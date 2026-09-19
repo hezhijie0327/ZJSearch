@@ -8,4 +8,8 @@
     ],
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
+    // The built-in CSS validator doesn't know Tailwind v4's at-rules
+    // (@custom-variant, @theme, …) and flags them as "Unknown at rule";
+    // biome (configured with css.parser.tailwindDirectives) is the real CSS gate.
+    "css.lint.unknownAtRules": "ignore",
 }

@@ -1,0 +1,4 @@
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_info with context %}
+{% block title %}{{ active_page.title }} - {% endblock %}
+{% block page_data %}{{ page_info(all_pages, active_page, active_pagename) }}{% endblock %}

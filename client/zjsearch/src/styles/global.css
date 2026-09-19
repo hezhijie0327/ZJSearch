@@ -1,0 +1,21 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* zjsearch design system: minimal, modern, light & dark.
+
+   Single CSS entry — everything ships as one zjsearch.min.css.  The split is
+   by consumer, not by page: component styling is Tailwind utilities in the
+   TSX; these partials hold only what utilities cannot reach (tokens, element
+   defaults, the server-rendered faces, third-party chrome).  Import order
+   mirrors the original cascade order — behaviors.css and map.css stay
+   unlayered on purpose, so they must come last. */
+@import "tailwindcss";
+
+@import "./tokens.css";
+@import "./base.css";
+@import "./noscript.css";
+@import "./boot.css";
+@import "./prose.css";
+@import "./behaviors.css";
+@import "./map.css";
+
+@custom-variant dark (&:where(.dark, .dark *));

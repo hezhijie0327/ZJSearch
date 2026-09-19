@@ -1,0 +1,67 @@
+{#- zjsearch: search results page, always rendered as a streaming response
+    (zjsearch_search_stream): the early chunk (head, boot skeleton, boot-data
+    payload, dynamic import of the app bundle) flushes immediately and the app
+    boots interactive while the engines run; `streamed` triggers the search on
+    first access in the late chunk, which replaces the pending payload through
+    #page-data (see RouterProvider). -#}
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_boot, page_results, page_redirect, page_error with context %}
+{% from "zjsearch/noscript.html" import ns_results with context %}
+{% block title %}{% if query_in_title %}{{- q|e }} - {% endif %}{% endblock %}
+{% block app_skeleton %}{% include "zjsearch/skeleton.html" %}{% endblock %}
+{% block head %}<link rel="alternate" type="application/rss+xml" title="{{ instance_name }} search: {{ q|e }}" href="{{ url_for('search', _external=True) }}?q={{ q|urlencode }}&amp;categories={{ selected_categories|join(",") | replace(' ','+') }}&amp;pageno={{ pageno }}&amp;time_range={{ time_range }}&amp;language={{ current_language }}&amp;safesearch={{ safesearch }}&amp;format=rss">{% endblock %}
+{% block body_tail %}
+<script id="boot-data" type="application/json" client_settings="{{ client_settings }}">{{- page_boot(q, selected_categories, pageno, time_range, current_language) -}}</script>
+{#- the app must not wait for the document to finish parsing: dynamic
+    import() evaluates the module as soon as it is fetched.  The results
+    feature chunk (stable name, see vite.config) is pre-warmed alongside so
+    the app boot never waits for it — the home page never downloads it. -#}
+<script>
+  import("{{ url_for('static', filename='zjsearch.min.js') }}").catch(function () {
+    window.location.reload();
+  });
+  import("{{ url_for('static', filename='chunk/zjs-results.min.js') }}").catch(function () {});
+</script>
+<!--zjs-shell-->
+{#- everything below blocks on the streamed search -#}
+<noscript>
+<main>
+{%- if streamed.error_message -%}
+<div class="zjs-noscript">
+  <h1>{{ instance_name }}</h1>
+  <p>{{ streamed.error_message }}</p>
+  <p><a href="{{ url_for('index') }}">Back to search</a></p>
+</div>
+{%- elif streamed.redirect_url -%}
+<meta http-equiv="refresh" content="0;url={{ streamed.redirect_url }}">
+{%- else -%}
+{{ ns_results(streamed.results, q, pageno, streamed.paging, streamed.answers, streamed.corrections, streamed.suggestions) }}
+{%- endif -%}
+</main>
+</noscript>
+<script id="page-data" type="application/json">
+{%- if streamed.error_message -%}
+{{- page_error(streamed.error_message) -}}
+{%- elif streamed.redirect_url -%}
+{{- page_redirect(streamed.redirect_url) -}}
+{%- else -%}
+{%- if streamed.results and streamed.results|map(attribute='template')|unique|list|count == 1 -%}
+  {%- set only_template = streamed.results[0]['template']|default('default.html')|replace('.html', '') -%}
+{%- else -%}
+  {%- set only_template = '' -%}
+{%- endif -%}
+{{- page_results(streamed.results, q, selected_categories, pageno, time_range, streamed.suggestions,
+                 streamed.corrections, streamed.answers, streamed.infoboxes, streamed.engine_data, streamed.paging,
+                 streamed.unresponsive_engines, streamed.timings, streamed.max_response_time,
+                 timeout_limit, current_language, streamed.search_language, only_template) -}}
+{%- endif -%}
+</script>
+<script>
+  if (window.__zjsPageData) {
+    window.__zjsPageData();
+  } else {
+    // module not booted yet — it picks #page-data up from the DOM on boot
+    document.dispatchEvent(new CustomEvent("zjs:page-data"));
+  }
+</script>
+{% endblock %}

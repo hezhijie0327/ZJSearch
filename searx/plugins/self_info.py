@@ -49,11 +49,21 @@ class SXNGPlugin(Plugin):
             return results
 
         if self.ip_regex.search(search.search_query.query) and request.remote_addr:
+            ip = str(ip_address(request.remote_addr).compressed)
             results.add(
-                results.types.Answer(answer=gettext("Your IP is: ") + ip_address(request.remote_addr).compressed)
+                results.types.Answer(
+                    answer=gettext("Your IP is: ") + ip,
+                    data={"kind": "self", "label": gettext("Your IP is: "), "value": ip},
+                )
             )
 
         if self.ua_regex.match(search.search_query.query):
-            results.add(results.types.Answer(answer=gettext("Your user-agent is: ") + str(request.user_agent)))
+            user_agent = str(request.user_agent)
+            results.add(
+                results.types.Answer(
+                    answer=gettext("Your user-agent is: ") + user_agent,
+                    data={"kind": "self", "label": gettext("Your user-agent is: "), "value": user_agent},
+                )
+            )
 
         return results

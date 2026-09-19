@@ -1,0 +1,123 @@
+# zjsearch theme dev instance settings (tracked; carries LAN-specific values
+# such as the outgoing proxy).
+# Run with:
+#   SEARXNG_SETTINGS_PATH=client/zjsearch/dev-settings.yml ./manage webapp.run
+use_default_settings: true
+
+general:
+  instance_name: ZJSearch
+  debug: false
+  # instance URLs exercised by the info page (links card)
+  privacypolicy_url: https://example.com/privacy
+  donation_url: https://example.com/donate
+  contact_url: mailto:contact@example.com
+
+search:
+  formats:
+    - html
+    - csv
+    - json
+    - rss
+
+ui:
+  default_theme: zjsearch
+  # result "cached" pill prefix — defaults to https://web.archive.org/web/
+  # cache_url: "https://webcache.googleusercontent.com/search?q=cache:"
+
+# preference locks — locked rows vanish from the preferences UI
+# (server also ignores their posted values). Lockable keys: categories,
+# language, autocomplete, favicon_resolver, safesearch, doi_resolver,
+# locale, theme, simple_style, center_alignment, results_on_new_tab,
+# search_on_category_select, method, image_proxy, query_in_title.
+# NOTE: hotkeys / url_formatting are NOT lockable server-side.
+# preferences:
+#   lock: [simple_style, safesearch, image_proxy]
+preferences:
+  lock: []
+
+# dev instance shows the full default tab set plus the stock images
+# specialization (upstream ships it commented out) — keep the new category
+# one click away for theme QA.  Overriding REPLACES the default tab set.
+categories_as_tabs:
+  general:
+  images:
+  stock images:
+  videos:
+  news:
+  map:
+  music:
+  it:
+  science:
+  files:
+  social media:
+
+# public instances link + custom links for the info page links card
+brand:
+  public_instances: https://searx.space
+  custom:
+    links:
+      Uptime: https://uptime.searxng.org/history/darmarit-org
+      Blog: https://example.com/blog
+
+server:
+  secret_key: "zjsearch-local-dev-secret-key"
+  limiter: false
+  image_proxy: true
+
+# proxy so region-blocked engines are reachable from this network
+# (LAN-specific: uncomment and set your own proxy when needed)
+outgoing:
+  request_timeout: 5.0
+  # proxies:
+  #   all://:
+  #     - http://10.192.7.1:7890
+  #     - http://192.168.20.23:7890
+
+# tor_check plugin: fetches check.torproject.org through the outgoing proxy
+# above (reachable that way on this network).  NOTE: a `plugins:` override
+# REPLACES the default set (settings_loader.update_settings), so every shipped
+# plugin is listed here explicitly (all active, alphabetized).
+plugins:
+  searx.plugins.advanced_search_syntax.SXNGPlugin:
+    active: true
+  searx.plugins.ahmia_filter.SXNGPlugin:
+    active: true
+  searx.plugins.calculator.SXNGPlugin:
+    active: true
+  searx.plugins.currency_convert.SXNGPlugin:
+    active: true
+  searx.plugins.hash_plugin.SXNGPlugin:
+    active: true
+  searx.plugins.hostnames.SXNGPlugin:
+    active: true
+  searx.plugins.infinite_scroll.SXNGPlugin:
+    active: true
+  searx.plugins.oa_doi_rewrite.SXNGPlugin:
+    active: true
+  searx.plugins.self_info.SXNGPlugin:
+    active: true
+  searx.plugins.stock_quote.SXNGPlugin:
+    active: true
+  searx.plugins.time_zone.SXNGPlugin:
+    active: true
+  searx.plugins.tor_check.SXNGPlugin:
+    active: true
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: true
+  searx.plugins.unit_converter.SXNGPlugin:
+    active: true
+
+# movie engines for the !movies poster wall (both disabled upstream)
+engines:
+  - name: tmdb
+    disabled: false
+  - name: imdb
+    disabled: false
+  # offline UI fixtures: the engine stays silent unless the query contains
+  # the "zjaudit" token, so ordinary searches are not polluted — e.g.
+  # /search?q=zjaudit+images&categories=images renders a deterministic
+  # image masonry without touching the network (same data as npm run audit)
+  - name: zjaudit
+    engine: zjsearch_fixtures
+    shortcut: zja
+    disabled: false

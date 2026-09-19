@@ -63,17 +63,33 @@ class SXNGPlugin(Plugin):
             except RequestException:
                 # No answer, return error
                 msg = gettext("Could not download the list of Tor exit-nodes from")
-                results.add(results.types.Answer(answer=f"{msg} {url_exit_list}"))
+                results.add(
+                    results.types.Answer(
+                        answer=f"{msg} {url_exit_list}",
+                        data={"kind": "tor_check", "status": "error"},
+                    )
+                )
                 return results
 
             real_ip = ip_address(address=str(request.remote_addr)).compressed
 
             if real_ip in node_list:
                 msg = gettext("You are using Tor and it looks like you have the external IP address")
-                results.add(results.types.Answer(answer=f"{msg} {real_ip}"))
-
+                status = "using_tor"
             else:
                 msg = gettext("You are not using Tor and you have the external IP address")
-                results.add(results.types.Answer(answer=f"{msg} {real_ip}"))
+                status = "not_tor"
+
+            results.add(
+                results.types.Answer(
+                    answer=f"{msg} {real_ip}",
+                    data={
+                        "kind": "tor_check",
+                        "status": status,
+                        "ip": str(real_ip),
+                        "nodes": str(len(node_list)),
+                    },
+                )
+            )
 
         return results

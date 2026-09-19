@@ -1,0 +1,64 @@
+# zjsearch Lighthouse audit instance settings — used by `npm run audit`
+# (scripts/audit.mjs boots a throwaway granian on :8907 with this file).
+#
+# Fully OFFLINE on purpose: remote engines make the audited pages
+# variance-sensitive (timeouts, captchas, dead image URLs change the page
+# between runs).  The engine list is reduced to `zjsearch_fixtures`, a
+# deterministic offline engine that answers instantly with fixed result
+# sets — one fixture kind per query token (zjaudit general/images/videos/
+# music/files/science/apps, see searx/engines/zjsearch_fixtures.py).
+# The instance also presents an indexable X-Robots-Tag: the upstream
+# default noindex would cap the SEO category no matter what the theme does.
+use_default_settings:
+  engines:
+    keep_only:
+      - zjaudit
+
+general:
+  instance_name: ZJSearch
+  debug: false
+  privacypolicy_url: https://example.com/privacy
+  donation_url: https://example.com/donate
+  contact_url: mailto:contact@example.com
+
+search:
+  formats:
+    - html
+    - json
+  # no remote autocompleter calls during audits
+  autocomplete: ""
+
+ui:
+  default_theme: zjsearch
+
+preferences:
+  lock: []
+
+brand:
+  public_instances: https://searx.space
+  custom:
+    links:
+      Uptime: https://uptime.searxng.org/history/darmarit-org
+      Blog: https://example.com/blog
+
+server:
+  secret_key: "zjsearch-local-dev-secret-key"
+  limiter: false
+  # raw local fixture image URLs (no image-proxy round trip)
+  image_proxy: false
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-Download-Options: noopen
+    # the upstream default is "noindex, nofollow" — an audit instance wants
+    # to be indexable or the SEO category can never reach its threshold.
+    # (public_instance: true would force the Valkey-backed limiter on, so we
+    # override just the header instead.)
+    X-Robots-Tag: "index, follow"
+    Referrer-Policy: no-referrer
+
+# offline fixture engine only — one engine, every result presentation
+engines:
+  - name: zjaudit
+    engine: zjsearch_fixtures
+    shortcut: zja
+    disabled: false

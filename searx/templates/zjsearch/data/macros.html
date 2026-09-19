@@ -1,0 +1,582 @@
+{#- zjsearch theme: server → React data contract.
+
+Every macro in this file serializes a piece of the Jinja render context into
+JSON.  The React application (client/zjsearch) consumes the resulting payload
+(``#page-data``) and renders 100% of the UI.  Server-side filters
+(image_proxify, favicon_url, get_pretty_url, query highlighting) are applied
+here, so the client never sees raw third-party URLs and inherits all data
+pipeline features without any Python changes. -#}
+
+{# ---------------------------------------------------------------- strings #}
+
+{#- Localized UI strings, keyed for the React i18n helper. -#}
+
+{# ----------------------------------------------------------------- globals #}
+
+{#- Shared context for every page: brand, categories, locales, i18n, prefs. -#}
+{% macro globals(page) -%}
+{
+  "page": {{ page|tojson }},
+  "instance_name": {{ instance_name|tojson }},
+  "version": {{ searxng_version|tojson }},
+  "git_url": {{ searxng_git_url|tojson }},
+  "issue_url": {{ (get_setting('brand.issue_url') or '')|tojson }},
+  "donation_url": {{ (donation_url or '')|tojson }},
+  "enable_metrics": {{ enable_metrics|tojson }},
+  "public_instances_url": {{ (get_setting('brand.public_instances') or '')|tojson }},
+  "privacypolicy_url": {{ (get_setting('general.privacypolicy_url') or '')|tojson }},
+  "contact_url": {{ (get_setting('general.contact_url') or '')|tojson }},
+  "custom_links": [
+    {%- for title, link in get_setting('brand.custom.links').items() -%}
+    {"title": {{ title|tojson }}, "url": {{ link|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "search_formats": {{ search_formats|tojson }},
+  "categories_as_tabs": {{ categories_as_tabs|tojson }},
+  "categories": {{ categories|tojson }},
+  "default_category": {{ DEFAULT_CATEGORY|tojson }},
+  "locales": [
+    {%- for tag, name, country, english, flag in sxng_locales -%}
+    {"tag": {{ tag|tojson }}, "name": {{ name|tojson }}, "country": {{ country|tojson }}, "english": {{ english|tojson }}, "flag": {{ flag|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "language": {{ current_language|tojson }},
+  "safesearch": {{ safesearch|tojson }},
+  "method": {{ method|tojson }},
+  "theme": {{ theme|tojson }},
+  "theme_style": {{ (preferences.get_value('simple_style') or 'auto')|tojson }},
+  "search_on_category_select": {{ search_on_category_select|tojson }},
+  "results_on_new_tab": {{ results_on_new_tab|tojson }},
+  "url_formatting": {{ url_formatting|tojson }},
+  "favicon_resolver": {{ favicon_resolver|tojson }},
+  "doi_resolver": {{ doi_resolver|tojson }},
+  "cache_url": {{ (cache_url or '')|tojson }},
+  "locale": {{ locale_rfc5646|tojson }},
+  "about_url": {{ url_for('info', pagename='about')|tojson }},
+  "search_syntax_url": {{ url_for('info', pagename='search-syntax')|tojson }},
+  "rtl": {{ 'true' if rtl else 'false' }}
+}
+{%- endmacro %}
+
+{# ----------------------------------------------------------------- results #}
+
+{#- Media URL for the page payload.  The privacy proxy only accepts http(s)
+    URLs — same-origin static paths (offline fixtures, instance assets) would
+    400 through it, so they pass through unchanged. -#}
+{% macro media_url(url) -%}
+{%- if url.startswith('/') %}{{ url }}{% else %}{{ image_proxify(url) }}{% endif -%}
+{%- endmacro %}
+
+{#- One search result.  Emits the union of all fields used by the 11 result
+    layouts; ``template`` tells the client which one to render. -#}
+{% macro _result_data(result) -%}
+{
+  {%- if result.parsed_url %}
+  "netloc": {{ (result.parsed_url.netloc or '')|tojson }},
+  "favicon": {{ (favicon_url(result.parsed_url.netloc) or '')|tojson }},
+  "pretty_url": {{ get_pretty_url(result.parsed_url)|tojson }},
+  {%- endif %}
+  {%- if result.publishedDate %}
+  "published_date": {{ result.publishedDate.isoformat()|tojson }},
+  {%- endif %}
+  {%- if result.length %}
+    {%- if result.length is string %}
+  "length_display": {{ result.length|tojson }},
+    {%- elif result.length is number %}
+  "length_seconds": {{ result.length }},
+    {%- else %}
+  "length_seconds": {{ result.length.total_seconds() }},
+    {%- endif %}
+  {%- endif %}
+  {%- if result.views %}"views": {{ result.views|tojson }},{% endif %}
+  {%- if result.score is number %}"score": {{ result.score }},{% endif %}
+  {%- if result.author %}"author": {{ result.author|striptags|tojson }},{% endif %}
+  {%- if result.metadata %}"metadata": {{ result.metadata|tojson }},{% endif %}
+  {%- if result.img_src %}"img_src": {{ (media_url(result.img_src) or '')|tojson }},{% endif %}
+  {%- if result.thumbnail %}"thumbnail": {{ (media_url(result.thumbnail) or '')|tojson }},{% endif %}
+  {%- if result.iframe_src %}"iframe_src": {{ result.iframe_src|tojson }},{% endif %}
+  {%- if result.audio_src %}"audio_src": {{ result.audio_src|tojson }},{% endif %}
+  {%- if result.open_group %}"open_group": true,{% endif %}
+  {%- if result.close_group %}"close_group": true,{% endif %}
+
+  {%- if result.template == 'images.html' %}
+  "thumbnail_src": {{ (media_url(result.thumbnail_src) if result.thumbnail_src else '')|tojson }},
+  "resolution": {{ (result.resolution or '')|tojson }},
+  "img_format": {{ (result.img_format or '')|tojson }},
+  "source": {{ (result.source or '')|tojson }},
+  "filesize": {{ (result.filesize or '')|tojson }},
+  "formats": [
+    {%- for ref in (result.formats or []) -%}
+    {"url": {{ ref.url|tojson }}, "label": {{ (ref.label or '')|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  {%- elif result.template == 'torrent.html' %}
+    {%- if result.magnetlink %}"magnetlink": {{ result.magnetlink|tojson }},{% endif %}
+    {%- if result.torrentfile %}"torrentfile": {{ result.torrentfile|tojson }},{% endif %}
+    {%- if result.seed is defined %}"seed": {{ result.seed | int or 0 }},{% endif %}
+    {%- if result.leech is defined %}"leech": {{ result.leech | int or 0 }},{% endif %}
+    {%- if result.filesize %}"filesize": {{ result.filesize|tojson }},{% endif %}
+    {%- if result.files %}"files": {{ result.files | int or 0 }},{% endif %}
+  {%- elif result.template == 'map.html' %}
+    {%- if result.address %}
+    {%- set a = result.address %}
+    {%- set addr_fields = {
+      'name': a.get('name'),
+      'road': a.get('road'),
+      'house_number': a.get('house_number'),
+      'postcode': a.get('postcode'),
+      'locality': a.get('locality'),
+      'country': a.get('country'),
+      'country_code': a.get('country_code'),
+    } -%}
+    "address": {
+      {%- for k, v in addr_fields.items() if v -%}
+      {{ k|tojson }}: {{ v|tojson }}{{ ", " if not loop.last }}
+      {%- endfor -%}
+    },
+    {%- endif %}
+    {%- if result.links %}
+    "map_links": [
+      {%- for l in result.links -%}
+      {"label": {{ (l.get('label') or '')|tojson }}, "url": {{ (l.get('url') or '')|tojson }} }{{ ", " if not loop.last }}
+      {%- endfor -%}
+    ],
+    {%- endif %}
+    {%- if result.data %}
+    "data": [
+      {%- for d in result.data -%}
+      {"label": {{ (d.get('label') or '')|tojson }}, "value": {{ (d.get('value') or '')|tojson }}}{{ ", " if not loop.last }}
+      {%- endfor -%}
+    ],
+    {%- endif %}
+    {%- if result.boundingbox %}"boundingbox": {{ result.boundingbox|tojson }},{% endif %}
+    {%- if result.longitude %}"longitude": {{ result.longitude|tojson }},{% endif %}
+    {%- if result.latitude %}"latitude": {{ result.latitude|tojson }},{% endif %}
+    {%- if result.geojson %}"geojson": {{ result.geojson|tojson }},{% endif %}
+  {%- elif result.template == 'paper.html' %}
+    {%- if result.comments %}"comments": {{ result.comments|tojson }},{% endif %}
+    {%- if result.tags %}"tags": {{ result.tags|tojson }},{% endif %}
+    {%- if result.type %}"paper_type": {{ result.type|tojson }},{% endif %}
+    {%- if result.authors %}"authors": {{ result.authors|tojson }},{% endif %}
+    {%- if result.editor %}"editor": {{ result.editor|tojson }},{% endif %}
+    {%- if result.publisher %}"publisher": {{ result.publisher|tojson }},{% endif %}
+    {%- if result.journal %}"journal": {{ result.journal|tojson }},{% endif %}
+    {%- if result.volume %}"volume": {{ result.volume|tojson }},{% endif %}
+    {%- if result.number %}"number": {{ result.number|tojson }},{% endif %}
+    {%- if result.pages %}"pages": {{ result.pages|tojson }},{% endif %}
+    {%- if result.doi %}"doi": {{ result.doi|tojson }},{% endif %}
+    {%- if result.issn %}"issn": {{ result.issn|tojson }},{% endif %}
+    {%- if result.isbn %}"isbn": {{ result.isbn|tojson }},{% endif %}
+    {%- if result.pdf_url %}"pdf_url": {{ result.pdf_url|tojson }},{% endif %}
+    {%- if result.html_url %}"html_url": {{ result.html_url|tojson }},{% endif %}
+  {%- elif result.template == 'packages.html' %}
+    {%- if result.package_name %}"package_name": {{ result.package_name|tojson }},{% endif %}
+    {%- if result.version %}"version": {{ result.version|tojson }},{% endif %}
+    {%- if result.maintainer %}"maintainer": {{ result.maintainer|tojson }},{% endif %}
+    {%- if result.tags %}"tags": {{ result.tags|tojson }},{% endif %}
+    {%- if result.popularity %}"popularity": {{ result.popularity|tojson }},{% endif %}
+    {%- if result.license_name %}"license_name": {{ result.license_name|tojson }},{% endif %}
+    {%- if result.license_url %}"license_url": {{ result.license_url|tojson }},{% endif %}
+    {%- if result.homepage %}"homepage": {{ result.homepage|tojson }},{% endif %}
+    {%- if result.source_code_url %}"source_code_url": {{ result.source_code_url|tojson }},{% endif %}
+    {%- if result.links %}"project_links": {{ result.links|tojson }},{% endif %}
+  {%- elif result.template == 'code.html' %}
+    {%- if result.repository %}"repository": {{ result.repository|tojson }},{% endif %}
+    {%- if result.filename %}"filename": {{ result.filename|tojson }},{% endif %}
+    {%- if result.HTML is defined %}
+      {%- set code_html = result.HTML() if result.HTML is callable else result.HTML %}
+    "code_html": {{ (code_html or '')|tojson }},
+    {%- endif %}
+  {%- elif result.template == 'file.html' %}
+    {%- if result.abstract %}"abstract_html": {{ result.abstract|tojson }},{% endif %}
+    {%- if result.author %}"author": {{ result.author|tojson }},{% endif %}
+    {%- if result.filename %}"filename": {{ result.filename|tojson }},{% endif %}
+    {%- if result.size %}"size": {{ result.size|tojson }},{% endif %}
+    {%- if result.time %}"time": {{ result.time|tojson }},{% endif %}
+    {%- if result.mimetype %}"mimetype": {{ result.mimetype|tojson }},{% endif %}
+    {%- if result.embedded %}"embedded": {{ result.embedded|tojson }},{% endif %}
+    {%- if result.mtype %}"mtype": {{ result.mtype|tojson }},{% endif %}
+    {%- if result.subtype %}"subtype": {{ result.subtype|tojson }},{% endif %}
+  {%- elif result.template == 'keyvalue.html' %}
+    {%- if result.caption %}"caption": {{ result.caption|tojson }},{% endif %}
+    {%- if result.key_title %}"key_title": {{ result.key_title|tojson }},{% endif %}
+    {%- if result.value_title %}"value_title": {{ result.value_title|tojson }},{% endif %}
+    {%- if result.kvmap %}
+    "kvmap": {
+      {%- for k, v in result.kvmap.items() -%}
+      {{ k|tojson }}: {{ v|tojson }}{{ ", " if not loop.last }}
+      {%- endfor -%}
+    },
+    {%- endif %}
+  {%- elif result.template == 'products.html' %}
+    {%- if result.price %}"price": {{ result.price|tojson }},{% endif %}
+    {%- if result.shipping %}"shipping": {{ result.shipping|tojson }},{% endif %}
+    {%- if result.source_country %}"source_country": {{ result.source_country|tojson }},{% endif %}
+  {%- endif %}
+
+  "template": {{ (result.template or 'default.html')|replace('.html', '')|tojson }},
+  {%- if result.score %}"score": {{ result.score|round(3) }},{% endif %}
+  "url": {{ (result.url or '')|tojson }},
+  "title_html": {{ (result.title or '')|tojson }},
+  "title_text": {{ (result.title or '')|striptags|tojson }},
+  "content_html": {{ (result.content or '')|tojson }},
+  "content_text": {{ (result.content or '')|striptags|tojson }},
+  "engines": {{ ((result.engines|sort|list) if result.engines else [])|tojson }},
+  "category": {{ (result.category or '')|tojson }},
+  "priority": {{ (result.priority or '')|tojson }}
+}
+{%- endmacro %}
+
+{#- Answers (legacy text, translations, weather). -#}
+{% macro _weather_item(data, answer) -%}
+{
+  "summary": {{ (data.summary or '')|tojson }},
+  "symbol": {{ (data.url or '')|tojson }},
+  "location_name": {{ data.location.name|tojson }},
+  "timezone": {{ data.location.timezone|tojson }},
+  "condition": {{ (data.condition or '')|tojson }},
+  "temp_c": {{ data.temperature.value("°C") }},
+  "temp_f": {{ data.temperature.value("°F") }}
+  {%- if data.datetime %},
+  "datetime_iso": {{ data.datetime.datetime.isoformat()|tojson }},
+  "date_iso": {{ data.datetime.datetime.date().isoformat()|tojson }},
+  "hour": {{ data.datetime.datetime.hour }}{% endif %}
+  {%- if data.feels_like %}, "feels_like": {{ data.feels_like.value("°C") }}{% endif %}
+  {%- if data.wind_from %}, "wind": {{ data.wind_from.value("Point")|tojson }}{% endif %}
+  {%- if data.wind_speed %}, "wind_speed": {{ data.wind_speed.value("km/h") }}{% endif %}
+  {%- if data.pressure %}, "pressure": {{ data.pressure.value("hPa") }}{% endif %}
+  {%- if data.humidity %}, "humidity": {{ data.humidity.value() }}{% endif %}
+}
+{%- endmacro %}
+
+{% macro _answer_data(answer) -%}
+{
+  "template": {{ (answer.template or 'answer/legacy.html')|tojson }}
+  {%- if answer.template == 'answer/translations.html' %}
+  , "engine": {{ (answer.engine or '')|tojson }}
+  , "url": {{ (answer.url or '')|tojson }}
+  , "translations": [
+    {%- for item in answer.translations -%}
+    {
+      "text": {{ item.text|tojson }},
+      "transliteration": {{ (item.transliteration or '')|tojson }},
+      "examples": {{ (item.examples or [])|tojson }},
+      "definitions": {{ (item.definitions or [])|tojson }},
+      "synonyms": {{ (item.synonyms or [])|tojson }}
+    }{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+  {%- elif answer.template == 'answer/weather.html' %}
+  , "engine": {{ (answer.engine or '')|tojson }}
+  , "service": {{ (answer.service or '')|tojson }}
+  , "url": {{ (answer.url or '')|tojson }}
+  , "current": {{ _weather_item(answer.current, answer) }}
+  , "forecasts": [
+    {%- for f in answer.forecasts -%}
+    {{ _weather_item(f, answer) }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+{%- else %}
+, "answer": {{ (answer.answer or '')|tojson }}
+, "engine": {{ (answer.engine or '')|tojson }}
+, "url": {{ (answer.url or '')|tojson }}
+{%- if answer.data %}
+, "data": { {%- for key, value in answer.data.items() %}{{ key|tojson }}: {{ value|tojson }}{{ ", " if not loop.last }}{%- endfor -%} }{% endif %}
+{%- endif %}
+}
+{%- endmacro %}
+
+{#- Infobox with attributes / urls / related topics. -#}
+{% macro _infobox_data(infobox) -%}
+{
+  "title": {{ (infobox.infobox or '')|tojson }},
+  "content_html": {{ (infobox.content or '')|tojson }},
+  "img_src": {{ (media_url(infobox.img_src) if infobox.img_src else '')|tojson }}
+  {%- if infobox.attributes %}
+  , "attributes": [
+    {%- for a in infobox.attributes -%}
+    {
+      "label": {{ (a.get('label') or '')|tojson }},
+      "value": {{ (a.get('value') or '')|tojson }},
+      "image_src": {{ (media_url(a['image']['src']) if a.get('image') and a['image'].get('src') else '')|tojson }},
+      "image_alt": {{ (a['image'].get('alt', '') if a.get('image') else '')|tojson }}
+    }{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+  {%- endif %}
+  {%- if infobox.urls %}
+  , "urls": [
+    {%- for u in infobox.urls -%}
+    {"title": {{ (u.get('title') or u.get('url') or '')|tojson }}, "url": {{ (u.get('url') or '')|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+  {%- endif %}
+  {%- if infobox.relatedTopics %}
+  , "related_topics": [
+    {%- for topic in infobox.relatedTopics -%}
+    {
+      "name": {{ (topic.get('name') or '')|tojson }},
+      "suggestions": {{ (topic.get('suggestions') or [])|tojson }}
+    }{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+  {%- endif %}
+}
+{%- endmacro %}
+
+{# ------------------------------------------------------------- page blocks #}
+
+{% macro page_404() -%}
+{"globals": {{ globals('404') }}}
+{%- endmacro %}
+
+{# boot payloads of the streamed search page: the HTTP status is already out
+   when the search finishes, so redirects and failures close the stream with
+   these payloads instead (the client boots into them, see main.tsx) #}
+{% macro page_redirect(url) -%}
+{"globals": {{ globals('redirect') }}, "url": {{ url|tojson }}}
+{%- endmacro %}
+
+{% macro page_error(message) -%}
+{"globals": {{ globals('error') }}, "message": {{ (message or '')|tojson }}}
+{%- endmacro %}
+
+{# first-stage payload of the streamed search page: the client boots into it
+   right away (interactive header + skeleton) while the engines run; the late
+   chunk of the same response replaces it through #page-data (RouterProvider
+   consumes the pushed payload, it never re-fetches) #}
+{% macro page_boot(q, selected_categories, pageno, time_range, current_language) -%}
+{"globals": {{ globals('results') }},"q": {{ q|tojson }},"selected_categories": {{ (selected_categories or [])|tojson }},"pageno": {{ pageno }},"time_range": {{ (time_range or '')|tojson }},"suggestions": [],"corrections": [],"answers": [],"infoboxes": [],"results": [],"engine_data": {},"paging": false,"unresponsive_engines": [],"timings": [],"max_response_time": null,"timeout_limit": "","current_language": {{ current_language|tojson }},"search_language": "","only_template": "","pending": true}
+{%- endmacro %}
+
+{% macro page_index(selected_categories) -%}
+{
+  "globals": {{ globals('index') }},
+  "selected_categories": {{ (selected_categories or [])|tojson }}
+}
+{%- endmacro %}
+
+{% macro page_results(results, q, selected_categories, pageno, time_range,
+                      suggestions, corrections, answers, infoboxes,
+                      engine_data, paging, unresponsive_engines, timings,
+                      max_response_time, timeout_limit, current_language,
+                      search_language, only_template) -%}
+{
+  "globals": {{ globals('results') }},
+  "q": {{ q|tojson }},
+  "selected_categories": {{ (selected_categories or [])|tojson }},
+  "pageno": {{ pageno }},
+  "time_range": {{ (time_range or '')|tojson }},
+  "suggestions": [
+    {%- for s in suggestions -%}
+    {"q": {{ s.url|tojson }}, "title": {{ s.title|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "corrections": [
+    {%- for c in corrections -%}
+    {"q": {{ c.url|tojson }}, "title": {{ c.title|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "answers": [
+    {%- for a in answers -%}
+    {{ _answer_data(a) }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "infoboxes": [
+    {%- for infobox in infoboxes -%}
+    {{ _infobox_data(infobox) }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "results": [
+    {%- for result in results -%}
+    {{ _result_data(result) }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "engine_data": {{ (engine_data or {})|tojson }},
+  "paging": {{ 'true' if paging else 'false' }},
+  "unresponsive_engines": {{ (unresponsive_engines or [])|tojson }},
+  "timings": [
+    {%- for engine_name, response_time in (timings or []) -%}
+    {"name": {{ engine_name|tojson }}, "time": {{ response_time|round(3) }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "max_response_time": {{ (max_response_time|round(3) if max_response_time else 'null') }},
+  "timeout_limit": {{ (timeout_limit or '')|tojson }},
+  "current_language": {{ current_language|tojson }},
+  "search_language": {{ (search_language or '')|tojson }},
+  "only_template": {{ only_template|tojson }}
+}
+{%- endmacro %}
+
+{%- macro _engine_entry(engine, categ, disabled_engines, shortcuts, stats, reliabilities, supports) -%}
+{%- set about_website = engine.about.website if engine.about is defined else '' -%}
+{%- set about_wikidata = engine.about.wikidata_id if engine.about is defined else '' -%}
+{
+  "name": {{ engine.name|tojson }},
+  "shortcut": {{ (shortcuts.get(engine.name) or '')|tojson }},
+  "categories": {{ (engine.categories or [])|tojson }},
+  "language": {{ ((engine.language or '')|upper if engine.language else '')|tojson }},
+  "enable_http": {{ 'true' if engine.enable_http else 'false' }},
+  "weight": {{ engine.weight or 1.0 }},
+  "timeout": {{ engine.timeout or 0 }},
+  "website": {{ (about_website or '')|tojson }},
+  "wikidata_id": {{ (about_wikidata or '')|tojson }},
+  "disabled": {{ 'true' if (engine.name, categ) in disabled_engines else 'false' }},
+{%- set st = stats[engine.name] if engine.name in stats else none -%}
+{%- set rel = reliabilities[engine.name] if engine.name in reliabilities else none -%}
+  "stats_time": {{ 'null' if st is none or st['time'] is none else st['time'] }},
+  "stats_rate80": {{ 'null' if st is none or st['rate80'] is none else st['rate80'] }},
+  "stats_rate95": {{ 'null' if st is none or st['rate95'] is none else st['rate95'] }},
+  "stats_result_count": {{ (st['result_count'] or 0) if st is not none else 0 }},
+  "warn_timeout": {{ 'true' if (st is not none and st['warn_timeout']) else 'false' }},
+  "reliability": {{ 'null' if rel is none or rel['reliability'] is none else rel['reliability'] }},
+  "errors": {{ (reliabilities.get(engine.name, {}).get('errors', []) if engine.name in reliabilities else [])|tojson }},
+  "supports_safesearch": {{ 'true' if (engine.name in supports and supports[engine.name]['safesearch']) else 'false' }},
+  "supports_time_range": {{ 'true' if (engine.name in supports and supports[engine.name]['time_range_support']) else 'false' }}
+}
+{%- endmacro %}
+
+{% macro page_preferences(prefs, selected_categories, locales, current_locale,
+                          engines_by_category, stats, max_rate95,
+                          reliabilities, supports, answer_storage,
+                          disabled_engines, autocomplete_backends,
+                          favicon_resolver_names, shortcuts, themes,
+                          plugins_storage, current_doi_resolver,
+                          allowed_plugins, preferences_url_params,
+                          locked_preferences, doi_resolvers, cookies) -%}
+{
+  "globals": {{ globals('preferences') }},
+  "current_locale": {{ (current_locale or '')|tojson }},
+  "locales": {
+    {%- for locale_id, locale_name in locales|dictsort -%}
+    {{ locale_id|tojson }}: {{ locale_name|tojson }}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  },
+  "kv": {
+    "categories": {{ (selected_categories or [])|tojson }},
+    "language": {{ prefs.get_value('language')|tojson }},
+    "locale": {{ (prefs.get_value('locale') or '')|tojson }},
+    "autocomplete": {{ (prefs.get_value('autocomplete') or '')|tojson }},
+    "favicon_resolver": {{ (prefs.get_value('favicon_resolver') or '')|tojson }},
+    "safesearch": {{ prefs.get_value('safesearch')|tojson }},
+    "theme": {{ prefs.get_value('theme')|tojson }},
+    "simple_style": {{ (prefs.get_value('simple_style') or 'auto')|tojson }},
+    "center_alignment": {{ 'true' if prefs.get_value('center_alignment') else 'false' }},
+    "results_on_new_tab": {{ 'true' if prefs.get_value('results_on_new_tab') else 'false' }},
+    "search_on_category_select": {{ 'true' if prefs.get_value('search_on_category_select') else 'false' }},
+    "hotkeys": {{ prefs.get_value('hotkeys')|tojson }},
+    "url_formatting": {{ prefs.get_value('url_formatting')|tojson }},
+    "method": {{ prefs.get_value('method')|tojson }},
+    "image_proxy": {{ 'true' if prefs.get_value('image_proxy') else 'false' }},
+    "query_in_title": {{ 'true' if prefs.get_value('query_in_title') else 'false' }},
+    "doi_resolver": {{ current_doi_resolver|tojson }},
+    "tokens": {{ prefs.tokens.get_value()|tojson }}
+  },
+  "max_rate95": {{ max_rate95 or 0 }},
+  "autocomplete_backends": {{ (autocomplete_backends|list)|tojson }},
+  "favicon_resolver_names": {{ (favicon_resolver_names|list)|tojson }},
+  "themes": {{ themes|tojson }},
+  "doi_resolvers": { {%- for name, url in doi_resolvers.items() -%}{{ name|tojson }}: {{ url|tojson }}{{ ", " if not loop.last }}{%- endfor -%} },
+  "locked_preferences": {{ (locked_preferences or [])|tojson }},
+  "preferences_url_params": {{ preferences_url_params|tojson }},
+  "cookies": [
+    {%- for name, value in cookies.items() -%}
+    {"name": {{ name|tojson }}, "value": {{ value|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "answerers": [
+    {%- for info in answer_storage -%}
+    {"keywords": {{ (info.keywords or [])|tojson }}, "name": {{ (info.name or '')|tojson }}, "description": {{ (info.description or '')|tojson }}, "examples": {{ (info.examples or [])|tojson }}, "plugin": false}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "plugins": [
+    {%- for plugin in plugins_storage -%}
+    {"id": {{ plugin.id|tojson }}, "name": {{ (plugin.name or '')|tojson }}, "description": {{ (plugin.description or '')|tojson }}, "section": {{ (plugin.preference_section or '')|tojson }}, "enabled": {{ 'true' if plugin.id in allowed_plugins else 'false' }}, "keywords": {{ ((plugin.keywords or []))|tojson }}, "examples": {{ ((plugin.examples or []))|tojson }}, "plugin": true}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "engine_tabs": [
+    {%- for categ in categories_as_tabs + [DEFAULT_CATEGORY] -%}
+    {
+      "category": {{ categ|tojson }},
+      "is_default": {{ 'true' if categ == DEFAULT_CATEGORY else 'false' }},
+      "groups": [
+        {%- for group, group_bang, group_engines in engines_by_category[categ] | group_engines_in_tab -%}
+        {
+          "group": {{ group|tojson }},
+          "group_bang": {{ (group_bang or '')|tojson }},
+          "engines": [
+            {%- for engine in group_engines -%}
+            {%- if not engine.private -%}
+            {{ _engine_entry(engine, categ, disabled_engines, shortcuts, stats, reliabilities, supports) }}{{ ", " if not loop.last }}
+            {%- endif -%}
+            {%- endfor -%}
+          ]
+        }{{ ", " if not loop.last }}
+        {%- endfor -%}
+      ]
+    }{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+}
+{%- endmacro %}
+
+{% macro page_stats(sort_order, selected_engine_name, engine_stats, engine_reliabilities) -%}
+{
+  "globals": {{ globals('stats') }},
+  "sort_order": {{ (sort_order or '')|tojson }},
+  "selected_engine_name": {{ (selected_engine_name or '')|tojson }},
+  "max_result_count": {{ engine_stats.get('max_result_count', 0) or 0 }},
+  "max_time": {{ engine_stats.get('max_time', 0) or 0 }},
+  "engines": [
+    {%- for s in engine_stats.get('time', []) -%}
+    {
+      "name": {{ s.name|tojson }},
+      "score": {{ (s.score if s.score is not none else 'null') }},
+      "score_per_result": {{ (s.score_per_result if s.score_per_result is not none else 'null') }},
+      "result_count": {{ (s.result_count if s.result_count is not none else 'null') }},
+      "total": {{ (s.total if s.total is not none else 'null') }},
+      "http": {{ (s.http if s.http is not none else 'null') }},
+      "processing": {{ (s.processing if s.processing is not none else 'null') }},
+      "total_p80": {{ (s.total_p80 if s.total_p80 is not none else 'null') }},
+      "http_p80": {{ (s.http_p80 if s.http_p80 is not none else 'null') }},
+      "processing_p80": {{ (s.processing_p80 if s.processing_p80 is not none else 'null') }},
+      "total_p95": {{ (s.total_p95 if s.total_p95 is not none else 'null') }},
+      "http_p95": {{ (s.http_p95 if s.http_p95 is not none else 'null') }},
+      "processing_p95": {{ (s.processing_p95 if s.processing_p95 is not none else 'null') }},
+      "reliability": {{ (engine_reliabilities.get(s.name, {}).get('reliability', 'null') if s.name in engine_reliabilities else 'null') }}
+    }{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ],
+  "errors": [
+    {%- if selected_engine_name -%}
+    {%- for error in engine_reliabilities[selected_engine_name].errors -%}
+    {
+      "secondary": {{ 'true' if error.secondary else 'false' }},
+      "exception_classname": {{ (error.exception_classname or '')|tojson }},
+      "log_message": {{ (error.log_message or '')|tojson }},
+      "percentage": {{ error.percentage or 0 }},
+      "log_parameters": {{ ((error.log_parameters or [])|list)|tojson }},
+      "filename": {{ (error.filename or '')|tojson }},
+      "line_no": {{ error.line_no or 0 }},
+      "function": {{ (error.function or '')|tojson }},
+      "code": {{ (error.code or '')|tojson }}
+    }{{ ", " if not loop.last }}
+    {%- endfor -%}
+    {%- endif -%}
+  ]
+}
+{%- endmacro %}
+
+{% macro page_info(all_pages, active_page, active_pagename) -%}
+{
+  "globals": {{ globals('info') }},
+  "active_pagename": {{ active_pagename|tojson }},
+  "active_title": {{ active_page.title|tojson }},
+  "active_html": {{ active_page.html|tojson }},
+  "pages": [
+    {%- for pagename, locale, page in all_pages -%}
+    {"pagename": {{ pagename|tojson }}, "locale": {{ locale|tojson }}, "title": {{ page.title|tojson }}}{{ ", " if not loop.last }}
+    {%- endfor -%}
+  ]
+}
+{%- endmacro %}

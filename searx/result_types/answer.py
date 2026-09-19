@@ -34,6 +34,7 @@ __all__ = ["AnswerSet", "Answer", "Translations", "WeatherAnswer"]
 
 from flask_babel import gettext
 import msgspec
+import typing
 
 from searx import weather
 from ._base import Result
@@ -85,6 +86,13 @@ class Answer(BaseAnswer, kw_only=True):
 
     answer: str
     """Text of the answer."""
+
+    data: dict[str, typing.Any] | None = None
+    """Optional structured payload for theme renderers, e.g. ``{"kind":
+    "hash", "algo": "sha512", "digest": "..."}``.  Themes without support for
+    these fields just render the *answer* text.  Beside string values the
+    payload may carry nested structures (e.g. the unit converter's list of
+    sibling units)."""
 
     def __hash__(self):
         """The hash value of field *answer* is the hash value of the
