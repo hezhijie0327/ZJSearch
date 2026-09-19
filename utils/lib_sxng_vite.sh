@@ -12,10 +12,16 @@ vite.:  .. to be done ..
     fix:   run prettiers on simple theme
     lint:  run linters on simple theme
     dev:   start development server
+  zjsearch.:
+    build: build static files of the zjsearch theme (React)
+    fix:   run formatters on zjsearch theme
+    lint:  run linters on zjsearch theme
+    dev:   start development server (proxies to a local SearXNG instance)
 EOF
 }
 
 VITE_SIMPLE_THEME="${REPO_ROOT}/client/simple"
+VITE_ZJSEARCH_THEME="${REPO_ROOT}/client/zjsearch"
 
 # ToDo: vite server is not implemented yet / will be done in a follow up PR
 #
@@ -84,4 +90,45 @@ templates.simple.pygments() {
         return 1
     fi
     return 0
+}
+
+vite.zjsearch.build() {
+    (
+        set -e
+        node.env
+        build_msg ZJSEARCH "run build of theme from: ${VITE_ZJSEARCH_THEME}"
+
+        pushd "${VITE_ZJSEARCH_THEME}"
+        npm install
+        npm run build
+        popd &>/dev/null
+    )
+}
+
+vite.zjsearch.dev() {
+    (
+        set -e
+        node.env
+        build_msg ZJSEARCH "start server for FE development of: ${VITE_ZJSEARCH_THEME}"
+        pushd "${VITE_ZJSEARCH_THEME}"
+        npm install
+        npm run dev
+        popd &>/dev/null
+    )
+}
+
+vite.zjsearch.fix() {
+    (
+        set -e
+        node.env
+        npm --prefix client/zjsearch run fix
+    )
+}
+
+vite.zjsearch.lint() {
+    (
+        set -e
+        node.env
+        npm --prefix client/zjsearch run lint
+    )
 }

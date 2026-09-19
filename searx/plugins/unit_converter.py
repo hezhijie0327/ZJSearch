@@ -62,9 +62,11 @@ class SXNGPlugin(Plugin):
             for keyword in CONVERT_KEYWORDS:
                 if query_part == keyword:
                     from_query, to_query = query.split(keyword, 1)
-                    target_val = _parse_text_and_convert(from_query.strip(), to_query.strip())
-                    if target_val:
-                        results.add(results.types.Answer(answer=target_val))
+                    converted = _parse_text_and_convert(from_query.strip(), to_query.strip())
+                    if converted:
+                        answer, data = converted
+                        results.add(results.types.Answer(answer=answer, data=data))
+                    break
 
         return results
 
@@ -80,7 +82,7 @@ RE_MEASURE = r'''
 '''
 
 
-def _parse_text_and_convert(from_query, to_query) -> str | None:
+def _parse_text_and_convert(from_query, to_query) -> tuple[str, dict] | None:
 
     # pylint: disable=too-many-branches, too-many-locals
 
@@ -88,7 +90,7 @@ def _parse_text_and_convert(from_query, to_query) -> str | None:
         return None
 
     measured = re.match(RE_MEASURE, from_query, re.VERBOSE)
-    if not (measured and measured.group('number'), measured.group('unit')):
+    if not (measured and measured.group('unit')):
         return None
 
     # Symbols are not unique, if there are several hits for the from-unit, then
@@ -102,14 +104,14 @@ def _parse_text_and_convert(from_query, to_query) -> str | None:
     for symbol, si_name, from_si, to_si, orig_symbol in symbol_to_si():
 
         if symbol == measured.group('unit'):
-            source_list.append((si_name, to_si))
+            source_list.append((si_name, to_si, orig_symbol))
         if symbol == to_query:
             target_list.append((si_name, from_si, orig_symbol))
 
     if not (source_list and target_list):
         return None
 
-    source_to_si = target_from_si = target_symbol = None
+    source_to_si = target_from_si = target_symbol = source_symbol = si_name = None
 
     # second: find the right unit by comparing list of from-units with list of to-units
 
@@ -119,21 +121,26 @@ def _parse_text_and_convert(from_query, to_query) -> str | None:
                 source_to_si = source[1]
                 target_from_si = target[1]
                 target_symbol = target[2]
+                source_symbol = source[2]
+                si_name = source[0]
 
     if not (source_to_si and target_from_si):
         return None
 
     _locale = get_locale() or 'en_US'
 
-    value = measured.group('sign') + measured.group('number') + (measured.group('E') or '')
+    # a value-less query ("kg to lb") converts 1 by default, like the search
+    # engines' own converters
+    value = measured.group('sign') + (measured.group('number') or '1') + (measured.group('E') or '')
     value = babel.numbers.parse_decimal(value, locale=_locale)
+    value_in = float(value)
 
     # convert value to SI unit
 
     if isinstance(source_to_si, (float, int)):
-        value = float(value) * source_to_si
+        value = value_in * source_to_si
     else:
-        value = source_to_si(float(value))
+        value = source_to_si(value_in)
 
     # convert value from SI unit to target unit
 
@@ -148,4 +155,30 @@ def _parse_text_and_convert(from_query, to_query) -> str | None:
     else:
         result = babel.numbers.format_decimal(value, locale=_locale, format='#,##0.##########;-#')
 
-    return f'{result} {target_symbol}'
+    from_value = babel.numbers.format_decimal(value_in, locale=_locale, format='#,##0.##########;-#')
+
+    # Sibling units of the resolved dimension (same SI unit) for the theme's
+    # interactive converter.  Special (callable) converters can't be shipped
+    # as factors -- the theme implements °C / °F / Bft natively.
+
+    units: list[dict] = []
+    seen: set[str] = set()
+    for sym, unit_si_name, _from_si, to_si_f, orig in symbol_to_si():
+        if unit_si_name != si_name or sym != orig or sym in seen:
+            continue
+        seen.add(sym)
+        if isinstance(to_si_f, (float, int)):
+            units.append({"symbol": sym, "to_si": float(to_si_f)})
+        else:
+            units.append({"symbol": sym, "special": True})
+
+    data = {
+        "kind": "unit_conversion",
+        "from_value": from_value,
+        "from_unit": source_symbol,
+        "to_value": result,
+        "to_unit": target_symbol,
+        "units": units,
+    }
+
+    return f'{result} {target_symbol}', data

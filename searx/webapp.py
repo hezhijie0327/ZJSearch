@@ -1404,5 +1404,13 @@ application = app
 
 init()
 
+# zjsearch theme: stream search HTML responses (app shell first, the engines
+# run while the browser shows the boot skeleton).  Everything lives in
+# searx/zjsearch_stream.py -- this file only registers the hook, so upstream
+# changes here cannot conflict with the fork.
+import searx.zjsearch_stream  # pylint: disable=cyclic-import,wrong-import-position
+
+searx.zjsearch_stream.install(app)
+
 if __name__ == "__main__":
     run()
