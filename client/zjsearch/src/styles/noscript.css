@@ -1,0 +1,228 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* Basic no-JS face (noscript.html) — a self-contained document style, see
+   the .zjs-noscript block below. */
+
+@layer components {
+  /* basic no-JS mode (noscript.html): self-contained document styling in the
+     RSS feed's visual language — own palette incl. a prefers-color-scheme
+     dark override, independent of the app's class-based theming (there is no
+     JS to set the theme classes) */
+  .zjs-noscript {
+    --ns-bg: #faf9f6;
+    --ns-surface: #ffffff;
+    --ns-line: #e6e2d7;
+    --ns-ink: #201d17;
+    --ns-ink-2: #6b675c;
+    --ns-ink-3: #716c61;
+    --ns-accent: #8c6800;
+    --ns-accent-strong: #f5c84c;
+    box-sizing: border-box;
+    min-height: 100vh;
+    background: var(--ns-bg);
+    color: var(--ns-ink);
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .zjs-noscript {
+      --ns-bg: #1b1a18;
+      --ns-surface: #232120;
+      --ns-line: #38342f;
+      --ns-ink: #eceae4;
+      --ns-ink-2: #a8a399;
+      --ns-ink-3: #9b958a;
+      --ns-accent: #fec843;
+      --ns-accent-strong: #fec843;
+    }
+  }
+
+  .zjs-ns-wrap {
+    box-sizing: border-box;
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: 0 1rem 3rem;
+  }
+
+  .zjs-ns-brand {
+    padding: 2rem 0 1.5rem;
+    border-bottom: 2px solid var(--ns-accent-strong);
+  }
+
+  .zjs-ns-wordmark {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .zjs-ns-wordmark .dot {
+    color: var(--ns-accent);
+  }
+
+  /* media extras so the no-JS face carries the same information as the app:
+     image thumbnails, torrent size/health/magnet, video duration/author */
+  .zjs-ns-thumb {
+    display: block;
+    margin: 0.35rem 0;
+  }
+  .zjs-ns-thumb img {
+    display: block;
+    max-width: 100%;
+    max-height: 220px;
+    border-radius: 8px;
+  }
+  .zjs-ns-meta2 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.9rem;
+    margin: 0.4rem 0 0;
+    font-size: 0.75rem;
+    color: var(--ns-ink-3);
+  }
+  .zjs-ns-meta2 a {
+    color: var(--ns-accent);
+  }
+
+  .zjs-noscript h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 1.4rem 0 0.2rem;
+  }
+
+  .zjs-ns-meta {
+    font-size: 0.8rem;
+    color: var(--ns-ink-3);
+    margin-bottom: 1.1rem;
+  }
+
+  .zjs-ns-meta .count {
+    font-weight: 600;
+    color: var(--ns-ink-2);
+  }
+
+  .zjs-ns-form {
+    display: flex;
+    gap: 0.5rem;
+    margin: 1.4rem 0 1.1rem;
+  }
+
+  .zjs-ns-form input[type="text"] {
+    min-width: 0;
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--ns-line);
+    border-radius: 0.75rem;
+    background: var(--ns-surface);
+    color: var(--ns-ink);
+    font: inherit;
+  }
+
+  .zjs-ns-form button {
+    padding: 0.5rem 1rem;
+    border: 0;
+    border-radius: 0.75rem;
+    background: var(--ns-accent-strong);
+    color: #241d0e;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .zjs-ns-answer {
+    background: var(--ns-surface);
+    border: 1px solid var(--ns-line);
+    border-radius: 16px;
+    padding: 0.9rem 1rem;
+    margin: 0 0 0.7rem;
+  }
+
+  .zjs-ns-article {
+    background: var(--ns-surface);
+    border: 1px solid var(--ns-line);
+    border-radius: 16px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 0.7rem;
+    transition: border-color 0.15s ease;
+  }
+
+  .zjs-ns-article:hover {
+    border-color: var(--ns-accent-strong);
+  }
+
+  .zjs-ns-host {
+    font-size: 0.75rem;
+    color: var(--ns-ink-3);
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .zjs-ns-article h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .zjs-ns-title-link {
+    color: var(--ns-ink);
+    text-decoration: none;
+  }
+
+  .zjs-ns-title-link:hover {
+    color: var(--ns-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .zjs-ns-article p {
+    margin: 0 0 0.45rem;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--ns-ink-2);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .zjs-ns-article time {
+    font-size: 0.75rem;
+    color: var(--ns-ink-3);
+  }
+
+  .zjs-ns-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .zjs-ns-note {
+    font-size: 0.85rem;
+    color: var(--ns-ink-2);
+  }
+
+  .zjs-ns-note a {
+    color: var(--ns-accent);
+  }
+
+  .zjs-ns-paging a {
+    margin-right: 0.5rem;
+  }
+
+  .zjs-ns-table {
+    border-collapse: collapse;
+    margin: 1rem 0;
+    width: 100%;
+  }
+
+  .zjs-ns-table th,
+  .zjs-ns-table td {
+    border: 1px solid var(--ns-line);
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+  }
+}

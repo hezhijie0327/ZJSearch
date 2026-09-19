@@ -1,0 +1,60 @@
+{#- zjsearch: static boot skeleton, streamed by the server before the search
+    finishes (see zjsearch_search_stream).  It is wiped when React boots with
+    the pending page payload and hidden entirely when JavaScript is disabled
+    (the noscript results replace it).  Geometry mirrors the real results page
+    chrome — header row (brand, query box, action buttons), category tabs,
+    filter row, text-card list, reserved-empty right rail — so the swap to the
+    React pending state does not shift the layout.  Keep in sync with
+    ResultsPage / ResultSkeleton. -#}
+<div aria-busy="true" class="zjs-boot">
+  <div class="zjs-boot-top">
+    <div class="zjs-boot-brand">{{ instance_name }}<span>.</span></div>
+    <div class="zjs-boot-q">
+      <span class="zjs-boot-q-text">{{ q|e }}</span>
+      <span aria-hidden="true" class="zjs-boot-submit">
+        <svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+      </span>
+    </div>
+    <div aria-hidden="true" class="zjs-boot-actions">
+      <span class="zjs-skeleton zjs-boot-action"></span>
+      <span class="zjs-skeleton zjs-boot-action"></span>
+      <span class="zjs-skeleton zjs-boot-action"></span>
+    </div>
+  </div>
+  <div class="zjs-boot-body">
+    <div class="zjs-boot-main">
+      <div aria-hidden="true" class="zjs-boot-tabs">
+        <span class="zjs-skeleton zjs-boot-tab is-selected"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+      </div>
+      <div aria-hidden="true" class="zjs-boot-filters">
+        <span class="zjs-skeleton zjs-boot-filter"></span>
+        <span class="zjs-skeleton zjs-boot-filter"></span>
+        <span class="zjs-skeleton zjs-boot-filter"></span>
+      </div>
+      <div aria-hidden="true" class="zjs-boot-cards">
+        {%- for _ in range(5) -%}
+        <div class="zjs-boot-card">
+          <div class="zjs-skeleton zjs-boot-w40"></div>
+          <div class="zjs-skeleton zjs-boot-title"></div>
+          <div class="zjs-skeleton zjs-boot-line"></div>
+          <div class="zjs-skeleton zjs-boot-line2"></div>
+          <div class="zjs-skeleton zjs-boot-pill"></div>
+        </div>
+        {%- endfor -%}
+      </div>
+    </div>
+    {#- the real page reserves the right rail even when it stays empty
+        (ResultsPage renders it for the infobox) — reserve the width only -#}
+    <div aria-hidden="true" class="zjs-boot-side"></div>
+  </div>
+  <noscript>
+    <style>.zjs-boot { display: none !important; }</style>
+  </noscript>
+</div>

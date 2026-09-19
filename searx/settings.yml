@@ -228,6 +228,9 @@ plugins:
   searx.plugins.self_info.SXNGPlugin:
     active: true
 
+  searx.plugins.stock_quote.SXNGPlugin:
+    active: true
+
   searx.plugins.unit_converter.SXNGPlugin:
     active: true
 

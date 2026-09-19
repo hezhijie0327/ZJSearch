@@ -27,3 +27,24 @@ searx/version_frozen.py
 .dir-locals.el
 
 .python-version
+
+.zcode
+searx/static/themes/zjsearch/
+Makefile
+utils/lib_sxng_themes.sh
+utils/lib_sxng_vite.sh
+
+# local zjsearch patch export
+/zjsearch-theme.patch
+
+# windows local-verification links (hardlinks + junctions into themes/zjsearch)
+/searx/static/zjsearch.min.js
+/searx/static/zjsearch.min.css
+/searx/static/chunk/
+/searx/static/img/
+
+# lighthouse gate archives (raw LHR reports + scores, compared across commits)
+client/zjsearch/.lighthouse-archive/
+
+# lighthouse gate materialised no-JS page (transient)
+/searx/static/audit-nojs.html

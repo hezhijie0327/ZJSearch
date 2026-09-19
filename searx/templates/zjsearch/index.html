@@ -1,0 +1,13 @@
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_index with context %}
+{% from "zjsearch/noscript.html" import ns_form, ns_links with context %}
+{% block head %}<link rel="canonical" href="{{ url_for('index', _external=True) }}">{% endblock %}
+{% block title %}{% endblock %}
+{% block page_data %}{{ page_index(selected_categories) }}{% endblock %}
+{% block noscript %}
+<div class="zjs-noscript">
+  <h1>{{ instance_name }}</h1>
+  {{ ns_form('') }}
+  {{ ns_links() }}
+</div>
+{% endblock %}

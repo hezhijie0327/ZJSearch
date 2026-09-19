@@ -1,0 +1,6 @@
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_404 with context %}
+{% from "zjsearch/noscript.html" import ns_404 with context %}
+{% block title %}Page not found - {% endblock %}
+{% block page_data %}{{ page_404() }}{% endblock %}
+{% block noscript %}{{ ns_404() }}{% endblock %}

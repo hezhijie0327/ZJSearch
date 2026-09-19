@@ -1,0 +1,65 @@
+{#- zjsearch theme: application shell.
+
+The zjsearch theme renders no UI on the server.  Every page is a thin shell that
+boots the React application (``zjsearch.min.js``) and hands it the full page
+payload as JSON (``#page-data``) plus the base64 ``client_settings`` blob on the
+module script tag.  See ``client/zjsearch/`` for the UI implementation. -#}
+<!DOCTYPE html>
+<html lang="{{ locale_rfc5646 }}"{% if rtl %} dir="rtl"{% endif %}{% if preferences.get_value('center_alignment') %} class="centered"{% endif %}>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="endpoint" content="{{ endpoint }}">
+  <meta name="description" content="{{ instance_name }} — a privacy-respecting, open metasearch engine">
+  <meta name="generator" content="searxng/{{ searxng_version }}">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noarchive">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}{% endblock %}{{ instance_name }}</title>
+  <script>
+    // resolve the light/dark mode before first paint: explicit preference from
+    // the cookie (the server writes "auto" when the preference is auto),
+    // otherwise follow the system setting
+    (function () {
+      var style = "";
+      try {
+        var m = document.cookie.match(/(?:^|; *)simple_style=(\w+)/);
+        style = m ? m[1] : "";
+      } catch (e) { /* ignore */ }
+      var auto = style !== "light" && style !== "dark" && style !== "black";
+      var dark = style === "dark" || style === "black" ||
+        (auto && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+      document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.classList.toggle("black", style === "black");
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='zjsearch.min.css') }}" type="text/css">
+  {%- if get_setting('server.limiter') or get_setting('server.public_instance') %}
+  <link rel="stylesheet" href="{{ url_for('client_token', token=link_token) }}" type="text/css">
+  {%- endif %}
+  <link title="{{ instance_name }}" type="application/opensearchdescription+xml" rel="search" href="{{ opensearch_url }}">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.png') }}" sizes="any">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('manifest') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div id="app">{% block app_skeleton %}{% endblock %}</div>
+  {%- block body_tail %}
+  <noscript>
+    <main>
+    {% block noscript %}
+    <div class="zjs-noscript">
+      <h1>{{ instance_name }}</h1>
+      <p>JavaScript is disabled or not supported — the ZJSearch interface needs it.</p>
+      <p><a href="{{ url_for('index') }}">Back to search</a></p>
+    </div>
+    {% endblock %}
+    </main>
+  </noscript>
+  <script id="page-data" type="application/json">{% block page_data %}{}{% endblock %}</script>
+  <script type="module" src="{{ url_for('static', filename='zjsearch.min.js') }}" client_settings="{{ client_settings }}"></script>
+  {%- endblock %}
+</body>
+</html>

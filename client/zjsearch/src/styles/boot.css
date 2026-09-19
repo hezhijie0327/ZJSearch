@@ -1,0 +1,235 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* Skeleton family: the .zjs-skeleton shimmer primitive (shared by the
+   server-streamed shell and React's ResultSkeleton in cardParts.tsx) and the
+   .zjs-boot streamed boot skeleton (skeleton.html) with its error screen. */
+
+@layer components {
+  .zjs-skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-2);
+    border-radius: 8px;
+  }
+
+  .zjs-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--surface) 65%, transparent), transparent);
+    animation: var(--animate-shimmer);
+  }
+
+  /* boot skeleton: streamed by the server before the search finishes
+     (results page shell), wiped by React on boot.  Geometry mirrors the real
+     results page — header row, category tabs, filter row, text cards, an
+     empty right rail — so the boot swap does not shift the layout; hidden
+     for no-JS via the inline <noscript><style> in the skeleton markup. */
+  .zjs-boot {
+    max-width: var(--results-max, 90rem);
+    margin-inline: auto;
+    padding: 0.75rem 1rem 2rem;
+  }
+  @media (min-width: 40rem) {
+    .zjs-boot {
+      padding-inline: 1.5rem;
+    }
+  }
+  .zjs-boot-top {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .zjs-boot-brand {
+    display: none;
+    flex: none;
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .zjs-boot-brand span {
+    color: var(--accent);
+  }
+  /* stand-in for the real compact SearchBox: h-12 ps-5 pe-2 with the
+     max-w-2xl xl:max-w-3xl 2xl:max-w-4xl column of ResultsPage's header */
+  .zjs-boot-q {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    max-width: 42rem;
+    padding: 0.375rem 0.5rem 0.375rem 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: 9999px;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+    color: var(--ink-2);
+    font-size: 1rem;
+  }
+  @media (min-width: 80rem) {
+    .zjs-boot-q {
+      max-width: 48rem;
+    }
+  }
+  @media (min-width: 96rem) {
+    .zjs-boot-q {
+      max-width: 56rem;
+    }
+  }
+  .zjs-boot-q-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* static stand-in for the accent submit button of the real search box */
+  .zjs-boot-submit {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: var(--accent-strong);
+    color: var(--accent-contrast);
+  }
+  /* ghost HeaderActions: the 36px ghost circles of the real icon buttons */
+  .zjs-boot-actions {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-inline-start: auto;
+  }
+  .zjs-boot-action {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+  }
+  .zjs-boot-body {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+  }
+  .zjs-boot-main {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  /* ghost category tabs (text + amber underline; first one selected) and
+     filter row (h-9 rounded-xl dropdown triggers) of the real page */
+  .zjs-boot-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    overflow: hidden;
+    padding-block: 0.25rem;
+  }
+  .zjs-boot-tab {
+    flex: none;
+    width: 5rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+  }
+  .zjs-boot-tab.is-selected {
+    width: 6rem;
+    box-shadow: inset 0 -2px 0 var(--accent-strong);
+  }
+  .zjs-boot-filters {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+    overflow: hidden;
+  }
+  .zjs-boot-filter {
+    flex: none;
+    width: 7rem;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+  }
+  /* card stack mirrors ResultSkeleton + the real list's space-y-1 */
+  .zjs-boot-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+  }
+  .zjs-boot-card {
+    border-radius: 1rem;
+    padding: 1rem;
+  }
+  /* bars follow the real card rhythm: url / mt-1 title / mt-1.5 snippet ×2
+     / mt-2 engines pill — same values as ResultSkeleton in cardParts.tsx */
+  .zjs-boot-w40 {
+    height: 16px;
+    width: 160px;
+  }
+  .zjs-boot-title {
+    height: 24px;
+    width: 75%;
+    margin-top: 4px;
+  }
+  .zjs-boot-line {
+    height: 22px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .zjs-boot-line2 {
+    height: 22px;
+    width: 83%;
+    margin-top: 6px;
+  }
+  .zjs-boot-pill {
+    height: 22px;
+    width: 112px;
+    margin-top: 8px;
+    border-radius: 9999px;
+  }
+  /* width-only reservation of the results right rail (lg:w-80 xl:w-96),
+      which the real page keeps even while it is empty */
+  .zjs-boot-side {
+    display: none;
+  }
+  @media (min-width: 30rem) {
+    .zjs-boot-brand {
+      display: block;
+    }
+  }
+  @media (min-width: 64rem) {
+    .zjs-boot-side {
+      display: block;
+      flex: 0 0 20rem;
+    }
+  }
+  @media (min-width: 80rem) {
+    .zjs-boot-side {
+      flex-basis: 24rem;
+    }
+  }
+
+  /* boot error: replacement screen when the streamed search reports a
+     failure as a boot payload (the app never renders for it) */
+  .zjs-boot-error {
+    display: flex;
+    min-height: 60dvh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    text-align: center;
+  }
+  .zjs-boot-error p {
+    font-size: 0.875rem;
+    color: var(--ink-2);
+  }
+  .zjs-boot-error a {
+    font-size: 0.875rem;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+}
