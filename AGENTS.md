@@ -528,7 +528,13 @@ Results right rail (desktop): the infobox scrolls inside its own area
 can ever get content — always during the streamed boot (width reservation
 matches the static skeleton so the swap never shifts) and afterwards only
 with content (infoboxes present or POST mode), at which point an absent
-rail frees the column and the container-query grids widen into it. The
+rail frees the column and the container-query grids widen into it. A
+rail-free **card-list** page (`list`/`dictionary`/`science`) is the one
+exception: borderless rows capped at the reading measure cannot use the
+freed width, so the column takes
+`lg:max-w-[calc(100%-22rem)] xl:max-w-[calc(100%-26rem)]` — exactly the
+width the reserved rail would leave, keeping the boot swap gapless and
+the page shaped (no formless right void). The
 sidebar itself grows on wide screens (`lg:w-80
 xl:w-96`) instead of giving everything to the text column. Grid density
 is container-query driven: the results column is an `@container` and
