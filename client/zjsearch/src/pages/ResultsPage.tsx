@@ -249,6 +249,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // never shifts); afterwards it stays only with content — an absent rail
   // frees the column and the container-query grids widen into it
   const showRail = showSkeletons || data.infoboxes.length > 0 || globals.method === "POST";
+  // a freed rail column is only useful to container-query grids; card-list
+  // presentations render borderless rows capped at the reading measure, so
+  // the full freed width would read as a formless void. They keep instead
+  // the exact width the reserved rail gives the column — which also keeps
+  // the streamed boot → payload swap gapless for text pages.
+  const cardListLayout = layout.kind === "list" || layout.kind === "dictionary" || layout.kind === "science";
+  const columnCap = !showRail && cardListLayout ? "lg:max-w-[calc(100%-22rem)] xl:max-w-[calc(100%-26rem)]" : "";
 
   return (
     <Shell globals={globals} hideTopNav>
@@ -281,7 +288,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
           {/* @container: grid density keys off the actual column width, so
               widescreen adds a column and centered mode drops one */}
-          <div className="@container min-w-0 flex-1 pt-4" ref={listRef}>
+          <div className={`@container min-w-0 flex-1 pt-4 ${columnCap}`} ref={listRef}>
             {/* Kagi layout: the tabs and filters live in the results column so
                 the infobox sidebar rises to the top of the page */}
             <CategoryTabs

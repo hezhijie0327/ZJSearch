@@ -84,7 +84,11 @@ instead of inventing sizes/colours:
   steps), so widescreen mode (90rem cap) grows a column, centered mode
   (72rem) drops one, and the sidebar/empty-rail changes re-flow grids
   automatically. New grids must use container variants, not ``sm:``/
-  ``xl:`` viewport breakpoints.
+  ``xl:`` viewport breakpoints. A rail-free card-list page
+  (``list``/``dictionary``/``science``) is the exception: borderless text
+  rows cannot use the freed width, so its column caps to the exact width
+  the reserved rail would leave — a deliberate reading measure instead of
+  a formless void, and a gapless boot swap.
 - **Icons** — lucide-react, imported per usage site with
   ``aria-hidden``; 18px (``size-4.5``) in 36px round buttons, 14px
   (``size-3.5``) leading icons in tabs/pills, 12px (``size-3``) inside
