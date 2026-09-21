@@ -38,6 +38,8 @@ Implementations
 import datetime
 import typing as t
 
+from searx.result_types import Video
+
 engine_type = "offline"
 categories = ["general", "images", "videos", "music", "files", "science", "it", "apps"]
 disabled = True
@@ -107,15 +109,21 @@ def _images() -> list[dict[str, t.Any]]:
     ]
 
 
-def _videos() -> list[dict[str, t.Any]]:
+def _videos() -> list[Video]:
+    # the typed Video class real video engines emit since upstream #6743:
+    # timedelta length, thumbnail (not img_src), author/views meta and the
+    # auto-filled iframe_src (empty here — example.com is no known embedder)
     return [
-        {
-            "title": f"Audit fixture video #{index}",
-            "url": f"https://example.com/zjaudit/videos/{index}",
-            "content": f"Offline fixture video #{index} for the video grid.",
-            "img_src": FIXTURE_IMG,
-            "length": 60 * index % 3600,
-        }
+        Video(
+            title=f"Audit fixture video #{index}",
+            url=f"https://example.com/zjaudit/videos/{index}",
+            content=f"Offline fixture video #{index} for the video grid.",
+            thumbnail=FIXTURE_IMG,
+            publishedDate=_PUBLISHED - index * _DAYS,
+            length=datetime.timedelta(seconds=(60 * index) % 3600),
+            author=f"Fixture channel #{index % 4}",
+            views=f"{13 * index % 90 + 10}K",
+        )
         for index in range(1, 13)
     ]
 
