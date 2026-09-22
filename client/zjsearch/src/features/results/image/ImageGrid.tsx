@@ -4,11 +4,12 @@ import { imageAlt } from "@/lib/format.ts";
 /** Image results: borderless masonry grid; the lightbox opens through a portal. */
 
 import { ImageOff } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lightbox } from "@/features/results/image/Lightbox.tsx";
 import { useGraceThumb } from "@/features/results/Tile.tsx";
 import type { ResultItem } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 function ImageTile({
   results,
@@ -81,6 +82,14 @@ function ImageTile({
 /** Borderless masonry grid: pure images, info only on hover. */
 export function ImageGrid({ results }: { results: ResultItem[] }) {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
+  // the viewer keeps fading after the index clears; the last index feeds the
+  // exit render so the image does not vanish mid-fade
+  const { render: renderViewer, closing: viewerClosing } = useExitPresence(openIndex !== null, 200);
+  const lastIndex = useRef(0);
+  if (openIndex !== null) {
+    lastIndex.current = openIndex;
+  }
+  const viewIndex = openIndex ?? lastIndex.current;
 
   return (
     // masonry density keys off the column width (container queries), like
@@ -98,10 +107,11 @@ export function ImageGrid({ results }: { results: ResultItem[] }) {
           />
         );
       })}
-      {openIndex !== null
+      {renderViewer
         ? createPortal(
             <Lightbox
-              index={openIndex}
+              closing={viewerClosing}
+              index={viewIndex}
               onClose={() => {
                 setOpenIndex(null);
               }}

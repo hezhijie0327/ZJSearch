@@ -22,7 +22,10 @@ import { ZH_CN } from "@/lib/i18n/zh-CN.ts";
 import type { LocaleInfo } from "@/lib/types.ts";
 
 export type { StringKey };
-export type Translate = (key: StringKey) => string;
+/** Interpolation values for `{name}` placeholders in catalog strings
+    (DESIGN.md §10). */
+export type TranslateParams = Record<string, string | number>;
+export type Translate = (key: StringKey, params?: TranslateParams) => string;
 
 /** Language picker options shared by the results filter row and the
     preferences general tab: default [all], autodetect (optionally annotated
@@ -82,5 +85,11 @@ export function useT(): Translate {
     router); resolves the catalog from an explicit locale tag. */
 export function translateFor(locale: string): Translate {
   const catalog = CATALOGS[themeLocaleTag(locale)] ?? EN;
-  return (key: StringKey) => catalog[key] ?? EN[key] ?? key;
+  return (key, params) => {
+    const template = catalog[key] ?? EN[key] ?? key;
+    if (!params) {
+      return template;
+    }
+    return template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match));
+  };
 }
