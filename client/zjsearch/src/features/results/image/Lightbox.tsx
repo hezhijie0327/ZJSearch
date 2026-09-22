@@ -70,11 +70,15 @@ function ProgressiveImage({ thumbnail, full, alt }: { thumbnail: string; full: s
 export function Lightbox({
   results,
   index,
+  closing = false,
   onClose,
   onNavigate,
 }: {
   results: ResultItem[];
   index: number;
+  /** exit phase: fade out, stop interacting, ignore keys (no second
+      history.back from a repeated Escape while the fade plays) */
+  closing?: boolean;
   onClose: () => void;
   onNavigate: (index: number) => void;
 }) {
@@ -87,7 +91,9 @@ export function Lightbox({
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
-  const dialogRef = useDialogFocus<HTMLDivElement>();
+  // active=false the moment closing starts: focus returns to the trigger
+  // immediately instead of after the exit animation unmounts the viewer
+  const dialogRef = useDialogFocus<HTMLDivElement>(!closing);
 
   const resetZoom = useCallback(() => {
     setZoom(1);
@@ -141,6 +147,9 @@ export function Lightbox({
   );
 
   useEffect(() => {
+    if (closing) {
+      return;
+    }
     if (window.location.hash !== IMAGE_VIEWER_HASH) {
       window.location.hash = "image-viewer";
     }
@@ -153,10 +162,13 @@ export function Lightbox({
     return () => {
       window.removeEventListener("hashchange", onHashChange);
     };
-  }, [onClose]);
+  }, [onClose, closing]);
 
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (closing) {
+        return;
+      }
       const zoomIn = event.key === "+" || event.key === "=";
       const zoomOut = event.key === "-";
       if (
@@ -192,7 +204,7 @@ export function Lightbox({
     return () => {
       window.removeEventListener("keydown", onKeyDown, { capture: true });
     };
-  }, [close, nav, resetZoom]);
+  }, [closing, close, nav, resetZoom]);
 
   if (!result) {
     return null;
@@ -210,7 +222,8 @@ export function Lightbox({
   return (
     <div
       aria-modal="true"
-      className="fixed inset-0 z-50 flex flex-col bg-[#161616]/97 animate-fade-in"
+      className={`fixed inset-0 z-50 flex flex-col bg-[#161616]/97 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      inert={closing || undefined}
       onTouchEnd={(event) => {
         const start = touchStartX.current;
         const end = event.changedTouches[0]?.clientX ?? null;

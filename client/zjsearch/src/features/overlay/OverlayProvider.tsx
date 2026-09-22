@@ -10,7 +10,17 @@
  */
 
 import { X } from "lucide-react";
-import { createContext, type ReactNode, Suspense, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { fetchText } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -18,6 +28,7 @@ import { isModifiedClick } from "@/lib/link.ts";
 import { extractPageData } from "@/lib/pageData.ts";
 import { ICON_BTN } from "@/lib/styles.ts";
 import type { AnyPageData } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** Panels the app can render inside the drawer. Returning null means "this
     payload is not panel-able" and shows the fallback with an escape link. */
@@ -58,8 +69,17 @@ export function useOverlay(): OverlayContextValue {
 export function OverlayProvider({ panels, children }: { panels: OverlayPanels; children: ReactNode }) {
   const t = useT();
   const [state, setState] = useState<OverlayState | null>(null);
+  // the drawer plays its slide-out/fade-out window after closeOverlay; the
+  // last state is kept so the panel still has content to fade
+  const { render: renderDrawer, closing: drawerClosing } = useExitPresence(state !== null, 260);
+  const lastState = useRef<OverlayState | null>(null);
+  if (state) {
+    lastState.current = state;
+  }
+  const view = state ?? lastState.current;
   // the drawer element is rendered by this always-mounted provider: pass the
-  // open flag so the focus effect runs when the dialog actually appears
+  // open flag so the focus effect runs when the dialog actually appears —
+  // and returns to the trigger the moment closing starts, not at unmount
   const dialogRef = useDialogFocus<HTMLDivElement>(state !== null);
 
   const closeOverlay = useCallback(() => {
@@ -149,18 +169,19 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
   return (
     <OverlayContext.Provider value={contextValue}>
       {children}
-      {state ? (
+      {renderDrawer && view ? (
         <div
-          aria-label={state.title}
+          aria-label={view.title}
           aria-modal="true"
           className="fixed inset-0 z-50"
+          inert={drawerClosing || undefined}
           ref={dialogRef}
           role="dialog"
           tabIndex={-1}
         >
           <button
             aria-label={t("close")}
-            className="absolute inset-0 cursor-default bg-black/60 animate-fade-in"
+            className={`absolute inset-0 cursor-default bg-black/60 ${drawerClosing ? "animate-fade-out" : "animate-fade-in"}`}
             onClick={closeOverlay}
             type="button"
           />
@@ -168,11 +189,13 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
               so pills center in the drawer instead of the viewport (the
               entrance animation's residual transform contains `fixed`) */}
           <div
-            className="absolute inset-y-0 end-0 flex w-full max-w-3xl flex-col bg-bg shadow-pop animate-slide-in-right"
+            className={`absolute inset-y-0 end-0 flex w-full max-w-3xl flex-col bg-bg shadow-pop ${
+              drawerClosing ? "animate-slide-out-right" : "animate-slide-in-right"
+            }`}
             data-zjs-overlay-panel=""
           >
             <div className="flex items-center justify-between border-b border-line px-5 py-3">
-              <h2 className="text-lg font-semibold text-ink">{state.title}</h2>
+              <h2 className="text-lg font-semibold text-ink">{view.title}</h2>
               <button
                 aria-label={t("close")}
                 className={ICON_BTN}
@@ -201,22 +224,22 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
                 }
                 event.preventDefault();
                 event.stopPropagation();
-                openPanel(href, state?.title ?? "");
+                openPanel(href, view.title);
               }}
             >
-              {state.loading ? (
+              {view.loading ? (
                 <PanelSkeleton />
-              ) : state.error ? (
-                <p className="p-6 text-sm text-danger">{state.error}</p>
-              ) : state.mode === "document" ? (
+              ) : view.error ? (
+                <p className="p-6 text-sm text-danger">{view.error}</p>
+              ) : view.mode === "document" ? (
                 <article className="px-5 pb-8">
                   <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-ink-2">
-                    {state.text}
+                    {view.text}
                   </pre>
                 </article>
-              ) : state.data ? (
+              ) : view.data ? (
                 <Suspense fallback={<PanelSkeleton />}>
-                  {panels.renderPage(state.data, state.hint) ?? <PanelFallback data={state.data} />}
+                  {panels.renderPage(view.data, view.hint) ?? <PanelFallback data={view.data} />}
                 </Suspense>
               ) : null}
             </div>

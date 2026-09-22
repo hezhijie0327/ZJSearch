@@ -9,6 +9,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 export interface DropdownOption {
   value: string;
@@ -64,6 +65,8 @@ export function Dropdown({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLUListElement>(null);
   const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
+  // the menu stays mounted through its fade-out window after a dismissal
+  const { render: renderMenu, closing: menuClosing } = useExitPresence(open);
 
   // close on outside clicks (the portaled menu counts as inside)
   useEffect(() => {
@@ -206,11 +209,14 @@ export function Dropdown({
         )}
       </button>
 
-      {open && menuStyle
+      {renderMenu && menuStyle
         ? createPortal(
             <ul
               aria-label={ariaLabel}
-              className={`fixed z-50 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop animate-fade-in ${menuClassName}`}
+              className={`fixed z-50 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
+                menuClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
+              } ${menuClassName}`}
+              inert={menuClosing || undefined}
               ref={menuRef}
               role="listbox"
               style={menuStyle}

@@ -82,11 +82,25 @@ function widgetRows(t: Translate): Array<[string, string]> {
   ];
 }
 
-export function HelpModal({ layout, onClose }: { layout: "default" | "vim"; onClose: () => void }) {
+export function HelpModal({
+  layout,
+  closing = false,
+  onClose,
+}: {
+  layout: "default" | "vim";
+  /** exit phase: the dialog is fading out and must stop interacting */
+  closing?: boolean;
+  onClose: () => void;
+}) {
   const t = useT();
-  const dialogRef = useDialogFocus<HTMLDivElement>();
+  // active=false the moment closing starts: focus returns to the trigger
+  // immediately instead of after the exit animation unmounts the dialog
+  const dialogRef = useDialogFocus<HTMLDivElement>(!closing);
 
   useEffect(() => {
+    if (closing) {
+      return;
+    }
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
@@ -96,7 +110,7 @@ export function HelpModal({ layout, onClose }: { layout: "default" | "vim"; onCl
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [onClose]);
+  }, [onClose, closing]);
 
   const columns: HelpColumn[] = [
     { title: t("help_shortcuts"), rows: shortcutRows(layout, t) },
@@ -106,7 +120,14 @@ export function HelpModal({ layout, onClose }: { layout: "default" | "vim"; onCl
   ];
 
   return (
-    <div aria-modal="true" className="fixed inset-0 z-50 animate-fade-in" ref={dialogRef} role="dialog" tabIndex={-1}>
+    <div
+      aria-modal="true"
+      className={`fixed inset-0 z-50 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      inert={closing || undefined}
+      ref={dialogRef}
+      role="dialog"
+      tabIndex={-1}
+    >
       <button
         aria-label={t("close")}
         className="absolute inset-0 cursor-default bg-black/60"
@@ -114,7 +135,11 @@ export function HelpModal({ layout, onClose }: { layout: "default" | "vim"; onCl
         type="button"
       />
       <div className="pointer-events-none absolute inset-0 grid place-items-center p-4">
-        <div className="pointer-events-auto max-h-[86dvh] w-full max-w-5xl overflow-auto rounded-2xl border border-line bg-surface p-6 shadow-pop animate-fade-up lg:max-w-6xl">
+        <div
+          className={`pointer-events-auto max-h-[86dvh] w-full max-w-5xl overflow-auto rounded-2xl border border-line bg-surface p-6 shadow-pop lg:max-w-6xl ${
+            closing ? "animate-fade-out" : "animate-fade-up"
+          }`}
+        >
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-ink">{t("hotkeys")}</h2>
             <button aria-label={t("close")} className={ICON_BTN} data-dialog-close="" onClick={onClose} type="button">

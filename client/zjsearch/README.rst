@@ -4,6 +4,10 @@ zjsearch
 
 A from-scratch React + TypeScript UI theme for SearXNG, named **ZJSearch**.
 
+The theme conforms to the family design contract ``DESIGN.md`` (ZJBlog
+repository) — palette tokens, component fragments, motion rules and
+quality gates are family-wide.
+
 Unlike the bundled ``simple`` theme (server-rendered HTML progressively
 enhanced with TypeScript), zjsearch renders **100% of the UI in React**.
 The SearXNG server keeps rendering every page, but the theme's Jinja

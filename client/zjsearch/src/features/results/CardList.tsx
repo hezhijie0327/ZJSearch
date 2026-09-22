@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import clsx from "clsx";
 import type { ReactNode } from "react";
 import { ResultCard } from "@/features/results/cards/ResultCard.tsx";
 import { ResultRow } from "@/features/results/ResultRow.tsx";
+import { cn } from "@/lib/cn.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
 /** One entry per rendered row, carrying its page-global hotkey index. */
@@ -42,7 +42,7 @@ export function CardList({
   renderItem?: (result: ResultItem, index: number) => ReactNode;
 }) {
   return (
-    <div className={clsx(spaced && "space-y-1", className)}>
+    <div className={cn(spaced && "space-y-1", className)}>
       {entries.map(({ result, index }) => (
         <ResultRow index={index} key={index} selected={selected === index}>
           {renderItem ? (

@@ -7,6 +7,7 @@ import { useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
 import { ICON_BTN } from "@/lib/styles.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 interface Suggestion {
   text: string;
@@ -155,6 +156,15 @@ export function SearchBox({
   };
 
   const showDropdown = open && suggestions.length > 0;
+  // the list stays mounted through its fade-out window; render the last
+  // non-empty suggestion set so a mid-exit fetch clearing `suggestions`
+  // cannot collapse the fading panel into an empty bordered box
+  const { render: renderSuggest, closing: suggestClosing } = useExitPresence(showDropdown);
+  const lastSuggestions = useRef(suggestions);
+  if (suggestions.length > 0) {
+    lastSuggestions.current = suggestions;
+  }
+  const exitSuggestions = lastSuggestions.current;
 
   return (
     <div className="relative w-full" ref={boxRef}>
@@ -214,14 +224,17 @@ export function SearchBox({
         </button>
       </form>
 
-      {showDropdown ? (
+      {renderSuggest && exitSuggestions.length > 0 ? (
         <ul
           aria-label={t("search_suggestions")}
-          className="absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop animate-fade-in"
+          className={`absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
+            suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
+          }`}
           id={listboxId}
+          inert={suggestClosing || undefined}
           role="listbox"
         >
-          {suggestions.map((suggestion, index) => (
+          {exitSuggestions.map((suggestion, index) => (
             <li key={suggestion.text}>
               {/* option role on the button: role=option must not nest
                   interactive descendants (activedescendant targets this id) */}

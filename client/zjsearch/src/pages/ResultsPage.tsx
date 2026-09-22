@@ -29,6 +29,7 @@ import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 export function ResultsPage({ data }: { data: SearchPageData }) {
   const t = useT();
@@ -73,6 +74,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
 
   const settings = useSettings();
   const [helpOpen, setHelpOpen] = useState(false);
+  const { render: renderHelp, closing: helpClosing } = useExitPresence(helpOpen);
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
   const [hotkeysSelected, setHotkeysSelected] = useState(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -392,7 +394,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       </main>
 
       <BackToTop />
-      {helpOpen ? <HelpModal layout={settings.hotkeys} onClose={() => setHelpOpen(false)} /> : null}
+      {renderHelp ? (
+        <HelpModal closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
+      ) : null}
     </Shell>
   );
 }

@@ -12,6 +12,7 @@ import { useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
 import type { BasicPageData } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 import { preloadResultsPage } from "@/pages/lazyPages.ts";
 
 interface IndexData extends BasicPageData {
@@ -47,6 +48,7 @@ export function IndexPage({ data }: { data: IndexData }) {
   };
 
   const [helpOpen, setHelpOpen] = useState(false);
+  const { render: renderHelp, closing: helpClosing } = useExitPresence(helpOpen);
   const [hintHidden, setHintHidden] = useState(() => window.localStorage.getItem("zjs-hint-hidden") === "1");
   const settings = useSettings();
   const t = useT();
@@ -74,7 +76,7 @@ export function IndexPage({ data }: { data: IndexData }) {
           {globals.instance_name}
           <button
             aria-label={`${t("powered_by")} SearXNG`}
-            className="group/dot relative cursor-pointer text-accent-strong"
+            className="group/dot relative cursor-pointer text-accent"
             onClick={() => {
               openOverlay(globals.about_url, t("about"), "about");
             }}
@@ -177,7 +179,9 @@ export function IndexPage({ data }: { data: IndexData }) {
           </div>
         </div>
       )}
-      {helpOpen ? <HelpModal layout={settings.hotkeys} onClose={() => setHelpOpen(false)} /> : null}
+      {renderHelp ? (
+        <HelpModal closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
+      ) : null}
     </Shell>
   );
 }

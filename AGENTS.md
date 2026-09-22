@@ -5,9 +5,12 @@ Guidance for AI agents working in this repository.
 ## Repository
 
 Fork of [SearXNG](https://github.com/searxng/searxng) (metasearch engine, Python/Flask + Jinja2).
-Current working branch: `skin`. The purpose of this fork is the custom theme
+Current working branch: `zjsearch`. The purpose of this fork is the custom theme
 **zjsearch** — a from-scratch React + TypeScript UI — alongside the upstream
-`simple` theme. Python changes are the exception, not the rule: only make them
+`simple` theme. The theme follows the family design contract **DESIGN.md**
+(ZJBlog repository): palette tokens and shared fragments are family-wide,
+so token retunes and new fragments update DESIGN.md first and both
+implementations together. Python changes are the exception, not the rule: only make them
 when the user explicitly asks (e.g. the structured `data` payloads that
 special-query answers carry for the theme — see
 `searx/result_types/answer.py` and the hash/self-info/time-zone plugins plus
@@ -132,7 +135,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   locale — `en.ts` is the source and defines the `StringKey` union, `zh-CN.ts`
   must implement it fully; every other locale falls back to English. Add new
   keys to `en.ts` first (then the other catalogs), render via `useT()` /
-  `t("key")` — unknown keys are compile errors. Adding a language = one new
+  `t("key")` — unknown keys are compile errors. `t(key, params)` interpolates
+  `{name}` placeholders (the DESIGN.md §10 family API). Adding a language = one new
   catalog file + one entry in `CATALOGS` / `themeLocaleTag()`.
 - About/Stats/Preferences open as slide-in drawers
   (`src/features/overlay/OverlayProvider.tsx`); the panel fetches page-data and
@@ -391,8 +395,14 @@ Motion & disclosure:
   image masonry does the same) while `eager` first-four images paint
   immediately (LCP); list rows beyond the first 12 (infinite-scroll
   appends) run `animate-fade-in`, and the preferences tab panel fades on
-  every tab switch (`key={tab}` remount). Dismissals stay instant-unmount
-  by design (no exit animations anywhere).
+  every tab switch (`key={tab}` remount). Dismissals play an exit animation
+  through `useExitPresence` (`src/lib/useExitPresence.ts`): the surface
+  stays mounted for its `-out` animation with `closing` → `inert` +
+  short-circuited handlers (the lightbox must not take a second
+  `history.back()` mid-fade); the unmount timer is the doc-mandated timeout
+  fallback; reduced motion unmounts instantly; dialogs pass `active={!closing}`
+  to `useDialogFocus` so focus returns at close-initiation, not at unmount.
+  Content swaps (tab panels, pagination) are covered by the enter animation.
 
 Shared style & logic tokens (import, never re-type):
 
@@ -709,6 +719,8 @@ Python edits — the repo policy forbids them):
 
 ## Docs worth reading first
 
+- The family `DESIGN.md` (ZJBlog repository) — design tokens, fragments,
+  motion and quality contract the theme must conform to.
 - `client/zjsearch/README.rst` — theme architecture and workflow.
 - `docs/dev/templates.rst` — result field reference (the upstream render contract).
 - `docs/dev/plugins/` — server plugin registry used by the preferences UI.
