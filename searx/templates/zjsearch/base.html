@@ -4,8 +4,21 @@ The zjsearch theme renders no UI on the server.  Every page is a thin shell that
 boots the React application (``zjsearch.min.js``) and hands it the full page
 payload as JSON (``#page-data``) plus the base64 ``client_settings`` blob on the
 module script tag.  See ``client/zjsearch/`` for the UI implementation. -#}
+{#- resolve the palette server-side: explicit dark/black preferences render as
+    html classes right in the markup, so the streamed boot skeleton paints in
+    the user's palette with zero JavaScript (client-side optimizers that defer
+    inline scripts — e.g. Cloudflare Rocket Loader — must not flash light).
+    Auto mode stays client-side (system preference): the inline head script
+    below syncs it. -#}
+{% set html_classes = [] %}
+{% if preferences.get_value('center_alignment') %}{% set html_classes = html_classes + ['centered'] %}{% endif %}
+{% if preferences.get_value('simple_style') in ('dark', 'black') %}{% set html_classes = html_classes + ['dark'] %}{% endif %}
+{% if preferences.get_value('simple_style') == 'black' %}{% set html_classes = html_classes + ['black'] %}{% endif %}
+{#- light is inert in the app (tokens default to light) but lets the no-JS
+    face (noscript.css) pin the explicit choice against a dark system -#}
+{% if preferences.get_value('simple_style') == 'light' %}{% set html_classes = html_classes + ['light'] %}{% endif %}
 <!DOCTYPE html>
-<html lang="{{ locale_rfc5646 }}"{% if rtl %} dir="rtl"{% endif %}{% if preferences.get_value('center_alignment') %} class="centered"{% endif %}>
+<html lang="{{ locale_rfc5646 }}"{% if rtl %} dir="rtl"{% endif %}{% if html_classes %} class="{{ html_classes|join(' ') }}"{% endif %}>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,10 +29,13 @@ module script tag.  See ``client/zjsearch/`` for the UI implementation. -#}
   <meta name="robots" content="noarchive">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}{% endblock %}{{ instance_name }}</title>
-  <script>
+  <script data-cfasync="false">
     // resolve the light/dark mode before first paint: explicit preference from
     // the cookie (the server writes "auto" when the preference is auto),
-    // otherwise follow the system setting
+    // otherwise follow the system setting.  dark/black are already rendered
+    // server-side on <html> above — the toggles re-assert the same values.
+    // data-cfasync="false" keeps Cloudflare Rocket Loader from deferring
+    // this script past first paint (it must run before the skeleton shows).
     (function () {
       var style = "";
       try {
@@ -59,7 +75,7 @@ module script tag.  See ``client/zjsearch/`` for the UI implementation. -#}
     </main>
   </noscript>
   <script id="page-data" type="application/json">{% block page_data %}{}{% endblock %}</script>
-  <script type="module" src="{{ url_for('static', filename='zjsearch.min.js') }}" client_settings="{{ client_settings }}"></script>
+  <script type="module" src="{{ url_for('static', filename='zjsearch.min.js') }}" client_settings="{{ client_settings }}" data-cfasync="false"></script>
   {%- endblock %}
 </body>
 </html>
