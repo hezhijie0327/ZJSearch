@@ -43,8 +43,9 @@
   .zjs-boot-brand {
     display: none;
     flex: none;
+    font-family: var(--font-serif);
     font-size: 1.25rem;
-    font-weight: 800;
+    font-weight: 600;
     letter-spacing: -0.025em;
     color: var(--ink);
     white-space: nowrap;

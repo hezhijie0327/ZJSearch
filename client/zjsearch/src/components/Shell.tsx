@@ -3,6 +3,7 @@
 import { ChartColumn, Info, SlidersHorizontal } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { useEffect } from "react";
+import { siteConfig } from "@/config/site.ts";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { isModifiedClick, newTabLinkProps } from "@/lib/link.ts";
@@ -119,9 +120,9 @@ function TopNav({ globals, hideBrand = false }: { globals: GlobalData; hideBrand
         <span aria-hidden="true" />
       ) : (
         <Link ariaLabel={globals.instance_name} className="shrink-0 select-none" href="/" title={globals.instance_name}>
-          <span className="text-xl font-extrabold tracking-tight text-ink">
+          <span className="font-serif text-xl font-semibold tracking-tight text-ink">
             {globals.instance_name}
-            <span className="text-accent-strong">.</span>
+            <span className="text-accent">.</span>
           </span>
         </Link>
       )}
@@ -134,7 +135,9 @@ function Footer() {
   const year = new Date().getFullYear();
   return (
     <footer className="mx-auto w-full max-w-5xl px-4 pb-8 text-center text-xs text-ink-3 sm:px-6">
-      <p className="leading-5">© {year} Zhijie Online</p>
+      <p className="leading-5">
+        © {year} {siteConfig.copyright}
+      </p>
     </footer>
   );
 }

@@ -57,7 +57,7 @@ export function Infobox({
             src={infobox.img_src}
           />
         ) : null}
-        <h2 className="min-w-0 text-xl font-semibold leading-tight tracking-tight text-ink" dir="auto">
+        <h2 className="min-w-0 font-serif text-xl font-semibold leading-tight tracking-tight text-ink" dir="auto">
           {infobox.title}
         </h2>
       </div>
