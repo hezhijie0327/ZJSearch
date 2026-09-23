@@ -41,7 +41,10 @@
           .brand {
             padding: 2rem 0 1.5rem; border-bottom: 2px solid var(--accent-strong);
           }
-          .brand .wordmark { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em; }
+          .brand .wordmark {
+            font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+            font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em;
+          }
           .brand .wordmark .dot { color: var(--accent); }
           h1 { font-size: 1.25rem; font-weight: 600; margin: 1.4rem 0 0.2rem; }
           .meta { font-size: 0.8rem; color: var(--ink-3); margin-bottom: 1.1rem; }
