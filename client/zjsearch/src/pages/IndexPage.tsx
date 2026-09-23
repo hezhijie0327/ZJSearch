@@ -72,7 +72,7 @@ export function IndexPage({ data }: { data: IndexData }) {
         {/* the accent dot is the attribution: hovering (or focusing) it fades
             in "Powered by SearXNG" beside the wordmark — absolutely positioned
             so the centered brand never shifts — and tapping it opens About */}
-        <h1 className="animate-fade-up text-6xl font-extrabold tracking-tight text-ink sm:text-7xl">
+        <h1 className="animate-fade-up font-serif text-6xl font-black tracking-tight text-ink sm:text-7xl">
           {globals.instance_name}
           <button
             aria-label={`${t("powered_by")} SearXNG`}

@@ -82,8 +82,9 @@
   }
 
   .zjs-ns-wordmark {
+    font-family: var(--font-serif);
     font-size: 1.25rem;
-    font-weight: 800;
+    font-weight: 600;
     letter-spacing: -0.01em;
   }
 

@@ -349,10 +349,14 @@ Type scale — one size per text role:
   titles.
 - 16px `text-base`: result titles (list/news/product/video grids all share
   the `Title`/h3 token) and ALL search inputs (hero included).
-- 20px `text-xl`: infobox title; 24px `text-2xl`: page headings; section
+- 20px `text-xl`: infobox title (serif — the family editorial track applied to
+  the one knowledge heading); 24px `text-2xl`: page headings; section
   headings in between are `text-base`/`text-lg` `font-semibold`.
-- Brand marks: hero `text-6xl/7xl`, header `text-xl`, both `font-extrabold`
-  (the brand dot span is `text-accent` — readable in every palette).
+- Brand marks: hero `text-6xl/7xl font-black`, header `text-xl
+  font-semibold`, both `font-serif` (registered DESIGN.md §4 variant: result
+  titles and UI section headings stay sans for scan density; the wordmark
+  dot is interactive — hover powers the "Powered by SearXNG" reveal, and its
+  span is `text-accent`, readable in every palette).
 - Thumbnail corner badges / floating overlay chips: 11px `font-medium`
   (badge tier, the sanctioned sub-12px exception along with the mini
   player's tabular clock and the weather SVG chart labels).
@@ -608,9 +612,11 @@ build; upstream `simple` instead links a dedicated built rss.css).  Rules:
 - Their palettes mirror the app tokens exactly (light `--accent #8c6800`,
   `--ink-3 #716c61`; dark tokens match `.dark`) — the earlier lighter
   amber/grey variants are gone; keep them in sync when retuning tokens.
-  Dark mode there is `prefers-color-scheme` (no JS to set classes).
+  Dark mode there is `prefers-color-scheme` plus the server-rendered
+  `html.light/.dark/.black` classes (base.html) — explicit preference beats
+  the system, no JS involved.
 - Radii follow the app scale (cards 16px = rounded-2xl), the wordmark is
-  1.25rem/800 like the header brand, and the brand dot is `.dot`
+  1.25rem/600 serif like the header brand, and the brand dot is `.dot`
   (accent), not an ad-hoc class.
 - Strings are English-only by design: the no-JS templates have no i18n
   mechanism (adding per-server-locale template variants doesn't scale);
@@ -697,20 +703,23 @@ Python edits — the repo policy forbids them):
   `local/py3/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt`.
 - `searx/valkeydb.py` imports the POSIX-only `pwd` module at top level and
   crashes on import. Put a tiny `pwd` stub outside the repo on `PYTHONPATH`.
+- The app bundle URLs live at the static ROOT (`/static/zjsearch.min.js`):
+  `webapp.custom_url_for` only maps a bare filename when it exists in
+  `searx/static/`, so the build publishes `zjsearch.min.js`, `zjsearch.min.css`
+  and `chunk/` there itself (`tools/assets.ts` closeBundle, `chunk/` rebuilt
+  from scratch each build). Beware STALE root copies: they shadow every
+  rebuild (a running instance keeps answering with the old ETag bytes even
+  after restart-proof rebuilds — the served bundle lacks your new classes
+  while the file on disk has them). On Windows the root copies additionally
+  need the POSIX-path workaround below; the old manual `os.link` recipe is
+  OBSOLETE since the build publishes by copy.
 - Windows path separators break theme asset URLs:
   `webutils.get_static_file_list()` returns `themes\zjsearch\...` while
-  `webapp.custom_url_for` compares with forward slashes, so `/static/zjsearch.min.js`
-  is served unmapped and 404s (works fine on POSIX). Workaround: hardlink the
-  built assets into `searx/static/` — `zjsearch.min.js`, `zjsearch.min.css`
-  AND the whole `chunk/` directory (vite splits lazy pages into it; the
-  preferences chunk landing there makes the preferences drawer 404 without
-  this step). Sync everything after EVERY rebuild (vite replaces the target
-  files, breaking the links); they are untracked and git-ignored. `mklink`
-  backslash escaping is unreliable from Git Bash — use Python `os.link`:
-  `local/py3/Scripts/python -c "import os,shutil;src='themes/zjsearch/chunk';dst='chunk';shutil.rmtree(dst,ignore_errors=True);os.makedirs(dst);[os.link(os.path.join(src,f),os.path.join(dst,f)) for f in os.listdir(src)]"`
-  (run inside `searx/static`). Junctions (`mklink /J`) do NOT work —
-  WhiteNoise's directory walk skips them. Symptom of a stale link: curl the
-  URL and get HTML instead of JS. See `HANDOVER.md` for the full recipe.
+  `webapp.custom_url_for` compares with forward slashes, so
+  `/static/themes/zjsearch/img/...` URLs 404 (works fine on POSIX).
+  The bundle files above are immune (they live at the static root under
+  plain names). If a themed asset URL ever 404s on Windows, check the
+  separator in `get_static_file_list()` first.
 - Start the app directly, mirroring `manage`'s `webapp.run` env vars:
   `SEARXNG_SETTINGS_PATH=<settings.yml> GRANIAN_INTERFACE=wsgi
   GRANIAN_HOST=127.0.0.1 GRANIAN_PORT=8888 local/py3/Scripts/granian
