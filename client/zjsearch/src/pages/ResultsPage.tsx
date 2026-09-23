@@ -270,12 +270,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               hidden on small screens so the query box keeps enough width */}
           <Link
             ariaLabel={globals.instance_name}
-            className="hidden min-[480px]:block shrink-0 select-none font-serif text-xl font-semibold tracking-tight text-ink"
+            className="hidden min-[480px]:block shrink-0 select-none font-serif text-2xl font-semibold tracking-tight text-ink"
             href="/"
             title={globals.instance_name}
           >
             {globals.instance_name}
-            <span className="text-accent">.</span>
+            {/* 品牌句号（DESIGN.md §2.2）：实心金点收尾，与 favicon 句号同色系 */}
+            <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
           </Link>
           <div className="min-w-0 flex-1 max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
             <SearchBox initialQuery={data.q} onSubmitQuery={submitQuery} />

@@ -352,11 +352,13 @@ Type scale — one size per text role:
 - 20px `text-xl`: infobox title (serif — the family editorial track applied to
   the one knowledge heading); 24px `text-2xl`: page headings; section
   headings in between are `text-base`/`text-lg` `font-semibold`.
-- Brand marks: hero `text-6xl/7xl font-black`, header `text-xl
-  font-semibold`, both `font-serif` (registered DESIGN.md §4 variant: result
-  titles and UI section headings stay sans for scan density; the wordmark
-  dot is interactive — hover powers the "Powered by SearXNG" reveal, and its
-  span is `text-accent`, readable in every palette).
+- Brand marks: hero `text-6xl/7xl font-black`, header/results wordmark
+  `text-2xl font-semibold`, both `font-serif` (registered DESIGN.md §4
+  variant: result titles and UI section headings stay sans for scan
+  density). The wordmark period is a geometric gold dot (`bg-accent-strong`
+  fill, aria-hidden — echoes the favicon's brand period, §2.2); on the hero
+  it stays interactive — hover powers the "Powered by SearXNG" reveal,
+  click opens About.
 - Thumbnail corner badges / floating overlay chips: 11px `font-medium`
   (badge tier, the sanctioned sub-12px exception along with the mini
   player's tabular clock and the weather SVG chart labels).

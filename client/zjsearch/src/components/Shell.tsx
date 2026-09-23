@@ -120,9 +120,10 @@ function TopNav({ globals, hideBrand = false }: { globals: GlobalData; hideBrand
         <span aria-hidden="true" />
       ) : (
         <Link ariaLabel={globals.instance_name} className="shrink-0 select-none" href="/" title={globals.instance_name}>
-          <span className="font-serif text-xl font-semibold tracking-tight text-ink">
+          <span className="font-serif text-2xl font-semibold tracking-tight text-ink">
             {globals.instance_name}
-            <span className="text-accent">.</span>
+            {/* 品牌句号（DESIGN.md §2.2）：实心金点收尾，与 favicon 句号同色系 */}
+            <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
           </span>
         </Link>
       )}
