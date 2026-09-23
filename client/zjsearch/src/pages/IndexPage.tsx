@@ -76,13 +76,14 @@ export function IndexPage({ data }: { data: IndexData }) {
           {globals.instance_name}
           <button
             aria-label={`${t("powered_by")} SearXNG`}
-            className="group/dot relative cursor-pointer text-accent"
+            className="group/dot relative cursor-pointer"
             onClick={() => {
               openOverlay(globals.about_url, t("about"), "about");
             }}
             type="button"
           >
-            .
+            {/* 品牌句号（DESIGN.md §2.2）：实心金点收尾，与 favicon 句号同色系 */}
+            <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
             <span
               aria-hidden="true"
               className="pointer-events-none absolute bottom-1.5 left-full ms-3 hidden whitespace-nowrap text-xs font-medium tracking-normal text-ink-3 opacity-0 transition-opacity duration-150 group-focus-visible/dot:opacity-100 group-hover/dot:opacity-100 sm:block"
