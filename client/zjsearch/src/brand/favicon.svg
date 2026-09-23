@@ -1,10 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- ZJSearch 品牌标：签名图形「放大镜」+ 品牌句号（DESIGN.md §2.2 家族语言：
+       圆头描边 stroke-width 14、金渐变 #f5c84c→#e09f0a 透明底、右下句号 (85,85) r7） -->
   <defs>
     <linearGradient id="lens" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#f5c84c"/>
       <stop offset="1" stop-color="#e09f0a"/>
     </linearGradient>
   </defs>
-  <circle cx="43" cy="43" r="25" fill="none" stroke="url(#lens)" stroke-width="13"/>
-  <path d="M62.5 62.5 L83 83" stroke="url(#lens)" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="41" cy="41" r="24" fill="none" stroke="url(#lens)" stroke-width="14"/>
+  <path d="M58.5 58.5 L72 72" fill="none" stroke="url(#lens)" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="85" cy="85" r="7" fill="url(#lens)"/>
 </svg>
