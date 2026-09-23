@@ -3,8 +3,11 @@
 /* Markdown-rendered long-form content (info/about pages). */
 
 @layer components {
-  /* server-rendered info/about pages (markdown-generated HTML) */
+  /* server-rendered info/about pages (markdown-generated HTML);
+     serif body + headings — the family editorial track for long-form
+     content (DESIGN.md §4) */
   .prose-basic {
+    font-family: var(--font-serif);
     line-height: 1.7;
     font-size: 0.925rem;
     color: var(--ink-2);

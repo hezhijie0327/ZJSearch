@@ -55,8 +55,9 @@ export const SEGMENT_IDLE = "text-ink-2 hover:bg-surface-2 hover:text-ink";
 export const DISABLED = "disabled:pointer-events-none disabled:opacity-40";
 
 /** Corner badge over media (duration / filesize): the sanctioned 11px badge
-    tier on a fixed-dark scrim, readable over any thumbnail in every palette. */
-export const TILE_BADGE = "absolute rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium text-white";
+    tier on a fixed-dark scrim, readable over any thumbnail in every palette.
+    Numerals are tabular so durations/sizes align across a grid. */
+export const TILE_BADGE = "absolute rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white";
 
 /** Reliability column colour: green >=90, ink >=80, amber >=50, red below,
     muted when unknown — shared by the stats page and the engine tables. */

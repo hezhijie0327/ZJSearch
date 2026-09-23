@@ -23,6 +23,8 @@
             --bg: #faf9f6; --surface: #ffffff; --surface-2: #f1efe8;
             --line: #e6e2d7; --ink: #201d17; --ink-2: #6b675c; --ink-3: #716c61;
             --accent: #8c6800; --accent-strong: #f5c84c; color-scheme: light;
+            --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+            --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
           }
           @media (prefers-color-scheme: dark) {
             :root {
@@ -33,7 +35,7 @@
           }
           * { box-sizing: border-box; }
           body {
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: var(--font-sans);
             margin: 0 auto; max-width: 48rem; padding: 0 1rem 3rem;
             color: var(--ink); background: var(--bg);
             overflow-wrap: anywhere; /* torrent titles are long dot-joined strings */
@@ -42,7 +44,7 @@
             padding: 2rem 0 1.5rem; border-bottom: 2px solid var(--accent-strong);
           }
           .brand .wordmark {
-            font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", SimSun, Georgia, serif;
+            font-family: var(--font-serif);
             font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em;
           }
           .brand .wordmark .dot { color: var(--accent); }
