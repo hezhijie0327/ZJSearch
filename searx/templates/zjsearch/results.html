@@ -16,7 +16,7 @@
     import() evaluates the module as soon as it is fetched.  The results
     feature chunk (stable name, see vite.config) is pre-warmed alongside so
     the app boot never waits for it — the home page never downloads it. -#}
-<script>
+<script data-cfasync="false">
   import("{{ url_for('static', filename='zjsearch.min.js') }}").catch(function () {
     window.location.reload();
   });
@@ -56,7 +56,7 @@
                  timeout_limit, current_language, streamed.search_language, only_template) -}}
 {%- endif -%}
 </script>
-<script>
+<script data-cfasync="false">
   if (window.__zjsPageData) {
     window.__zjsPageData();
   } else {

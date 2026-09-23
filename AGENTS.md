@@ -184,8 +184,14 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   never before a closing brace.
 - Theme style light/dark uses the `simple_style` cookie; `black` is OLED black
   (html gets both `dark` and `black` classes). Auto = no cookie + system setting.
-  The html class is set by an inline script in `base.html` and mirrored by
-  `applyThemeStyle()` in `client/zjsearch/src/lib/theme.ts` — keep both in sync.
+  The `dark`/`black` classes are rendered SERVER-SIDE into the `<html>` tag
+  (`base.html` reads the preference), so the streamed boot skeleton paints in
+  the user's palette with zero JavaScript — optimizers that defer inline
+  scripts (e.g. Cloudflare Rocket Loader) must not flash a light skeleton;
+  all zjsearch inline scripts carry `data-cfasync="false"` for the same
+  reason. The inline head script in `base.html` (also exempted) syncs auto
+  mode and live toggles and is mirrored by `applyThemeStyle()` in
+  `client/zjsearch/src/lib/theme.ts` — keep both in sync.
 - `POST /preferences` form semantics (upstream `Preferences.parse_form`):
   absent booleans are false; absent `category_*` clears the category
   selection; **`engine_<name>__<category>` and `plugin_<id>` are REVERSED —

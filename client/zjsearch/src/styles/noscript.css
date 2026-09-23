@@ -5,9 +5,10 @@
 
 @layer components {
   /* basic no-JS mode (noscript.html): self-contained document styling in the
-     RSS feed's visual language — own palette incl. a prefers-color-scheme
-     dark override, independent of the app's class-based theming (there is no
-     JS to set the theme classes) */
+     RSS feed's visual language — own palette following the system preference,
+     plus the server-rendered theme classes (base.html resolves the
+     simple_style preference onto <html>): an explicit choice beats the
+     system, exactly like in the app.  Dark/black mirror the app palettes. */
   .zjs-noscript {
     --ns-bg: #faf9f6;
     --ns-surface: #ffffff;
@@ -38,6 +39,34 @@
       --ns-accent: #fec843;
       --ns-accent-strong: #fec843;
     }
+  }
+
+  /* explicit preference classes: higher specificity than the media query */
+  html.light .zjs-noscript {
+    --ns-bg: #faf9f6;
+    --ns-surface: #ffffff;
+    --ns-line: #e6e2d7;
+    --ns-ink: #201d17;
+    --ns-ink-2: #6b675c;
+    --ns-ink-3: #716c61;
+    --ns-accent: #8c6800;
+    --ns-accent-strong: #f5c84c;
+  }
+  html.dark .zjs-noscript {
+    --ns-bg: #1b1a18;
+    --ns-surface: #232120;
+    --ns-line: #38342f;
+    --ns-ink: #eceae4;
+    --ns-ink-2: #a8a399;
+    --ns-ink-3: #9b958a;
+    --ns-accent: #fec843;
+    --ns-accent-strong: #fec843;
+  }
+  /* OLED black on top of dark (the server renders both classes) */
+  html.black .zjs-noscript {
+    --ns-bg: #000000;
+    --ns-surface: #0b0b0c;
+    --ns-line: #242426;
   }
 
   .zjs-ns-wrap {
