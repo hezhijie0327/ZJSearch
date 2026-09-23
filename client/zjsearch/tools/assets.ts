@@ -45,6 +45,18 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
         .composite([{ input: glyph, gravity: "centre" }])
         .png()
         .toFile(path.join(imgDir, "apple-touch-icon.png"));
+
+      // the app bundle URLs live at the static ROOT (/static/zjsearch.min.js —
+      // webapp.custom_url_for only maps filenames that exist there), so
+      // publish the bundles next to the themed assets; chunk/ is rebuilt from
+      // scratch so hashes removed by this build don't linger
+      const rootStatic = path.resolve(PATH.root, "searx/static");
+      for (const file of ["zjsearch.min.js", "zjsearch.min.css"]) {
+        await fs.copyFile(path.join(PATH.dist, file), path.join(rootStatic, file));
+      }
+      const rootChunk = path.join(rootStatic, "chunk");
+      await fs.rm(rootChunk, { force: true, recursive: true });
+      await fs.cp(path.join(PATH.dist, "chunk"), rootChunk, { recursive: true });
     },
   };
 }
