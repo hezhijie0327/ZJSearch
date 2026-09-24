@@ -32,9 +32,10 @@ template.
 
 __all__ = ["AnswerSet", "Answer", "Translations", "WeatherAnswer"]
 
+import typing
+
 from flask_babel import gettext
 import msgspec
-import typing
 
 from searx import weather
 from ._base import Result
