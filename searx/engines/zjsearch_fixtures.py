@@ -213,7 +213,7 @@ _FIXTURES = {
 }
 
 
-def search(query: str, request_params: t.Any) -> list[dict[str, t.Any]]:  # noqa: ARG001
+def search(query: str, request_params: t.Any) -> list[dict[str, t.Any]]:  # pylint: disable=unused-argument
     """Return the fixture set whose token appears in the query (default:
     the general set).  Queries without the "zjaudit" token get nothing:
     dev settings register this engine next to the real ones, and ordinary

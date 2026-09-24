@@ -129,7 +129,7 @@ def _eastmoney_series(klines: list[str]) -> dict[str, t.Any]:
     }
 
 
-def _eastmoney_fetch(symbol: str) -> dict[str, t.Any] | None:
+def _eastmoney_fetch(symbol: str) -> dict[str, t.Any] | None:  # pylint: disable=too-many-locals
     suggestion = _eastmoney_resolve(symbol)
     if not suggestion:
         return None
@@ -142,7 +142,8 @@ def _eastmoney_fetch(symbol: str) -> dict[str, t.Any] | None:
 
     year_start = f"{datetime.date.today().year}-01-01"
     # 1M/YTD derive from the 1Y daily bars, so six requests cover all ranges
-    quote_j, k1d, k5d, k1y_j, k5y_j, kmax_j = _fetch_json_multi(
+    # (per-position contract: realtime quote, 5m, 15m, 1d, 1w, full-history)
+    quote_j, k1d, k5d, k1y_j, k5y_j, kmax_j = _fetch_json_multi(  # pylint: disable=unbalanced-tuple-unpacking
         [
             EM_QUOTE_URL.format(secid=secid),
             EM_KLINE_URL.format(secid=secid, fields2=EM_FIELDS_FULL, klt=5, lmt=80),
@@ -177,7 +178,6 @@ def _eastmoney_fetch(symbol: str) -> dict[str, t.Any] | None:
 
     daily_full = (k1y_j or {}).get("data") or {}
     daily_klines: list[str] = daily_full.get("klines") or []
-    daily_closes = [float(k.split(",")[2]) for k in daily_klines]
     daily_highs = [float(k.split(",")[3]) for k in daily_klines]
     daily_lows = [float(k.split(",")[4]) for k in daily_klines]
     daily_volumes = [float(k.split(",")[5]) for k in daily_klines]
@@ -247,7 +247,6 @@ def _eastmoney_fetch(symbol: str) -> dict[str, t.Any] | None:
     }
 
 
-
 def _avg_volume(day_candles: list[list[float]]) -> float | None:
     volumes = [c[4] for c in day_candles[-250:]]
     return round(sum(volumes) / len(volumes)) if volumes else None
@@ -262,7 +261,7 @@ TX_MKLINE_URL = TX_BASE + "/appstock/app/kline/mkline?param={symbol},{granularit
 TX_ROW_CANDLE = (1, 3, 4, 2, 5)  # open, high, low, close, volume
 
 
-def _tencent_symbol(symbol: str) -> str:
+def _tencent_symbol(symbol: str) -> str:  # pylint: disable=too-many-return-statements
     """Normalize a user symbol to a tencent one (``sh600519``, ``hk00700``,
     ``usAAPL``).  Already-prefixed symbols pass through unchanged.  US tickers
     are upper-cased: tencent's kline host is case-sensitive there and serves
@@ -294,26 +293,85 @@ def _tx_label(raw: str) -> str:
     return raw
 
 
-def _candles(rows: list[list], o: int, h: int, low: int, c: int, v: int) -> list[list[float]]:
+def _candles(rows: list[list], o_idx: int, h_idx: int, low_idx: int, c_idx: int, v_idx: int) -> list[list[float]]:
     out = []
     for row in rows:
         try:
-            out.append([float(row[i]) for i in (o, h, low, c, v)])
+            out.append([float(row[i]) for i in (o_idx, h_idx, low_idx, c_idx, v_idx)])
         except (ValueError, IndexError):
             continue
     return out
 
 
-def _qt_float(qt: list[str], index: int) -> float | None:
-    if index >= len(qt) or qt[index] in ("", None):
+def _qt_float(qt_fields: list[str], index: int) -> float | None:
+    if index >= len(qt_fields) or qt_fields[index] in ("", None):
         return None
     try:
-        return float(qt[index])
+        return float(qt_fields[index])
     except ValueError:
         return None
 
 
-def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:
+def _tx_quote_fields(qt_fields: list[str], day_candles: list[list[float]], is_us: bool) -> dict[str, t.Any] | None:
+    """Realtime qt fields with the daily bars as the fallback (close vs prior
+    close).  The qt layout differs per market: CN/HK report the P/E at index
+    52, US listings at index 39.  Returns None when neither source yields
+    price and prior close."""
+
+    def qt_float(index: int) -> float | None:
+        return _qt_float(qt_fields, index)
+
+    price = qt_float(3)
+    if price is None and day_candles:
+        price = day_candles[-1][3]
+    previous_close = qt_float(4)
+    if previous_close is None and len(day_candles) >= 2:
+        previous_close = day_candles[-2][3]
+    if price is None or previous_close is None:
+        return None
+    change = qt_float(31)
+    if change is None:
+        change = round(price - previous_close, 2)
+    change_percent = qt_float(32)
+    if change_percent is None:
+        change_percent = round(change / previous_close * 100, 2) if previous_close else 0.0
+
+    market_cap = qt_float(45)
+    market_cap = market_cap * 1e8 if market_cap is not None else None
+
+    open_price = qt_float(5)
+    if open_price is None and day_candles:
+        open_price = day_candles[-1][0]
+    high = qt_float(33)
+    if high is None and day_candles:
+        high = day_candles[-1][1]
+    low = qt_float(34)
+    if low is None and day_candles:
+        low = day_candles[-1][2]
+
+    # 52-week extremes always derive from the daily bars -- the qt indexes
+    # that carry them differ per market and some layouts misreport; a shorter
+    # history says nothing about a year, so the card hides them instead
+    recent = day_candles[-250:] if len(day_candles) >= 30 else []
+    week52_high = max(c[1] for c in recent) if recent else None
+    week52_low = min(c[2] for c in recent) if recent else None
+
+    return {
+        "price": price,
+        "previous_close": previous_close,
+        "change": change,
+        "change_percent": change_percent,
+        "open": open_price,
+        "high": high,
+        "low": low,
+        "pe": qt_float(39 if is_us else 52),
+        "market_cap": market_cap,
+        "week52_high": week52_high,
+        "week52_low": week52_low,
+    }
+
+
+def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:  # pylint: disable=too-many-locals
     tx_symbol = _tencent_symbol(symbol)
     # qt[1] carries the listing name; the bare code is the fallback
     code = tx_symbol[2:].upper()
@@ -357,7 +415,8 @@ def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:
         day_rows = rows_of(day_node, "qfqday", "day")
         qt = qt_of(day_node, series_symbol, tx_symbol)
 
-    week_j, m5_j, m15_j = _fetch_json_seq(
+    # per-position contract: weekly, 5-minute, 15-minute
+    week_j, m5_j, m15_j = _fetch_json_seq(  # pylint: disable=unbalanced-tuple-unpacking
         [
             TX_KLINE_URL.format(symbol=series_symbol, granularity="week", start="", end="", count=320),
             TX_MKLINE_URL.format(symbol=series_symbol, granularity="m5", count=80),
@@ -373,53 +432,12 @@ def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:
 
     day_candles = _candles(day_rows, *TX_ROW_CANDLE)
 
-    qt_float = lambda index: _qt_float(qt, index)  # noqa: E731
     if len(qt) > 1 and qt[1]:
         name = str(qt[1])
 
-    # the qt layout differs per market: CN/HK report the P/E at index 52 and
-    # 52-week extremes at 47/48; US listings carry the P/E at index 39 and
-    # no 52-week extremes at all
-    is_us = tx_symbol.startswith("us")
-
-    # realtime fields first, daily bars as the fallback (close vs prior close)
-    last_bar = day_candles[-1] if day_candles else None
-    prev_bar = day_candles[-2] if len(day_candles) >= 2 else None
-
-    price = qt_float(3)
-    if price is None and last_bar:
-        price = last_bar[3]
-    previous_close = qt_float(4)
-    if previous_close is None and prev_bar:
-        previous_close = prev_bar[3]
-    if price is None or previous_close is None:
+    fields = _tx_quote_fields(qt, day_candles, tx_symbol.startswith("us"))
+    if fields is None:
         return None
-    change = qt_float(31)
-    if change is None:
-        change = round(price - previous_close, 2)
-    change_percent = qt_float(32)
-    if change_percent is None:
-        change_percent = round(change / previous_close * 100, 2) if previous_close else 0.0
-
-    market_cap = qt_float(45)
-    market_cap = market_cap * 1e8 if market_cap is not None else None
-
-    open_price = qt_float(5)
-    if open_price is None and last_bar:
-        open_price = last_bar[0]
-    high = qt_float(33)
-    if high is None and last_bar:
-        high = last_bar[1]
-    low = qt_float(34)
-    if low is None and last_bar:
-        low = last_bar[2]
-
-    # 52-week extremes always derive from the daily bars -- the qt indexes
-    # that carry them differ per market and some layouts misreport; a shorter
-    # history says nothing about a year, so the card hides them instead
-    recent = day_candles[-250:] if len(day_candles) >= 30 else []
-    week52_high = max(c[1] for c in recent) if recent else None
-    week52_low = min(c[2] for c in recent) if recent else None
 
     def rows_series(rows: list[list]) -> dict[str, t.Any]:
         return {
@@ -440,8 +458,7 @@ def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:
     }
     ranges = {key: value for key, value in ranges.items() if value and value["candles"]}
     range_bounds = {
-        key: [value["labels"][0], value["labels"][-1]] if value["labels"] else ["", ""]
-        for key, value in ranges.items()
+        key: [value["labels"][0], value["labels"][-1]] if value["labels"] else ["", ""] for key, value in ranges.items()
     }
 
     as_of_date, as_of_time = _tencent_as_of(qt)
@@ -455,17 +472,7 @@ def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:
         "market": _tx_market_label(tx_symbol),
         "exchange": exchange_of(tx_symbol),
         "currency": "USD" if tx_symbol.startswith("us") else ("HKD" if tx_symbol.startswith("hk") else "CNY"),
-        "price": price,
-        "previous_close": previous_close,
-        "change": change,
-        "change_percent": change_percent,
-        "open": open_price,
-        "high": high,
-        "low": low,
-        "pe": qt_float(39 if is_us else 52),
-        "market_cap": market_cap,
-        "week52_high": week52_high,
-        "week52_low": week52_low,
+        **fields,
         "avg_volume": _avg_volume(day_candles),
         "as_of_date": as_of_date,
         "as_of_time": as_of_time,
@@ -474,16 +481,16 @@ def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:
     }
 
 
-def _tencent_as_of(qt: list[str]) -> tuple[str, str]:
+def _tencent_as_of(qt_fields: list[str]) -> tuple[str, str]:
     """Timestamps come in per-market layouts: CN/HK pack them as
     ``YYYYMMDDHHMM`` while US carries a dashed ``YYYY-MM-DD HH:MM`` string at
     a different index (a leading "delay" element shifts the whole array), so
     scan for either shape instead of trusting one position."""
-    for raw in qt:
+    for raw in qt_fields:
         m = re.search(r"(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})", str(raw))
         if m:
             return f"{m.group(1)}-{m.group(2)}-{m.group(3)}", f"{m.group(4)}:{m.group(5)}"
-    for raw in qt:
+    for raw in qt_fields:
         m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})", str(raw))
         if m:
             return f"{m.group(1)}-{m.group(2)}-{m.group(3)}", f"{m.group(4)}:{m.group(5)}"
@@ -515,6 +522,7 @@ def exchange_of(tx_symbol: str) -> str:
 
 
 # ------------------------------------------------------------------ dispatch
+
 
 def _lookup(symbol: str) -> dict[str, t.Any] | None:
     """Cached ``symbol -> payload``.  Eastmoney is the primary source; when

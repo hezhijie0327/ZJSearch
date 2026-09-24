@@ -84,9 +84,7 @@ _DATE_PATTERN = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
 
 # Regex to detect advanced syntax context (for distinguishing /regex/ in syntax vs file paths)
 _ADVANCED_REGEX_CONTEXT = re.compile(
-    r'(?:^|\s)(?:\+|-)?(?:intitle|inurl|intext):/[^/]+/[a-z]*|'
-    r'(?:^|\s)\+/[^/]+/[a-z]*|'
-    r'(?:^|\s)-/[^/]+/[a-z]*',
+    r'(?:^|\s)(?:\+|-)?(?:intitle|inurl|intext):/[^/]+/[a-z]*|' r'(?:^|\s)\+/[^/]+/[a-z]*|' r'(?:^|\s)-/[^/]+/[a-z]*',
     re.IGNORECASE,
 )
 
@@ -108,9 +106,7 @@ _POSITIONAL_KEYS = (
 
 # Aggressive fallback removals for the (rare) case that cleaning left
 # advanced syntax behind; pre-compiled once instead of re-built per query.
-_AGGRESSIVE_PATTERNS = [
-    re.compile(p.pattern + r'[^\s]*', re.IGNORECASE) for p in _VERIFY_PATTERNS
-]
+_AGGRESSIVE_PATTERNS = [re.compile(p.pattern + r'[^\s]*', re.IGNORECASE) for p in _VERIFY_PATTERNS]
 
 
 class SXNGPlugin(Plugin):
@@ -296,9 +292,14 @@ class SXNGPlugin(Plugin):
 
         # Words from regex patterns (cautious extraction)
         regex_lists = [
-            syntax['include_regexes'], syntax['exclude_regexes'],
-            syntax['intitle_regexes'], syntax['intext_regexes'], syntax['inurl_regexes'],
-            syntax['neg_intitle_regexes'], syntax['neg_intext_regexes'], syntax['neg_inurl_regexes'],
+            syntax['include_regexes'],
+            syntax['exclude_regexes'],
+            syntax['intitle_regexes'],
+            syntax['intext_regexes'],
+            syntax['inurl_regexes'],
+            syntax['neg_intitle_regexes'],
+            syntax['neg_intext_regexes'],
+            syntax['neg_inurl_regexes'],
         ]
         for pattern_list in regex_lists:
             for pat in pattern_list:
@@ -306,9 +307,14 @@ class SXNGPlugin(Plugin):
 
         # Words from word patterns
         word_lists = [
-            syntax['include_words'], syntax['exclude_words'],
-            syntax['intitle_words'], syntax['inurl_words'], syntax['intext_words'],
-            syntax['neg_intitle_words'], syntax['neg_inurl_words'], syntax['neg_intext_words'],
+            syntax['include_words'],
+            syntax['exclude_words'],
+            syntax['intitle_words'],
+            syntax['inurl_words'],
+            syntax['intext_words'],
+            syntax['neg_intitle_words'],
+            syntax['neg_inurl_words'],
+            syntax['neg_intext_words'],
         ]
         for word_list in word_lists:
             for word in word_list:
@@ -338,11 +344,17 @@ class SXNGPlugin(Plugin):
         """Check if a word starts with advanced syntax indicators."""
         # Check prefixed operators
         prefixes = [
-            'site:', '-site:',
-            'intitle:', '-intitle:',
-            'inurl:', '-inurl:',
-            'intext:', '-intext:',
-            'filetype:', 'before:', 'after:',
+            'site:',
+            '-site:',
+            'intitle:',
+            '-intitle:',
+            'inurl:',
+            '-inurl:',
+            'intext:',
+            '-intext:',
+            'filetype:',
+            'before:',
+            'after:',
         ]
         if any(word.startswith(prefix) for prefix in prefixes):
             return True
@@ -444,9 +456,7 @@ class SXNGPlugin(Plugin):
             regexes = [m.strip() for m in p[regex_key].findall(query)]
             syntax[f'{key_prefix}_regexes'] = regexes
             words = p[word_key].findall(query)
-            syntax[f'{key_prefix}_words'] = [
-                w.strip() for w in words if not any(w in r for r in regexes)
-            ]
+            syntax[f'{key_prefix}_words'] = [w.strip() for w in words if not any(w in r for r in regexes)]
 
         # 6. Negative positional patterns
         for key_prefix, regex_key, word_key in [
@@ -457,9 +467,7 @@ class SXNGPlugin(Plugin):
             regexes = [m.strip() for m in p[regex_key].findall(query)]
             syntax[f'{key_prefix}_regexes'] = regexes
             words = p[word_key].findall(query)
-            syntax[f'{key_prefix}_words'] = [
-                w.strip() for w in words if not any(w in r for r in regexes)
-            ]
+            syntax[f'{key_prefix}_words'] = [w.strip() for w in words if not any(w in r for r in regexes)]
 
         # 7. Include/Exclude patterns
         syntax['include_regexes'] = [m.strip() for m in p['include_regex'].findall(query)]
@@ -479,15 +487,26 @@ class SXNGPlugin(Plugin):
         syntax['_regex_compiled'] = {
             key: [self._compile_user_regex(p) for p in syntax[key]]
             for key in (
-                'include_regexes', 'exclude_regexes',
-                'intitle_regexes', 'inurl_regexes', 'intext_regexes',
-                'neg_intitle_regexes', 'neg_inurl_regexes', 'neg_intext_regexes',
+                'include_regexes',
+                'exclude_regexes',
+                'intitle_regexes',
+                'inurl_regexes',
+                'intext_regexes',
+                'neg_intitle_regexes',
+                'neg_inurl_regexes',
+                'neg_intext_regexes',
             )
         }
         for key in (
-            'include_words', 'exclude_words', 'remaining_terms',
-            'intitle_words', 'inurl_words', 'intext_words',
-            'neg_intitle_words', 'neg_inurl_words', 'neg_intext_words',
+            'include_words',
+            'exclude_words',
+            'remaining_terms',
+            'intitle_words',
+            'inurl_words',
+            'intext_words',
+            'neg_intitle_words',
+            'neg_inurl_words',
+            'neg_intext_words',
         ):
             syntax[key] = [self._word_matcher(w) for w in syntax[key]]
         syntax['_phrases_lower'] = [p.lower() for p in syntax['exact_phrases']]
@@ -502,8 +521,7 @@ class SXNGPlugin(Plugin):
         if not match:
             return None
         try:
-            return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)),
-                          tzinfo=timezone.utc)
+            return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)), tzinfo=timezone.utc)
         except ValueError:
             return None
 
@@ -540,11 +558,13 @@ class SXNGPlugin(Plugin):
             return True
 
         cleaned_query, syntax = self._parse_advanced_syntax(original_query)
-        syntax.update({
-            'has_advanced_syntax': True,
-            'original_query': original_query,
-            'cleaned_query': cleaned_query,
-        })
+        syntax.update(
+            {
+                'has_advanced_syntax': True,
+                'original_query': original_query,
+                'cleaned_query': cleaned_query,
+            }
+        )
 
         request.original_query = original_query
         request.search_syntax = syntax
@@ -761,7 +781,7 @@ class SXNGPlugin(Plugin):
 
         # Short-circuit: apply filters in order of cost/selectivity
         # 1. Site filters (uses pre-computed sets, very fast)
-        if (syntax['site_include'] or syntax['site_exclude']):
+        if syntax['site_include'] or syntax['site_exclude']:
             if not self._check_site_filters(url, syntax):
                 return False
 
@@ -783,8 +803,10 @@ class SXNGPlugin(Plugin):
         # check) -- lowercased once, shared by word matchers and phrases
         has_excl = syntax['exclude_words'] or syntax['_regex_compiled']['exclude_regexes']
         has_incl = (
-            syntax['include_words'] or syntax['_regex_compiled']['include_regexes']
-            or syntax['_phrases_lower'] or syntax['remaining_terms']
+            syntax['include_words']
+            or syntax['_regex_compiled']['include_regexes']
+            or syntax['_phrases_lower']
+            or syntax['remaining_terms']
         )
         if has_excl or has_incl:
             search_text = f"{title} {content}"
