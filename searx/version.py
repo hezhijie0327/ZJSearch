@@ -12,8 +12,8 @@ import subprocess
 VERSION_STRING: str = "1.0.0"
 VERSION_TAG: str = "1.0.0"
 DOCKER_TAG: str = "1.0.0"
-GIT_URL: str = "unknown"
-GIT_BRANCH: str = "unknown"
+GIT_URL: str = "https://github.com/hezhijie0327/ZJSearch"
+GIT_BRANCH: str = "zjsearch"
 
 logger = logging.getLogger("searx")
 
@@ -92,15 +92,6 @@ def get_information() -> tuple[str, str, str, str, str]:
     docker_tag: str = DOCKER_TAG
     git_url: str = GIT_URL
     git_branch: str = GIT_BRANCH
-
-    try:
-        version_string, version_tag, docker_tag = get_git_version()
-    except subprocess.CalledProcessError as ex:
-        logger.error("Error while getting the version: %s", ex.stderr)
-    try:
-        git_url, git_branch = get_git_url_and_branch()
-    except subprocess.CalledProcessError as ex:
-        logger.error("Error while getting the git URL & branch: %s", ex.stderr)
 
     return version_string, version_tag, docker_tag, git_url, git_branch
 
