@@ -662,6 +662,101 @@ build; upstream `simple` instead links a dedicated built rss.css).  Rules:
   any resolve/fetch failure is silence.  The answer text doubles as the
   no-JS/RSS form of the quote.
 
+## Python CI (upstream gates for searx/ changes)
+
+The upstream Integration workflow (`.github/workflows/integration.yml`) is the
+quality gate for every engine/plugin change: `make ci.test` = yamllint,
+black, pyright, pylint, unit, robot, rst, shell, shfmt + pybabel. For python
+work the relevant checks are **black, pylint, nose2 unit tests** (plus an
+advisory basedpyright pass). Two structural facts:
+
+- CI triggers only on push/PR to `master` — the `zjsearch` branch is never
+  CI-checked remotely. Run the checks locally before committing python
+  changes; the branch once accumulated black + pylint failures (including in
+  committed theme files) that went unnoticed for weeks for exactly this
+  reason.
+- Tool versions are pinned in `requirements-dev.txt` (black==26.5.1,
+  pylint==4.0.8, basedpyright==1.40.1, nose2==0.16.0). Match the pins: a
+  different black flags ~230 upstream files and buries the signal; unit tests
+  run under **nose2, not pytest**.
+
+`make`/`./manage` do not work on Windows — run the tools directly with the
+venv, using the EXACT options `manage` hardcodes (`BLACK_OPTIONS`/
+`BLACK_TARGETS` near the top of `manage`; pylint options in
+`utils/lib_sxng_test.sh`):
+
+```sh
+# black — bare `black` is WRONG (defaults: 88 cols + quote normalization →
+# massive false diffs and a corrupted style). manage's options:
+local/py3/Scripts/python -m black --check --target-version py311 \
+  --line-length 120 --skip-string-normalization \
+  --exclude "(searx/static|searx/languages.py)" --include 'searxng.msg|\.pyi?$' \
+  searx searxng_extra tests
+
+# pylint — two passes, both must be exit-code 0. .pylintrc has NO
+# fail-under override → default 10.0, so ANY warning fails CI. `traits`,
+# `logger`, `categories` are engine builtins (first pass only):
+local/py3/Scripts/python -m pylint --rcfile .pylintrc \
+  --additional-builtins="traits,logger,categories" searx/engines
+local/py3/Scripts/python -m pylint --rcfile .pylintrc --ignore-paths=searx/engines \
+  searx searx/searxng.msg searxng_extra searxng_extra/docs_prebuild tests
+
+# unit tests (needs the pwd stub below on PYTHONPATH)
+local/py3/Scripts/python -m nose2 -s tests/unit
+
+# basedpyright — advisory (CI ignores its exit value); `list[list]`-shaped
+# params produce 100+ "partially unknown" warnings that are noise, skim the
+# errors only for real runtime hazards
+local/py3/Scripts/python -m basedpyright --level warning <changed .py files>
+```
+
+Gotchas learned the hard way:
+
+- Piping pylint through `tail` hides its exit code (`$?` is tail's); check
+  the score/exit unpiped when scripting.
+- `import searx.webapp` outside the app **exits 1** unless `SEARXNG_SECRET`
+  is set (default secret_key is fatal) and `SEARXNG_SETTINGS_PATH` points at
+  a settings file.
+- On Windows the unit suite is 339/340:
+  `test_webapp.ViewsTestCase.test_search_html` fails with
+  `TemplateNotFound: result_templates/default.html` — the documented
+  Windows path-separator bug, not our code (`webutils.get_result_templates()`
+  os.walk-joins backslashes; `webapp.get_result_template` compares forward
+  slashes, so the themed path never matches and the bare fallback can't
+  resolve). Linux CI is green. Prove the mechanism in one line:
+  normalize `webapp.result_templates` separators, then
+  `get_result_template('simple', 'default.html')` returns the themed path.
+
+Engine changes additionally get a load smoke test through the REAL
+registration path — `searx.engines.load_engine(engine_data)` takes the
+settings.yml engine dict, NOT a module; it resolves imports, required
+attributes, traits and categories in one shot. Rules discovered:
+
+- Engine `name` must NOT contain underscores, or the engine is **silently
+  marked inactive**: module `brave_api` must be registered as
+  `name: braveapi` (etc.). No error surfaces — the engine just never runs.
+- Engines whose `setup()`/`init()` probe the network need credentials at
+  load: `marginalia` refuses to load without `api_key`; `brave_api` /
+  `google_custom_search` load with dummy keys but need real ones for
+  results.
+- Data-format rules for engines: the video `length` field is a
+  `datetime.timedelta` (bare int seconds render as raw numbers in
+  simple/RSS — zjsearch's macros tolerate all three shapes); `thumbnail_src`
+  is valid on the typed `Image` result class and on the `LegacyResult` dict
+  path (with `template: images.html`); package results need
+  `package_name`/`version` for `packages.html`; `python-dateutil` IS in
+  requirements.txt.
+- House style: no broad `except Exception` in engines (pylint W0718, no
+  upstream precedent for disabling it — narrow the types instead);
+  unavoidable unused args take a trailing
+  `# pylint: disable=unused-argument` (see `dummy-offline.py`); a >120-char
+  def line with both noqa and pylint comments violates `max-line-length`
+  (drop the noqa — this repo has no flake8).
+
+Helper scripts live outside the repo in `C:\Users\zhijie.he\Lab\zjs-stubs\`
+(`pwd.py`, `smoke_engines.py` — loads every current engine and prints
+LOADED/NOT LOADED).
+
 ## zjsearch performance notes
 
 - Every content `<img>` is `loading="lazy" decoding="async"` inside an
@@ -704,7 +799,8 @@ Python edits — the repo policy forbids them):
   `local/py3/Scripts/`), then
   `local/py3/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt`.
 - `searx/valkeydb.py` imports the POSIX-only `pwd` module at top level and
-  crashes on import. Put a tiny `pwd` stub outside the repo on `PYTHONPATH`.
+  crashes on import. Put a tiny `pwd` stub outside the repo on `PYTHONPATH`
+  (working copy: `C:\Users\zhijie.he\Lab\zjs-stubs\pwd.py`).
 - The app bundle URLs live at the static ROOT (`/static/zjsearch.min.js`):
   `webapp.custom_url_for` only maps a bare filename when it exists in
   `searx/static/`, so the build publishes `zjsearch.min.js`, `zjsearch.min.css`
