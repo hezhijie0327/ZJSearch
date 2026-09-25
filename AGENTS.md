@@ -110,7 +110,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `features/results/AiSummary.tsx` + `aiAnswer.ts`): the gate is an HMAC
   token in the page-data globals, the client assembles the numbered source
   context from the payload it already has, and the endpoint streams a cited
-  markdown answer (reasoning relayed wrapped in `<think>`). Transports are
+  markdown answer (reasoning relayed wrapped in `<think>`).  A stream that
+  dies before its first token answers 502 with a truncated upstream reason
+  in the body (tags stripped — gateways answer with HTML pages), which
+  fetchStream carries as the error detail and the card renders under its
+  failed label. Transports are
   the official SDKs (openai chat/responses, anthropic, gemini), configured
   under `zjsearch: ai:` in settings; the API key may travel via the
   `ZJSEARCH_AI_KEY` env (dev-settings deliberately keeps it out of the

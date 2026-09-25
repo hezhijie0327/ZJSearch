@@ -16,7 +16,8 @@ Design contract:
   page-data ``globals`` (``capability()``), not a session; safe with
   multiple granian workers.
 - The endpoint streams raw text (``text/plain``); errors before the first
-  token answer as clean HTTP statuses (403 / 422 / 502).
+  token answer as clean HTTP statuses (403 / 422 / 502) -- the 502 body
+  carries a truncated upstream reason the client renders in the card.
 - Transports are the official SDKs: ``AsyncOpenAI`` drives both OpenAI
   dialects (chat completions + Responses API), ``AsyncAnthropic`` the
   Messages API and ``google-genai`` the Gemini API -- all async, on the
@@ -804,6 +805,34 @@ def _build_answer_messages(
     return [{"role": "system", "content": system}, user]
 
 
+def _reason_of(payload: str | None) -> str:
+    """A one-line, truncated upstream error for the 502 body: the client
+    shows it under the answer card's failed label so a broken transport is
+    readable in the UI (the full detail stays in the server log).  Tags are
+    stripped -- gateways and proxies love answering with HTML error pages,
+    and the raw markup would bury the actual message (the <title> text)."""
+    text = re.sub(r"<[^>]+>", " ", str(payload or ""))
+    text = " ".join(text.split())
+    return text[:240] or "upstream returned an empty stream"
+
+
+def _upstream_error_response(first_kind: str, first: str | None) -> flask.Response:
+    """The 502 response for a stream that died before its first token: a
+    plain-text body carrying the truncated upstream reason -- the client's
+    fetchStream surfaces it under the card's failed label (the full detail
+    is already in the server log)."""
+    if first_kind == "end":
+        logger.warning(
+            "zjsearch_ai: upstream produced no answer content -- reasoning-style models can spend very "
+            "long on their thinking; disable thinking via zjsearch.ai.extra_body "
+            "(e.g. chat_template_kwargs: {'enable_thinking': False}) or set params.max_tokens"
+        )
+    reason = _reason_of(first) if first_kind == "error" else _reason_of(None)
+    resp = flask.Response(f"AI upstream error: {reason}", status=502, mimetype="text/plain")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 def _answer() -> flask.Response:
     """AI Overview: the client assembles the numbered source context from the
     page payload it already has, this view streams the answer.  Reasoning
@@ -841,15 +870,7 @@ def _answer() -> flask.Response:
         stream = open_stream(False)
         first_kind, first = stream.next_event(FIRST_EVENT_TIMEOUT)
     if first_kind not in ("delta", "think") or not first:
-        if first_kind == "end":
-            logger.warning(
-                "zjsearch_ai: upstream produced no answer content -- reasoning-style models can spend very "
-                "long on their thinking; disable thinking via zjsearch.ai.extra_body "
-                "(e.g. chat_template_kwargs: {'enable_thinking': False}) or set params.max_tokens"
-            )
-        # upstream status / message is already in the server log: answer a
-        # clean HTTP error instead of an error inside the stream
-        flask.abort(502)
+        return _upstream_error_response(first_kind, first)
 
     def generate():
         try:
