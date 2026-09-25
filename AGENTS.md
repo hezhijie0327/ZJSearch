@@ -901,6 +901,9 @@ Python edits — the repo policy forbids them):
 
 ## Docs worth reading first
 
+- `AUDIT.md` (repo root) — the full-theme audit playbook: environment
+  bootstrap, gates, test matrix, browser measurement recipes and the
+  fix→regress→docs loop. Run audits FROM that file.
 - The family `DESIGN.md` (ZJBlog repository) — design tokens, fragments,
   motion and quality contract the theme must conform to.
 - `client/zjsearch/README.rst` — theme architecture and workflow.
