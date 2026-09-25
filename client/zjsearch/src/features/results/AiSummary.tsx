@@ -1,16 +1,67 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+// KaTeX typography for the math pipeline (lazy-loaded plugins, css is small
+// enough to ride the results stylesheet; the woff2 fonts load on demand)
+import "katex/dist/katex.min.css";
+
 import { ArrowUpRight, Brain, ChevronDown, Copy, RefreshCw, Sparkles } from "lucide-react";
+import type { CompileContext, Token } from "mdast-util-from-markdown";
+import type { Mark } from "mdast-util-mark";
+import { pandocMarkFromMarkdown } from "mdast-util-mark";
+import { pandocMark } from "micromark-extension-mark";
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
+import remarkDeflist from "remark-deflist";
+import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
+import type { Data, PluggableList } from "unified";
 import { Collapse } from "@/components/Collapse.tsx";
 import { type AiSourceMeta, splitAnswerStream } from "@/features/results/aiAnswer.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { AiCapability } from "@/lib/types.ts";
+
+/** ==高亮==（Pandoc/Typora 风格）——ZJBlog 同款 micromark 微扩展，经标准注入
+    点挂进 remark-parse。data(key, value) 是整体替换而非追加，必须读出现有
+    列表再 push，否则会顶掉 remark-gfm / remark-math 已注册的扩展。mark 的
+    mdast 节点没有官方 hast handler，包装 enter.mark 补 data.hName（与 gfm
+    delete 同机制）。toMarkdown 无需 —— 本管线从不序列化回 markdown。 */
+function remarkMark(this: { data: () => Data }) {
+  const data = this.data() as Data & { micromarkExtensions?: unknown[]; fromMarkdownExtensions?: unknown[] };
+  data.micromarkExtensions ??= [];
+  data.micromarkExtensions.push(pandocMark());
+  const inner = pandocMarkFromMarkdown as {
+    canContainEols?: string[];
+    enter?: { mark?: (this: never, token: never) => Mark | undefined; [key: string]: unknown };
+    exit?: Record<string, unknown>;
+  };
+  const originalEnterMark = inner.enter?.mark;
+  data.fromMarkdownExtensions ??= [];
+  data.fromMarkdownExtensions.push({
+    canContainEols: inner.canContainEols,
+    enter: {
+      ...inner.enter,
+      // mdast-util-mark bundles drifted copies of the micromark types (nested
+      // node_modules) -- the runtime shape is identical, the handler boundary
+      // is cast once here
+      mark: function (this: CompileContext, token: Token) {
+        const node = originalEnterMark?.call(this as never, token as never) as Mark | undefined;
+        if (node) {
+          node.data ??= {};
+          node.data.hName = "mark";
+        }
+        return node;
+      },
+    },
+    exit: inner.exit,
+  });
+}
+
+/** 基础 remark 插件集（ZJBlog 同款语法集的轻量部分，随 results chunk 加载；
+    KaTeX 数学管线因体积懒加载，见 MarkdownAnswer）。 */
+const BASE_REMARK = [remarkGfm, remarkMark, remarkEmoji, remarkDeflist];
 
 /**
  * The whole-page AI Overview.  The server puts an {@link AiCapability}
@@ -168,6 +219,17 @@ const OVERVIEW_PREVIEW_PX = 224;
 
 const CITATION = /\[(\d+(?:\s*[,，]\s*\d+)*)\]|\[\*\]/g;
 
+/** The props react-markdown hands to component overrides (hast props, whose
+    shape varies per tag -- hence the index signature). */
+type MdProps = {
+  alt?: string;
+  children?: ReactNode;
+  className?: string;
+  href?: string;
+  src?: string;
+  [key: string]: unknown;
+};
+
 /** Rewrite [n] / [n,m] citations into `#ref-n` links (one link per number)
     that the markdown `a` override renders as citation chips.  `[*]` stays
     literal text. */
@@ -297,25 +359,96 @@ const HEADING = "mt-3 text-base font-semibold text-ink first:mt-0";
 
 const CODE_BLOCK = "mt-2 overflow-x-auto rounded-xl bg-surface-2 p-3 font-mono text-xs leading-relaxed text-ink";
 
+/** A fenced code block with a hover copy button (ZJBlog's code-card
+    language): the shared clipboard+toast path in a corner chip. */
+function CodeBlock({ children }: { children: ReactNode }) {
+  const t = useT();
+  const copyToast = useCopyToast();
+  const ref = useRef<HTMLPreElement | null>(null);
+  return (
+    <div className="group relative">
+      <pre className={CODE_BLOCK} ref={ref}>
+        {children}
+      </pre>
+      <button
+        aria-label={t("copy")}
+        className="absolute end-2 top-2 inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 hover:text-ink"
+        onClick={() => {
+          copyToast(ref.current?.textContent ?? "");
+        }}
+        title={t("copy")}
+        type="button"
+      >
+        <Copy className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function isDarkTheme(): boolean {
+  return document.documentElement.classList.contains("dark") || document.documentElement.classList.contains("black");
+}
+
 let mermaidSeq = 0;
 
 /** A settled ```mermaid fence renders as a diagram: the mermaid package
     (heavy) is imported only when a block actually exists, the theme follows
-    the palette, and a chart the parser rejects falls back to a plain code
-    block.  The card only mounts this once its stream has settled -- the
-    fence grows chunk by chunk while streaming, and re-rendering the SVG on
-    every chunk reads as flicker (the streaming view is the code fallback). */
+    the palette (html class watch -- a mid-view flip re-renders the svg),
+    rendering waits for the viewport (300px buffer, tall diagrams below the
+    fold never pay), and a chart the parser rejects falls back to a plain
+    code block.  The card only mounts this once its stream has settled --
+    the fence grows chunk by chunk while streaming, and re-rendering the
+    SVG on every chunk reads as flicker (the streaming view is the code
+    fallback). */
 function MermaidBlock({ chart }: { chart: string }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [nearViewport, setNearViewport] = useState(
+    () => typeof window !== "undefined" && !("IntersectionObserver" in window),
+  );
+  const [theme, setTheme] = useState(() => isDarkTheme());
+
+  // 进入视口(含 300px 缓冲)才触发加载 —— 长答案里屏外的图不白白付费
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el || nearViewport) {
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setNearViewport(true);
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    io.observe(el);
+    return () => {
+      io.disconnect();
+    };
+  }, [nearViewport]);
+
+  // 主题切换(html class 翻转,含 auto 跟随系统)后以新主题重渲
+  useEffect(() => {
+    const mo = new MutationObserver(() => {
+      setTheme(isDarkTheme());
+    });
+    mo.observe(document.documentElement, { attributeFilter: ["class"] });
+    return () => {
+      mo.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!nearViewport) {
+      return;
+    }
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        const dark =
-          document.documentElement.classList.contains("dark") || document.documentElement.classList.contains("black");
-        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "neutral" });
+        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: theme ? "dark" : "neutral" });
         const rendered = await mermaid.render(`zjs-mmd-${(mermaidSeq++).toString(36)}`, chart);
         if (!cancelled) {
           setSvg(rendered.svg);
@@ -330,7 +463,7 @@ function MermaidBlock({ chart }: { chart: string }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [chart]);
+  }, [nearViewport, chart, theme]);
   if (svg) {
     return (
       <div
@@ -340,9 +473,9 @@ function MermaidBlock({ chart }: { chart: string }) {
     );
   }
   if (failed) {
-    return <pre className={CODE_BLOCK}>{chart}</pre>;
+    return <CodeBlock>{chart}</CodeBlock>;
   }
-  return <div className="zjs-mermaid mt-2 min-h-24 rounded-xl bg-surface-2" />;
+  return <div className="zjs-mermaid mt-2 min-h-24 rounded-xl bg-surface-2" ref={containerRef} />;
 }
 
 /** The text content of a react-markdown code child (the raw fence body). */
@@ -366,16 +499,13 @@ function markdownComponents(
   meta: AiSourceMeta[],
   onCite: ((index: number) => boolean) | undefined,
   settled: boolean,
-): Record<
-  string,
-  (props: { alt?: string; children?: ReactNode; className?: string; href?: string; src?: string }) => ReactNode
-> {
-  const heading = ({ children }: { children?: ReactNode }) => (
+): Record<string, (props: MdProps) => ReactNode> {
+  const heading = ({ children }: MdProps) => (
     <h3 className={HEADING} dir="auto">
       {children}
     </h3>
   );
-  const external = ({ children, href }: { children?: ReactNode; href?: string }) => (
+  const external = ({ children, href }: MdProps) => (
     <a
       className="text-accent underline-offset-2 transition-colors hover:text-accent-hover hover:underline"
       href={href}
@@ -402,12 +532,18 @@ function markdownComponents(
       // compact [n] whose hover opens the source preview panel
       return <CitationChip n={n} onCite={onCite} source={source} />;
     },
+    blockquote: ({ children }) => (
+      <blockquote className="my-2 border-s-2 border-line ps-3 text-ink-2">{children}</blockquote>
+    ),
     code: ({ className, children }) =>
       className ? (
         <code className={className}>{children}</code>
       ) : (
         <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs">{children}</code>
       ),
+    dd: ({ children }) => <dd className="ms-5 text-ink-2">{children}</dd>,
+    dt: ({ children }) => <dt className="mt-2 font-medium text-ink">{children}</dt>,
+    mark: ({ children }) => <mark className="rounded bg-accent-soft px-0.5 text-ink">{children}</mark>,
     h1: heading,
     h2: heading,
     h3: heading,
@@ -434,7 +570,7 @@ function markdownComponents(
         }
         return <MermaidBlock chart={textOf(props?.children)} />;
       }
-      return <pre className={CODE_BLOCK}>{children}</pre>;
+      return <CodeBlock>{children}</CodeBlock>;
     },
     table: ({ children }) => (
       <table className="my-2 w-full border-collapse text-xs" dir="auto">
@@ -455,7 +591,12 @@ function markdownComponents(
     MermaidBlock and reset its svg/failed state on every tick, flickering
     the answer (and any diagram) for as long as the content height kept
     changing.  Stable props (markdown text, per-result meta, settled) keep
-    the subtree untouched by measurement churn. */
+    the subtree untouched by measurement churn.
+    KaTeX 数学管线（ZJBlog 同款 remark-math + rehype-katex）：体积可观，仅在
+    答案里出现 $ / $$ 定界符时才懒加载；加载完成前先按纯 markdown 渲染
+    （定界符短暂裸奔，与 mermaid 占位符同一模式）。 */
+const MATH_FENCE = /\$\$[\s\S]+?\$\$|\$[^\s$][^$\n]*\$/;
+
 const MarkdownAnswer = memo(function MarkdownAnswer({
   markdown,
   meta,
@@ -467,8 +608,29 @@ const MarkdownAnswer = memo(function MarkdownAnswer({
   onCite?: (index: number) => boolean;
   settled: boolean;
 }) {
+  const needsMath = MATH_FENCE.test(markdown);
+  const [mathPlugins, setMathPlugins] = useState<[PluggableList, PluggableList] | null>(null);
+  useEffect(() => {
+    if (!needsMath || mathPlugins) {
+      return;
+    }
+    let cancelled = false;
+    void Promise.all([import("remark-math"), import("rehype-katex")]).then(([rm, rh]) => {
+      if (!cancelled) {
+        setMathPlugins([[rm.default], [rh.default]]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsMath, mathPlugins]);
+  const withMath = needsMath && mathPlugins;
   return (
-    <Markdown components={markdownComponents(meta, onCite, settled)} remarkPlugins={[remarkGfm]}>
+    <Markdown
+      components={markdownComponents(meta, onCite, settled)}
+      rehypePlugins={withMath ? mathPlugins[1] : undefined}
+      remarkPlugins={withMath ? [...BASE_REMARK, ...mathPlugins[0]] : BASE_REMARK}
+    >
       {markdown}
     </Markdown>
   );

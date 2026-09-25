@@ -718,12 +718,23 @@ Rules:
 - Write the answer in {lang}.
 - Cite sources right after the statements they support: [1] for one source,
   [1,3] for several. Use [*] only for common knowledge that no source covers.
-- Format freely in GitHub-flavored markdown: section headings, bullet /
-  numbered lists, **bold**, tables, fenced code blocks, links when a source
-  URL genuinely helps -- and a ```mermaid fenced block (flowchart /
-  sequence / ...) when a diagram clarifies the answer better than prose.
-  In mermaid, quote every node label that contains punctuation or
-  parentheses: A["降水(雨/雪)"] -- not A[降水(雨/雪)].
+- Format freely in GitHub-flavored markdown -- the renderer supports all of
+  it: "## " section headings, bullet / numbered lists (task lists "- [x]"
+  for step checklists), **bold**, ~~strikethrough~~, tables for
+  comparisons, > blockquotes for short source quotes, `inline code` and
+  fenced code blocks, --- horizontal rules, definition lists ("Term" on
+  one line, ": definition" below), emoji shortcodes like :tada: used
+  sparingly, and links when a source URL genuinely helps.
+- When a diagram clarifies structure or flow better than prose, emit a
+  ```mermaid fenced block (flowchart, sequence, state, ER, gantt, pie,
+  mindmap, timeline).  Keep diagrams small -- around 15 nodes at most --
+  and quote every node label that contains punctuation or parentheses:
+  A["降水(雨/雪)"] -- not A[降水(雨/雪)].
+- Math typesets as real equations -- write LaTeX: inline $E=mc^2$ or
+  display $$\\int_0^1 f(x)\\,dx$$ blocks.  Each formula appears ONCE, in
+  LaTeX only -- never repeat it as plain text beside the equation.  No raw
+  HTML and no markdown images (![alt](url)) -- visual evidence arrives as
+  attachments instead.
 - If the sources do not answer the question, say so in one short line and
   answer from common knowledge marked with [*].
 - Get to the point in the first sentence. No preamble, no closing remark."""

@@ -24,13 +24,20 @@
   ],
   "dependencies": {
     "clsx": "^2.1.1",
+    "katex": "^0.18.9",
     "lucide-react": "^1.45.0",
+    "mdast-util-mark": "^1.0.0",
     "mermaid": "^12.0.0",
+    "micromark-extension-mark": "^1.0.2",
     "ol": "^10.10.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "rehype-katex": "^7.0.1",
+    "remark-deflist": "^1.0.0",
+    "remark-emoji": "^5.0.2",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
