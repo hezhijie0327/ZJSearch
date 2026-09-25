@@ -101,6 +101,19 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   errors fall through to the upstream view unchanged. `_render_context` in
   the module mirrors `webapp.render`'s context building — re-sync it if
   upstream changes `render`.
+- The AI Overview (`searx/zjsearch_ai.py`, route `POST /ai/answer`; client
+  `features/results/AiSummary.tsx` + `aiAnswer.ts`): the gate is an HMAC
+  token in the page-data globals, the client assembles the numbered source
+  context from the payload it already has, and the endpoint streams a cited
+  markdown answer (reasoning relayed wrapped in `<think>`). Transports are
+  the official SDKs (openai chat/responses, anthropic, gemini), configured
+  under `zjsearch: ai:` in settings; the API key may travel via the
+  `ZJSEARCH_AI_KEY` env (dev-settings deliberately keeps it out of the
+  repo). NOTE: LM Studio VALIDATES the bearer token — the placeholder
+  "none" that local auth-free endpoints get is rejected with 401, so LM
+  Studio deployments must set a real key. Lighthouse-critical: the
+  feature adds zero bytes to the eager graph (the trigger lives in the
+  results chunk; KaTeX/mermaid load only when the answer uses them).
 - The boot skeleton (`zjsearch/skeleton.html` + the `.zjs-boot` block in
   `src/styles/boot.css`) is a **geometry mirror of the real results page**, not an
   invented loading screen — it only covers the JS-boot window (server flush →
@@ -182,6 +195,23 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   output is Markup (never escaped), and `|tojson` is the only safe way to embed
   dynamic values — hand-built JSON must place `, ` separators **between** items,
   never before a closing brace.
+- **Static-root publishing contract**: the served bundle URLs live at the
+  static root (`/static/zjsearch.min.js`) because `webapp.custom_url_for`
+  only maps filenames that exist in `searx/static/`. `tools/assets.ts`
+  closeBundle therefore publishes EVERY root-level `zjsearch*.min.{js,css}`
+  artifact plus `assets/` (KaTeX fonts) there. Vite emits extra root-level
+  CSS chunks (zjsearch2/3.min.css) whose preload helpers resolve them as
+  SIBLINGS of the JS bundles — a missing one 404s and main.tsx's
+  `await import(ResultsPage)` never settles, so the streamed search page
+  boots into the skeleton FOREVER (homepage SPA navigation still works,
+  which misdirects the debugging; see Debugging notes for the recipe).
+- The streamed search page fails SAFE: a late-chunk serialization error
+  (a malformed result field reaching a macro) makes `zjsearch_stream`
+  emit a recovery `page_error` payload (a leading `</script>` closes a
+  script the failure may have left open; the client prefers the LAST
+  parseable `#page-data`, see `parseEmbeddedPageData`). Never let a
+  streamed response end silently after the shell — the client would hang
+  pending forever.
 - Theme style light/dark uses the `simple_style` cookie; `black` is OLED black
   (html gets both `dark` and `black` classes). Auto = no cookie + system setting.
   The `dark`/`black` classes are rendered SERVER-SIDE into the `<html>` tag
@@ -326,6 +356,22 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   the exact spinner still running (this caught the infinite-scroll
   sentinel spinning while idle). Conversely, a permanently-running CSS
   animation can also stall screenshot pipelines that wait for paint idle.
+- The in-app browser can FREEZE its rendering pipeline while the page's JS
+  keeps running: `requestAnimationFrame` never fires, transitions don't
+  run (they snap), timers clamp to ~1s, screenshots serve stale frames.
+  Symptoms look exactly like product bugs — rAF-driven animations "missing"
+  (the user-reported 「0 结果消息无动画」 was this), Collapse panels stuck at
+  0fr, mid-transition screenshots. Probe before concluding:
+  `await new Promise(r => requestAnimationFrame(r))` with a 1.5s timeout —
+  if rAF loses, recover with a fresh tab and re-measure; measurements taken
+  inside a jam are void (this audit's first transition test "proved" a
+  healthy animation broken).
+- A search page stuck on the static boot skeleton (React never mounted,
+  no reload loop) means the results chunk's dynamic import never settled —
+  check `performance.getEntriesByType("resource")` for a 404 on a
+  `zjsearch*.min.css` / chunk asset (see the static-root publishing
+  contract above) BEFORE touching animation code. A visible-but-stuck
+  toggle/panel after mount is a different bug class.
 
 ## zjsearch UI design system
 
@@ -379,7 +425,10 @@ Motion & disclosure:
   media embeds and category blocks unmount; the cheap meta strips stay
   mounted). Apply the spacing margin CONDITIONALLY on the Collapse wrapper
   (`open ? "mt-2" : ""`) — a static margin under a folded panel reads as a
-  stray gap. Triggers keep `aria-expanded` + the rotating chevron. Native
+  stray gap. Triggers keep `aria-expanded` + the rotating chevron. The
+  open path mounts at 0fr and expands on the next frames with a 120 ms
+  timeout FALLBACK — a starved rAF (occluded tab, jammed compositor)
+  must never leave a panel at 0fr forever. Native
   `<details>` disclosures get the same height animation via the
   `::details-content` progressive enhancement in `styles/behaviors.css` (unsupported
   browsers keep the chevron rotation alone).
@@ -431,14 +480,24 @@ Shared style & logic tokens (import, never re-type):
 - `components/Meter.tsx` is the only proportion bar (stats page, engine
   timing strips, engine tables); `components/CopyButton.tsx` +
   `ClickToCopy` + `useCopyToast` remain the only copy paths.
-- Cap-and-expand chip rows ("show 3 + N") use `lib/useCapExpand.ts`
-  (EnginesLine "+N", paper/package tags, weather sources) — callers render
-  their own chips, the hook owns the visibility state machine.
-- Thumbnail load state is `useGraceThumb` (Tile.tsx): 12s hung-request
+- Cap-and-expand chip rows ("show 3 + N") pair `lib/useCapExpand.ts` (owns
+  the visibility state machine) with `components/CapChip.tsx` (renders the
+  one "+N ⇄ ‹ show less" chip, `aria-expanded` included) — EnginesLine,
+  paper/package tags and weather sources all consume both; never hand-type
+  the toggle again (the four hand-rolled copies had already drifted, one
+  losing its `aria-expanded`).
+- Clamp-and-reveal (long content shown as a fixed preview + gradient +
+  full-width expand pill: infobox abstract, AI overview) goes through
+  `components/ClampReveal.tsx` — it owns the ResizeObserver measurement
+  (+1 sub-pixel guard), the max-height dance (expand animates to the
+  measured height then lifts the cap so late growth never sits under a
+  stale one; collapse re-applies the cap before easing down), the gradient
+  scrim and the toggle. Pass `active={false}` while content streams.
+- Thumbnail load state is `useGraceThumb` (tileParts.tsx): 12s hung-request
   grace, shared by grid tiles and the image masonry; the first four cells
   of a page are `eager` + fetchPriority high (page-global index via
   `indexOffset`).
-- Tile anatomy extras live in `features/results/Tile.tsx`:
+- Tile anatomy extras live in `features/results/tileParts.tsx`:
   `TileCloseAction` (the 28px dark close chip over playing media — every
   grid/card uses it, never re-type the button), `TileMeta` +
   `TileMetaAuthor/Views/Date` (the fixed-height meta footer row). The
@@ -503,7 +562,7 @@ its content, all sharing one visual language:
   products → `ProductGrid`. Bang-limited searches route the same way via
   `only_template` (`paper`, `torrent`).
 - Media grids share one tile anatomy, enforced by the shared scaffold in
-  `features/results/Tile.tsx` — every grid cell renders through `TileCell`
+  `features/results/tileParts.tsx` — every grid cell renders through `TileCell`
   (hotkey contract: `data-hotkey-index` + `selected` ring), titles through
   `TileTitle`, tile-centered actions (play / magnet / download) through
   `TileCenterAction`, corner badges through `TileBadge` (`TILE_BADGE` in
@@ -629,9 +688,12 @@ build; upstream `simple` instead links a dedicated built rss.css).  Rules:
 ## Custom plugin behaviour (server side, keep with the theme)
 
 - `unit_converter` / `currency_convert`: value-less queries ("kg to lb",
-  "usd to cny") convert **1** by default; a keyword split stops at the
-  first match (no duplicate answers).  Both ship the sibling-unit table so
-  the client converter can re-pair without new requests.
+  "usd to cny") convert **1** by default.  The keyword split takes the FIRST
+  keyword word and answers that ONE pair, cutting the to-side at the next
+  keyword: "5 usd to eur in gbp" answers usd→eur — never a later keyword's
+  re-pairing (usd→gbp), and never duplicate answers.  Both ship the
+  sibling-unit table so the client converter can re-pair without new
+  requests.
 - `advanced_search_syntax` is a query-operator POST-FILTER engine, not a
   pass-through: it parses `site:`/`-site:` (subdomain-aware), `filetype:`
   (URL path extension), `before:`/`after:` (vs `publishedDate`),
@@ -642,15 +704,22 @@ build; upstream `simple` instead links a dedicated built rss.css).  Rules:
   regardless of engine support.  Word terms use `\b` boundaries for ASCII
   but SUBSTRING for CJK: word boundaries never fire inside unspaced CJK
   text, so `\b教程\b` would make `+教程`/`intitle:教程` drop every result
-  and `-教程` exclude nothing (see `_word_matcher`).  A query that cleans
-  to nothing (a bare `site:host`) sends the include-domain(s) as the engine
-  query instead of the literal operator string.  It must be active wherever
-  the theme ships — the help dialog documents the operators — so it is
-  enabled in `client/zjsearch/dev-settings.yml`; a deployment host has to
-  enable it in its own settings (the upstream `searx/settings.yml` is left
+  and `-教程` exclude nothing (see `_word_matcher`).  A domain-shaped bare
+  `-word` ("test -wikipedia.org") is ALSO promoted into the site-exclude
+  set — the plain -word matcher runs against title+content only, so the
+  domain would otherwise survive on every result whose text never spells
+  it out (number-like words such as `-1.5` match the shape too, but
+  promoting them excludes a host nobody has; the word matcher still runs).
+  A query that cleans to nothing (a bare `site:host`) sends the
+  include-domain(s) as the engine query instead of the literal operator
+  string.  It must be active wherever the theme ships — the help dialog
+  documents the operators — so it is enabled in
+  `client/zjsearch/dev-settings.yml`; a deployment host has to enable it
+  in its own settings (the upstream `searx/settings.yml` is left
   untouched by the theme).
 - `time_zone`: an unknown location is silence (ValueError swallowed), not a
-  plugin error.
+  plugin error.  The filler word "in" is stripped from the search term, so
+  "time in tokyo" resolves like "time tokyo" instead of going silent.
 - `stock_quote`: `$AAPL`, `AAPL stock` render the `Stock.tsx` DDG-style
   card: price hero, change with the locale's red/green convention (zh-CN:
   red up), range pills (1D/5D/1M/YTD/1Y/5Y/MAX, all series pre-fetched in
