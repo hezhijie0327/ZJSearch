@@ -11,7 +11,8 @@
 # origin/master is fetched from origin first), so the patch carries the whole
 # theme delta relative to master. The diff runs against the working tree, so
 # uncommitted edits are included (untracked files are not). Included paths:
-# client/zjsearch, searx/templates/zjsearch and every searx/ python change
+# client/zjsearch, searx/templates/zjsearch, requirements.txt and every
+# searx/ python change
 # (searx/static is excluded) - the templates alone are not enough: the
 # special-query answers (stats/hash/self-info/time-zone/random) carry their
 # structured *data* payloads from the python side, and new templates running
@@ -57,7 +58,7 @@ Set-Location (Join-Path $PSScriptRoot "..\..")
 
 # byte-exact redirect through cmd: PowerShell's own ">" re-encodes git output
 # (UTF-16 / BOM), which git apply would reject
-cmd /c "git diff --text $Base -- client/zjsearch searx `"(exclude)searx/static`" > `"$Out`""
+cmd /c "git diff --text $Base -- client/zjsearch searx requirements.txt `"(exclude)searx/static`" > `"$Out`""
 
 $content = Get-Content $Out -Raw
 $files = ([regex]::Matches($content, "(?m)^diff --git")).Count

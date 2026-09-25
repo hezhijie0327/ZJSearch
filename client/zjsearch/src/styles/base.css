@@ -54,4 +54,20 @@
     padding: 0 1px;
     box-decoration-break: clone;
   }
+
+  /* transient tint when a Quick Answer citation jumps to its result row
+      (set/cleared imperatively around a scrollIntoView) */
+  [data-ai-flash] {
+    animation: zjs-ai-flash 1.8s ease-out both;
+  }
+}
+
+@keyframes zjs-ai-flash {
+  0%,
+  40% {
+    background-color: var(--accent-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
 }

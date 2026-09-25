@@ -15,3 +15,8 @@ typer==0.27.2
 isodate==0.7.2
 whitenoise==6.12.0
 typing-extensions==4.16.0
+
+# zjsearch theme: the AI answer SDK transports (searx/zjsearch_ai.py)
+openai==3.19.2
+anthropic==1.8.0
+google-genai==2.25.0

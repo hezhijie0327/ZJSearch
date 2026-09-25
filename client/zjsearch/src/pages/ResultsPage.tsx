@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox } from "@/components/SearchBox.tsx";
@@ -8,6 +8,8 @@ import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/Sea
 import { HeaderActions, Link, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
+import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
+import { aiSourceMeta, buildAiContext, collectAiImages } from "@/features/results/aiAnswer.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
 import { CacheUrlProvider } from "@/features/results/CacheUrlProvider.tsx";
@@ -23,7 +25,7 @@ import { Sidebar } from "@/features/results/Sidebar.tsx";
 import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
-import { useT } from "@/lib/i18n.ts";
+import { useLocale, useT } from "@/lib/i18n.ts";
 import { scrollBehavior } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
@@ -65,11 +67,18 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   });
 
   const [filterValues, setFilterValues] = useState<FilterValues>(filterValuesFrom);
+  // the AI output language follows the ACTIVE UI language (the i18n
+  // runtime's locale — the server preference alone can be a stale default
+  // while the UI actually renders in the browser language)
+  const uiLocale = useLocale();
+  const aiAnswer = useAiAnswer(globals.ai, uiLocale || globals.locale || "en");
 
-  // re-sync filters after any navigation (back/forward, payload change)
+  // re-sync filters after any navigation (back/forward, payload change);
+  // a new search invalidates the Quick Answer
   // biome-ignore lint/correctness/useExhaustiveDependencies: URL is the source of truth
   useEffect(() => {
     setFilterValues(filterValuesFrom());
+    aiAnswer.reset();
   }, [href]);
 
   const settings = useSettings();
@@ -78,6 +87,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
   const [hotkeysSelected, setHotkeysSelected] = useState(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const flashTimer = useRef<number | null>(null);
   const [appended, setAppended] = useState<ResultItem[]>([]);
   const [appendState, setAppendState] = useState<"idle" | "loading" | "error" | "done">("idle");
   const appendedHref = useRef(href);
@@ -231,6 +241,43 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   });
 
   const allResults = useMemo(() => [...data.results, ...appended], [data.results, appended]);
+  const aiImages = useMemo(() => collectAiImages(allResults), [allResults]);
+  const aiMeta = useMemo(() => aiSourceMeta(allResults), [allResults]);
+
+  // Quick Answer citation [n] → the n-th result of the flat list the answer
+  // context was built from; its card is found through the result link (every
+  // card view renders one) and flashed while scrolled into view.
+  // useCallback keeps the identity stable for the memoized answer body.
+  const jumpToAiSource = useCallback(
+    (index: number): boolean => {
+      const result = allResults[index - 1];
+      if (!result || !listRef.current) {
+        return false;
+      }
+      // text cards anchor through their result link, grid tiles through
+      // data-hotkey-index (the global result index) or the image tiles'
+      // data-ai-url (present even when a thumbnail failed to load)
+      const probe =
+        listRef.current.querySelector(`a[href="${CSS.escape(result.url)}"]`) ??
+        listRef.current.querySelector(`[data-hotkey-index="${index - 1}"]`) ??
+        listRef.current.querySelector(`[data-ai-url="${CSS.escape(result.url)}"]`);
+      const card = probe?.closest<HTMLElement>("article, [data-hotkey-index], button");
+      if (!card) {
+        return false;
+      }
+      card.scrollIntoView({ block: "start", behavior: scrollBehavior() });
+      if (flashTimer.current !== null) {
+        window.clearTimeout(flashTimer.current);
+      }
+      card.setAttribute("data-ai-flash", "");
+      flashTimer.current = window.setTimeout(() => {
+        card.removeAttribute("data-ai-flash");
+        flashTimer.current = null;
+      }, 1900);
+      return true;
+    },
+    [allResults],
+  );
   const layout = useMemo(
     () => detectResultsLayout(data, selectedCategories, allResults),
     [data, selectedCategories, allResults],
@@ -306,7 +353,21 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
             {!showSkeletons && !error ? (
               <>
                 <div className="mt-2">
-                  <DebugPanels data={data} results={allResults} searchUrl={shareableSearchUrl(data)} />
+                  <DebugPanels
+                    actions={
+                      globals.ai && allResults.length > 0 ? (
+                        <AiAnswerTrigger
+                          onToggle={() => {
+                            aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
+                          }}
+                          phase={aiAnswer.phase}
+                        />
+                      ) : null
+                    }
+                    data={data}
+                    results={allResults}
+                    searchUrl={shareableSearchUrl(data)}
+                  />
                 </div>
                 <div className="mt-3.5">
                   <SuggestionsBox data={data} onSearch={submitQuery} />
@@ -340,6 +401,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               <>
                 <Corrections data={data} onSearch={submitQuery} />
                 <div className="mt-3 space-y-3">
+                  {aiAnswer.open ? <AiAnswerCard onCite={jumpToAiSource} sourceMeta={aiMeta} state={aiAnswer} /> : null}
                   {calc ? <CalculatorAnswer calc={calc} /> : null}
                   <Answers answers={data.answers} query={data.q} />
                 </div>

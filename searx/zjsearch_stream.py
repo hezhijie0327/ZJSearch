@@ -24,7 +24,7 @@ import flask
 from flask_babel import gettext
 from markupsafe import escape
 
-from searx import logger, settings
+from searx import logger, settings, zjsearch_ai
 from searx.extended_types import sxng_request
 from searx.locales import RTL_LOCALES, match_locale
 from searx.webadapter import get_search_query_from_webapp
@@ -218,7 +218,7 @@ class ZjsearchStreamedSearch:
         return self._data.get('search_language')
 
 
-def _render_context(webapp, template_name: str, **kwargs):
+def _render_context(webapp, template_name: str, **kwargs):  # pylint: disable=unused-argument
     # mirror of searx.webapp.render() without the final render_template()
     # call -- helpers are read from the webapp module so this stays in sync
     # by construction; re-check against webapp.render when upstream changes it
@@ -282,12 +282,18 @@ def _render_context(webapp, template_name: str, **kwargs):
     )
     kwargs['urlparse'] = webapp.urlparse
 
+    # zjsearch AI summary capability (token + model) -- absent when the
+    # feature is off or unconfigured; the templates omit the key then and
+    # the client hides its chips.  The upstream render fallback path does
+    # not run this mirror, so it never carries the key either.
+    kwargs['ai'] = zjsearch_ai.capability()
+
     return kwargs
 
 
 def _search_stream_response(search_query, raw_text_query, selected_locale) -> flask.Response:
     """Build the streaming response for a zjsearch HTML search."""
-    import searx.webapp as webapp  # pylint: disable=import-outside-toplevel,cyclic-import
+    from searx import webapp  # pylint: disable=import-outside-toplevel,cyclic-import
 
     streamed = ZjsearchStreamedSearch(search_query, raw_text_query, selected_locale)
     context = _render_context(
@@ -324,7 +330,7 @@ def _search_stream_response(search_query, raw_text_query, selected_locale) -> fl
     return response
 
 
-def _before_request():
+def _before_request():  # pylint: disable=too-many-return-statements
     """Return the streaming response for zjsearch HTML searches, or None to
     let the upstream ``search()`` view handle the request unchanged."""
 
@@ -355,6 +361,9 @@ def install(app: flask.Flask) -> None:
     """Register the streaming hook; called once at the end of webapp.py.
 
     Registered after the upstream before_request hooks, so the preferences
-    (theme) and the merged GET/POST form are already prepared.
+    (theme) and the merged GET/POST form are already prepared.  Chains the
+    AI summary module (its own route registration) so webapp.py keeps a
+    single theme entry point.
     """
+    zjsearch_ai.install(app)
     app.before_request(_before_request)

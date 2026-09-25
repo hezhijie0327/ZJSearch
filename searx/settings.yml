@@ -3505,3 +3505,42 @@ doi_resolvers:
   sci-hub.ru: 'https://sci-hub.ru/'
 
 default_doi_resolver: 'oadoi.org'
+
+# zjsearch theme: per-result AI summaries (Kagi-style on-demand Summarize).
+# Everything ships off -- a deployment opts in by overriding these keys in
+# its own settings.yml (custom top-level keys are merged and preserved).
+#   url:    OpenAI-compatible chat/completions endpoint (required to enable)
+#   key:    bearer token; empty falls back to $ZJSEARCH_AI_KEY, "none" = unauthenticated
+#   model:  model name (required to enable)
+zjsearch:
+  ai:
+    enabled: false
+    # the transport is the official SDK of the chosen dialect: AsyncOpenAI
+    # (chat completions / Responses API), AsyncAnthropic (Messages) or
+    # google-genai (Gemini) -- base_url is used exactly as configured (each
+    # SDK appends its own method paths; per-SDK examples live in
+    # client/zjsearch/README.rst)
+    # sdk: openai_chat_completions  # openai_chat_completions | openai_responses | anthropic | gemini
+    base_url: ''
+    api_key: ''  # falls back to the ZJSEARCH_AI_KEY env
+    model: ''
+    # the create() kwargs of the chosen SDK -- max_tokens translates to
+    # each API's own key, everything else passes through 1:1, so the
+    # thinking-intensity knobs are the SDK's own names:
+    #   openai_chat_completions -> reasoning_effort: low | medium | high
+    #   openai_responses        -> reasoning: {effort: low}
+    #   anthropic               -> thinking: {type: enabled, budget_tokens: 2048}
+    #                              (a custom temperature is incompatible
+    #                              with thinking on the Messages API)
+    #   gemini                  -> thinking_config: {thinking_budget: 1024}
+    # temperature itself is opt-in: thinking models misbehave with forced
+    # non-default sampling params
+    # params:
+    #   temperature: 0.2
+    #   max_tokens: 700      # omit for the provider default
+    # attach image results to the answer request (vision models):
+    # "base64" fetches + inlines each picture server-side (default),
+    # "url" hands the references to the endpoint, "off" disables
+    images: base64
+    extra_body: {}  # merged 1:1 into the request body (provider-specific escape hatch)
+    extra_headers: {}  # extra HTTP headers, e.g. aihubmix's discount APP-Code

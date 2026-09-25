@@ -62,8 +62,9 @@ CURRENCY_LIST_TTL = 86400.0
 _currency_cache: dict[str, tuple[float, dict[str, float]]] = {}
 """base currency -> (monotonic fetch time, rates ``X per 1 base``)."""
 
-_currency_codes: frozenset[str] | None = None
-"""Cached catalogue of ISO codes the API can serve, with fetch time."""
+_currency_codes: list[tuple[float, frozenset[str]]] = []
+"""Cached catalogue of ISO codes the API can serve: ``(fetch time, codes)``;
+empty while the catalogue is unavailable."""
 
 
 def _supported_currencies() -> frozenset[str] | None:
@@ -72,10 +73,9 @@ def _supported_currencies() -> frozenset[str] | None:
 
     The fetch goes through the instance's default network, so the
     ``outgoing.proxies`` settings apply like for every engine."""
-    global _currency_codes
     now = time.monotonic()
-    if _currency_codes and now - _currency_codes[0] < CURRENCY_LIST_TTL:
-        return _currency_codes[1]
+    if _currency_codes and now - _currency_codes[0][0] < CURRENCY_LIST_TTL:
+        return _currency_codes[0][1]
 
     future = asyncio.run_coroutine_threadsafe(
         get_network().request("GET", CURRENCIES_URL, allow_redirects=True, timeout=8),
@@ -98,7 +98,8 @@ def _supported_currencies() -> frozenset[str] | None:
         logger.warning("empty currency list payload")
         return None
 
-    _currency_codes = (now, codes)
+    _currency_codes.clear()
+    _currency_codes.append((now, codes))
     return codes
 
 
