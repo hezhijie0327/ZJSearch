@@ -158,10 +158,11 @@ def _endpoint(cfg: dict[str, t.Any]) -> tuple[str, str]:
 
 
 def _endpoint_is_local(url: str) -> bool:
-    """True for loopback LLM endpoints (LM Studio, ollama): those must not
-    go through the outgoing proxy / Tor."""
+    """True for loopback / internal LLM endpoints (LM Studio, ollama, a
+    self-hosted gateway on an ``.internal`` name): those must not go
+    through the outgoing proxy / Tor."""
     host = (urlsplit(url).hostname or "").lower()
-    if host == "localhost" or host.endswith((".localhost", ".local")):
+    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
@@ -218,7 +219,9 @@ def _openai_client(cfg: dict[str, t.Any], base: str) -> t.Any:
     if client is None:
         client = AsyncOpenAI(
             base_url=base or None,
-            api_key=_chat_key(cfg),
+            # the SDKs refuse an empty key at construction -- auth-free local
+            # servers (ollama, LM Studio without auth) get a placeholder
+            api_key=_chat_key(cfg) or ("none" if _endpoint_is_local(base) else ""),
             max_retries=0,
             http_client=_httpx_client(not _endpoint_is_local(base)),
         )
@@ -234,7 +237,7 @@ def _anthropic_client(cfg: dict[str, t.Any], base: str) -> t.Any:
     if client is None:
         client = AsyncAnthropic(
             base_url=base or None,
-            api_key=_chat_key(cfg),
+            api_key=_chat_key(cfg) or ("none" if _endpoint_is_local(base) else ""),
             max_retries=0,
             http_client=_httpx_client(not _endpoint_is_local(base)),
         )
@@ -371,20 +374,14 @@ def _check_url(url: str) -> bool:
     return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast)
 
 
-def _fetch_image_b64(url: str, check: bool = True) -> str:
-    """The image as an ``data:`` URL, fetched through the image network with
-    a size cap -- empty when it fails, is too large or is not an image.  The
-    SSRF gate is skipped for the instance's own ``/image_proxy`` links (the
-    proxy applies searx's own upstream validation)."""
-    if check and not _check_url(url):
-        logger.warning("zjsearch_ai: image URL rejected by the SSRF gate: %r", url)
-        return ""
-    future = asyncio.run_coroutine_threadsafe(
-        _image_network().request("GET", url, timeout=_IMAGE_FETCH_TIMEOUT, headers={"User-Agent": gen_useragent()}),
-        get_loop(),
-    )
+async def _fetch_image(url: str) -> str:
+    """One image as a ``data:`` URL -- ``""`` when the fetch fails, the body
+    is too large or the content is not an image.  Runs on the network loop
+    (see :py:func:`_fetch_images_b64`)."""
     try:
-        resp = future.result(_IMAGE_FETCH_TIMEOUT + 1.0)
+        resp = await _image_network().request(
+            "GET", url, timeout=_IMAGE_FETCH_TIMEOUT, headers={"User-Agent": gen_useragent()}
+        )
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_ai: image fetch failed for %r: %r", url, exc)
         return ""
@@ -397,6 +394,45 @@ def _fetch_image_b64(url: str, check: bool = True) -> str:
     return f"data:{mime};base64,{base64.b64encode(content).decode()}"
 
 
+def _fetch_images_b64(urls: list[str]) -> list[str]:
+    """The images as ``data:`` URLs, fetched in parallel -- one round-trip to
+    the network loop instead of one per picture (the fetches used to run
+    sequentially: up to ``_MAX_IMAGES`` timeouts serialised before the LLM
+    call could even start).  Failed slots come back ``""``; each fetch
+    carries its own timeout, so the gather never hangs past it."""
+    if not urls:
+        return []
+
+    async def fetch_all() -> list[str]:
+        return list(await asyncio.gather(*(_fetch_image(url) for url in urls)))
+
+    future = asyncio.run_coroutine_threadsafe(fetch_all(), get_loop())
+    try:
+        return future.result(_IMAGE_FETCH_TIMEOUT * 2)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("zjsearch_ai: image fetch round failed: %r", exc)
+        return [""] * len(urls)
+
+
+def _image_fetch_candidate(url: str, absolute: str) -> str | None:
+    """The server-fetch URL for one client image reference -- ``None`` drops
+    it (a rejection is logged).  Same-origin ``/image_proxy`` links carry
+    the original URL as their target: fetch it directly through the image
+    network (the outgoing proxies apply) instead of hopping through the
+    instance's own proxy view; other same-origin references fetch the
+    instance itself, no gate."""
+    original = _proxied_original(absolute) if url.startswith("/") else None
+    if original is not None:
+        if _check_url(original):
+            return original
+        logger.warning("zjsearch_ai: image URL rejected by the SSRF gate: %r", original)
+        return None
+    if url.startswith("/") or _check_url(absolute):
+        return absolute
+    logger.warning("zjsearch_ai: image URL rejected by the SSRF gate: %r", absolute)
+    return None
+
+
 def _attached_images(payload: dict[str, t.Any], cfg: dict[str, t.Any]) -> list[dict[str, t.Any]]:
     """OpenAI-shaped ``image_url`` content parts for the attached image
     results -- every dialect pump converts them to its own block shape.  The
@@ -406,30 +442,38 @@ def _attached_images(payload: dict[str, t.Any], cfg: dict[str, t.Any]) -> list[d
     mode = str(cfg.get("images", "base64")).lower()
     if mode not in ("base64", "url"):
         return []
+    refs = payload.get("images")
+    if not isinstance(refs, list):
+        return []
     parts: list[dict[str, t.Any]] = []
-    for url in payload.get("images") or []:
-        if len(parts) >= _MAX_IMAGES:
+    fetch_urls: list[str] = []
+    for ref in refs:
+        if len(parts) + len(fetch_urls) >= _MAX_IMAGES:
             break
-        absolute = _absolute_url(str(url or "").strip())
+        url = str(ref or "").strip()
+        absolute = _absolute_url(url)
         if not absolute:
             continue
         if mode == "url":
             parts.append({"type": "image_url", "image_url": {"url": absolute}})
             continue
-        # same-origin /image_proxy links carry the original URL as their
-        # target -- fetch it directly through the image network (the
-        # outgoing proxies apply) instead of hopping through the proxy view
-        original = _proxied_original(absolute) if url.startswith("/") else None
-        if original is not None:
-            data = _fetch_image_b64(original) if _check_url(original) else ""
-        else:
-            data = _fetch_image_b64(absolute, check=not url.startswith("/"))
+        candidate = _image_fetch_candidate(url, absolute)
+        if candidate is not None:
+            fetch_urls.append(candidate)
+    if not fetch_urls:
+        return parts
+    # result lists repeat a host's images -- dedupe, order preserved
+    for data in _fetch_images_b64(list(dict.fromkeys(fetch_urls))):
         if data:
             parts.append({"type": "image_url", "image_url": {"url": data}})
     return parts
 
 
 # ----------------------------------------------------------- dialect streams
+
+
+def _system_of(messages: list[dict[str, t.Any]]) -> str:
+    return "".join(str(m.get("content")) for m in messages if m.get("role") == "system")
 
 
 def _anthropic_image(part: dict[str, t.Any]) -> dict[str, t.Any]:
@@ -475,7 +519,7 @@ def _gemini_messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.An
     Gemini API takes no remote image references on this path."""
     from google.genai import types  # pylint: disable=import-outside-toplevel
 
-    system = "".join(str(m.get("content")) for m in messages if m.get("role") == "system")
+    system = _system_of(messages)
     contents: list[t.Any] = []
     for message in messages:
         if message.get("role") == "system":
@@ -501,10 +545,6 @@ def _gemini_messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.An
         if parts:
             contents.append(types.Content(role="user", parts=parts))
     return system or None, contents
-
-
-def _system_of(messages: list[dict[str, t.Any]]) -> str:
-    return "".join(str(m.get("content")) for m in messages if m.get("role") == "system")
 
 
 async def _pump_openai_chat(
@@ -605,10 +645,14 @@ async def _pump_anthropic(
             if event.type != "content_block_delta":
                 continue
             delta = event.delta
+            # delta is a discriminated union (text_delta / thinking_delta /
+            # signature_delta / input_json_delta / citations_delta) -- only
+            # the first two carry prose; bare attribute access on the others
+            # killed the whole stream (SignatureDelta has no .text)
             if delta.type == "thinking_delta":
                 if relay_reasoning and delta.thinking:
                     events.put(("think", str(delta.thinking)))
-            elif delta.text:
+            elif delta.type == "text_delta" and delta.text:
                 events.put(("delta", str(delta.text)))
     finally:
         await stream.close()
