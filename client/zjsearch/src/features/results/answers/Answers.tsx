@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { LegacyAnswer } from "@/features/results/answers/Legacy.tsx";
 import { StockAnswer } from "@/features/results/answers/Stock.tsx";
 import { TranslationsAnswer } from "@/features/results/answers/Translations.tsx";
@@ -32,7 +32,9 @@ function answerKey(answer: AnswerData, index: number): string {
   }
 }
 
-export function Answers({ answers, query }: { answers: AnswerData[]; query?: string }) {
+/** memo: the AI answer streams through the page-level state -- every chunk
+    re-renders ResultsPage, and the answers payload is stable while it does. */
+export const Answers = memo(function Answers({ answers, query }: { answers: AnswerData[]; query?: string }) {
   const t = useT();
   const visible = useMemo(() => {
     if (answers.length === 0) {
@@ -105,4 +107,4 @@ export function Answers({ answers, query }: { answers: AnswerData[]; query?: str
       })}
     </section>
   );
-}
+});

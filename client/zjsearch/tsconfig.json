@@ -20,8 +20,7 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"],
-      "mdast-util-mark": ["./node_modules/mdast-util-mark/index.d.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "tools", "vite.config.ts"]

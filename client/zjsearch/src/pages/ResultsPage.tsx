@@ -282,6 +282,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     () => detectResultsLayout(data, selectedCategories, allResults),
     [data, selectedCategories, allResults],
   );
+  // stable identity: ResultsView is memoized against the AI stream's
+  // per-chunk re-renders, an inline closure would break the memo
+  const onToggleBlock = useCallback((key: string) => {
+    setCollapsedBlocks((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
 
   // client-side calculator answer (server plugin "calculator" enabled)
   const calc = useMemo(() => {
@@ -420,9 +425,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       collapsedBlocks={collapsedBlocks}
                       globals={globals}
                       layout={layout}
-                      onToggleBlock={(key) => {
-                        setCollapsedBlocks((prev) => ({ ...prev, [key]: !prev[key] }));
-                      }}
+                      onToggleBlock={onToggleBlock}
                       results={allResults}
                       selected={hotkeysSelected}
                     />
