@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 /**
- * Compare two Lighthouse gate archives — `npm run audit:diff -- <runA> <runB>`.
+ * Compare two Lighthouse gate archives — `pnpm run audit:diff -- <runA> <runB>`.
  *
  * Each run directory (`.lighthouse-archive/<timestamp>/`) holds a
  * `scores.json` plus the raw `*.lhr.json` reports written by audit.mjs.

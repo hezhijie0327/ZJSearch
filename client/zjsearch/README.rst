@@ -136,7 +136,7 @@ Layout of this workspace
    client/zjsearch/
    ├── dev-settings.yml     # local instance settings (default_theme: zjsearch)
    ├── audit-settings.yml   # instance settings for the Lighthouse gate (public headers)
-   ├── scripts/audit.mjs    # `npm run audit`: boots an instance on :8907 and
+   ├── scripts/audit.mjs    # `pnpm run audit`: boots an instance on :8907 and
    │                        # Lighthouse-gates the key pages per category
    ├── vite.config.ts       # build -> searx/static/themes/zjsearch, dev proxy, @ alias
    ├── tools/assets.ts      # rasterizes brand SVGs into favicons/PWA icons
@@ -172,7 +172,7 @@ Layout of this workspace
 Lighthouse audit
 ================
 
-``npm run audit`` is the theme's quality gate — **fully offline**.  It
+``pnpm run audit`` is the theme's quality gate — **fully offline**.  It
 boots a throwaway instance on ``127.0.0.1:8907`` whose engine list is
 reduced to ``zjaudit`` (``searx/engines/zjsearch_fixtures.py``): a
 deterministic offline engine serving fixed result sets keyed by the query
@@ -186,7 +186,7 @@ torrent grid, science papers, IT packages) and fails when a category
 drops below the thresholds in ``scripts/audit.mjs``.  Raw reports and a
 ``scores.json`` summary are archived under
 ``client/zjsearch/.lighthouse-archive/<run>/`` (git-ignored); compare two
-runs with ``npm run audit:diff -- <runA> <runB>``.
+runs with ``pnpm run audit:diff -- <runA> <runB>``.
 
 Notes:
 
@@ -279,9 +279,14 @@ paths; module boundaries export only what other modules need.
 Build & development
 ===================
 
+The client is a **pnpm** workspace: ``pnpm-lock.yaml`` is the single
+lockfile (``packageManager`` is pinned in ``package.json``) — use pnpm for
+every install/run here; do not mix in npm/yarn.  The upstream simple theme
+keeps its own npm lockfile.
+
 .. code:: sh
 
-   make themes.zjsearch        # npm install + vite build (into searx/static/themes/zjsearch)
+   make themes.zjsearch        # pnpm install + vite build (into searx/static/themes/zjsearch)
    make themes.zjsearch.lint   # biome check + tsc --noEmit
    make themes.zjsearch.dev    # vite dev server (HMR), proxies API calls to
                                # a local instance; start the instance with:

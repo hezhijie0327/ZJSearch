@@ -36,10 +36,14 @@ LM Studio (or any OpenAI-compatible endpoint) must be up for AI tests;
 ## 2. Quality gates (every round, before browser work)
 
 ```sh
-make themes.zjsearch                       # full build (also publishes static root)
-cd client/zjsearch && npm run lint         # biome + tsc --noEmit
-npm run audit                              # Lighthouse gate — needs Chrome installed
+make themes.zjsearch                        # full build (also publishes static root)
+cd client/zjsearch && pnpm run lint         # biome + tsc --noEmit
+pnpm run audit                              # Lighthouse gate — needs Chrome installed
 ```
+
+The zjsearch client is a pnpm workspace (`pnpm-lock.yaml` + `packageManager`);
+`pnpm install --frozen-lockfile` is the only install path in scripts. The
+upstream simple theme stays on npm — never let the two lockfiles mix.
 
 Python (only when searx/ changed; exact manage-pinned options, Windows
 variants in AGENTS.md):
@@ -53,20 +57,19 @@ local/py3/bin/python -m pylint --rcfile .pylintrc --ignore-paths=searx/engines <
 
 ## 3. Dependency updates (every audit round)
 
-npm — `Wanted` columns are in-range updates, apply them all; the pinned
-exact versions (biome) need an explicit install at the new pin:
+pnpm — `pnpm outdated` lists what moved; apply in-range updates via
 
 ```sh
-cd client/zjsearch && npm outdated
-npm update
-npm install -D @biomejs/biome@<new pin>     # for exactly-pinned dev deps
+cd client/zjsearch && pnpm outdated
+pnpm update                                  # in-range updates, refreshes pnpm-lock.yaml
+pnpm add -D @biomejs/biome@<new pin>         # for exactly-pinned dev deps
 ```
 
 - HOLD major jumps for a separate decision — never ride a major through an
   unrelated audit. Standing example: typescript `~5.9` -> 7.x (the Go-based
   rewrite) was left unadopted at the 2026-09 audit; read its release notes
   and adopt deliberately, with the full matrix re-run.
-- After updating: `npm run lint` + `make themes.zjsearch`, RESTART the
+- After updating: `pnpm run lint` + `make themes.zjsearch`, RESTART the
   instance (new hashes), then regress the surfaces that exercise the
   moved packages — the AI overview (react-markdown / remark-* / katex /
   mermaid / lucide-react), a grid page (ol), and the streamed boot (vite
@@ -216,7 +219,7 @@ rules and the shared-token inventory from AGENTS.md, covering:
 
 ## 8. Known environment traps
 
-- `npm run audit` needs Chrome (`ChromeNotInstalledError` otherwise) —
+- `pnpm run audit` needs Chrome (`ChromeNotInstalledError`) —
   not a theme regression; run on a machine with Chrome.
 - `manage`-anything re-runs pip; a mirror serving 0-byte wheels fails the
   hash check → start granian directly (§1) and/or pin `-i` to a working

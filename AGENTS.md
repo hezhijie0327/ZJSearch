@@ -40,12 +40,17 @@ Key directories:
 ## Commands
 
 ```sh
-make themes.zjsearch        # npm install + vite build -> searx/static/themes/zjsearch
+make themes.zjsearch        # pnpm install + vite build -> searx/static/themes/zjsearch
 make themes.zjsearch.lint   # biome check + tsc --noEmit (run inside client/zjsearch)
 make themes.zjsearch.dev    # vite dev server (HMR), proxies API calls to :8888
 make run                    # dev instance on http://127.0.0.1:8888 (granian, reloads ./searx)
-npm run audit               # Lighthouse gate (inside client/zjsearch): boots its own instance
+pnpm run audit              # Lighthouse gate (inside client/zjsearch): boots its own instance
                             # on :8907 with audit-settings.yml and thresholds per category/page
+
+Package manager: the zjsearch client is a PNPM workspace (`pnpm-lock.yaml`,
+`packageManager` field in package.json) — use pnpm for every install/run
+inside client/zjsearch; the upstream simple theme stays on npm (its own
+lockfile, untouched).
 ```
 
 - Local instance for theme work (default_theme: zjsearch, all search formats on):
@@ -66,7 +71,7 @@ npm run audit               # Lighthouse gate (inside client/zjsearch): boots it
 - Deployment to another host: `client/zjsearch/make-patch.sh` (PowerShell twin
   `make-patch.ps1`, keep both in sync) exports the whole theme delta vs master —
   client sources, zjsearch templates AND every `searx/` python change except
-  `searx/static` — as an ignored `zjsearch-theme.patch` for `git apply` + `npm run
+  `searx/static` — as an ignored `zjsearch-theme.patch` for `git apply` + `pnpm run
   build` on the target. Templates and python must ship together: new templates
   reading `answer.data` against old python only log jinja2 Undefined warnings and
   render raw-text answers.
@@ -841,13 +846,13 @@ LOADED/NOT LOADED).
   gapless, and the hero search box preloads it on focus for SPA searches.
   If you rename the chunk, update `results.html` in the same change.
   OpenLayers is dynamically imported only when a map result expands. Keep
-  heavy features out of the eager graph. `npm run audit` Lighthouse-gates
+  heavy features out of the eager graph. `pnpm run audit` Lighthouse-gates
   every result presentation **fully offline** — audit-settings.yml reduces
   the engine list (keep_only) to `zjaudit`
   (searx/engines/zjsearch_fixtures.py), a deterministic offline engine
   whose fixture sets are keyed by the query token; raw LHRs + scores.json
   archive under `.lighthouse-archive/<run>/` (git-ignored) and
-  `npm run audit:diff -- <runA> <runB>` compares two runs.  Desktop is the
+  `pnpm run audit:diff -- <runA> <runB>` compares two runs.  Desktop is the
   default profile, `LH_FORM_FACTOR=mobile` for mobile floors; search-page
   SEO is exempt — upstream robots.txt disallows `?q=`.
 - No webfonts (system font stack) and no third-party scripts; icons come
