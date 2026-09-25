@@ -91,6 +91,14 @@ _ADVANCED_REGEX_CONTEXT = re.compile(
 # File extension at the end of a URL path (filetype: filter)
 _EXT_PATTERN = re.compile(r'\.([a-z0-9]+)$', re.IGNORECASE)
 
+# A domain-shaped term ("example.com", "en.wikipedia.org"): a bare -word that
+# has this shape reads as a domain exclusion and is promoted into the site
+# exclude set as well -- the plain word matcher only sees title + content,
+# so "-wikipedia.org" would otherwise never drop a result from the host.
+_DOMAINISH_TERM_RE = re.compile(
+    r'^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$', re.IGNORECASE
+)
+
 # Kana + CJK ideographs (unified, extension A, compatibility) -- scripts
 # written without word separators; see `_word_matcher` (hangul is spaced and
 # keeps word boundaries)
@@ -474,6 +482,18 @@ class SXNGPlugin(Plugin):
         syntax['include_words'] = [m.strip() for m in p['include_word'].findall(query)]
         syntax['exclude_regexes'] = [m.strip() for m in p['exclude_regex'].findall(query)]
         syntax['exclude_words'] = [m.strip() for m in p['exclude_word'].findall(query)]
+
+        # A domain-shaped exclusion ("-wikipedia.org") also excludes the HOST:
+        # the plain -word matcher runs against title + content only, so the
+        # domain would otherwise survive on every result whose text does not
+        # spell it out.  Numbers like "-1.5" match the shape too -- promoting
+        # them merely excludes a host nobody has, the word matcher still runs.
+        for w in syntax['exclude_words']:
+            if _DOMAINISH_TERM_RE.match(w):
+                domain = self._normalize_domain(w)
+                if domain and domain not in syntax['_site_exclude_set']:
+                    syntax['site_exclude'].append(domain)
+                    syntax['_site_exclude_set'].add(domain)
 
         # 8. Clean query for engines
         cleaned_query = self._clean_query_for_engines(query)

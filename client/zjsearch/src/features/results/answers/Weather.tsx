@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronLeft, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
+import { CapChip } from "@/components/CapChip.tsx";
 import { cap } from "@/lib/format.ts";
 import { useLocale, useT } from "@/lib/i18n.ts";
 import { CHIP, CHIP_HOVER, SCROLLBAR_NONE } from "@/lib/styles.ts";
@@ -296,27 +297,13 @@ export function WeatherAnswer({
               </span>
             ),
           )}
-          {!sourcesExpanded && hiddenSources > 0 ? (
-            <button
-              aria-label={t("more")}
-              className={`${CHIP} ${CHIP_HOVER}`}
-              onClick={toggleSources}
-              title={sources.map((source) => source.service).join(", ")}
-              type="button"
-            >
-              +{hiddenSources}
-            </button>
-          ) : null}
-          {sourcesExpanded && hiddenSources > 0 ? (
-            <button
-              className="inline-flex items-center gap-1 transition-colors hover:text-ink"
-              onClick={toggleSources}
-              type="button"
-            >
-              <ChevronLeft className="size-3 shrink-0" />
-              {t("show_less")}
-            </button>
-          ) : null}
+          <CapChip
+            className={`${CHIP} ${CHIP_HOVER}`}
+            expanded={sourcesExpanded}
+            hidden={hiddenSources}
+            onToggle={toggleSources}
+            title={sources.map((source) => source.service).join(", ")}
+          />
         </div>
       ) : null}
     </div>

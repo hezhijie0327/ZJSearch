@@ -27,7 +27,6 @@ export function Dropdown({
   variant = "bare",
   menuClassName = "",
   icon,
-  iconOnly = false,
   triggerLabel,
   triggerClassName,
   multiple = false,
@@ -56,7 +55,6 @@ export function Dropdown({
   /** optional icon shown before the label in the trigger */
   icon?: ReactNode;
   /** trigger renders only the icon (kebab-style menus) */
-  iconOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -170,19 +168,13 @@ export function Dropdown({
         aria-haspopup="listbox"
         aria-label={ariaLabel}
         className={
-          iconOnly
-            ? `flex size-9 items-center justify-center rounded-full transition-colors ${
-                open ? "bg-surface-2 text-ink" : "text-ink-2 hover:bg-surface-2/70 hover:text-ink"
+          variant === "bare"
+            ? `relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] transition-colors ${
+                open ? "bg-surface-2 text-ink" : (triggerClassName ?? "text-ink-2 hover:bg-surface-2/70 hover:text-ink")
               }`
-            : variant === "bare"
-              ? `relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] transition-colors ${
-                  open
-                    ? "bg-surface-2 text-ink"
-                    : (triggerClassName ?? "text-ink-2 hover:bg-surface-2/70 hover:text-ink")
-                }`
-              : `flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 text-[13px] transition-colors ${
-                  open ? "border-ink-3" : "border-line hover:border-ink-3"
-                } bg-surface text-ink ${triggerClassName ?? ""}`
+            : `flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 text-[13px] transition-colors ${
+                open ? "border-ink-3" : "border-line hover:border-ink-3"
+              } bg-surface text-ink ${triggerClassName ?? ""}`
         }
         onClick={() => {
           if (open) {
@@ -197,16 +189,14 @@ export function Dropdown({
         type="button"
       >
         {icon}
-        {iconOnly ? null : <span className="truncate">{triggerLabel ?? current?.label ?? value}</span>}
-        {underline && !iconOnly ? (
+        <span className="truncate">{triggerLabel ?? current?.label ?? value}</span>
+        {underline ? (
           <span aria-hidden="true" className="absolute inset-x-4 -bottom-0.5 h-0.5 rounded-full bg-accent-strong" />
         ) : null}
-        {iconOnly ? null : (
-          <ChevronDown
-            aria-hidden="true"
-            className={`size-3.5 shrink-0 opacity-70 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        )}
+        <ChevronDown
+          aria-hidden="true"
+          className={`size-3.5 shrink-0 opacity-70 transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {renderMenu && menuStyle

@@ -2,7 +2,7 @@
 
 import { Globe, Package, Tag, Truck } from "lucide-react";
 import { ResultLink } from "@/features/results/cardParts.tsx";
-import { TileCell, TileEngines, TileThumb, TileTitle } from "@/features/results/Tile.tsx";
+import { TileCell, TileEngines, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
 import { imageAlt } from "@/lib/format.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 

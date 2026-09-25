@@ -6,7 +6,7 @@ import { imageAlt } from "@/lib/format.ts";
 
 import { Clapperboard } from "lucide-react";
 import { ResultLink } from "@/features/results/cardParts.tsx";
-import { TileCell, TileEngines, TileFavicon, TileThumb, TileTitle } from "@/features/results/Tile.tsx";
+import { TileCell, TileEngines, TileFavicon, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
 export function PosterGrid({

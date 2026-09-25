@@ -10,7 +10,7 @@ import { categoryLabel } from "@/lib/categories.ts";
 import { languageOptions, useT } from "@/lib/i18n.ts";
 import { scrollBehavior } from "@/lib/motion.ts";
 import { useSettings } from "@/lib/settings.ts";
-import { SCROLLBAR_NONE } from "@/lib/styles.ts";
+import { SCROLLBAR_NONE, SCROLLBAR_NONE_SM } from "@/lib/styles.ts";
 import type { GlobalData } from "@/lib/types.ts";
 
 interface CategoryTabsProps {
@@ -96,7 +96,7 @@ export function CategoryTabs({ globals, selected, onSelectionChange, onSearch, w
         className={`min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5 ${
           wrap
             ? "ps-2"
-            : "-ms-4 sm:flex-nowrap sm:gap-y-0 sm:overflow-x-auto sm:pb-0.5 sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden sm:[&>*]:shrink-0"
+            : `-ms-4 sm:flex-nowrap sm:gap-y-0 sm:overflow-x-auto sm:pb-0.5 ${SCROLLBAR_NONE_SM} sm:[&>*]:shrink-0`
         }`}
         ref={scrollerRef}
       >

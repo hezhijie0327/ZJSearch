@@ -7,7 +7,7 @@ import { ImageOff } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lightbox } from "@/features/results/image/Lightbox.tsx";
-import { useGraceThumb } from "@/features/results/Tile.tsx";
+import { useGraceThumb } from "@/features/results/tileParts.tsx";
 import type { ResultItem } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 

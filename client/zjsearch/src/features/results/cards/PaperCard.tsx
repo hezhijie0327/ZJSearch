@@ -1,17 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import {
-  Activity,
-  BookOpen,
-  Calendar,
-  ChevronLeft,
-  ExternalLink,
-  FileText,
-  Fingerprint,
-  Quote,
-  User,
-} from "lucide-react";
+import { Activity, BookOpen, Calendar, ExternalLink, FileText, Fingerprint, Quote, User } from "lucide-react";
 import type { ReactNode } from "react";
+import { CapChip } from "@/components/CapChip.tsx";
 import {
   type CardProps,
   EnginesLine,
@@ -180,22 +171,13 @@ export function PaperCard({ result, globals }: CardProps) {
                     </span>
                   ))}
                   {hiddenTags > 0 ? (
-                    <button
-                      aria-expanded={tagsExpanded}
+                    <CapChip
                       className={`${CHIP} text-ink-3 ${CHIP_HOVER}`}
-                      onClick={toggleTags}
+                      expanded={tagsExpanded}
+                      hidden={hiddenTags}
+                      onToggle={toggleTags}
                       title={tags.join(", ")}
-                      type="button"
-                    >
-                      {tagsExpanded ? (
-                        <>
-                          <ChevronLeft className="size-3 shrink-0" />
-                          {t("show_less")}
-                        </>
-                      ) : (
-                        `+${hiddenTags}`
-                      )}
-                    </button>
+                    />
                   ) : null}
                 </div>
               ) : null}

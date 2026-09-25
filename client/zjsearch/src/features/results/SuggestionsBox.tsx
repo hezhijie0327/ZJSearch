@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n.ts";
 import { scrollBehavior } from "@/lib/motion.ts";
-import { DISABLED, SCROLLBAR_NONE } from "@/lib/styles.ts";
+import { DISABLED, PILL, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import type { SearchPageData } from "@/lib/types.ts";
 
 export function SuggestionsBox({ data, onSearch }: { data: SearchPageData; onSearch: (q: string) => void }) {
@@ -68,7 +68,7 @@ export function SuggestionsBox({ data, onSearch }: { data: SearchPageData; onSea
       >
         {data.suggestions.map((suggestion) => (
           <button
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-accent-soft hover:text-accent"
+            className={`${PILL} shrink-0 gap-1.5 hover:bg-accent-soft hover:text-accent`}
             dir="auto"
             key={suggestion.q}
             onClick={() => {

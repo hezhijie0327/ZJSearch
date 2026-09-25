@@ -9,6 +9,10 @@
 /** Hidden-scrollbar tail for horizontally swipeable rows (mobile-style). */
 export const SCROLLBAR_NONE = "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
+/** Responsive variant: the hidden-scrollbar swipe behaviour kicks in from
+    `sm:` up (below it the row wraps) — category/filter tab rows. */
+export const SCROLLBAR_NONE_SM = "sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden";
+
 /** Single-line swipe row: children never wrap or shrink — overflow swipes
     horizontally instead, like the mobile category tabs.  Callers add their
     own gap (e.g. gap-1 / gap-x-2). */
@@ -49,6 +53,22 @@ export const SEGMENT =
   "flex items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-[13px] transition-colors";
 export const SEGMENT_ACTIVE = "bg-accent-strong font-medium text-accent-contrast";
 export const SEGMENT_IDLE = "text-ink-2 hover:bg-surface-2 hover:text-ink";
+
+/** Compact segmented control (in-row choice groups: preferences POST/GET,
+    theme-style picker, stock range pills): SEGMENT at the 13px control tier
+    with a tighter pad — pair with SEGMENT_ACTIVE / SEGMENT_IDLE. */
+export const SEGMENT_SM =
+  "flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] transition-colors";
+
+/** Results meta-row toggle (12px tier: 「found N results」, 「took X s」, the
+    AI trigger): a borderless text button that raises its ink on hover. */
+export const META_TOGGLE = "inline-flex min-h-6 items-center gap-1 transition-colors hover:text-ink";
+
+/** Pill chip on the 13px control tier (strip chips, suggestion chips):
+    rounded surface fill; callers append their own gap-* and hover colour
+    (the selected language lives in the design contract, not here). */
+export const PILL =
+  "inline-flex items-center rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors";
 
 /** Shared disabled treatment for secondary controls (pager arrows, sliders):
     dimmed and click-transparent, never invisible. */

@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { CopyButton } from "@/components/CopyButton.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { reducedMotion } from "@/lib/motion.ts";
+import { PILL } from "@/lib/styles.ts";
 
 interface MapResultProps {
   longitude?: string;
@@ -217,7 +218,7 @@ export function MapResult({ longitude, latitude, boundingbox, geojson, label, au
     <div className="mt-2">
       <button
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+        className={`${PILL} gap-1.5 hover:text-ink`}
         onClick={() => {
           setOpen((prev) => !prev);
         }}

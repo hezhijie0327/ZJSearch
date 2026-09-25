@@ -40,6 +40,9 @@ utils/lib_sxng_vite.sh
 # windows local-verification links (hardlinks + junctions into themes/zjsearch)
 /searx/static/zjsearch.min.js
 /searx/static/zjsearch.min.css
+/searx/static/zjsearch2.min.css
+/searx/static/zjsearch3.min.css
+/searx/static/assets/
 /searx/static/chunk/
 /searx/static/img/
 

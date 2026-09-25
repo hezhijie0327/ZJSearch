@@ -2,6 +2,7 @@
 
 import { Lightbulb, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox } from "@/components/SearchBox.tsx";
 import { CategoryTabs, defaultFilterValues, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
@@ -109,9 +110,10 @@ export function IndexPage({ data }: { data: IndexData }) {
             variant="hero"
           />
         </div>
-        {/* single stable toggle: opens the tabs + filter rows in flow; the
-            hero is top-anchored (30vh), so growth extends downward only and
-            the brand/search box never move */}
+        {/* single stable toggle: opens the tabs + filter rows in flow (the
+            shared Collapse animates both directions); the hero is top-anchored
+            (30vh), so growth extends downward only and the brand/search box
+            never move */}
         <div className="mt-3 flex w-full justify-end animate-fade-up [animation-delay:120ms]">
           <button
             aria-expanded={optionsOpen}
@@ -127,31 +129,29 @@ export function IndexPage({ data }: { data: IndexData }) {
             {t("search_options")}
           </button>
         </div>
-        {optionsOpen ? (
-          <>
-            <div className="relative z-10 mt-3 w-full animate-fade-up [animation-delay:60ms]">
-              <CategoryTabs
-                globals={globals}
-                onSearch={(categories) => {
-                  setSelected(categories);
-                  submitSearch(query, categories);
-                }}
-                onSelectionChange={setSelected}
-                selected={selected}
-                wrap
-              />
-            </div>
-            <div className="relative z-10 mt-2 flex w-full flex-wrap items-center gap-1.5 ps-6 animate-fade-in">
-              <SearchFilters
-                globals={globals}
-                onChange={(next) => {
-                  setFilters((prev) => ({ ...prev, ...next }));
-                }}
-                values={filters}
-              />
-            </div>
-          </>
-        ) : null}
+        <Collapse className={optionsOpen ? "mt-3" : ""} open={optionsOpen}>
+          <div className="relative z-10 w-full">
+            <CategoryTabs
+              globals={globals}
+              onSearch={(categories) => {
+                setSelected(categories);
+                submitSearch(query, categories);
+              }}
+              onSelectionChange={setSelected}
+              selected={selected}
+              wrap
+            />
+          </div>
+          <div className="relative z-10 mt-2 flex w-full flex-wrap items-center gap-1.5 ps-6">
+            <SearchFilters
+              globals={globals}
+              onChange={(next) => {
+                setFilters((prev) => ({ ...prev, ...next }));
+              }}
+              values={filters}
+            />
+          </div>
+        </Collapse>
       </main>
       {hintHidden ? null : (
         <div className="mx-auto mb-10 w-full max-w-xl px-4">

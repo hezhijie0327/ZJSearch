@@ -5,7 +5,6 @@ import {
   EmbedFrame,
   EnginesLine,
   MediaCollapse,
-  MediaPreview,
   MetaLine,
   PrettyUrl,
   ResultArticle,
@@ -20,7 +19,7 @@ import { useT } from "@/lib/i18n.ts";
     slot rhythm) so with-image and without-image news stay structurally
     identical to every other result. */
 
-export function DefaultCard({ eager, result, globals, mediaOpen }: CardProps) {
+export function DefaultCard({ eager, result, globals }: CardProps) {
   const t = useT();
   return (
     <ResultArticle priority={result.priority}>
@@ -35,13 +34,9 @@ export function DefaultCard({ eager, result, globals, mediaOpen }: CardProps) {
           </div>
           {result.iframe_src ? (
             <div className="mt-2">
-              {mediaOpen ? (
-                <MediaPreview src={result.iframe_src} />
-              ) : (
-                <MediaCollapse hideLabel={t("hide_media")} showLabel={t("show_media")}>
-                  {() => <EmbedFrame src={result.iframe_src ?? ""} />}
-                </MediaCollapse>
-              )}
+              <MediaCollapse hideLabel={t("hide_media")} showLabel={t("show_media")}>
+                {() => <EmbedFrame src={result.iframe_src ?? ""} />}
+              </MediaCollapse>
             </div>
           ) : null}
           <p

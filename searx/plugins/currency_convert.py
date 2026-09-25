@@ -200,15 +200,19 @@ class SXNGPlugin(Plugin):
         if len(query_parts) < 3:
             return results
 
-        for query_part in query_parts:
-            for keyword in CONVERT_KEYWORDS:
-                if query_part == keyword:
-                    from_query, to_query = query.split(keyword, 1)
-                    converted = _parse_and_convert(from_query.strip(), to_query.strip())
-                    if converted:
-                        answer, data = converted
-                        results.add(results.types.Answer(answer=answer, data=data))
-                    break
+        # split at the FIRST keyword word and answer that one pair: later
+        # keywords must not re-pair the conversion ("1 usd to eur in gbp"
+        # answers usd->eur, cut at the next keyword -- never usd->gbp)
+        keyword_at = [i for i, part in enumerate(query_parts) if part.lower() in CONVERT_KEYWORDS]
+        if not keyword_at:
+            return results
+        first = keyword_at[0]
+        from_query = " ".join(query_parts[:first]).strip()
+        to_query = " ".join(query_parts[first + 1 : (keyword_at[1] if len(keyword_at) > 1 else None)]).strip()
+        converted = _parse_and_convert(from_query, to_query)
+        if converted:
+            answer, data = converted
+            results.add(results.types.Answer(answer=answer, data=data))
 
         return results
 

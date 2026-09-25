@@ -70,7 +70,6 @@ export const ZH_CN: Record<StringKey, string> = {
   resolution: "分辨率",
   source: "来源",
   image_formats: "图片格式",
-  original_format: "原始格式",
   engines: "引擎",
   view_original: "查看原图",
   feels_like: "体感温度",
@@ -376,4 +375,5 @@ export const ZH_CN: Record<StringKey, string> = {
   tip_high: "最高",
   tip_low: "最低",
   tip_volume: "成交量",
+  image_viewer: "图片查看器",
 };

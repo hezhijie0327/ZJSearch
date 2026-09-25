@@ -49,11 +49,24 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
       // the app bundle URLs live at the static ROOT (/static/zjsearch.min.js —
       // webapp.custom_url_for only maps filenames that exist there), so
       // publish the bundles next to the themed assets; chunk/ is rebuilt from
-      // scratch so hashes removed by this build don't linger
+      // scratch so hashes removed by this build don't linger.
+      // EVERY root-level *.min.js/*.min.css artifact ships, not just the entry
+      // pair: vite also emits root-level CSS chunks (zjsearch2/3.min.css —
+      // KaTeX & co.) that the preload helpers resolve as siblings of the JS
+      // bundles.  A missing one 404s on /search and the awaited CSS dep of
+      // main.tsx's `await import(ResultsPage)` never settles — the app then
+      // boots into the skeleton forever (homepage SPA navigation still worked,
+      // which is why this read as "direct /search?q= URLs hang").
       const rootStatic = path.resolve(PATH.root, "searx/static");
-      for (const file of ["zjsearch.min.js", "zjsearch.min.css"]) {
-        await fs.copyFile(path.join(PATH.dist, file), path.join(rootStatic, file));
+      for (const file of await fs.readdir(PATH.dist)) {
+        if (/^zjsearch.*\.min\.(js|css)$/.test(file)) {
+          await fs.copyFile(path.join(PATH.dist, file), path.join(rootStatic, file));
+        }
       }
+      // the CSS chunks' url(...) references (KaTeX woff2/woff/ttf) resolve
+      // against the root-level CSS files -> /static/assets/...
+      await fs.rm(path.join(rootStatic, "assets"), { force: true, recursive: true });
+      await fs.cp(path.join(PATH.dist, "assets"), path.join(rootStatic, "assets"), { recursive: true });
       const rootChunk = path.join(rootStatic, "chunk");
       await fs.rm(rootChunk, { force: true, recursive: true });
       await fs.cp(path.join(PATH.dist, "chunk"), rootChunk, { recursive: true });

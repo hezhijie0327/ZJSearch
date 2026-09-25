@@ -12,11 +12,13 @@ import remarkDeflist from "remark-deflist";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
+import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { type AiSourceMeta, splitAnswerStream } from "@/features/results/aiAnswer.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
+import { CODE_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /** 基础 remark 插件集 —— 系统 Prompt 实际广告的语法面（GFM / 表情 shortcode /
@@ -146,11 +148,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
 export function AiAnswerTrigger({ phase, onToggle }: { phase: AiAnswerPhase; onToggle: () => void }) {
   const t = useT();
   return (
-    <button
-      className="inline-flex min-h-6 items-center gap-1 transition-colors hover:text-ink"
-      onClick={onToggle}
-      type="button"
-    >
+    <button className={`${META_TOGGLE} text-xs`} onClick={onToggle} type="button">
       <Sparkles className="size-3 shrink-0" />
       {phase === "streaming" ? t("ai_answering") : phase === "error" ? t("ai_answer_failed") : t("ai_answer")}
     </button>
@@ -232,6 +230,7 @@ function citeToLinks(text: string): string {
     wrapper's overflow-hidden cannot clip it); clicking jumps to the
     matching result row.  Moving between chip and panel keeps it open. */
 function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; onCite?: (index: number) => boolean }) {
+  const t = useT();
   const [panel, setPanel] = useState<{ x: number; y: number } | null>(null);
   const hideTimer = useRef<number | null>(null);
   const chipRef = useRef<HTMLButtonElement | null>(null);
@@ -316,7 +315,7 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
                 ) : null}
                 <span className="truncate">{source.domain}</span>
                 <a
-                  aria-label="open"
+                  aria-label={t("open_source")}
                   className="ms-auto inline-flex items-center rounded p-0.5 transition-colors hover:bg-surface-2 hover:text-accent"
                   href={source.u}
                   onClick={(event) => {
@@ -539,11 +538,7 @@ function markdownComponents(
       <blockquote className="my-2 border-s-2 border-line ps-3 text-ink-2">{children}</blockquote>
     ),
     code: ({ className, children }) =>
-      className ? (
-        <code className={className}>{children}</code>
-      ) : (
-        <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs">{children}</code>
-      ),
+      className ? <code className={className}>{children}</code> : <code className={CODE_CHIP}>{children}</code>,
     dd: ({ children }) => <dd className="ms-5 text-ink-2">{children}</dd>,
     dt: ({ children }) => <dt className="mt-2 font-medium text-ink">{children}</dt>,
     h1: heading,
@@ -683,7 +678,6 @@ export function AiAnswerCard({
 }) {
   const t = useT();
   const [thinkForced, setThinkForced] = useState<boolean | null>(null);
-  const [overviewExpanded, setOverviewExpanded] = useState(false);
   const { think, answer, thinking } = splitAnswerStream(state.text);
   const hasThink = think.trim().length > 0;
   const hasAnswer = answer.trim().length > 0;
@@ -697,50 +691,6 @@ export function AiAnswerCard({
   const failed = state.phase === "error" || (state.phase === "done" && !hasAnswer && !hasThink);
 
   const markdown = useMemo(() => citeToLinks(answer), [answer]);
-  const overviewRef = useRef<HTMLDivElement | null>(null);
-  const [contentPx, setContentPx] = useState<number | null>(null);
-
-  // the measured node mounts with the answer (it does not exist before the
-  // first chunk), so the observer attaches when it appears -- a mount-only
-  // effect would measure nothing on the click -> stream -> done path
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run when the measured node mounts
-  useEffect(() => {
-    const el = overviewRef.current;
-    if (!el) {
-      return;
-    }
-    const ro = new ResizeObserver(() => {
-      // +1 guards against sub-pixel rounding clipping the last text line
-      setContentPx(Math.ceil(el.getBoundingClientRect().height) + 1);
-    });
-    ro.observe(el);
-    return () => {
-      ro.disconnect();
-    };
-  }, [hasAnswer]);
-
-  // content that fits the preview needs no clamp, gradient or toggle
-  const needsClamp = state.phase === "done" && contentPx !== null && contentPx > OVERVIEW_PREVIEW_PX + 24;
-
-  // expanded: the cap rides at contentPx while the 300ms ease plays, then is
-  // lifted entirely -- late content growth (a mermaid svg that renders after
-  // the measurement, fonts, view switches) must never sit under a stale cap.
-  // collapsing re-applies the cap at the fresh contentPx first (same visual
-  // height) so the ease down to the preview interpolates instead of snapping.
-  const [expandCapless, setExpandCapless] = useState(false);
-  const toggleExpanded = () => {
-    if (overviewExpanded) {
-      setExpandCapless(false);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setOverviewExpanded(false);
-        });
-      });
-    } else {
-      setExpandCapless(false);
-      setOverviewExpanded(true);
-    }
-  };
 
   return (
     <div className="animate-fade-up rounded-2xl border border-line bg-surface p-4">
@@ -787,45 +737,15 @@ export function AiAnswerCard({
       ) : null}
       {hasAnswer ? (
         <div className={`${hasThink ? "mt-2 " : ""}text-sm leading-relaxed text-ink`}>
-          <div
-            className="relative overflow-hidden transition-[max-height] duration-300 ease-out"
-            onTransitionEnd={(event) => {
-              if (event.propertyName === "max-height" && overviewExpanded) {
-                setExpandCapless(true);
-              }
-            }}
-            style={{
-              maxHeight: needsClamp
-                ? overviewExpanded
-                  ? expandCapless
-                    ? undefined
-                    : (contentPx ?? OVERVIEW_PREVIEW_PX)
-                  : OVERVIEW_PREVIEW_PX
-                : (contentPx ?? undefined),
-            }}
+          {/* streaming renders uncapped (active=false); once settled the
+              shared clamp-and-reveal takes over the preview cap */}
+          <ClampReveal
+            active={state.phase === "done"}
+            buttonClassName="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-line py-2 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink"
+            previewPx={OVERVIEW_PREVIEW_PX}
           >
-            <div ref={overviewRef}>
-              <MarkdownAnswer markdown={markdown} meta={sourceMeta} onCite={onCite} settled={state.phase === "done"} />
-            </div>
-            {needsClamp ? (
-              <div
-                className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface to-transparent transition-opacity duration-300 ${
-                  overviewExpanded ? "opacity-0" : "opacity-100"
-                }`}
-              />
-            ) : null}
-          </div>
-          {needsClamp ? (
-            <button
-              aria-expanded={overviewExpanded}
-              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-line py-2 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink"
-              onClick={toggleExpanded}
-              type="button"
-            >
-              {overviewExpanded ? t("collapse") : t("expand")}
-              <ChevronDown className={`size-3.5 transition-transform ${overviewExpanded ? "rotate-180" : ""}`} />
-            </button>
-          ) : null}
+            <MarkdownAnswer markdown={markdown} meta={sourceMeta} onCite={onCite} settled={state.phase === "done"} />
+          </ClampReveal>
         </div>
       ) : streaming && !hasThink ? (
         <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>

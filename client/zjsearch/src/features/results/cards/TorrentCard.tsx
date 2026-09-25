@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, Calendar, Download, FileText, Magnet, Package } from "lucide-react";
 import { type CardProps, EnginesLine, PrettyUrl, ResultArticle, Title } from "@/features/results/cardParts.tsx";
-import { formatDate } from "@/lib/format.ts";
+import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { CHIP, META_ROW } from "@/lib/styles.ts";
 
@@ -12,6 +12,7 @@ import { CHIP, META_ROW } from "@/lib/styles.ts";
 
 export function TorrentCard({ result, globals }: CardProps) {
   const t = useT();
+  const size = formatFilesize(result.filesize);
   return (
     <ResultArticle priority={result.priority}>
       <div className="flex gap-4">
@@ -49,10 +50,10 @@ export function TorrentCard({ result, globals }: CardProps) {
                 {t("leecher")}
               </span>
             ) : null}
-            {result.filesize ? (
+            {size ? (
               <span className="inline-flex items-center gap-1">
                 <FileText className="size-3" />
-                {result.filesize}
+                {size}
               </span>
             ) : null}
             {result.files ? (

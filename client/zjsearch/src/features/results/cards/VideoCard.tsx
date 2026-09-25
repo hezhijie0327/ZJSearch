@@ -13,7 +13,7 @@ import {
   Thumb,
   Title,
 } from "@/features/results/cardParts.tsx";
-import { TileCloseAction } from "@/features/results/Tile.tsx";
+import { TileCloseAction } from "@/features/results/tileParts.tsx";
 import { formatLength, imageAlt } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 
@@ -62,7 +62,7 @@ export function VideoCard({ eager, result, globals }: CardProps) {
                 <>
                   <iframe
                     allowFullScreen
-                    className="absolute inset-0 size-full"
+                    className="absolute inset-0 size-full animate-fade-in"
                     referrerPolicy="origin"
                     src={result.iframe_src ?? ""}
                     title={result.title_text}

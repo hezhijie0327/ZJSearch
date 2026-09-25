@@ -68,7 +68,6 @@ export const EN = {
   resolution: "Resolution",
   source: "Source",
   image_formats: "Image formats",
-  original_format: "original format",
   engines: "Engines",
   view_original: "View original",
   feels_like: "Feels Like",
@@ -99,7 +98,7 @@ export const EN = {
   name: "Name",
   autocomplete: "Autocomplete",
   show_queries_as_you_type: "Show possible queries as you type",
-  favicon_resolver: "Favicon Resolver",
+  favicon_resolver: "Favicon resolver",
   display_favicons: "Display favicons near search results",
   filter_content: "Filter content",
   open_access_doi_resolver: "Open Access DOI resolver",
@@ -178,7 +177,7 @@ export const EN = {
   open_source: "Open source",
 
   homepage: "Project homepage",
-  center_alignment: "Center Alignment",
+  center_alignment: "Center alignment",
   center_alignment_desc: "Turn off for the full-width widescreen layout; on narrows the results column and centers it.",
   search_options: "Search options",
   meta_found: "Found",
@@ -381,6 +380,7 @@ export const EN = {
   tip_high: "High",
   tip_low: "Low",
   tip_volume: "Volume",
+  image_viewer: "Image viewer",
 };
 
 export type StringKey = keyof typeof EN;
