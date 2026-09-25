@@ -189,8 +189,17 @@ def _httpx_client(remote: bool) -> t.Any:
     client = _sdk_http_clients.get(remote)
     if client is None:
         out = settings.get("outgoing", {})
-        proxies = dict(out.get("proxies") or {}) if remote else {}
-        client = httpx2.AsyncClient(mounts=proxies or None, verify=out.get("verify", True))
+        mounts = {}
+        if remote:
+            # searx outgoing.proxies values are proxy URLs or LISTS of
+            # fallback URLs (the curl engines round-robin the list);
+            # httpx2 mounts want one transport per pattern -- the first
+            # URL of a list serves
+            for pattern, value in dict(out.get("proxies") or {}).items():
+                urls = [str(u) for u in (value if isinstance(value, list) else [value]) if u]
+                if urls:
+                    mounts[str(pattern)] = httpx2.AsyncHTTPTransport(proxy=httpx2.Proxy(urls[0]))
+        client = httpx2.AsyncClient(mounts=mounts or None, verify=out.get("verify", True))
         _sdk_http_clients[remote] = client
     return client
 
