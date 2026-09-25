@@ -55,16 +55,23 @@
     box-decoration-break: clone;
   }
 
-  /* transient tint when a Quick Answer citation jumps to its result row
-      (set/cleared imperatively around a scrollIntoView) */
+  /* "selected by the AI" marks around result rows reached through Quick
+      Answer citations: the dashed accent frame PERSISTS (an accumulating
+      set of the results the AI cited); the locate tint flashes once per
+      jump.  outline never shifts layout and follows rounded corners. */
+  [data-ai-cited] {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+  }
+
   [data-ai-flash] {
-    animation: zjs-ai-flash 1.8s ease-out both;
+    animation: zjs-ai-flash 1.9s ease-out both;
   }
 }
 
 @keyframes zjs-ai-flash {
   0%,
-  40% {
+  45% {
     background-color: var(--accent-soft);
   }
   100% {
