@@ -209,6 +209,14 @@ export function SearchBox({
   };
 
   const showDropdown = open && suggestions.length > 0;
+  /** the navigated suggestion split for the ghost layer: typed prefix solid,
+      completion muted (null when no suggestion is actively selected, or the
+      suggestion doesn't extend the typed prefix — then nothing is ghosted
+      and the input keeps its plain ink text) */
+  const ghost =
+    open && active >= 0 && suggestions[active]?.text.startsWith(typed)
+      ? { typed, completion: suggestions[active].text.slice(typed.length) }
+      : null;
   // the list stays mounted through its fade-out window; render the last
   // non-empty suggestion set so a mid-exit fetch clearing `suggestions`
   // cannot collapse the fading panel into an empty bordered box
@@ -230,33 +238,52 @@ export function SearchBox({
         onSubmit={onSubmit}
         role="search"
       >
-        <input
-          aria-activedescendant={active >= 0 && suggestions[active] ? `${listboxId}-${active}` : undefined}
-          aria-autocomplete="list"
-          aria-controls={showDropdown ? listboxId : undefined}
-          aria-expanded={showDropdown}
-          aria-label={t("search")}
-          autoCapitalize="none"
-          autoComplete="off"
-          className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-ink-3"
-          dir="auto"
-          name="q"
-          onChange={(event) => {
-            const value = event.target.value;
-            setQuery(value);
-            setTyped(value);
-            setActive(-1); // fresh typing clears the suggestion selection
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder={t("search_placeholder")}
-          ref={inputRef}
-          role="combobox"
-          spellCheck={false}
-          type="text"
-          value={query}
-        />
+        <div className="relative min-w-0 flex-1">
+          {/* ghost layer for the navigated suggestion: the typed prefix keeps
+              its ink colour, the completion renders muted — a purely visual
+              "this part is the suggestion" cue (the real input's text is
+              transparent while the ghost shows; the caret stays visible via
+              caret-ink).  whitespace-pre + same font metrics keep the mirror
+              aligned with the input's single line. */}
+          {ghost ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre text-base"
+            >
+              <span className="text-ink">{ghost.typed}</span>
+              <span className="text-ink-3">{ghost.completion}</span>
+            </div>
+          ) : null}
+          <input
+            aria-activedescendant={active >= 0 && suggestions[active] ? `${listboxId}-${active}` : undefined}
+            aria-autocomplete="list"
+            aria-controls={showDropdown ? listboxId : undefined}
+            aria-expanded={showDropdown}
+            aria-label={t("search")}
+            autoCapitalize="none"
+            autoComplete="off"
+            className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${
+              ghost ? "text-transparent caret-ink selection:bg-transparent" : ""
+            }`}
+            dir="auto"
+            name="q"
+            onChange={(event) => {
+              const value = event.target.value;
+              setQuery(value);
+              setTyped(value);
+              setActive(-1); // fresh typing clears the suggestion selection
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={onKeyDown}
+            placeholder={t("search_placeholder")}
+            ref={inputRef}
+            role="combobox"
+            spellCheck={false}
+            type="text"
+            value={query}
+          />
+        </div>
         {query ? (
           <button
             aria-label={t("clear")}
