@@ -266,9 +266,16 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         return false;
       }
       card.scrollIntoView({ block: "start", behavior: scrollBehavior() });
+      // the dashed frame persists — an accumulating set of the results the
+      // AI cited; the tint flash below is the one-shot locate highlight
+      card.setAttribute("data-ai-cited", "");
       if (flashTimer.current !== null) {
         window.clearTimeout(flashTimer.current);
       }
+      // restart the flash when a second citation hits the same card (setting
+      // the attribute again would not replay a running CSS animation)
+      card.removeAttribute("data-ai-flash");
+      void card.offsetWidth;
       card.setAttribute("data-ai-flash", "");
       flashTimer.current = window.setTimeout(() => {
         card.removeAttribute("data-ai-flash");
