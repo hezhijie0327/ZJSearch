@@ -40,7 +40,8 @@ const BASE_REMARK = [remarkGfm, remarkEmoji, remarkDeflist];
  * `#ref-n` links that the `a` override turns into favicon-domain chips
  * which click-jump to the matching result row.  The LLM call happens on
  * click only; before the first streamed byte errors answer as clean HTTP
- * statuses (403 / 422 / 502).
+ * statuses (403 / 422 / 502) — the 502 body carries the upstream reason,
+ * which the card renders under its failed label.
  */
 
 export type AiAnswerPhase = "idle" | "streaming" | "done" | "error";
@@ -51,6 +52,9 @@ export interface AiAnswerState {
       the visible markdown answer with [n] citations */
   text: string;
   open: boolean;
+  /** the transport's error message (HTTP status + upstream reason) when
+      phase === "error" — rendered under the card's failed label */
+  error: string | null;
   /** ask the question for the current results (or re-ask after an error) */
   start: (q: string, context: string, images?: string[]) => void;
   toggle: (q: string, context: string, images?: string[]) => void;
@@ -69,6 +73,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
   const [phase, setPhase] = useState<AiAnswerPhase>("idle");
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const lastAskRef = useRef<{ context: string; images: string[]; q: string } | null>(null);
 
@@ -84,6 +89,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     abortRef.current = controller;
     setPhase("streaming");
     setText("");
+    setError(null);
     setOpen(true);
     let accumulated = "";
     void fetchStream(
@@ -102,8 +108,9 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
           setPhase("done");
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (!controller.signal.aborted) {
+          setError(err instanceof Error ? err.message : String(err));
           setPhase(accumulated ? "done" : "error");
         }
       });
@@ -138,10 +145,11 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     lastAskRef.current = null;
     setPhase("idle");
     setText("");
+    setError(null);
     setOpen(false);
   };
 
-  return { open, phase, regenerate, reset, start, text, toggle };
+  return { error, open, phase, regenerate, reset, start, text, toggle };
 }
 
 /** Meta-row entry (the 12px toggle tier of 「found N results · took X s」). */
@@ -750,7 +758,18 @@ export function AiAnswerCard({
       ) : streaming && !hasThink ? (
         <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>
       ) : null}
-      {failed ? <p className="mt-2 text-xs text-danger">{t("ai_answer_failed")}</p> : null}
+      {failed ? (
+        <div className="mt-2 text-xs text-danger">
+          <p>{t("ai_answer_failed")}</p>
+          {state.error ? (
+            // the transport's own reason (HTTP status + upstream message),
+            // truncated server-side — a broken endpoint must be readable
+            <p className="mt-1 break-words text-danger/80" dir="auto">
+              {state.error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

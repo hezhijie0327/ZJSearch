@@ -109,6 +109,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | About/Stats | header icon buttons | drawer panels, internal links browse in-panel |
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
+| AI failure UX | point `zjsearch.ai.base_url` at a dead port | 502 body reason readable under the card's failed label |
 
 Plugin answers (server-side; test via curl §6, not the browser):
 
