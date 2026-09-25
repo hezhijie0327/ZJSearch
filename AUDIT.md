@@ -51,7 +51,43 @@ local/py3/bin/python -m black --check --target-version py311 --line-length 120 \
 local/py3/bin/python -m pylint --rcfile .pylintrc --ignore-paths=searx/engines <changed .py files>
 ```
 
-## 3. Functional test matrix
+## 3. Dependency updates (every audit round)
+
+npm — `Wanted` columns are in-range updates, apply them all; the pinned
+exact versions (biome) need an explicit install at the new pin:
+
+```sh
+cd client/zjsearch && npm outdated
+npm update
+npm install -D @biomejs/biome@<new pin>     # for exactly-pinned dev deps
+```
+
+- HOLD major jumps for a separate decision — never ride a major through an
+  unrelated audit. Standing example: typescript `~5.9` -> 7.x (the Go-based
+  rewrite) was left unadopted at the 2026-09 audit; read its release notes
+  and adopt deliberately, with the full matrix re-run.
+- After updating: `npm run lint` + `make themes.zjsearch`, RESTART the
+  instance (new hashes), then regress the surfaces that exercise the
+  moved packages — the AI overview (react-markdown / remark-* / katex /
+  mermaid / lucide-react), a grid page (ol), and the streamed boot (vite
+  output shape feeds the static-root publishing contract).
+
+python — the three AI SDK transports live in requirements.txt as exact
+pins; bump only when the index is actually ahead, then reinstall, restart,
+and re-run the LM Studio AI test (they have exactly one consumer,
+`searx/zjsearch_ai.py`):
+
+```sh
+local/py3/bin/pip index versions openai
+local/py3/bin/pip index versions anthropic
+local/py3/bin/pip index versions google-genai
+```
+
+- The rest of requirements.txt is upstream-owned: check for awareness,
+  update only with an upstream reason (an upstream commit that needs it),
+  so rebases stay conflict-free.
+
+## 4. Functional test matrix
 
 Offline fixtures first (deterministic, no network): queries containing the
 `zjaudit` token hit `searx/engines/zjsearch_fixtures.py` — see the module
@@ -71,7 +107,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
 
-Plugin answers (server-side; test via curl §5, not the browser):
+Plugin answers (server-side; test via curl §6, not the browser):
 
 | Query | Expected answer `kind` |
 |---|---|
@@ -88,7 +124,7 @@ Plugin answers (server-side; test via curl §5, not the browser):
 | `test -site:en.wikipedia.org` | same, explicit form |
 | `"finite state machine"` | exact phrase |
 
-## 4. Browser measurement recipes (browser-use)
+## 5. Browser measurement recipes (browser-use)
 
 The in-app browser has THREE documented failure modes that fake product
 bugs. Probe BEFORE concluding anything:
@@ -128,7 +164,7 @@ Waiting for streamed pages: never trust `goto` (the late chunk can exceed
 navigation timeouts) — poll `document.querySelector("#app")` innerText for
 `/Found \d+ results|找到 \d+ 条/` in 1.5–2 s intervals.
 
-## 5. Server-side inspection (answers & contracts)
+## 6. Server-side inspection (answers & contracts)
 
 Plugin/answer testing bypasses the browser — the answer is fully formed in
 page-data:
@@ -148,7 +184,7 @@ prefers the LAST parseable one). Contract sync checks: walk
 `data/macros.html` vs `lib/types.ts` field-by-field per result template and
 answer kind; check every serialized key has a consumer.
 
-## 6. Code audit dimensions (the sweep)
+## 7. Code audit dimensions (the sweep)
 
 Dispatch parallel read-only Explore agents (client / server) with the layer
 rules and the shared-token inventory from AGENTS.md, covering:
@@ -162,7 +198,7 @@ rules and the shared-token inventory from AGENTS.md, covering:
    in/out or is a sanctioned instant swap; every disclosure has
    `aria-expanded`; hover/press transitions on every interactive element.
    The IndexPage options panel and in-thumbnail iframes were past gaps.
-3. **Plugin behaviour** — the §3 matrix plus edge cases (CJK terms,
+3. **Plugin behaviour** — the §4 matrix plus edge cases (CJK terms,
    multi-keyword queries, unknown locations = silence).
 4. **Icons** — text-only controls next to icon-paired siblings.
 5. **Design tokens** — light/dark/black sweeps, widescreen/centered,
@@ -178,7 +214,7 @@ rules and the shared-token inventory from AGENTS.md, covering:
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,
    `alt` on images, keyboard reachability.
 
-## 7. Known environment traps
+## 8. Known environment traps
 
 - `npm run audit` needs Chrome (`ChromeNotInstalledError` otherwise) —
   not a theme regression; run on a machine with Chrome.
@@ -188,12 +224,12 @@ rules and the shared-token inventory from AGENTS.md, covering:
 - Template edits need an instance restart (Jinja caches compiled
   templates); python edits too (no reload in this start mode).
 - In-app-browser screenshots may serve a STALE compositor frame right
-  after load/animation — nudge and wait (§4).
+  after load/animation — nudge and wait (§5).
 - `$AAPL` is `%24AAPL` — a mis-encoded test vector once sent the audit
   chasing a non-existent stock-plugin bug. Double-check encodings before
   suspecting the code.
 
-## 8. Closing the loop
+## 9. Closing the loop
 
 1. Fix → rebuild (`make themes.zjsearch`) → restart instance (WhiteNoise +
    Jinja caches) → regress the touched area in the browser AND the plugin
