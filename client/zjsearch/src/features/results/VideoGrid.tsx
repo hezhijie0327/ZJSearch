@@ -16,7 +16,7 @@ import {
   TileMetaViews,
   TileThumb,
   TileTitle,
-} from "@/features/results/Tile.tsx";
+} from "@/features/results/tileParts.tsx";
 import { formatDate, formatLength, imageAlt } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";

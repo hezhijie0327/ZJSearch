@@ -40,14 +40,23 @@ export function Collapse({
       if (!present) {
         setPresent(true);
       }
-      // mount at 0fr first, then let the transition play on the next frames
-      const frame = requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
+      // mount at 0fr first, then let the transition play on the next frames;
+      // the timeout is the fallback for starved rAF (occluded tab, jammed
+      // compositor) -- without it the panel would stay at 0fr forever
+      let done = false;
+      const expand = () => {
+        if (!done) {
+          done = true;
           setExpanded(true);
-        });
+        }
+      };
+      const frame = requestAnimationFrame(() => {
+        requestAnimationFrame(expand);
       });
+      const timer = window.setTimeout(expand, 120);
       return () => {
         cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
       };
     }
     setExpanded(false);

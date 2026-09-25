@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+import { resultHost } from "@/lib/link.ts";
 import type { InfoboxData, ResultItem } from "@/lib/types.ts";
 
 /**
@@ -26,13 +27,12 @@ export interface AiSourceMeta {
 export function aiSourceMeta(results: ResultItem[], max = 20): AiSourceMeta[] {
   const out: AiSourceMeta[] = [];
   for (const result of results.slice(0, max)) {
-    let domain = "";
-    try {
-      domain = new URL(result.url).hostname.replace(/^www\./, "");
-    } catch {
-      domain = result.url.slice(0, 24);
-    }
-    out.push({ domain, favicon: result.favicon || "", t: result.title_text.slice(0, 200), u: result.url });
+    out.push({
+      domain: resultHost(result.url, result.netloc, true),
+      favicon: result.favicon || "",
+      t: result.title_text.slice(0, 200),
+      u: result.url,
+    });
   }
   return out;
 }
@@ -41,17 +41,6 @@ const DEEP_SOURCES = 5;
 const SHALLOW_SOURCES = 15;
 const DEEP_SNIPPET_CHARS = 800;
 const INFOBOX_CHARS = 2000;
-
-function hostOf(result: ResultItem): string {
-  if (result.netloc) {
-    return result.netloc;
-  }
-  try {
-    return new URL(result.url).host;
-  } catch {
-    return result.url;
-  }
-}
 
 function dateOf(result: ResultItem): string {
   return result.published_date ? ` (${result.published_date.slice(0, 10)})` : "";
@@ -84,12 +73,12 @@ export function buildAiContext(results: ResultItem[], infoboxes: InfoboxData[]):
   for (const result of results.slice(0, DEEP_SOURCES)) {
     index += 1;
     lines.push(
-      `[${index}] ${hostOf(result)}${dateOf(result)}: ${result.title_text}: ${result.content_text.slice(0, DEEP_SNIPPET_CHARS)}`,
+      `[${index}] ${resultHost(result.url, result.netloc)}${dateOf(result)}: ${result.title_text}: ${result.content_text.slice(0, DEEP_SNIPPET_CHARS)}`,
     );
   }
   for (const result of results.slice(DEEP_SOURCES, DEEP_SOURCES + SHALLOW_SOURCES)) {
     index += 1;
-    lines.push(`[${index}] ${hostOf(result)}: ${result.title_text}`);
+    lines.push(`[${index}] ${resultHost(result.url, result.netloc)}: ${result.title_text}`);
   }
   const infobox = infoboxes[0];
   if (infobox) {

@@ -92,7 +92,6 @@ pipeline features without any Python changes. -#}
     {%- endif %}
   {%- endif %}
   {%- if result.views %}"views": {{ result.views|tojson }},{% endif %}
-  {%- if result.score is number %}"score": {{ result.score }},{% endif %}
   {%- if result.author %}"author": {{ result.author|striptags|tojson }},{% endif %}
   {%- if result.metadata %}"metadata": {{ result.metadata|tojson }},{% endif %}
   {%- if result.img_src %}"img_src": {{ (media_url(result.img_src) or '')|tojson }},{% endif %}
@@ -152,7 +151,7 @@ pipeline features without any Python changes. -#}
       {%- endfor -%}
     ],
     {%- endif %}
-    {%- if result.boundingbox %}"boundingbox": {{ result.boundingbox|tojson }},{% endif %}
+    {%- if result.boundingbox %}"boundingbox": {{ result.boundingbox|map('float')|list|tojson }},{% endif %}
     {%- if result.longitude %}"longitude": {{ result.longitude|tojson }},{% endif %}
     {%- if result.latitude %}"latitude": {{ result.latitude|tojson }},{% endif %}
     {%- if result.geojson %}"geojson": {{ result.geojson|tojson }},{% endif %}
@@ -192,7 +191,6 @@ pipeline features without any Python changes. -#}
     {%- endif %}
   {%- elif result.template == 'file.html' %}
     {%- if result.abstract %}"abstract_html": {{ result.abstract|tojson }},{% endif %}
-    {%- if result.author %}"author": {{ result.author|tojson }},{% endif %}
     {%- if result.filename %}"filename": {{ result.filename|tojson }},{% endif %}
     {%- if result.size %}"size": {{ result.size|tojson }},{% endif %}
     {%- if result.time %}"time": {{ result.time|tojson }},{% endif %}

@@ -12,8 +12,9 @@ import { ChevronLeft, ChevronRight, Download, ExternalLink, ImageOff, X } from "
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EnginesLine } from "@/features/results/cardParts.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
+import { formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import { hostnameOf, newTabLinkProps } from "@/lib/link.ts";
+import { newTabLinkProps, resultHost } from "@/lib/link.ts";
 import { useSettings } from "@/lib/settings.ts";
 import type { ResultItem } from "@/lib/types.ts";
 
@@ -213,7 +214,7 @@ export function Lightbox({
   const thumbSrc = result.thumbnail_src || result.img_src || "";
   const linkProps = newTabLinkProps(settings.results_on_new_tab);
 
-  const hostname = result.netloc || (result.url ? hostnameOf(result.url) : "");
+  const hostname = resultHost(result.url, result.netloc);
   // the title already names the site; engines whose source field adds
   // information (openverse: "flickr") keep the extra label
   const source = result.source?.toLowerCase() === hostname.toLowerCase() ? null : result.source;
@@ -221,6 +222,7 @@ export function Lightbox({
 
   return (
     <div
+      aria-label={result.title_text || t("image_viewer")}
       aria-modal="true"
       className={`fixed inset-0 z-50 flex flex-col bg-[#161616]/97 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
       inert={closing || undefined}
@@ -246,7 +248,7 @@ export function Lightbox({
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-0.5 py-1.5 text-xs leading-5">
           <Label label={t("resolution")} value={result.resolution} />
           <Label label={t("type")} value={result.img_format} />
-          <Label label={t("filesize")} value={result.filesize} />
+          <Label label={t("filesize")} value={formatFilesize(result.filesize)} />
           <Label label={t("source")} value={source} />
           {formats.length > 0 ? (
             <span className="inline-flex flex-wrap items-center gap-x-1">

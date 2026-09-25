@@ -11,6 +11,7 @@
 import {
   AlertTriangle,
   ChevronDown,
+  Copy,
   FileCode2,
   FileJson,
   FileSpreadsheet,
@@ -29,6 +30,7 @@ import { downloadResults } from "@/lib/exporters.ts";
 import { round1 } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { isModifiedClick } from "@/lib/link.ts";
+import { META_TOGGLE, PILL } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 
@@ -50,9 +52,8 @@ function formatOrder(format: string): number {
   return index === -1 ? FORMAT_ORDER.length : index;
 }
 
-const metaToggle = "inline-flex min-h-6 items-center gap-1 transition-colors hover:text-ink";
-const stripChip =
-  "inline-flex items-center gap-1 rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink";
+const metaToggle = META_TOGGLE;
+const stripChip = `${PILL} gap-1 hover:text-ink`;
 
 export function DebugPanels({
   data,
@@ -132,7 +133,7 @@ export function DebugPanels({
             </div>
             {/* confirmation comes from the shared green flashToast */}
             <button
-              className="shrink-0 rounded-full border border-line px-3 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:border-accent hover:text-accent"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[13px] font-medium text-ink-2 transition-colors hover:border-accent hover:text-accent"
               onClick={() => {
                 if (searchUrl) {
                   copyToast(searchUrl);
@@ -140,6 +141,7 @@ export function DebugPanels({
               }}
               type="button"
             >
+              <Copy className="size-3.5" />
               {t("copy_link")}
             </button>
           </div>

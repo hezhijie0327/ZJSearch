@@ -24,6 +24,9 @@ class SXNGPlugin(Plugin):
 
     id: str = "time_zone"
     keywords: list[str] = ["time", "timezone", "now", "clock", "timezones"]
+    # filler words that carry no location ("time in tokyo") -- without this,
+    # the leftover "in" makes the geolocation miss and the answer goes silent
+    fillers: list[str] = ["in"]
 
     def __init__(self, plg_cfg: "PluginCfg"):
         super().__init__(plg_cfg)
@@ -46,9 +49,10 @@ class SXNGPlugin(Plugin):
         if search.search_query.pageno > 1:
             return results
 
-        # remove keywords from the query
+        # remove keywords and filler words from the query
         query = search.search_query.query
-        query_parts = filter(lambda part: part.lower() not in self.keywords, query.split(" "))
+        skip = self.keywords + self.fillers
+        query_parts = filter(lambda part: part.lower() not in skip, query.split(" "))
         search_term = " ".join(query_parts).strip()
 
         if not search_term:

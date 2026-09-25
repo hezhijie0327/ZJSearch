@@ -20,7 +20,7 @@ import {
   TileMetaDate,
   TileThumb,
   TileTitle,
-} from "@/features/results/Tile.tsx";
+} from "@/features/results/tileParts.tsx";
 import { formatClock, formatDate, formatLength, imageAlt } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { DISABLED } from "@/lib/styles.ts";

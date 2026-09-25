@@ -28,3 +28,16 @@ export function hostnameOf(url: string): string {
     return url;
   }
 }
+
+/** The compact display host for a result: the server-provided `netloc` wins
+    (it is already normalized), the URL hostname is the fallback.  With
+    `stripWww` the leading "www." is dropped for chip-style labels (AI
+    citations); every consumer of result hosts goes through here so the
+    label language stays one thing. */
+export function resultHost(url: string, netloc: string | undefined, stripWww = false): string {
+  let host = netloc || hostnameOf(url);
+  if (stripWww) {
+    host = host.replace(/^www\./, "");
+  }
+  return host || url.slice(0, 24);
+}

@@ -36,6 +36,10 @@ not the sum."""
 QUOTE_CACHE: dict[str, tuple[float, dict[str, t.Any] | None]] = {}
 """``{source}:{symbol}`` -> (fetch time, payload or None while the resolve failed)."""
 
+QUOTE_CACHE_MAX = 512
+"""Entry cap: the cache keys on raw symbol variants (user input), so a cap
+keeps a long-running worker's memory flat; FIFO eviction is fine for a 60 s TTL."""
+
 SUFFIX_RE = re.compile(r"^(.*\S)\s+(?:stock|quote)$", re.IGNORECASE)
 PREFIX_DOLLAR_RE = re.compile(r"^\$([A-Za-z0-9.\-]{1,16})$")
 
@@ -373,8 +377,11 @@ def _tx_quote_fields(qt_fields: list[str], day_candles: list[list[float]], is_us
 
 def _tencent_fetch(symbol: str) -> dict[str, t.Any] | None:  # pylint: disable=too-many-locals
     tx_symbol = _tencent_symbol(symbol)
-    # qt[1] carries the listing name; the bare code is the fallback
-    code = tx_symbol[2:].upper()
+    # qt[1] carries the listing name; the bare code is the fallback -- strip
+    # the exchange prefix only when one is really there ("sh600519" ->
+    # "600519"); a symbol that passed through unchanged ("BRK.B", "3M")
+    # would lose its first two characters to a blind [2:] slice
+    code = tx_symbol[2:].upper() if re.fullmatch(r"(sh|sz|bj|hk|us)\S{2,}", tx_symbol.lower()) else tx_symbol.upper()
     name = code
 
     year_start = f"{datetime.date.today().year}-01-01"
@@ -542,6 +549,10 @@ def _lookup(symbol: str) -> dict[str, t.Any] | None:
         if payload:
             break
     QUOTE_CACHE[symbol] = (time.monotonic(), payload)
+    while len(QUOTE_CACHE) > QUOTE_CACHE_MAX:
+        # FIFO: drop the oldest insertions (dict preserves insertion order)
+        oldest = next(iter(QUOTE_CACHE))
+        del QUOTE_CACHE[oldest]
     return payload
 
 

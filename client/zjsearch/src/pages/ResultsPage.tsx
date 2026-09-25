@@ -444,9 +444,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       loadNextPage.current();
                     }}
                   />
-                ) : (
+                ) : allResults.length > 0 ? (
+                  // a zero-result page is final — the NoResults state above
+                  // owns it (its later-page variant carries the prev action)
                   <Pagination onPage={onPage} pageno={data.pageno} paging={data.paging} />
-                )}
+                ) : null}
               </>
             )}
           </div>

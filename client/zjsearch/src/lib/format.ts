@@ -91,3 +91,22 @@ export function imageAlt(result: { title_text: string; url: string }): string {
   }
   return result.url;
 }
+
+/** Filesize display: passthrough when the engine already humanized it,
+    raw byte counts get IEC units (files/torrents come both ways). */
+export function formatFilesize(size: string | number | undefined): string | null {
+  if (size === undefined || size === "") {
+    return null;
+  }
+  if (typeof size === "string") {
+    return size;
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = size;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 100 || unit === 0 ? Math.round(value) : round1(value)} ${units[unit]}`;
+}

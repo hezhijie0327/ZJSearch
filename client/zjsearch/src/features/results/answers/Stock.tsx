@@ -10,6 +10,7 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { useContext, useState } from "react";
 import { I18nContext, useT } from "@/lib/i18n.ts";
+import { SEGMENT_ACTIVE, SEGMENT_SM } from "@/lib/styles.ts";
 import type { AnswerData, StockAnswerPayload, StockSeries } from "@/lib/types.ts";
 
 type RangeKey = "1D" | "5D" | "1M" | "YTD" | "1Y" | "5Y" | "MAX";
@@ -201,11 +202,7 @@ export function StockAnswer({ answer }: { answer: Extract<AnswerData, { template
         <div className="mt-3 flex flex-wrap gap-1.5">
           {RANGES.filter((key) => (d.ranges[key]?.candles.length ?? 0) > 1).map((key) => (
             <button
-              className={`rounded-full px-3 py-1 text-[13px] transition-colors ${
-                key === range
-                  ? "bg-accent-strong font-medium text-accent-contrast"
-                  : "bg-surface-2 text-ink-2 hover:text-ink"
-              }`}
+              className={`${SEGMENT_SM} rounded-full px-3 ${key === range ? SEGMENT_ACTIVE : "bg-surface-2 text-ink-2 hover:text-ink"}`}
               key={key}
               onClick={() => {
                 setRange(key);

@@ -100,7 +100,8 @@ export interface ResultItem {
   resolution?: string;
   img_format?: string;
   source?: string;
-  filesize?: string;
+  /** humanized string when the engine provides one, raw bytes otherwise */
+  filesize?: string | number;
   formats?: Array<{ url: string; label: string }>;
 
   // torrent.html

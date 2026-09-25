@@ -190,7 +190,7 @@ class ZjsearchStreamedSearch:
     @property
     def engine_data(self):
         self._run()
-        return self._data.get('engine_data', [])
+        return self._data.get('engine_data', {})
 
     @property
     def paging(self):
@@ -311,18 +311,47 @@ def _search_stream_response(search_query, raw_text_query, selected_locale) -> fl
     )
     template = flask.current_app.jinja_env.get_template('{}/results.html'.format(context['theme']))
 
+    # recovery payload for a late-chunk serialization failure: the leading
+    # </script> closes a script the failure may have left open (a stray end
+    # tag is dropped by the HTML parser otherwise) and a clean page_error
+    # payload follows; the client prefers the last parseable #page-data, so
+    # it recovers even when the failed attempt left a broken script behind
+    _late_chunk_recovery = (
+        '</script>'
+        '<script id="page-data" type="application/json">'
+        '{%- from "zjsearch/data/macros.html" import page_error with context -%}'
+        '{{ page_error(message) }}'
+        '</script>'
+        '<script data-cfasync="false">'
+        'if (window.__zjsPageData) { window.__zjsPageData(); }'
+        ' else { document.dispatchEvent(new CustomEvent("zjs:page-data")); }'
+        '</script>'
+    )
+
     def generate():
         buf = None
-        for chunk in template.stream(context):
-            if buf is not None:
-                buf.append(chunk)
-                if SHELL_END in chunk:
-                    yield ''.join(buf)
-                    buf = None
-            else:
-                yield chunk
-        if buf:
-            yield ''.join(buf)
+        shell_done = False
+        try:
+            for chunk in template.stream(context):
+                if buf is not None:
+                    buf.append(chunk)
+                    if SHELL_END in chunk:
+                        yield ''.join(buf)
+                        buf = None
+                        shell_done = True
+                else:
+                    yield chunk
+            if buf:
+                yield ''.join(buf)
+        except Exception as exc:  # pylint: disable=broad-except
+            # a serialization error after the shell (a malformed result field
+            # reaching a macro) must not leave the client pending forever: it
+            # booted into the pending payload, so close with a page_error the
+            # router understands -- a bare truncation would hang the skeleton
+            logger.exception('zjsearch_stream: late chunk failed: %s', exc)
+            if shell_done:
+                recovery = flask.current_app.jinja_env.from_string(_late_chunk_recovery)
+                yield recovery.render(context, message=str(exc) or 'internal error')
 
     response = flask.Response(flask.stream_with_context(generate()), mimetype='text/html')
     # ask reverse proxies to pass the early shell through unbuffered

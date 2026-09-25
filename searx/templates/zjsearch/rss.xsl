@@ -128,7 +128,7 @@
           </xsl:for-each>
         </main>
         <footer>© <span id="year"></span> <xsl:value-of select="$instance" /></footer>
-        <script>
+        <script data-cfasync="false">
           document.getElementById("year").textContent = new Date().getFullYear();
         </script>
       </body>

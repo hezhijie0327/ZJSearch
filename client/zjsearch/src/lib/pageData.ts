@@ -11,16 +11,21 @@ import { DEFAULT_CLIENT_SETTINGS } from "@/lib/settings.ts";
 import type { AnyPageData } from "@/lib/types.ts";
 
 export function parseEmbeddedPageData(): AnyPageData | null {
-  const el = document.getElementById("page-data");
-  const text = el?.textContent?.trim();
-  if (!text) {
-    return null;
+  // the late chunk carries ONE #page-data -- but the stream-error recovery
+  // (zjsearch_stream) may append a second, clean one after a failed attempt
+  // that left a broken script behind: prefer the last payload that parses
+  for (const el of [...document.querySelectorAll("#page-data")].reverse()) {
+    const text = el.textContent?.trim();
+    if (!text) {
+      continue;
+    }
+    try {
+      return JSON.parse(text) as AnyPageData;
+    } catch {
+      /* a truncated payload from a failed serialization -- try the next */
+    }
   }
-  try {
-    return JSON.parse(text) as AnyPageData;
-  } catch {
-    return null;
-  }
+  return null;
 }
 
 /** First-stage payload of a streamed search page (see
@@ -42,11 +47,18 @@ export function parseBootData(): AnyPageData | null {
 
 export function extractPageData(html: string): AnyPageData {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  const text = doc.getElementById("page-data")?.textContent?.trim();
-  if (!text) {
-    throw new Error("page-data missing in response");
+  for (const el of [...doc.querySelectorAll("#page-data")].reverse()) {
+    const text = el.textContent?.trim();
+    if (!text) {
+      continue;
+    }
+    try {
+      return JSON.parse(text) as AnyPageData;
+    } catch {
+      /* a truncated payload from a failed stream serialization -- try the next */
+    }
   }
-  return JSON.parse(text) as AnyPageData;
+  throw new Error("page-data missing in response");
 }
 
 export function parseClientSettings(): ClientSettings {

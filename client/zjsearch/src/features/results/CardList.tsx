@@ -30,7 +30,6 @@ export function CardList({
   selected,
   autoOpenMap = false,
   spaced = true,
-  className,
   renderItem,
 }: {
   entries: CardListEntry[];
@@ -38,11 +37,10 @@ export function CardList({
   selected: number;
   autoOpenMap?: boolean;
   spaced?: boolean;
-  className?: string;
   renderItem?: (result: ResultItem, index: number) => ReactNode;
 }) {
   return (
-    <div className={cn(spaced && "space-y-1", className)}>
+    <div className={cn(spaced && "space-y-1")}>
       {entries.map(({ result, index }) => (
         <ResultRow index={index} key={index} selected={selected === index}>
           {renderItem ? (

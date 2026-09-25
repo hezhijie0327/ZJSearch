@@ -16,8 +16,8 @@ import {
   TileMeta,
   TileMetaDate,
   TileTitle,
-} from "@/features/results/Tile.tsx";
-import { formatDate } from "@/lib/format.ts";
+} from "@/features/results/tileParts.tsx";
+import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
@@ -54,7 +54,7 @@ export function FilesGrid({
     <div className="grid grid-cols-2 gap-x-4 gap-y-8 @sm:grid-cols-3 @[46rem]:grid-cols-4 @5xl:grid-cols-5">
       {results.map((result, index) => {
         const extension = detectExtension(result.filename || result.title_text);
-        const size = result.filesize || result.size || null;
+        const size = formatFilesize(result.filesize ?? result.size);
         const date = result.published_date ? formatDate(result.published_date) : result.time || null;
         const health = result.seed !== undefined || result.leech !== undefined;
         const downloadHref =

@@ -1,26 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import {
-  Archive,
-  Award,
-  Calendar,
-  ChevronLeft,
-  Clock,
-  Eye,
-  Globe,
-  ImageOff,
-  Music,
-  Play,
-  Server,
-  User,
-} from "lucide-react";
+import { Archive, Award, Calendar, Clock, Eye, Globe, ImageOff, Music, Play, Server, User } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
+import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { useCacheUrl } from "@/features/results/CacheUrlProvider.tsx";
 import { formatDate, formatLength, formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { newTabLinkProps } from "@/lib/link.ts";
-import { CHIP, CHIP_HOVER, META_ROW, TILE_BADGE } from "@/lib/styles.ts";
+import { CHIP, CHIP_HOVER, META_ROW, PILL, TILE_BADGE } from "@/lib/styles.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
 
@@ -208,16 +196,7 @@ export function EnginesLine({
           ))
         : null}
       {hidden > 0 ? (
-        <button aria-expanded={expanded} className={`${chip} shrink-0 ${chipHover}`} onClick={toggle} type="button">
-          {expanded ? (
-            <>
-              <ChevronLeft className="size-3 shrink-0" />
-              {t("show_less")}
-            </>
-          ) : (
-            `+${hidden}`
-          )}
-        </button>
+        <CapChip className={`${chip} shrink-0 ${chipHover}`} expanded={expanded} hidden={hidden} onToggle={toggle} />
       ) : null}
       {cacheUrl ? (
         compact ? (
@@ -316,7 +295,7 @@ export function MediaCollapse({
       <button
         aria-controls={panelId}
         aria-expanded={open}
-        className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+        className={`${PILL} mt-1 gap-1.5 hover:text-ink`}
         onClick={() => {
           setOpen((prev) => !prev);
         }}
@@ -377,8 +356,6 @@ export interface CardProps {
   globals: GlobalData;
   /** map-intent pages open the inline OSM map automatically (upstream simple behaviour) */
   autoOpenMap?: boolean;
-  /** music-intent pages show the media preview expanded with our own player */
-  mediaOpen?: boolean;
   /** first results load their thumbnail eagerly (LCP) */
   eager?: boolean;
 }
