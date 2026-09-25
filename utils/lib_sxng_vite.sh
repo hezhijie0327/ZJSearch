@@ -98,9 +98,12 @@ vite.zjsearch.build() {
         node.env
         build_msg ZJSEARCH "run build of theme from: ${VITE_ZJSEARCH_THEME}"
 
+        # zjsearch is a pnpm workspace (pnpm-lock.yaml, packageManager field):
+        # `pnpm install` runs the prepare hook (husky path) and installs from
+        # the lockfile; the upstream simple theme stays on npm
         pushd "${VITE_ZJSEARCH_THEME}"
-        npm install
-        npm run build
+        pnpm install --frozen-lockfile
+        pnpm run build
         popd &>/dev/null
     )
 }
@@ -111,8 +114,8 @@ vite.zjsearch.dev() {
         node.env
         build_msg ZJSEARCH "start server for FE development of: ${VITE_ZJSEARCH_THEME}"
         pushd "${VITE_ZJSEARCH_THEME}"
-        npm install
-        npm run dev
+        pnpm install
+        pnpm run dev
         popd &>/dev/null
     )
 }
@@ -121,7 +124,7 @@ vite.zjsearch.fix() {
     (
         set -e
         node.env
-        npm --prefix client/zjsearch run fix
+        pnpm --dir client/zjsearch run fix
     )
 }
 
@@ -129,6 +132,6 @@ vite.zjsearch.lint() {
     (
         set -e
         node.env
-        npm --prefix client/zjsearch run lint
+        pnpm --dir client/zjsearch run lint
     )
 }

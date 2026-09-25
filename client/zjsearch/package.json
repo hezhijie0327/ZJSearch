@@ -10,10 +10,10 @@
     "dev": "vite",
     "prepare": "git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath client/zjsearch/.husky || true",
     "audit": "node scripts/audit.mjs",
-    "ci": "npm run lint && npm run build",
+    "ci": "pnpm run lint && pnpm run build",
     "clean": "rm -Rf node_modules",
     "fix": "biome check --write",
-    "lint": "npm run lint:biome && npm run lint:tsc",
+    "lint": "pnpm run lint:biome && pnpm run lint:tsc",
     "lint:biome": "biome check",
     "lint:tsc": "tsc --noEmit",
     "audit:diff": "node scripts/audit-diff.mjs"
@@ -52,11 +52,13 @@
     "sharp": "~0.35.4",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
+    "unified": "^11.0.5",
     "vite": "^8.2.2"
   },
   "lint-staged": {
     "*.{ts,tsx,css,json}": [
       "biome check --write --no-errors-on-unmatched"
     ]
-  }
+  },
+  "packageManager": "pnpm@12.5.1"
 }

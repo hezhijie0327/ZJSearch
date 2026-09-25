@@ -5,7 +5,7 @@
 #   powershell -ExecutionPolicy Bypass -File make-patch.ps1 [-Base <ref>] [-Out <file>]
 #   # on the target machine:
 #   git apply --check zjsearch-theme.patch && git apply zjsearch-theme.patch
-#   cd client/zjsearch ; npm install ; npm run build
+#   cd client/zjsearch ; pnpm install ; pnpm run build
 #
 # Default base: master (falls back to origin/master; if neither exists,
 # origin/master is fetched from origin first), so the patch carries the whole

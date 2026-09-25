@@ -24,7 +24,7 @@ const PATH = {
   src: "src/",
 } as const;
 
-// local SearXNG instance used by `npm run dev` (start it with: make run)
+// local SearXNG instance used by `pnpm run dev` (start it with: make run)
 const DEV_BACKEND = process.env.ZJSEARCH_BACKEND || "http://127.0.0.1:8888";
 
 export default {

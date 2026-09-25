@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 /**
- * zjsearch Lighthouse gate — `npm run audit`.
+ * zjsearch Lighthouse gate — `pnpm run audit`.
  *
  * Boots a throwaway granian on :8907 with audit-settings.yml and runs
  * Lighthouse over the home page plus one page per result presentation
