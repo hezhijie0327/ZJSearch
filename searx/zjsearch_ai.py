@@ -88,12 +88,6 @@ _IMAGE_MAX_BYTES = 2 * 1024 * 1024
 _IMAGE_FETCH_TIMEOUT = 8.0
 _MAX_IMAGES = 4
 
-_HISTORY_MAX_TURNS = 6
-_HISTORY_TURN_MAX_CHARS = 6000
-_HISTORY_Q_MAX_CHARS = 500
-"""Follow-up conversation history the client replays with each ask (the
-server stays stateless): last 6 turns, each answer capped."""
-
 # -------------------------------------------------------------- configuration
 
 
@@ -487,10 +481,8 @@ def _gemini_messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.An
         if message.get("role") == "system":
             continue
         content = message.get("content")
-        # the Gemini API calls the assistant "model"
-        role = "model" if message.get("role") == "assistant" else "user"
         if not isinstance(content, list):
-            contents.append(types.Content(role=role, parts=[types.Part(text=str(content))]))
+            contents.append(types.Content(role="user", parts=[types.Part(text=str(content))]))
             continue
         parts = []
         for part in content:
@@ -507,7 +499,7 @@ def _gemini_messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.An
                 else:
                     logger.warning("zjsearch_ai: gemini dialect skips a non-inline image part")
         if parts:
-            contents.append(types.Content(role=role, parts=parts))
+            contents.append(types.Content(role="user", parts=parts))
     return system or None, contents
 
 
@@ -734,39 +726,13 @@ Rules:
   parentheses: A["降水(雨/雪)"] -- not A[降水(雨/雪)].
 - If the sources do not answer the question, say so in one short line and
   answer from common knowledge marked with [*].
-- Get to the point in the first sentence. No preamble, no closing remark.
-- Earlier turns, when present, asked about the same numbered sources: a
-  short follow-up like "换成表格" or "画成流程图" restyles or extends the
-  previous answer; keep the [n] citations consistent with the source list."""
+- Get to the point in the first sentence. No preamble, no closing remark."""
 
 _ANSWER_USER_PROMPT = "<q>{q}</q>\n<sources>\n{context}\n</sources>"
 
 
-def _history_messages(payload: dict[str, t.Any]) -> list[dict[str, t.Any]]:
-    """The follow-up conversation as user/assistant messages.  The client
-    replays its prior turns (stripped of thinking) with every ask; entries
-    are sanitized and capped, anything malformed is skipped."""
-    turns = payload.get("history")
-    if not isinstance(turns, list):
-        return []
-    messages: list[dict[str, t.Any]] = []
-    for turn in turns[-_HISTORY_MAX_TURNS:]:
-        if not isinstance(turn, dict):
-            continue
-        q = str(turn.get("q") or "").strip()[:_HISTORY_Q_MAX_CHARS]
-        a = str(turn.get("a") or "").strip()[:_HISTORY_TURN_MAX_CHARS]
-        if q and a:
-            messages.append({"role": "user", "content": q})
-            messages.append({"role": "assistant", "content": a})
-    return messages
-
-
 def _build_answer_messages(
-    query: str,
-    context: str,
-    lang: str,
-    image_parts: list[dict[str, t.Any]],
-    history: list[dict[str, t.Any]] | None = None,
+    query: str, context: str, lang: str, image_parts: list[dict[str, t.Any]]
 ) -> list[dict[str, t.Any]]:
     system = _ANSWER_SYSTEM_PROMPT.format(today=datetime.date.today().isoformat(), lang=lang)
     if image_parts:
@@ -780,7 +746,7 @@ def _build_answer_messages(
         if image_parts
         else {"role": "user", "content": user_text}
     )
-    return [{"role": "system", "content": system}, *(history or []), user]
+    return [{"role": "system", "content": system}, user]
 
 
 def _answer() -> flask.Response:
@@ -803,12 +769,11 @@ def _answer() -> flask.Response:
         lang = "en"
 
     image_parts = _attached_images(payload, cfg)
-    history = _history_messages(payload)
 
     def open_stream(with_images: bool) -> _LlmStream:
         return _LlmStream(
             cfg,
-            _build_answer_messages(q, context, lang, image_parts if with_images else [], history),
+            _build_answer_messages(q, context, lang, image_parts if with_images else []),
             relay_reasoning=True,
         )
 

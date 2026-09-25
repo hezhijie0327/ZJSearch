@@ -174,10 +174,6 @@ export const EN = {
   ai_answer_failed: "Answer failed",
   ai_thinking: "Thinking",
   regenerate: "Regenerate",
-  ai_followup: "Ask a follow-up",
-  send: "Send",
-  ai_prev_answer: "Previous answer",
-  ai_next_answer: "Next answer",
   open_source: "Open source",
 
   homepage: "Project homepage",

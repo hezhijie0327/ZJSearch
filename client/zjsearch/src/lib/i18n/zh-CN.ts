@@ -176,10 +176,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_answer_failed: "回答失败",
   ai_thinking: "思考过程",
   regenerate: "重新生成",
-  ai_followup: "尽情提问",
-  send: "发送",
-  ai_prev_answer: "上一次回答",
-  ai_next_answer: "下一次回答",
   open_source: "打开来源",
 
   homepage: "项目主页",

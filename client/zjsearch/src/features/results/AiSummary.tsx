@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import {
-  ArrowUp,
-  ArrowUpRight,
-  Brain,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Copy,
-  RefreshCw,
-  Sparkles,
-} from "lucide-react";
+import { ArrowUpRight, Brain, ChevronDown, Copy, RefreshCw, Sparkles } from "lucide-react";
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
@@ -41,35 +31,15 @@ import type { AiCapability } from "@/lib/types.ts";
 
 export type AiAnswerPhase = "idle" | "streaming" | "done" | "error";
 
-/** One completed exchange, replayed to the model with every follow-up (the
-    server stays stateless): question + the visible answer (thinking
-    stripped). */
-export interface AiHistoryTurn {
-  a: string;
-  q: string;
-}
-
 export interface AiAnswerState {
   phase: AiAnswerPhase;
   /** raw stream text: <think> block (when the model reasons) followed by
       the visible markdown answer with [n] citations */
   text: string;
   open: boolean;
-  /** completed follow-up turns; the live answer is the +1 entry of the
-      timeline (history + current), which viewIndex points into */
-  history: AiHistoryTurn[];
-  viewIndex: number;
-  /** the question the live (newest) answer is replying to */
-  question: string;
   /** ask the question for the current results (or re-ask after an error) */
   start: (q: string, context: string, images?: string[]) => void;
   toggle: (q: string, context: string, images?: string[]) => void;
-  /** step through the answer timeline: -1 = previous, +1 = next */
-  go: (delta: number) => void;
-  /** ask a follow-up: the prior turns (incl. the answer on screen) travel
-      with the request, so a short question like 换成表格 or 画成流程图
-      restyles or extends the previous answer */
-  followUp: (q: string) => void;
   /** re-run the last question against the same results */
   regenerate: () => void;
   /** drop everything (a new search invalidates the answer) */
@@ -85,30 +55,26 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
   const [phase, setPhase] = useState<AiAnswerPhase>("idle");
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
-  const [history, setHistory] = useState<AiHistoryTurn[]>([]);
-  const [viewIndex, setViewIndex] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
-  const lastAskRef = useRef<{ context: string; history: AiHistoryTurn[]; images: string[]; q: string } | null>(null);
+  const lastAskRef = useRef<{ context: string; images: string[]; q: string } | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const start = (q: string, context: string, images: string[] = [], history: AiHistoryTurn[] = []) => {
+  const start = (q: string, context: string, images: string[] = []) => {
     if (!capability) {
       return;
     }
     abortRef.current?.abort();
-    lastAskRef.current = { context, history, images, q };
+    lastAskRef.current = { context, images, q };
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase("streaming");
     setText("");
     setOpen(true);
-    setHistory(history);
-    setViewIndex(history.length); // a new stream is always the newest view
     let accumulated = "";
     void fetchStream(
       "/ai/answer",
-      { context, history, images, lang, q, tk: capability.tk },
+      { context, images, lang, q, tk: capability.tk },
       (chunk) => {
         accumulated += chunk;
         if (!controller.signal.aborted) {
@@ -129,31 +95,10 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
       });
   };
 
-  const go = (delta: number) => {
-    const total = history.length + (text.trim() ? 1 : 0);
-    if (total < 1) {
-      return;
-    }
-    setViewIndex((index) => Math.min(Math.max(index + delta, 0), total - 1));
-  };
-
-  const followUp = (q: string) => {
-    const last = lastAskRef.current;
-    if (!capability || !last || phase !== "done" || !text.trim()) {
-      return;
-    }
-    // the visible answer (thinking stripped) becomes the model's prior turn
-    const { answer } = splitAnswerStream(text);
-    if (!answer.trim()) {
-      return;
-    }
-    start(q, last.context, last.images, [...last.history, { a: answer, q: last.q }]);
-  };
-
   const regenerate = () => {
     const last = lastAskRef.current;
     if (last && phase !== "streaming") {
-      start(last.q, last.context, last.images, last.history);
+      start(last.q, last.context, last.images);
     }
   };
 
@@ -180,24 +125,9 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     setPhase("idle");
     setText("");
     setOpen(false);
-    setHistory([]);
-    setViewIndex(0);
   };
 
-  return {
-    followUp,
-    go,
-    history,
-    open,
-    phase,
-    question: lastAskRef.current?.q ?? "",
-    regenerate,
-    reset,
-    start,
-    text,
-    toggle,
-    viewIndex,
-  };
+  return { open, phase, regenerate, reset, start, text, toggle };
 }
 
 /** Meta-row entry (the 12px toggle tier of 「found N results · took X s」). */
@@ -585,22 +515,7 @@ export function AiAnswerCard({
   const t = useT();
   const [thinkForced, setThinkForced] = useState<boolean | null>(null);
   const [overviewExpanded, setOverviewExpanded] = useState(false);
-  const [draft, setDraft] = useState("");
-  const live = splitAnswerStream(state.text);
-  // the answer timeline: completed follow-up turns + the live one; viewIndex
-  // points into it (clamped here -- a new stream always lands on the newest
-  // view), historical turns are stored thinking-stripped
-  const total = state.history.length + (state.text.trim() ? 1 : 0);
-  const viewIndex = Math.min(state.viewIndex, Math.max(total - 1, 0));
-  const viewingLatest = viewIndex >= state.history.length;
-  const think = viewingLatest ? live.think : "";
-  const thinking = viewingLatest ? live.thinking : false;
-  const answer = viewingLatest ? live.answer : (state.history[viewIndex]?.a ?? "");
-  // chat mode (follow-ups exist): every turn shows the question it answers
-  // as a right-aligned user bubble -- the live view carries the question
-  // being answered, historical turns their own
-  const question = viewingLatest ? state.question : (state.history[viewIndex]?.q ?? "");
-  const showQuestion = total > 1 && question.trim().length > 0;
+  const { think, answer, thinking } = splitAnswerStream(state.text);
   const hasThink = think.trim().length > 0;
   const hasAnswer = answer.trim().length > 0;
   const streaming = state.phase === "streaming";
@@ -665,52 +580,19 @@ export function AiAnswerCard({
           <Sparkles className="size-3.5" />
         </span>
         <span className="text-[13px] font-medium text-ink">{t("ai_answer")}</span>
-        {/* the turn switcher lives inline in the header: appearing and
-            disappearing takes only horizontal space, the card never shifts */}
-        {total > 1 ? (
-          <div className="flex items-center gap-0.5 text-xs text-ink-3">
-            <button
-              aria-label={t("ai_prev_answer")}
-              className="inline-flex min-h-6 items-center rounded px-1 transition-colors hover:text-ink disabled:opacity-40"
-              disabled={viewIndex <= 0}
-              onClick={() => {
-                state.go(-1);
-              }}
-              type="button"
-            >
-              <ChevronLeft className="size-3.5" />
-            </button>
-            <span className="min-h-6 leading-6 tabular-nums">
-              {viewIndex + 1} / {total}
-            </span>
-            <button
-              aria-label={t("ai_next_answer")}
-              className="inline-flex min-h-6 items-center rounded px-1 transition-colors hover:text-ink disabled:opacity-40"
-              disabled={viewIndex >= total - 1}
-              onClick={() => {
-                state.go(1);
-              }}
-              type="button"
-            >
-              <ChevronRight className="size-3.5" />
-            </button>
-          </div>
-        ) : null}
         {!streaming ? (
           <div className="ms-auto flex shrink-0 items-center gap-1.5">
-            {viewingLatest ? (
-              <button
-                aria-label={t("regenerate")}
-                className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-2 transition-colors hover:text-ink"
-                onClick={() => {
-                  state.regenerate();
-                }}
-                title={t("regenerate")}
-                type="button"
-              >
-                <RefreshCw className="size-3.5" />
-              </button>
-            ) : null}
+            <button
+              aria-label={t("regenerate")}
+              className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-2 transition-colors hover:text-ink"
+              onClick={() => {
+                state.regenerate();
+              }}
+              title={t("regenerate")}
+              type="button"
+            >
+              <RefreshCw className="size-3.5" />
+            </button>
             {state.phase === "done" && hasAnswer ? <CopyChip value={answer.trim()} /> : null}
           </div>
         ) : null}
@@ -754,13 +636,6 @@ export function AiAnswerCard({
             }}
           >
             <div ref={overviewRef}>
-              {showQuestion ? (
-                <div className="mb-2 flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-ee-md bg-surface-2 px-4 py-2.5 text-sm text-ink">
-                    {question}
-                  </div>
-                </div>
-              ) : null}
               <MarkdownAnswer markdown={markdown} meta={sourceMeta} onCite={onCite} settled={state.phase === "done"} />
             </div>
             {needsClamp ? (
@@ -787,37 +662,6 @@ export function AiAnswerCard({
         <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>
       ) : null}
       {failed ? <p className="mt-2 text-xs text-danger">{t("ai_answer_failed")}</p> : null}
-      {state.phase === "done" && hasAnswer ? (
-        <form
-          className="mt-3 flex items-center gap-2 border-t border-line pt-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const q = draft.trim();
-            if (!q) {
-              return;
-            }
-            state.followUp(q);
-            setDraft("");
-          }}
-        >
-          <input
-            className="h-9 min-w-0 flex-1 rounded-full border border-line bg-surface-2 px-4 text-[13px] text-ink transition-colors placeholder:text-ink-3 focus:border-accent-strong focus:outline-none"
-            onChange={(event) => {
-              setDraft(event.target.value);
-            }}
-            placeholder={t("ai_followup")}
-            value={draft}
-          />
-          <button
-            aria-label={t("send")}
-            className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-accent-contrast transition-opacity disabled:opacity-40"
-            disabled={!draft.trim()}
-            type="submit"
-          >
-            <ArrowUp className="size-4.5" />
-          </button>
-        </form>
-      ) : null}
     </div>
   );
 }
