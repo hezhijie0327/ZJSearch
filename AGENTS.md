@@ -245,6 +245,15 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
 - Results hotkeys (default / vim, see `src/features/hotkeys.ts`) must not fire
   while focus is in text inputs; hash-only changes (`#image-viewer`) are ignored
   by the router's popstate handler.
+- The search box autocomplete follows the Google interaction contract
+  (SearchBox): ArrowDown/Up walk the suggestions PLUS one extra slot — the
+  typed query itself — so navigating past the ends restores what the user
+  typed; a selected suggestion is written INTO the input with its untyped
+  suffix selected (continued typing replaces it), Enter submits the
+  displayed text, Escape restores the typed query and closes. The
+  debounced fetch keys on the typed baseline, so navigation never
+  re-fetches, and `event.nativeEvent.isComposing` short-circuits the whole
+  handler — IME composition (pinyin candidates) owns Enter and the arrows.
 - Bangs: category bangs (`!movies`), engine bangs (`!imdb`, one per engine
   `shortcut`) and external DDG bangs (`!!w`, redirect off-site — the SPA
   fetch fails cross-origin and falls back to a full page load, which is the

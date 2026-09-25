@@ -52,6 +52,9 @@ export function SearchBox({
   const listboxId = useId();
   const [innerQuery, setInnerQuery] = useState(initialQuery);
   const query = controlledQuery ?? innerQuery;
+  /** the text the user actually typed — the autocomplete baseline and the
+      restore point when arrow-key navigation wraps back past the list */
+  const [typed, setTyped] = useState(initialQuery);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -66,14 +69,16 @@ export function SearchBox({
   // keep the input in sync with server-provided queries (back/forward)
   useEffect(() => {
     setInnerQuery(initialQuery);
+    setTyped(initialQuery);
   }, [initialQuery]);
 
-  // debounced autocompleter
+  // debounced autocompleter — keyed on the TYPED text: arrow-key navigation
+  // rewrites the input with suggestion texts and must not re-fetch
   useEffect(() => {
     if (!settings.autocomplete) {
       return;
     }
-    const trimmed = query.trim();
+    const trimmed = typed.trim();
     if (trimmed.length < (settings.autocomplete_min || 2)) {
       setSuggestions([]);
       return;
@@ -93,7 +98,7 @@ export function SearchBox({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, settings.autocomplete, settings.autocomplete_min]);
+  }, [typed, settings.autocomplete, settings.autocomplete_min]);
 
   // close the dropdown on outside clicks
   useEffect(() => {
@@ -122,7 +127,49 @@ export function SearchBox({
     submit(query);
   };
 
+  /** select the completion part of a navigated-to suggestion (Google
+      behaviour): the typed prefix stays free, continued typing replaces the
+      selected suffix; restoring the typed text puts the caret at the end */
+  const selectCompletion = (text: string) => {
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (el && document.activeElement === el) {
+        el.setSelectionRange(typed.length, text.length);
+      }
+    });
+  };
+
+  /** ArrowDown/Up walk suggestions.length + 1 slots: the +1 slot is the
+      typed query itself, so navigating past the ends lands back on what
+      the user typed (Google behaviour). */
+  const navigateSelection = (delta: 1 | -1) => {
+    const count = suggestions.length + 1;
+    if (count <= 1) {
+      return;
+    }
+    const slot = (((active + delta) % count) + count) % count;
+    if (slot === suggestions.length) {
+      setActive(-1);
+      setQuery(typed);
+      selectCompletion(typed);
+      return;
+    }
+    const suggestion = suggestions[slot];
+    if (!suggestion) {
+      return;
+    }
+    setActive(slot);
+    setQuery(suggestion.text);
+    selectCompletion(suggestion.text);
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // IME composition (e.g. pinyin candidates) owns Enter and the arrows —
+    // handling them here would submit mid-composition or break candidate
+    // navigation
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (event.key === "Enter") {
       // some embedded browsers never run the implicit form submission, so
       // Enter is always handled explicitly here
@@ -137,21 +184,27 @@ export function SearchBox({
       }
       return;
     }
-    if (!open || suggestions.length === 0) {
-      return;
-    }
-    if (event.key === "Escape") {
-      setOpen(false);
-      return;
-    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActive((prev) => (prev + 1) % suggestions.length);
+      navigateSelection(1);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActive((prev) => (prev <= 0 ? suggestions.length - 1 : prev - 1));
+      navigateSelection(-1);
+      return;
+    }
+    if (!open || suggestions.length === 0) {
+      return;
+    }
+    if (event.key === "Escape") {
+      // restore the typed query first (a selection rewrites the input)
+      if (active >= 0) {
+        setActive(-1);
+        setQuery(typed);
+      }
+      setOpen(false);
+      return;
     }
   };
 
@@ -189,7 +242,10 @@ export function SearchBox({
           dir="auto"
           name="q"
           onChange={(event) => {
-            setQuery(event.target.value);
+            const value = event.target.value;
+            setQuery(value);
+            setTyped(value);
+            setActive(-1); // fresh typing clears the suggestion selection
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
