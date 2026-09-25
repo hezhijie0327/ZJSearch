@@ -743,8 +743,11 @@ export function AiAnswerCard({
           </Collapse>
         </div>
       ) : null}
+      {/* mt-2 unconditionally: without it a no-thinking answer sits flush
+          under the header row (the thinking header carries the same margin,
+          so both paths share the rhythm) */}
       {hasAnswer ? (
-        <div className={`${hasThink ? "mt-2 " : ""}text-sm leading-relaxed text-ink`}>
+        <div className="mt-2 text-sm leading-relaxed text-ink">
           {/* streaming renders uncapped (active=false); once settled the
               shared clamp-and-reveal takes over the preview cap */}
           <ClampReveal
