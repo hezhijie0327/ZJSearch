@@ -231,7 +231,12 @@ the SDK's own convention:
 ``params`` carries the chosen SDK's ``create()`` kwargs (``max_tokens``
 translates to each API's own key; ``temperature`` stays opt-in) and
 ``extra_body`` / ``extra_headers`` pass through 1:1 as the
-provider-specific escape hatches.  The stream protocol and the client
+provider-specific escape hatches.  The thinking-intensity knobs are the
+SDK's own names — ``reasoning_effort: low`` (chat completions),
+``reasoning: {effort: low}`` (Responses API — its ``summary`` deltas
+surface in the card's thinking block), ``thinking: {type: enabled,
+budget_tokens: 2048}`` (Anthropic), ``thinking_config:
+{thinking_budget: 1024}`` (Gemini).  The stream protocol and the client
 card live in ``features/results/AiSummary.tsx``.
 
 Which dialect for which provider?  Aggregators (aihubmix, openrouter,
