@@ -20,7 +20,7 @@ import {
   Rss,
   Timer,
 } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Meter } from "@/components/Meter.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
@@ -58,6 +58,7 @@ export function DebugPanels({
   data,
   results,
   searchUrl,
+  actions,
 }: {
   data: SearchPageData;
   /** results currently on screen (payload + appended infinite-scroll pages):
@@ -66,6 +67,8 @@ export function DebugPanels({
   /** shareable search URL: enables the copy action and the download formats
       (its format= URLs stay the fallback for modified clicks / feed readers) */
   searchUrl?: string;
+  /** extra meta-row entries rendered after the toggles (Quick Answer) */
+  actions?: ReactNode;
 }) {
   const t = useT();
   const copyToast = useCopyToast();
@@ -110,6 +113,7 @@ export function DebugPanels({
             <ChevronDown className={`size-3.5 transition-transform ${openPanel === "engines" ? "rotate-180" : ""}`} />
           </button>
         ) : null}
+        {actions}
       </div>
 
       <Collapse className={openPanel === "results" ? "mt-2" : ""} open={openPanel === "results"}>

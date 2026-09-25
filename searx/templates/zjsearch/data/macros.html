@@ -55,6 +55,9 @@ pipeline features without any Python changes. -#}
   "about_url": {{ url_for('info', pagename='about')|tojson }},
   "search_syntax_url": {{ url_for('info', pagename='search-syntax')|tojson }},
   "rtl": {{ 'true' if rtl else 'false' }}
+  {%- if ai %}
+  ,"ai": {"tk": {{ ai.tk|tojson }}, "model": {{ ai.model|tojson }} }
+  {%- endif %}
 }
 {%- endmacro %}
 

@@ -18,6 +18,10 @@ search:
     - csv
     - json
     - rss
+  # upstream default is "" (favicons off) -- with a resolver set, the
+  # favicon field populates across the theme (card URL rows, grid tiles,
+  # AI overview citation panels)
+  favicon_resolver: duckduckgo
 
 ui:
   default_theme: zjsearch
@@ -121,3 +125,34 @@ engines:
     engine: zjsearch_fixtures
     shortcut: zja
     disabled: false
+
+# the whole-page AI Overview (features/results/AiSummary.tsx) -- dev points
+# at the local LM Studio; the key travels via the ZJSEARCH_AI_KEY env so it
+# stays out of the repository.  base_url goes to the SDK exactly as written
+# (each SDK appends its own method paths):
+#   openai_chat_completions / openai_responses -> https://api.openai.com/v1
+#   anthropic -> https://api.anthropic.com                     (no /v1)
+#   gemini    -> https://generativelanguage.googleapis.com     (gateway
+#                prefixes like https://gw.example.com/gemini work too)
+# aggregators (aihubmix, openrouter, inferera, ...) expose OpenAI-compatible
+# routes for every model -- the openai dialect covers them all.
+zjsearch:
+  ai:
+    enabled: true
+    sdk: openai_chat_completions
+    base_url: "http://localhost:1234/v1"
+    api_key: ""
+    model: "qwen/qwen3.6-35b-a3b"
+    # online examples -- swap sdk/base_url/model and the ZJSEARCH_AI_KEY:
+    #   sdk: openai_chat_completions
+    #   base_url: "https://api.openai.com/v1"
+    #   model: "gpt-..."
+    #   sdk: anthropic
+    #   base_url: "https://api.anthropic.com"
+    #   model: "claude-..."
+    #   sdk: gemini
+    #   base_url: "https://generativelanguage.googleapis.com"
+    #   model: "gemini-..."
+    extra_body:  # LM Studio / vLLM only -- drop it for online providers
+      chat_template_kwargs:
+        enable_thinking: false

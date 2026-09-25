@@ -84,7 +84,7 @@ _DATE_PATTERN = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
 
 # Regex to detect advanced syntax context (for distinguishing /regex/ in syntax vs file paths)
 _ADVANCED_REGEX_CONTEXT = re.compile(
-    r'(?:^|\s)(?:\+|-)?(?:intitle|inurl|intext):/[^/]+/[a-z]*|' r'(?:^|\s)\+/[^/]+/[a-z]*|' r'(?:^|\s)-/[^/]+/[a-z]*',
+    r'(?:^|\s)(?:\+|-)?(?:intitle|inurl|intext):/[^/]+/[a-z]*|(?:^|\s)\+/[^/]+/[a-z]*|(?:^|\s)-/[^/]+/[a-z]*',
     re.IGNORECASE,
 )
 

@@ -21,6 +21,14 @@ interface CustomLink {
   url: string;
 }
 
+/** Per-result AI summary capability (zjsearch_ai): HMAC request token + the
+    configured model label.  Absent from globals when the feature is off or
+    unconfigured — the results UI hides its chips entirely then. */
+export interface AiCapability {
+  tk: string;
+  model: string;
+}
+
 export interface GlobalData {
   page: "index" | "results" | "preferences" | "stats" | "info" | "404" | "redirect" | "error";
   instance_name: string;
@@ -53,6 +61,7 @@ export interface GlobalData {
   about_url: string;
   search_syntax_url: string;
   rtl: boolean;
+  ai?: AiCapability;
 }
 
 // ------------------------------------------------------------------ results

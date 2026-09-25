@@ -11,7 +11,8 @@
 # origin/master is fetched from origin first), so the patch carries the whole
 # theme delta relative to master. The diff runs against the working tree, so
 # uncommitted edits are included (untracked files are not). Included paths:
-# client/zjsearch, searx/templates/zjsearch and every searx/ python change
+# client/zjsearch, searx/templates/zjsearch, requirements.txt and every
+# searx/ python change
 # (searx/static is excluded) - the templates alone are not enough: the
 # special-query answers (stats/hash/self-info/time-zone/random) carry their
 # structured *data* payloads from the python side, and new templates running
@@ -50,7 +51,7 @@ out=${2:-zjsearch-theme.patch}
 
 cd "$(dirname "$0")/../.."
 
-git diff --text "$base" -- client/zjsearch searx ':(exclude)searx/static' > "$out"
+git diff --text "$base" -- client/zjsearch searx requirements.txt ':(exclude)searx/static' > "$out"
 
 files=$(grep -c '^diff --git' "$out" || true)
 if [ "$files" = "0" ]; then
