@@ -153,6 +153,18 @@ zjsearch:
     #   sdk: gemini
     #   base_url: "https://generativelanguage.googleapis.com"
     #   model: "gemini-..."
-    extra_body:  # LM Studio / vLLM only -- drop it for online providers
-      chat_template_kwargs:
-        enable_thinking: false
+    # thinking-intensity knobs live in params under each SDK's own name:
+    #   openai_chat_completions -> reasoning_effort: low | medium | high
+    #   openai_responses        -> reasoning: {effort: low, summary: auto}
+    #                              (summary deltas surface in the thinking
+    #                              block; reasoning models only)
+    #   anthropic               -> thinking: {type: enabled, budget_tokens: 2048}
+    #   gemini                  -> thinking_config: {thinking_budget: 1024}
+    params:
+      reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
+    # NOTE: reasoning_effort and the LM Studio hard-off below are mutually
+    # exclusive -- sending an effort implies a reasoning request and
+    # re-enables thinking despite the template kwarg
+    # extra_body:  # LM Studio / vLLM only -- drop it for online providers
+    #   chat_template_kwargs:
+    #     enable_thinking: false
