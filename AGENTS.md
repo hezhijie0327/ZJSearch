@@ -254,6 +254,12 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   debounced fetch keys on the typed baseline, so navigation never
   re-fetches, and `event.nativeEvent.isComposing` short-circuits the whole
   handler — IME composition (pinyin candidates) owns Enter and the arrows.
+  While a suggestion is selected, a ghost mirror layer renders the typed
+  prefix in solid ink and the completion in ink-3 (the input's own text
+  goes transparent while it shows; the caret stays via caret-ink) — native
+  inputs cannot colour text spans, hence the overlay; the selection range
+  is still set with a transparent selection background so continued typing
+  replaces the suffix.
 - Bangs: category bangs (`!movies`), engine bangs (`!imdb`, one per engine
   `shortcut`) and external DDG bangs (`!!w`, redirect off-site — the SPA
   fetch fails cross-origin and falls back to a full page load, which is the
