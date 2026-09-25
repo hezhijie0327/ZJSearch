@@ -175,6 +175,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_answering: "回答中…",
   ai_answer_failed: "回答失败",
   ai_thinking: "思考过程",
+  ai_figure: "图表",
   regenerate: "重新生成",
   open_source: "打开来源",
 

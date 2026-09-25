@@ -5,17 +5,13 @@
 import "katex/dist/katex.min.css";
 
 import { ArrowUpRight, Brain, ChevronDown, Copy, RefreshCw, Sparkles } from "lucide-react";
-import type { CompileContext, Token } from "mdast-util-from-markdown";
-import type { Mark } from "mdast-util-mark";
-import { pandocMarkFromMarkdown } from "mdast-util-mark";
-import { pandocMark } from "micromark-extension-mark";
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
 import remarkDeflist from "remark-deflist";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
-import type { Data, PluggableList } from "unified";
+import type { PluggableList } from "unified";
 import { Collapse } from "@/components/Collapse.tsx";
 import { type AiSourceMeta, splitAnswerStream } from "@/features/results/aiAnswer.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
@@ -23,45 +19,11 @@ import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
-/** ==高亮==（Pandoc/Typora 风格）——ZJBlog 同款 micromark 微扩展，经标准注入
-    点挂进 remark-parse。data(key, value) 是整体替换而非追加，必须读出现有
-    列表再 push，否则会顶掉 remark-gfm / remark-math 已注册的扩展。mark 的
-    mdast 节点没有官方 hast handler，包装 enter.mark 补 data.hName（与 gfm
-    delete 同机制）。toMarkdown 无需 —— 本管线从不序列化回 markdown。 */
-function remarkMark(this: { data: () => Data }) {
-  const data = this.data() as Data & { micromarkExtensions?: unknown[]; fromMarkdownExtensions?: unknown[] };
-  data.micromarkExtensions ??= [];
-  data.micromarkExtensions.push(pandocMark());
-  const inner = pandocMarkFromMarkdown as {
-    canContainEols?: string[];
-    enter?: { mark?: (this: never, token: never) => Mark | undefined; [key: string]: unknown };
-    exit?: Record<string, unknown>;
-  };
-  const originalEnterMark = inner.enter?.mark;
-  data.fromMarkdownExtensions ??= [];
-  data.fromMarkdownExtensions.push({
-    canContainEols: inner.canContainEols,
-    enter: {
-      ...inner.enter,
-      // mdast-util-mark bundles drifted copies of the micromark types (nested
-      // node_modules) -- the runtime shape is identical, the handler boundary
-      // is cast once here
-      mark: function (this: CompileContext, token: Token) {
-        const node = originalEnterMark?.call(this as never, token as never) as Mark | undefined;
-        if (node) {
-          node.data ??= {};
-          node.data.hName = "mark";
-        }
-        return node;
-      },
-    },
-    exit: inner.exit,
-  });
-}
-
-/** 基础 remark 插件集（ZJBlog 同款语法集的轻量部分，随 results chunk 加载；
-    KaTeX 数学管线因体积懒加载，见 MarkdownAnswer）。 */
-const BASE_REMARK = [remarkGfm, remarkMark, remarkEmoji, remarkDeflist];
+/** 基础 remark 插件集 —— 系统 Prompt 实际广告的语法面（GFM / 表情 shortcode /
+    定义列表），随 results chunk 加载；KaTeX 数学管线因体积懒加载，见
+    MarkdownAnswer。不在 Prompt 里的扩展（如 ==mark==）刻意不装：模型不输出
+    它们，装了只是给不可信输出多开一条渲染路径。 */
+const BASE_REMARK = [remarkGfm, remarkEmoji, remarkDeflist];
 
 /**
  * The whole-page AI Overview.  The server puts an {@link AiCapability}
@@ -74,10 +36,9 @@ const BASE_REMARK = [remarkGfm, remarkMark, remarkEmoji, remarkDeflist];
  * starts, height-capped and tail-following inside), the answer is markdown
  * (GFM) rendered through react-markdown with [n] citations rewritten into
  * `#ref-n` links that the `a` override turns into favicon-domain chips
- * which click-jump to the matching result row.  Follow-up questions replay
- * the prior turns; the timeline switcher browses them.  The LLM call
- * happens on click only; before the first streamed byte errors answer as
- * clean HTTP statuses (403 / 422 / 502).
+ * which click-jump to the matching result row.  The LLM call happens on
+ * click only; before the first streamed byte errors answer as clean HTTP
+ * statuses (403 / 422 / 502).
  */
 
 export type AiAnswerPhase = "idle" | "streaming" | "done" | "error";
@@ -230,19 +191,40 @@ type MdProps = {
   [key: string]: unknown;
 };
 
-/** Rewrite [n] / [n,m] citations into `#ref-n` links (one link per number)
-    that the markdown `a` override renders as citation chips.  `[*]` stays
-    literal text. */
+/** One [n] / [n,m] match -> the `#ref-n` markdown links (one per number);
+    `[*]` stays literal text. */
+function rewriteCitation(match: string, group: string | undefined): string {
+  if (!group) {
+    return match;
+  }
+  return group
+    .split(/\s*[,，]\s*/)
+    .map((n: string) => `[${n}](#ref-${n})`)
+    .join("");
+}
+
+/** Rewrite [n] / [n,m] citations into `#ref-n` links that the markdown `a`
+    override renders as citation chips -- OUTSIDE code: the rewrite runs on
+    the raw markdown, so fenced blocks and inline spans must pass through
+    untouched (a `[1]` in a code example is an array index, not a source). */
 function citeToLinks(text: string): string {
-  return text.replace(CITATION, (_match, group) => {
-    if (!group) {
-      return _match;
-    }
-    return group
-      .split(/\s*[,，]\s*/)
-      .map((n: string) => `[${n}](#ref-${n})`)
-      .join("");
-  });
+  let inFence = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(?:```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) {
+        return line;
+      }
+      return line
+        .split(/(`[^`]*`)/)
+        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION, rewriteCitation)))
+        .join("");
+    })
+    .join("\n");
 }
 
 /** Compact [n] citation chip: hovering opens a floating preview panel with
@@ -395,12 +377,14 @@ let mermaidSeq = 0;
     (heavy) is imported only when a block actually exists, the theme follows
     the palette (html class watch -- a mid-view flip re-renders the svg),
     rendering waits for the viewport (300px buffer, tall diagrams below the
-    fold never pay), and a chart the parser rejects falls back to a plain
-    code block.  The card only mounts this once its stream has settled --
-    the fence grows chunk by chunk while streaming, and re-rendering the
-    SVG on every chunk reads as flicker (the streaming view is the code
-    fallback). */
+    fold never pay; beforeprint forces it so a print never shows empty
+    placeholders), and a chart the parser rejects falls back to a plain
+    code block (parse() runs first -- a failed render can litter the DOM).
+    The card only mounts this once its stream has settled -- the fence grows
+    chunk by chunk while streaming, and re-rendering the SVG on every chunk
+    reads as flicker (the streaming view is the code fallback). */
 function MermaidBlock({ chart }: { chart: string }) {
+  const t = useT();
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -429,6 +413,17 @@ function MermaidBlock({ chart }: { chart: string }) {
     };
   }, [nearViewport]);
 
+  // 打印时未滚动到的图是空占位 —— 尽力触发一次渲染
+  useEffect(() => {
+    const onBeforePrint = () => {
+      setNearViewport(true);
+    };
+    window.addEventListener("beforeprint", onBeforePrint);
+    return () => {
+      window.removeEventListener("beforeprint", onBeforePrint);
+    };
+  }, []);
+
   // 主题切换(html class 翻转,含 auto 跟随系统)后以新主题重渲
   useEffect(() => {
     const mo = new MutationObserver(() => {
@@ -448,7 +443,13 @@ function MermaidBlock({ chart }: { chart: string }) {
     const timer = window.setTimeout(async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: theme ? "dark" : "neutral" });
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          fontFamily: "var(--font-sans)",
+          theme: theme ? "dark" : "neutral",
+        });
+        await mermaid.parse(chart);
         const rendered = await mermaid.render(`zjs-mmd-${(mermaidSeq++).toString(36)}`, chart);
         if (!cancelled) {
           setSvg(rendered.svg);
@@ -467,8 +468,10 @@ function MermaidBlock({ chart }: { chart: string }) {
   if (svg) {
     return (
       <div
+        aria-label={t("ai_figure")}
         className="zjs-mermaid mt-2 overflow-x-auto rounded-xl bg-surface-2 p-3"
         dangerouslySetInnerHTML={{ __html: svg }}
+        role="img"
       />
     );
   }
@@ -543,20 +546,24 @@ function markdownComponents(
       ),
     dd: ({ children }) => <dd className="ms-5 text-ink-2">{children}</dd>,
     dt: ({ children }) => <dt className="mt-2 font-medium text-ink">{children}</dt>,
-    mark: ({ children }) => <mark className="rounded bg-accent-soft px-0.5 text-ink">{children}</mark>,
     h1: heading,
     h2: heading,
     h3: heading,
     img: ({ alt, src }) => (
       <img alt={alt ?? ""} className="my-2 max-w-full rounded-xl border border-line" loading="lazy" src={src} />
     ),
+    hr: () => <hr className="my-3 border-line" />,
     li: ({ children }) => (
       <li className="marker:text-accent" dir="auto">
         {children}
       </li>
     ),
-    ol: ({ children }) => <ol className="ms-5 list-decimal space-y-1">{children}</ol>,
-    p: ({ children }) => <p dir="auto">{children}</p>,
+    ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 ps-5 first:mt-0">{children}</ol>,
+    p: ({ children }) => (
+      <p className="my-2 first:mt-0" dir="auto">
+        {children}
+      </p>
+    ),
     pre: ({ children }) => {
       // a settled ```mermaid fence becomes a rendered diagram -- while the
       // stream is still growing into the fence it stays a code block (a
@@ -581,7 +588,7 @@ function markdownComponents(
     th: ({ children }) => (
       <th className="border border-line bg-surface-2 px-2 py-1 text-start font-medium">{children}</th>
     ),
-    ul: ({ children }) => <ul className="ms-5 list-disc space-y-1">{children}</ul>,
+    ul: ({ children }) => <ul className="my-2 list-disc space-y-1 ps-5 first:mt-0">{children}</ul>,
   };
 }
 

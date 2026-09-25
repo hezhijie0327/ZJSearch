@@ -6,7 +6,7 @@
  * reuse the same views per category in CategoryBlocks).
  */
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { AppsGrid } from "@/features/results/AppsGrid.tsx";
 import { CardList, entriesOf } from "@/features/results/CardList.tsx";
 import { CategoryBlocks } from "@/features/results/CategoryBlocks.tsx";
@@ -22,7 +22,10 @@ import { ProductGrid } from "@/features/results/ProductGrid.tsx";
 import { VideoGrid } from "@/features/results/VideoGrid.tsx";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
-export function ResultsView({
+/** memo: the AI answer streams through the page-level state -- every chunk
+    re-renders ResultsPage, and this tree (hundreds of result rows) must not
+    reconcile along; its props are stable references during a stream. */
+export const ResultsView = memo(function ResultsView({
   layout,
   results,
   globals,
@@ -100,7 +103,7 @@ export function ResultsView({
         ? "mt-2"
         : "mt-4";
   return <div className={wrapper}>{view}</div>;
-}
+});
 
 function DictionaryCardList({
   globals,
