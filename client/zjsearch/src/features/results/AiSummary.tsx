@@ -59,6 +59,8 @@ export interface AiAnswerState {
       timeline (history + current), which viewIndex points into */
   history: AiHistoryTurn[];
   viewIndex: number;
+  /** the question the live (newest) answer is replying to */
+  question: string;
   /** ask the question for the current results (or re-ask after an error) */
   start: (q: string, context: string, images?: string[]) => void;
   toggle: (q: string, context: string, images?: string[]) => void;
@@ -182,7 +184,20 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     setViewIndex(0);
   };
 
-  return { followUp, go, history, open, phase, regenerate, reset, start, text, toggle, viewIndex };
+  return {
+    followUp,
+    go,
+    history,
+    open,
+    phase,
+    question: lastAskRef.current?.q ?? "",
+    regenerate,
+    reset,
+    start,
+    text,
+    toggle,
+    viewIndex,
+  };
 }
 
 /** Meta-row entry (the 12px toggle tier of 「found N results · took X s」). */
@@ -581,6 +596,11 @@ export function AiAnswerCard({
   const think = viewingLatest ? live.think : "";
   const thinking = viewingLatest ? live.thinking : false;
   const answer = viewingLatest ? live.answer : (state.history[viewIndex]?.a ?? "");
+  // chat mode (follow-ups exist): every turn shows the question it answers
+  // as a right-aligned user bubble -- the live view carries the question
+  // being answered, historical turns their own
+  const question = viewingLatest ? state.question : (state.history[viewIndex]?.q ?? "");
+  const showQuestion = total > 1 && question.trim().length > 0;
   const hasThink = think.trim().length > 0;
   const hasAnswer = answer.trim().length > 0;
   const streaming = state.phase === "streaming";
@@ -734,6 +754,13 @@ export function AiAnswerCard({
             }}
           >
             <div ref={overviewRef}>
+              {showQuestion ? (
+                <div className="mb-2 flex justify-end">
+                  <div className="max-w-[85%] rounded-2xl rounded-ee-md bg-surface-2 px-4 py-2.5 text-sm text-ink">
+                    {question}
+                  </div>
+                </div>
+              ) : null}
               <MarkdownAnswer markdown={markdown} meta={sourceMeta} onCite={onCite} settled={state.phase === "done"} />
             </div>
             {needsClamp ? (
