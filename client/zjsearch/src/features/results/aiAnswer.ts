@@ -108,3 +108,44 @@ export function splitAnswerStream(text: string): { think: string; answer: string
     thinking: false,
   };
 }
+
+/** The citation grammar the renderer rewrites: [n], [n,m] (also full-width
+    commas) and the common-knowledge [*].  Shared by the citation-link
+    rewriting (AiSummary) and the cited-sources extraction below. */
+export const CITATION_RE = /\[(\d+(?:\s*[,，]\s*\d+)*)\]|\[\*\]/g;
+
+/** The source numbers actually cited in a settled answer — the same [n] /
+    [n,m] grammar the renderer rewrites, with the same skips: fenced code
+    blocks and inline spans hold array indexes, not citations.  1-based;
+    sorted, deduped. */
+export function citedSourceNumbers(answer: string): number[] {
+  const out = new Set<number>();
+  let inFence = false;
+  for (const line of answer.split("\n")) {
+    if (/^\s*(?:```|~~~)/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+    for (const part of line.split(/(`[^`]*`)/)) {
+      if (part.startsWith("`")) {
+        continue;
+      }
+      for (const match of part.matchAll(CITATION_RE)) {
+        const group = match[1];
+        if (!group) {
+          continue; // [*] — common knowledge, no source behind it
+        }
+        for (const n of group.split(/\s*[,，]\s*/)) {
+          const num = Number.parseInt(n, 10);
+          if (Number.isInteger(num) && num > 0) {
+            out.add(num);
+          }
+        }
+      }
+    }
+  }
+  return [...out].sort((a, b) => a - b);
+}

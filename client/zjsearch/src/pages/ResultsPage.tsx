@@ -9,7 +9,13 @@ import { HeaderActions, Link, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
-import { aiSourceMeta, buildAiContext, collectAiImages } from "@/features/results/aiAnswer.ts";
+import {
+  aiSourceMeta,
+  buildAiContext,
+  citedSourceNumbers,
+  collectAiImages,
+  splitAnswerStream,
+} from "@/features/results/aiAnswer.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
 import { CacheUrlProvider } from "@/features/results/CacheUrlProvider.tsx";
@@ -245,30 +251,40 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const aiMeta = useMemo(() => aiSourceMeta(allResults), [allResults]);
 
   // Quick Answer citation [n] → the n-th result of the flat list the answer
-  // context was built from; its card is found through the result link (every
-  // card view renders one) and flashed while scrolled into view.
-  // useCallback keeps the identity stable for the memoized answer body.
+  // context was built from.  The cited indices live in STATE (not bare DOM
+  // attributes) so the dashed frames can be cleared when the answer they
+  // belong to is replaced, and re-applied when React recreates a marked
+  // card's DOM (category blocks unmount while folded).
+  const [aiCited, setAiCited] = useState<ReadonlySet<number>>(() => new Set());
+  const findResultCard = useCallback((index: number, result: ResultItem): HTMLElement | null => {
+    const list = listRef.current;
+    if (!list) {
+      return null;
+    }
+    // text cards anchor through their result link, grid tiles through
+    // data-hotkey-index (the global result index) or the image tiles'
+    // data-ai-url (present even when a thumbnail failed to load)
+    const probe =
+      list.querySelector(`a[href="${CSS.escape(result.url)}"]`) ??
+      list.querySelector(`[data-hotkey-index="${index}"]`) ??
+      list.querySelector(`[data-ai-url="${CSS.escape(result.url)}"]`);
+    return probe?.closest<HTMLElement>("article, [data-hotkey-index], button") ?? null;
+  }, []);
+
   const jumpToAiSource = useCallback(
     (index: number): boolean => {
       const result = allResults[index - 1];
-      if (!result || !listRef.current) {
+      if (!result) {
         return false;
       }
-      // text cards anchor through their result link, grid tiles through
-      // data-hotkey-index (the global result index) or the image tiles'
-      // data-ai-url (present even when a thumbnail failed to load)
-      const probe =
-        listRef.current.querySelector(`a[href="${CSS.escape(result.url)}"]`) ??
-        listRef.current.querySelector(`[data-hotkey-index="${index - 1}"]`) ??
-        listRef.current.querySelector(`[data-ai-url="${CSS.escape(result.url)}"]`);
-      const card = probe?.closest<HTMLElement>("article, [data-hotkey-index], button");
+      const card = findResultCard(index - 1, result);
       if (!card) {
         return false;
       }
       card.scrollIntoView({ block: "start", behavior: scrollBehavior() });
-      // the dashed frame persists — an accumulating set of the results the
+      // the dashed frame persists — the accumulating set of the results the
       // AI cited; the tint flash below is the one-shot locate highlight
-      card.setAttribute("data-ai-cited", "");
+      setAiCited((prev) => new Set(prev).add(index - 1));
       if (flashTimer.current !== null) {
         window.clearTimeout(flashTimer.current);
       }
@@ -283,8 +299,47 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       }, 1900);
       return true;
     },
-    [allResults],
+    [allResults, findResultCard],
   );
+
+  // the marks belong to the answer that produced them: a fresh ask (new
+  // question, regenerate) and every new search payload drop the set
+  // biome-ignore lint/correctness/useExhaustiveDependencies: data is the commit key — a new payload invalidates the marks even mid-idle
+  useEffect(() => {
+    if (aiAnswer.phase === "streaming") {
+      setAiCited(new Set());
+    }
+  }, [aiAnswer.phase, data]);
+
+  // as soon as the answer settles, mark EVERY result it actually cites —
+  // the cited source numbers are parsed from the settled answer text with
+  // the same grammar (and code-block skips) the renderer uses
+  useEffect(() => {
+    if (aiAnswer.phase !== "done") {
+      return;
+    }
+    const { answer } = splitAnswerStream(aiAnswer.text);
+    setAiCited(new Set(citedSourceNumbers(answer).map((n) => n - 1)));
+  }, [aiAnswer.phase, aiAnswer.text]);
+
+  // (re-)apply the frames from the set — idempotent, so it doubles as the
+  // re-marker for cards whose DOM was recreated while folded
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) {
+      return;
+    }
+    for (const el of [...list.querySelectorAll("[data-ai-cited]")]) {
+      if (!aiCited.has(Number(el.getAttribute("data-ai-cited")))) {
+        el.removeAttribute("data-ai-cited");
+      }
+    }
+    for (const index of aiCited) {
+      const result = allResults[index];
+      const card = result ? findResultCard(index, result) : null;
+      card?.setAttribute("data-ai-cited", String(index));
+    }
+  }, [aiCited, allResults, findResultCard]);
   const layout = useMemo(
     () => detectResultsLayout(data, selectedCategories, allResults),
     [data, selectedCategories, allResults],

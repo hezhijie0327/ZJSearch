@@ -14,7 +14,7 @@ import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
-import { type AiSourceMeta, splitAnswerStream } from "@/features/results/aiAnswer.ts";
+import { type AiSourceMeta, CITATION_RE, splitAnswerStream } from "@/features/results/aiAnswer.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -184,8 +184,6 @@ function CopyChip({ value }: { value: string }) {
 
 const OVERVIEW_PREVIEW_PX = 224;
 
-const CITATION = /\[(\d+(?:\s*[,，]\s*\d+)*)\]|\[\*\]/g;
-
 /** The props react-markdown hands to component overrides (hast props, whose
     shape varies per tag -- hence the index signature). */
 type MdProps = {
@@ -227,7 +225,7 @@ function citeToLinks(text: string): string {
       }
       return line
         .split(/(`[^`]*`)/)
-        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION, rewriteCitation)))
+        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION_RE, rewriteCitation)))
         .join("");
     })
     .join("\n");
