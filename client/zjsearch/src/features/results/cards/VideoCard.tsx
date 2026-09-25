@@ -10,6 +10,7 @@ import {
   PrettyUrl,
   ResultArticle,
   ResultLink,
+  Snippet,
   Thumb,
   Title,
 } from "@/features/results/cardParts.tsx";
@@ -37,11 +38,7 @@ export function VideoCard({ eager, result, globals }: CardProps) {
               <MediaPreview src={result.iframe_src ?? ""} video />
             </div>
           ) : null}
-          <p
-            className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink-2"
-            dangerouslySetInnerHTML={{ __html: result.content_html || t("no_description") }}
-            dir="auto"
-          />
+          <Snippet className="mt-1.5" contentHtml={result.content_html || t("no_description")} />
         </div>
         {result.thumbnail ? (
           // the player replaces the thumbnail in place - same behaviour as

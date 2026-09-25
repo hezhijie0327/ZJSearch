@@ -9,6 +9,7 @@ import {
   PrettyUrl,
   ResultArticle,
   ResultLink,
+  Snippet,
   Thumb,
   Title,
 } from "@/features/results/cardParts.tsx";
@@ -39,13 +40,7 @@ export function DefaultCard({ eager, result, globals }: CardProps) {
               </MediaCollapse>
             </div>
           ) : null}
-          <p
-            className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink-2"
-            dangerouslySetInnerHTML={{
-              __html: result.content_html || t("no_description"),
-            }}
-            dir="auto"
-          />
+          <Snippet className="mt-1.5" contentHtml={result.content_html || t("no_description")} />
           {result.audio_src ? (
             <audio className="mt-2 w-full max-w-md" controls preload="none" src={result.audio_src} />
           ) : null}

@@ -7,6 +7,7 @@ import {
   MetaLine,
   PrettyUrl,
   ResultArticle,
+  Snippet,
   Title,
 } from "@/features/results/cardParts.tsx";
 import { MapResult } from "@/features/results/MapView.tsx";
@@ -30,13 +31,7 @@ export function MapCard({ result, globals, autoOpenMap }: CardProps) {
       <div className="mt-1">
         <MetaLine result={result} />
       </div>
-      {result.content_html ? (
-        <p
-          className="mt-1.5 line-clamp-2 max-w-prose text-sm leading-relaxed text-ink-2"
-          dangerouslySetInnerHTML={{ __html: result.content_html }}
-          dir="auto"
-        />
-      ) : null}
+      {result.content_html ? <Snippet className="mt-1.5 max-w-prose" contentHtml={result.content_html} /> : null}
       {addressLine ? (
         <p className="mt-2 flex items-start gap-1 text-sm text-ink-2">
           <MapPin className="mt-0.5 size-3.5 shrink-0 text-ink-3" />

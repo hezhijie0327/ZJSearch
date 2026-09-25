@@ -7,6 +7,7 @@ import {
   MediaCollapse,
   PrettyUrl,
   ResultArticle,
+  Snippet,
   Title,
 } from "@/features/results/cardParts.tsx";
 import { useT } from "@/lib/i18n.ts";
@@ -57,20 +58,8 @@ export function FileCard({ result, globals }: CardProps) {
                 </span>
               ))}
           </div>
-          {result.abstract_html ? (
-            <p
-              className="mt-1.5 line-clamp-2 max-w-prose text-sm leading-relaxed text-ink-2"
-              dangerouslySetInnerHTML={{ __html: result.abstract_html }}
-              dir="auto"
-            />
-          ) : null}
-          {result.content_html ? (
-            <p
-              className="mt-1.5 line-clamp-2 max-w-prose text-sm leading-relaxed text-ink-2"
-              dangerouslySetInnerHTML={{ __html: result.content_html }}
-              dir="auto"
-            />
-          ) : null}
+          {result.abstract_html ? <Snippet className="mt-1.5 max-w-prose" contentHtml={result.abstract_html} /> : null}
+          {result.content_html ? <Snippet className="mt-1.5 max-w-prose" contentHtml={result.content_html} /> : null}
           {result.embedded ? (
             isMedia ? (
               result.mtype === "video" ? (

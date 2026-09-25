@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { ArrowDown, ArrowUp, Calendar, Download, FileText, Magnet, Package } from "lucide-react";
-import { type CardProps, EnginesLine, PrettyUrl, ResultArticle, Title } from "@/features/results/cardParts.tsx";
+import {
+  type CardProps,
+  EnginesLine,
+  PrettyUrl,
+  ResultArticle,
+  Snippet,
+  Title,
+} from "@/features/results/cardParts.tsx";
 import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { CHIP, META_ROW } from "@/lib/styles.ts";
@@ -69,13 +76,7 @@ export function TorrentCard({ result, globals }: CardProps) {
               </span>
             ) : null}
           </div>
-          {result.content_html ? (
-            <p
-              className="mt-1.5 line-clamp-2 max-w-prose text-sm leading-relaxed text-ink-2"
-              dangerouslySetInnerHTML={{ __html: result.content_html }}
-              dir="auto"
-            />
-          ) : null}
+          {result.content_html ? <Snippet className="mt-1.5 max-w-prose" contentHtml={result.content_html} /> : null}
           {result.torrentfile ? (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               <a className={`${CHIP} text-ink-2 transition-colors hover:text-ink`} href={result.torrentfile}>
