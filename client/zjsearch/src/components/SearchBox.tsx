@@ -209,14 +209,15 @@ export function SearchBox({
   };
 
   const showDropdown = open && suggestions.length > 0;
-  /** the navigated suggestion split for the ghost layer: typed prefix solid,
-      completion muted (null when no suggestion is actively selected, or the
-      suggestion doesn't extend the typed prefix — then nothing is ghosted
-      and the input keeps its plain ink text) */
-  const ghost =
-    open && active >= 0 && suggestions[active]?.text.startsWith(typed)
-      ? { typed, completion: suggestions[active].text.slice(typed.length) }
-      : null;
+  /** the navigated suggestion split for the ghost layer: the typed prefix
+      solid, the completion muted.  Case-INSENSITIVE prefix check — "Tes"
+      still ghosts against "testicular torsion"; the ghost's solid span
+      carries the suggestion's own casing so the mirror matches the input
+      value exactly.  Non-extending suggestions just show plain ink text. */
+  const activeSuggestion = open && active >= 0 ? suggestions[active] : undefined;
+  const ghost = activeSuggestion?.text.toLowerCase().startsWith(typed.toLowerCase())
+    ? { typed: activeSuggestion.text.slice(0, typed.length), completion: activeSuggestion.text.slice(typed.length) }
+    : null;
   // the list stays mounted through its fade-out window; render the last
   // non-empty suggestion set so a mid-exit fetch clearing `suggestions`
   // cannot collapse the fading panel into an empty bordered box
@@ -262,8 +263,8 @@ export function SearchBox({
             aria-label={t("search")}
             autoCapitalize="none"
             autoComplete="off"
-            className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${
-              ghost ? "text-transparent caret-ink selection:bg-transparent" : ""
+            className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 selection:bg-transparent ${
+              ghost ? "text-transparent caret-ink" : ""
             }`}
             dir="auto"
             name="q"

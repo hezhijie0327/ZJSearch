@@ -259,7 +259,11 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   goes transparent while it shows; the caret stays via caret-ink) — native
   inputs cannot colour text spans, hence the overlay; the selection range
   is still set with a transparent selection background so continued typing
-  replaces the suffix.
+  replaces the suffix.  The prefix check is CASE-INSENSITIVE (the ghost's
+  solid span takes the suggestion's own casing) and `selection:bg-transparent`
+  sits on the input UNCONDITIONALLY — the site's global accent ::selection
+  would otherwise paint the fallback path (a suggestion that does not extend
+  the typed prefix) with a tan block.
 - Bangs: category bangs (`!movies`), engine bangs (`!imdb`, one per engine
   `shortcut`) and external DDG bangs (`!!w`, redirect off-site — the SPA
   fetch fails cross-origin and falls back to a full page load, which is the
