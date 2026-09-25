@@ -1,4 +1,11 @@
-import { type CardProps, EnginesLine, PrettyUrl, ResultArticle, Title } from "@/features/results/cardParts.tsx";
+import {
+  type CardProps,
+  EnginesLine,
+  PrettyUrl,
+  ResultArticle,
+  Snippet,
+  Title,
+} from "@/features/results/cardParts.tsx";
 import { useT } from "@/lib/i18n.ts";
 
 export function CodeCard({ result, globals }: CardProps) {
@@ -27,13 +34,7 @@ export function CodeCard({ result, globals }: CardProps) {
           </a>
         </p>
       ) : null}
-      {result.content_html ? (
-        <p
-          className="mt-1.5 line-clamp-2 max-w-prose text-sm leading-relaxed text-ink-2"
-          dangerouslySetInnerHTML={{ __html: result.content_html }}
-          dir="auto"
-        />
-      ) : null}
+      {result.content_html ? <Snippet className="mt-1.5 max-w-prose" contentHtml={result.content_html} /> : null}
       {result.code_html ? (
         <pre
           className="mt-2 max-h-96 overflow-auto rounded-xl border border-line bg-surface-2 p-4 font-mono text-xs leading-relaxed"

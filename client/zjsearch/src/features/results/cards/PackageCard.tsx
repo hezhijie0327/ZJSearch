@@ -3,7 +3,14 @@
 import { Calendar, Code, ExternalLink, Scale, Star, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
-import { type CardProps, EnginesLine, PrettyUrl, ResultArticle, Title } from "@/features/results/cardParts.tsx";
+import {
+  type CardProps,
+  EnginesLine,
+  PrettyUrl,
+  ResultArticle,
+  Snippet,
+  Title,
+} from "@/features/results/cardParts.tsx";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { CHIP, CHIP_HOVER, META_ROW } from "@/lib/styles.ts";
@@ -78,13 +85,7 @@ export function PackageCard({ result, globals }: CardProps) {
           {result.version ? <span key="version">v{result.version}</span> : null}
         </div>
       ) : null}
-      {result.content_html ? (
-        <p
-          className="mt-1.5 line-clamp-2 max-w-prose text-sm leading-relaxed text-ink-2"
-          dangerouslySetInnerHTML={{ __html: result.content_html }}
-          dir="auto"
-        />
-      ) : null}
+      {result.content_html ? <Snippet className="mt-1.5 max-w-prose" contentHtml={result.content_html} /> : null}
       {result.tags && result.tags.length > 0 ? (
         <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs">
           {result.tags.slice(0, tagsExpanded ? result.tags.length : 4).map((tag) => (

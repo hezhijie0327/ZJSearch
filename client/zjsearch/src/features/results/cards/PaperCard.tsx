@@ -9,6 +9,7 @@ import {
   PrettyUrl,
   ResultArticle,
   ResultLink,
+  Snippet,
   Thumb,
   Title,
 } from "@/features/results/cardParts.tsx";
@@ -101,13 +102,7 @@ export function PaperCard({ result, globals }: CardProps) {
               ))}
             </p>
           ) : null}
-          {result.content_html ? (
-            <p
-              className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink-2"
-              dangerouslySetInnerHTML={{ __html: result.content_html }}
-              dir="auto"
-            />
-          ) : null}
+          {result.content_html ? <Snippet className="mt-1.5" contentHtml={result.content_html} /> : null}
           {hasFooter ? (
             // two stacked rows: actions + DOI, then topic tags as pills
             // with a +N fold - nothing truncates against its neighbours

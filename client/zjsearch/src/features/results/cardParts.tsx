@@ -1,7 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Archive, Award, Calendar, Clock, Eye, Globe, ImageOff, Music, Play, Server, User } from "lucide-react";
-import { type ReactNode, useId, useState } from "react";
+import {
+  Archive,
+  Award,
+  Calendar,
+  ChevronDown,
+  Clock,
+  Eye,
+  Globe,
+  ImageOff,
+  Music,
+  Play,
+  Server,
+  User,
+} from "lucide-react";
+import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { useCacheUrl } from "@/features/results/CacheUrlProvider.tsx";
@@ -363,6 +376,117 @@ export interface CardProps {
     (url / mt-1 title / mt-1.5 snippet ×2 / mt-2 engines pill) so the swap to
     the real cards does not shift heights.  The streamed server skeleton
     (skeleton.html) mirrors these bars — keep both in sync. */
+/** Collapsed snippet preview: 2 lines of text-sm/leading-relaxed (22.75px
+    each) — 46px is the exact rendered height, so the ease lands without a
+    final snap when the clamp takes over. */
+const SNIPPET_PREVIEW_PX = 46;
+
+export function Snippet({ className = "", contentHtml }: { className?: string; contentHtml: string }) {
+  const t = useT();
+  const ref = useRef<HTMLParagraphElement | null>(null);
+  const [overflow, setOverflow] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(true);
+  /** pixel cap while the expand/collapse ease plays (null = unbounded) */
+  const [animPx, setAnimPx] = useState<number | null>(null);
+
+  // new content resets to the collapsed preview
+  // biome-ignore lint/correctness/useExhaustiveDependencies: contentHtml keys the reset — re-run only when the snippet text changes
+  useLayoutEffect(() => {
+    setExpanded(false);
+    setClamped(true);
+    setAnimPx(null);
+    setOverflow(false);
+  }, [contentHtml]);
+
+  // overflow = the text needs more than the 2-line preview; re-checked
+  // whenever the collapsed box re-flows (rail appearing, container queries
+  // change the column width).  Only the collapsed idle state measures —
+  // touching the states mid-ease would kill the animation, and an expanded
+  // snippet simply keeps its toggle.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: contentHtml is the commit key — the fresh text must be re-measured
+  useLayoutEffect(() => {
+    if (expanded || animPx !== null || !clamped) {
+      return;
+    }
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    setOverflow(el.scrollHeight > el.clientHeight + 1);
+    const ro = new ResizeObserver(() => {
+      setOverflow(el.scrollHeight > el.clientHeight + 1);
+    });
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+    };
+  }, [contentHtml, expanded, animPx, clamped]);
+
+  const easeFrames = (apply: () => void) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(apply);
+    });
+  };
+
+  const toggle = () => {
+    const el = ref.current;
+    if (!el) {
+      return;
+    }
+    if (expanded) {
+      // collapse: pin the full height, ease down to the preview, re-clamp at
+      // the end (the label flips immediately)
+      setAnimPx(el.scrollHeight);
+      easeFrames(() => {
+        setAnimPx(SNIPPET_PREVIEW_PX);
+      });
+    } else {
+      // expand: pin the preview height, lift the clamp, ease up, drop the cap
+      setAnimPx(el.clientHeight);
+      easeFrames(() => {
+        setClamped(false);
+        setAnimPx(el.scrollHeight);
+      });
+    }
+    setExpanded(!expanded);
+  };
+
+  return (
+    <div className={className}>
+      <p
+        className={`text-sm leading-relaxed text-ink-2 transition-[max-height] duration-300 ease-out ${clamped && animPx === null ? "line-clamp-2" : ""}`}
+        dangerouslySetInnerHTML={{ __html: contentHtml }}
+        dir="auto"
+        onTransitionEnd={(event) => {
+          if (event.propertyName !== "max-height") {
+            return;
+          }
+          if (expanded) {
+            setAnimPx(null); // fully revealed: late growth must not sit under a stale cap
+          } else {
+            setClamped(true);
+            setAnimPx(null);
+          }
+        }}
+        ref={ref}
+        style={{ maxHeight: animPx ?? undefined }}
+      />
+      {overflow || expanded ? (
+        <button
+          aria-expanded={expanded}
+          className="mt-0.5 inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
+          onClick={toggle}
+          type="button"
+        >
+          {expanded ? t("collapse") : t("expand")}
+          <ChevronDown className={`size-3 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function ResultSkeleton() {
   return (
     <div className="rounded-2xl p-4">

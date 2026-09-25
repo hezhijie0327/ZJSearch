@@ -8,6 +8,7 @@ import {
   PrettyUrl,
   ResultArticle,
   ResultLink,
+  Snippet,
   Thumb,
   Title,
 } from "@/features/results/cardParts.tsx";
@@ -46,13 +47,7 @@ export function ProductCard({ result, globals }: CardProps) {
               </span>
             ) : null}
           </div>
-          {result.content_html ? (
-            <p
-              className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-ink-2"
-              dangerouslySetInnerHTML={{ __html: result.content_html }}
-              dir="auto"
-            />
-          ) : null}
+          {result.content_html ? <Snippet className="mt-1.5" contentHtml={result.content_html} /> : null}
         </div>
         {result.thumbnail ? (
           <ResultLink className="ms-auto shrink-0 self-start" globals={globals} result={result}>
