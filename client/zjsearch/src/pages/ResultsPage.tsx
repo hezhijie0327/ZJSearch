@@ -442,13 +442,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               </>
             ) : null}
 
-            {!showSkeletons && data.infoboxes.length > 0 ? (
-              <div className="mt-3 flex flex-col gap-3 lg:hidden">
-                {data.infoboxes.map((infobox) => (
-                  <Infobox globals={globals} infobox={infobox} key={infobox.title} onSearch={submitQuery} />
-                ))}
-              </div>
-            ) : null}
             {error ? (
               <div
                 className="mb-4 rounded-2xl border border-danger/30 bg-danger/10 p-4 text-sm text-danger"
@@ -472,6 +465,17 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                   {calc ? <CalculatorAnswer calc={calc} /> : null}
                   <Answers answers={data.answers} query={data.q} />
                 </div>
+
+                {/* mobile knowledge panel: after the instant answers so the
+                    AI Overview leads the page (the desktop rail shows it
+                    beside the results instead) */}
+                {!showSkeletons && data.infoboxes.length > 0 ? (
+                  <div className="mt-3 flex flex-col gap-3 lg:hidden">
+                    {data.infoboxes.map((infobox) => (
+                      <Infobox globals={globals} infobox={infobox} key={infobox.title} onSearch={submitQuery} />
+                    ))}
+                  </div>
+                ) : null}
 
                 {allResults.length === 0 && data.answers.length === 0 ? (
                   <div className="mt-6">
