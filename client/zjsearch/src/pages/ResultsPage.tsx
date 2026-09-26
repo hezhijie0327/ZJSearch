@@ -39,6 +39,10 @@ import { useHasPlugin, useSettings } from "@/lib/settings.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
+/** stable empty set: the derived aiCited must not churn the apply effect
+    when the marks are invalidated (a fresh identity per render would) */
+const EMPTY_AI_CITED: ReadonlySet<number> = new Set();
+
 export function ResultsPage({ data }: { data: SearchPageData }) {
   const t = useT();
   const copyToast = useCopyToast();
@@ -80,11 +84,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const aiAnswer = useAiAnswer(globals.ai, uiLocale || globals.locale || "en");
 
   // re-sync filters after any navigation (back/forward, payload change);
-  // a new search invalidates the Quick Answer
+  // a new search invalidates the Quick Answer and its citation marks
   // biome-ignore lint/correctness/useExhaustiveDependencies: URL is the source of truth
   useEffect(() => {
     setFilterValues(filterValuesFrom());
     aiAnswer.reset();
+    setAiMarks(null);
   }, [href]);
 
   const settings = useSettings();
@@ -94,6 +99,8 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const [hotkeysSelected, setHotkeysSelected] = useState(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
   const flashTimer = useRef<number | null>(null);
+  const hrefRef = useRef(href);
+  hrefRef.current = href;
   const [appended, setAppended] = useState<ResultItem[]>([]);
   const [appendState, setAppendState] = useState<"idle" | "loading" | "error" | "done">("idle");
   const appendedHref = useRef(href);
@@ -251,11 +258,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const aiMeta = useMemo(() => aiSourceMeta(allResults), [allResults]);
 
   // Quick Answer citation [n] → the n-th result of the flat list the answer
-  // context was built from.  The cited indices live in STATE (not bare DOM
-  // attributes) so the dashed frames can be cleared when the answer they
-  // belong to is replaced, and re-applied when React recreates a marked
-  // card's DOM (category blocks unmount while folded).
-  const [aiCited, setAiCited] = useState<ReadonlySet<number>>(() => new Set());
+  // context was built from.  The cited indices live in STATE keyed to the
+  // search they were cited in (href): a new search invalidates them in the
+  // same render (no flash of stale frames on the new results), and the
+  // frames re-apply when React recreates a marked card's DOM (category
+  // blocks unmount while folded).
+  const [aiMarks, setAiMarks] = useState<{ href: string; indices: ReadonlySet<number> } | null>(null);
+  const aiCited = aiMarks && aiMarks.href === href ? aiMarks.indices : EMPTY_AI_CITED;
   const findResultCard = useCallback((index: number, result: ResultItem): HTMLElement | null => {
     const list = listRef.current;
     if (!list) {
@@ -284,7 +293,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       card.scrollIntoView({ block: "start", behavior: scrollBehavior() });
       // the dashed frame persists — the accumulating set of the results the
       // AI cited; the tint flash below is the one-shot locate highlight
-      setAiCited((prev) => new Set(prev).add(index - 1));
+      setAiMarks({ href, indices: new Set(aiCited).add(index - 1) });
       if (flashTimer.current !== null) {
         window.clearTimeout(flashTimer.current);
       }
@@ -299,27 +308,30 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       }, 1900);
       return true;
     },
-    [allResults, findResultCard],
+    [allResults, findResultCard, aiCited, href],
   );
 
-  // the marks belong to the answer that produced them: a fresh ask (new
-  // question, regenerate) and every new search payload drop the set
-  // biome-ignore lint/correctness/useExhaustiveDependencies: data is the commit key — a new payload invalidates the marks even mid-idle
+  // the marks belong to the answer that produced them: a fresh ask
+  // (new question, regenerate) drops the set; the new search invalidation
+  // is the derived aiCited above (href identity)
   useEffect(() => {
     if (aiAnswer.phase === "streaming") {
-      setAiCited(new Set());
+      setAiMarks(null);
     }
-  }, [aiAnswer.phase, data]);
+  }, [aiAnswer.phase]);
 
   // as soon as the answer settles, mark EVERY result it actually cites —
   // the cited source numbers are parsed from the settled answer text with
-  // the same grammar (and code-block skips) the renderer uses
+  // the same grammar (and code-block skips) the renderer uses.  The marks
+  // carry the href CURRENT at settle time (via ref — re-running on href
+  // would resurrect the previous answer's citations onto a new search's
+  // results).
   useEffect(() => {
     if (aiAnswer.phase !== "done") {
       return;
     }
     const { answer } = splitAnswerStream(aiAnswer.text);
-    setAiCited(new Set(citedSourceNumbers(answer).map((n) => n - 1)));
+    setAiMarks({ href: hrefRef.current, indices: new Set(citedSourceNumbers(answer).map((n) => n - 1)) });
   }, [aiAnswer.phase, aiAnswer.text]);
 
   // (re-)apply the frames from the set — idempotent, so it doubles as the
