@@ -8,7 +8,7 @@ import type { DropdownOption } from "@/components/Dropdown.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
 import { languageOptions, useT } from "@/lib/i18n.ts";
-import { scrollBehavior } from "@/lib/motion.ts";
+import { animateScroll } from "@/lib/motion.ts";
 import { useSettings } from "@/lib/settings.ts";
 import { SCROLLBAR_NONE, SCROLLBAR_NONE_SM } from "@/lib/styles.ts";
 import type { GlobalData } from "@/lib/types.ts";
@@ -40,12 +40,15 @@ export function CategoryTabs({ globals, selected, onSelectionChange, onSearch, w
   // "nothing selected".  Centering is a no-op while the row fits.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-center when the selection changes
   useLayoutEffect(() => {
-    if (wrap) {
+    const strip = scrollerRef.current;
+    if (wrap || !strip) {
       return;
     }
-    scrollerRef.current
-      ?.querySelector('button[aria-pressed="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "center", behavior: scrollBehavior() });
+    const tab = strip.querySelector<HTMLElement>('button[aria-pressed="true"]');
+    if (!tab) {
+      return;
+    }
+    animateScroll(strip, { left: tab.offsetLeft + tab.offsetWidth / 2 - strip.clientWidth / 2 });
   }, [wrap, selected]);
 
   const toggle = (category: string) => {

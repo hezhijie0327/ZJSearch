@@ -293,10 +293,18 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   sidebar Search-URL box (POST only) shows the shareable URL rebuilt from
   the page payload via `buildSearchUrl`.
 - Respect `prefers-reduced-motion`: the `styles/behaviors.css` guard covers CSS
-  transitions/animations, but JS-initiated smooth scrolling (BackToTop,
-  hotkey navigation, suggestion pager) must pass `scrollBehavior()` from
-  `src/lib/motion.ts` as its `behavior` — the stylesheet cannot reach it
-  (the module also exports `reducedMotion()` for durations).
+  transitions/animations, but it cannot reach JS-initiated scrolling — and
+  native `behavior: "smooth"` is NOT a safe primitive anyway: webviews built
+  with smooth scrolling disabled (embedded browsers, some in-app engines)
+  SILENTLY DROP every smooth scroll (`scrollTo`, `scrollIntoView`, CSS
+  `scroll-behavior` alike no-op — the scroll never happens at all; this
+  broke citation jumps, hotkeys and BackToTop in the ZCode in-app browser).
+  Every programmatic scroll goes through `animateScroll` /
+  `scrollIntoViewAnimated` (`src/lib/motion.ts`), which tween instant
+  scrolls per frame (works everywhere, one easing/duration across browsers,
+  cancels on user wheel/touch/key input, instant under reduced motion).
+  Never call `scrollIntoView`/`scrollTo` with `behavior: "smooth"` in theme
+  code (the module also exports `reducedMotion()` for durations).
   RTL uses Tailwind logical properties (`ps-`, `me-`, `start-`, `end-`)
   against a single stylesheet; `translate-x` is NOT logical — pair it with
   the `rtl:` variant when direction matters (see the Switch knob).

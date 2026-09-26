@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n.ts";
-import { scrollBehavior } from "@/lib/motion.ts";
+import { animateScroll } from "@/lib/motion.ts";
 import { DISABLED, PILL, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import type { SearchPageData } from "@/lib/types.ts";
 
@@ -42,7 +42,7 @@ export function SuggestionsBox({ data, onSearch }: { data: SearchPageData; onSea
     if (!strip) {
       return;
     }
-    strip.scrollBy({ left: direction * strip.clientWidth * 0.8, behavior: scrollBehavior() });
+    animateScroll(strip, { left: strip.scrollLeft + direction * strip.clientWidth * 0.8 });
   };
 
   // buttons are persistent so flipping state never shifts the chips; a
