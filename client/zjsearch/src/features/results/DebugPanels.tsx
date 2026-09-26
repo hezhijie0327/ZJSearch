@@ -30,7 +30,7 @@ import { downloadResults } from "@/lib/exporters.ts";
 import { round1 } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { isModifiedClick } from "@/lib/link.ts";
-import { META_TOGGLE, PILL } from "@/lib/styles.ts";
+import { META_TOGGLE, PILL, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 
@@ -87,7 +87,11 @@ export function DebugPanels({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+      {/* single line at every width — narrow viewports scroll the row
+          (left-right swipe), exactly like the filter dropdown row above */}
+      <div
+        className={`flex items-center gap-x-3 overflow-x-auto whitespace-nowrap text-xs text-ink-3 ${SCROLLBAR_NONE} [&>*]:shrink-0`}
+      >
         <button
           aria-expanded={openPanel === "results"}
           className={metaToggle}
