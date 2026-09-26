@@ -143,7 +143,17 @@ bugs. Probe BEFORE concluding anything:
    Verify state via DOM (`aria-expanded`, computed `gridTemplateRows`,
    `getBoundingClientRect().height`), use screenshots only for final
    visual confirmation. Nudge with `scrollBy(0, 1)` + wait before capturing.
-3. **Dead locators / dead keyboard injection**: if Playwright locator
+3. **Smooth scrolling silently disabled**: this webview drops EVERY native
+   smooth scroll — `scrollIntoView({behavior:"smooth"})`,
+   `window.scrollTo({behavior:"smooth"})` and CSS `scroll-behavior:smooth`
+   all no-op (no animation AND no jump) while instant scrolling, CSS
+   transitions and rAF stay healthy. Probe: sample `window.scrollY` per
+   frame around a `scrollTo({top: X, behavior:"smooth"})` — 0 moves with a
+   live rAF = this trap. Never call a "broken" animation until this probe
+   is clean; the theme's own `animateScroll` tween
+   (`src/lib/motion.ts`) exists precisely because of it (fixed citation
+   jumps / hotkeys / BackToTop "no scroll animation" in one stroke).
+4. **Dead locators / dead keyboard injection**: if Playwright locator
    clicks time out but `elementsFromPoint` shows the target on top, fall
    back to CUA coordinates; if synthetic keydown never reaches the page,
    CUA `type`/`keypress` carries real input events.

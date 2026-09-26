@@ -32,7 +32,7 @@ import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { useLocale, useT } from "@/lib/i18n.ts";
-import { scrollBehavior } from "@/lib/motion.ts";
+import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
@@ -221,7 +221,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       if (!next) {
         return;
       }
-      next.scrollIntoView({ block: "center", behavior: scrollBehavior() });
+      scrollIntoViewAnimated(next, "center");
       setHotkeysSelected(Number(next.dataset.hotkeyIndex));
     },
     open: (newTab: boolean) => {
@@ -290,7 +290,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       if (!card) {
         return false;
       }
-      card.scrollIntoView({ block: "start", behavior: scrollBehavior() });
+      scrollIntoViewAnimated(card, "start");
       // the dashed frame persists — the accumulating set of the results the
       // AI cited; the tint flash below is the one-shot locate highlight
       setAiMarks({ href, indices: new Set(aiCited).add(index - 1) });

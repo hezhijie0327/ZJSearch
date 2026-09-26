@@ -100,9 +100,11 @@ instead of inventing sizes/colours:
   concept = same icon everywhere (Search submits, X dismisses, Check
   confirms copy, ExternalLink leaves the site, ChevronDown discloses).
 - **Motion** — entrance/exit animations use the ``animate-*`` theme
-  tokens only; every JS-initiated scroll passes ``scrollBehavior()``
-  (``lib/motion.ts``, also exports ``reducedMotion()``); the stylesheet
-  guards ``prefers-reduced-motion`` for CSS.
+  tokens only; every JS-initiated scroll goes through ``animateScroll()`` /
+  ``scrollIntoViewAnimated()`` (``lib/motion.ts``, also exports
+  ``reducedMotion()``) — per-frame tweens of instant scrolls, because
+  native ``behavior: "smooth"`` is silently dropped by smooth-scroll-disabled
+  webviews; the stylesheet guards ``prefers-reduced-motion`` for CSS.
 - **Accessibility** — global ``:focus-visible`` outline (never remove it
   without an equivalent ring); icon-only buttons always carry an
   ``aria-label``; modal dialogs (drawer, lightbox, help modal) mount
