@@ -98,6 +98,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   through the lazy `streamed` runner — first property access triggers the
   search) plus a notify script; `RouterProvider` consumes the pushed payload
   (`window.__zjsPageData` / `zjs:page-data` event) and never re-fetches.
+  SPA navigations stream too: the router's `load()` consumes the response
+  body incrementally — the moment the early chunk's boot-data parses it
+  applies the pending payload, pushes history and paints the skeleton
+  (`extractBootPageData`; the classic search boots exactly like the AI
+  takeover instead of waiting for the engines), then the completed
+  `#page-data` settles the real data.
   ResultsPage shows skeletons while `data.pending`. Redirects (external
   bangs, instant-redirect) and mid-stream search errors arrive as late
   payloads (`page_redirect` / `page_error` macros → `globals.page:
@@ -180,7 +186,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `globals.ai_mode` tells the client) and ResultsPage renders ONLY the
   agent experience — the `[classic|AI]` switch (`AiModeSwitch`, hero +
   results header, ghost-mirrored in skeleton.html/boot.css) writes the
-  `ai` URL/body flag (`searchParams.ts`), ResultsPage auto-runs one
+  `ai` URL/body flag (`searchParams.ts`), the homepage's AI hero is
+  morphic's ask-card — SearchBox `variant="bare"` (no pill chrome, no
+  submit circle) inside a bordered card whose bottom row carries the
+  mode switch, the research-depth dropdown and the circular submit —
+  and the depth pick travels as the `mode` URL param to seed
+  `researchMode`.  ResultsPage auto-runs one
   `POST /ai/search` (`useAiSearch`, `fetchEventStream` NDJSON client;
   the classic tabs/filters/meta/suggestions/results/pagination are all
   hidden).  The page is a THREADED Vane-style layout: every question —

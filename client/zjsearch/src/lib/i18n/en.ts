@@ -185,8 +185,8 @@ export const EN = {
   mode_balanced: "Balanced",
   mode_quality: "Quality",
   related: "Related",
-  ai_hero_hint:
-    "AI mode: the assistant plans multi-round keyword searches, runs them in parallel and cites every source.",
+  ai_hero_ask: "Ask anything...",
+  ai_hero_search: "Search for anything...",
   ai_search_research: "Research",
   ai_search_thinking_plan: "Planning the searches…",
   ai_search_view_more: "View {n} more",

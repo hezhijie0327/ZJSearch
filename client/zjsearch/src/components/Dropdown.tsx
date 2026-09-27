@@ -52,7 +52,8 @@ export function Dropdown({
   underline?: boolean;
   isSelected?: (value: string) => boolean;
   menuClassName?: string;
-  /** optional icon shown before the label in the trigger */
+  /** optional icon shown before the label in the trigger; defaults to the
+      selected option's icon */
   icon?: ReactNode;
   /** trigger renders only the icon (kebab-style menus) */
 }) {
@@ -188,7 +189,7 @@ export function Dropdown({
         role="combobox"
         type="button"
       >
-        {icon}
+        {icon ?? (current?.icon ? <span className="shrink-0 text-ink-3">{current.icon}</span> : null)}
         <span className="truncate">{triggerLabel ?? current?.label ?? value}</span>
         {underline ? (
           <span aria-hidden="true" className="absolute inset-x-4 -bottom-0.5 h-0.5 rounded-full bg-accent-strong" />

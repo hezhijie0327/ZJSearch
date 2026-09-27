@@ -61,6 +61,28 @@ export function extractPageData(html: string): AnyPageData {
   throw new Error("page-data missing in response");
 }
 
+/** First-stage payload of a streamed search response (#boot-data, early
+    shell chunk): parsed from PARTIALLY received html while the stream is
+    still open, so an SPA navigation can paint the skeleton before the
+    engines finish.  Returns null while the chunk is incomplete or the
+    page ships no boot payload at all. */
+export function extractBootPageData(html: string): AnyPageData | null {
+  if (!html.includes('id="boot-data"')) {
+    return null;
+  }
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const text = doc.getElementById("boot-data")?.textContent?.trim();
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as AnyPageData;
+  } catch {
+    /* the chunk split mid-payload -- more html will complete it */
+    return null;
+  }
+}
+
 export function parseClientSettings(): ClientSettings {
   const el = document.querySelector("script[client_settings]");
   const raw = el?.getAttribute("client_settings");

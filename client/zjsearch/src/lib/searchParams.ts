@@ -24,6 +24,8 @@ export interface SearchParams {
   /** AI Search mode (the [classic|AI] switch): true adds `ai=1` to the
       URL / POST body; the flag is otherwise absent, never `ai=0` */
   ai?: boolean;
+  /** AI research depth (speed/balanced/quality), only meaningful with ai */
+  mode?: string;
 }
 
 /** One entry per search parameter, shared by the URL builder and the POST
@@ -50,6 +52,9 @@ export function searchParamEntries(params: SearchParams): Array<[string, string]
   }
   if (params.ai) {
     entries.push(["ai", "1"]);
+  }
+  if (params.ai && params.mode) {
+    entries.push(["mode", params.mode]);
   }
   if (params.categories && params.categories.length > 0) {
     entries.push(["categories", params.categories.join(",")]);
@@ -126,6 +131,7 @@ export function parseSearchUrl(url: URL): SearchParams {
     timeout_limit: query.get("timeout_limit") ?? undefined,
     theme: query.get("theme") ?? undefined,
     ai: query.get("ai") === "1",
+    mode: query.get("mode") ?? undefined,
     engine_data: Object.keys(engine_data).length > 0 ? engine_data : undefined,
   };
 }

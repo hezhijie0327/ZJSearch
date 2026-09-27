@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ArrowUp, SlidersHorizontal, Star, Zap } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AiModeSwitch } from "@/components/AiModeSwitch.tsx";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
@@ -21,6 +20,7 @@ import {
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
+import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
@@ -116,7 +116,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const hrefRef = useRef(href);
   hrefRef.current = href;
   const [followupQuery, setFollowupQuery] = useState("");
-  const [researchMode, setResearchMode] = useState<AiSearchMode>("balanced");
+  // the hero's depth pick travels as the `mode` URL param (validated --
+  // anything unknown falls back to balanced)
+  const [researchMode, setResearchMode] = useState<AiSearchMode>(() => {
+    const raw = new URLSearchParams(window.location.search).get("mode");
+    return raw === "speed" || raw === "quality" ? raw : "balanced";
+  });
   const [appended, setAppended] = useState<ResultItem[]>([]);
   const [appendState, setAppendState] = useState<"idle" | "loading" | "error" | "done">("idle");
   const appendedHref = useRef(href);
@@ -491,7 +496,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               <div className="min-w-0 flex-1 max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
                 <SearchBox initialQuery={data.q} onSubmitQuery={submitQuery} />
               </div>
-              {aiSearchCap ? <AiModeSwitch ai={aiModeRaw} onChange={onModeChange} /> : null}
               <div className="ms-auto">
                 <HeaderActions globals={globals} />
               </div>
@@ -513,7 +517,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                 <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
               </Link>
               <div className="ms-auto flex items-center gap-3">
-                {aiSearchCap ? <AiModeSwitch ai={aiModeRaw} onChange={onModeChange} /> : null}
                 <HeaderActions globals={globals} />
               </div>
             </div>
@@ -587,7 +590,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       />
                       <form
                         aria-label={t("ai_search_followup")}
-                        className="flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-card transition-colors focus-within:border-accent"
+                        className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent"
                         onSubmit={(event) => {
                           event.preventDefault();
                           const value = followupQuery.trim();
@@ -598,42 +601,34 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           aiSearch.followup(value, uiLocale || globals.locale || "en", researchMode);
                         }}
                       >
-                        <Dropdown
-                          ariaLabel={t("research_mode")}
-                          onChange={(value) => {
-                            setResearchMode(value as AiSearchMode);
-                          }}
-                          options={[
-                            { value: "speed", label: t("mode_speed"), icon: <Zap className="size-3.5 text-ink-3" /> },
-                            {
-                              value: "balanced",
-                              label: t("mode_balanced"),
-                              icon: <SlidersHorizontal className="size-3.5 text-ink-3" />,
-                            },
-                            {
-                              value: "quality",
-                              label: t("mode_quality"),
-                              icon: <Star className="size-3.5 text-ink-3" />,
-                            },
-                          ]}
-                          value={researchMode}
-                        />
                         <input
-                          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+                          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
                           onChange={(event) => {
                             setFollowupQuery(event.target.value);
                           }}
                           placeholder={t("ai_search_followup")}
                           value={followupQuery}
                         />
-                        <button
-                          aria-label={t("ai_search_followup")}
-                          className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-opacity disabled:opacity-40"
-                          disabled={!followupQuery.trim()}
-                          type="submit"
-                        >
-                          <ArrowUp className="size-4" />
-                        </button>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <Dropdown
+                            ariaLabel={t("research_mode")}
+                            onChange={(value) => {
+                              setResearchMode(value as AiSearchMode);
+                            }}
+                            options={depthOptions(t)}
+                            value={researchMode}
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              aria-label={t("ai_search_followup")}
+                              className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-opacity hover:bg-accent-strong-hover disabled:opacity-40"
+                              disabled={!followupQuery.trim()}
+                              type="submit"
+                            >
+                              <ArrowUp className="size-4" />
+                            </button>
+                          </div>
+                        </div>
                       </form>
                     </div>
                   ) : null}

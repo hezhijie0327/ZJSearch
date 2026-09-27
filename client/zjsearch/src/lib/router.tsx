@@ -8,7 +8,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { translateFor } from "@/lib/i18n.ts";
-import { extractPageData, parseEmbeddedPageData } from "@/lib/pageData.ts";
+import { extractBootPageData, extractPageData, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { buildSearchUrl, type SearchParams, searchParamEntries, urlThemeOverride } from "@/lib/searchParams.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 
@@ -89,25 +89,63 @@ export function RouterProvider({
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}`);
         }
-        const html = await resp.text();
+        const finalUrl = new URL(resp.url, window.location.href).href;
+        const pushHistory = () => {
+          if (historyMode === "none" || historyPushed) {
+            return;
+          }
+          historyPushed = true;
+          // keep the payload out of the history state — the page data already
+          // lives in React state and popstate re-fetches by URL, so storing
+          // it here would only duplicate memory for every visited page
+          window.history[historyMode === "replace" ? "replaceState" : "pushState"](null, "", finalUrl);
+        };
+        let historyPushed = false;
+        let html = "";
+        let pendingShown = false;
+
+        // Streamed search responses arrive in TWO chunks: the early shell
+        // carries a pending payload (boot-data) while the engines run, the
+        // late chunk carries the real page-data.  Consume the body
+        // incrementally and apply the pending payload the moment it is
+        // complete -- a classic search then boots into the skeleton exactly
+        // like the AI takeover instead of staring at the old page.
+        const reader = resp.body?.getReader();
+        if (reader) {
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            html += decoder.decode(value, { stream: true });
+            if (!pendingShown) {
+              const boot = extractBootPageData(html);
+              if (boot && boot.globals.page === "results") {
+                pendingShown = true;
+                pushHistory();
+                setHref(finalUrl);
+                setData(boot);
+                setLoading(false);
+                document.title = pageTitle(boot);
+                window.scrollTo(0, 0);
+              }
+            }
+          }
+          html += decoder.decode();
+        } else {
+          html = await resp.text();
+        }
+
         const pageData = extractPageData(html);
         if (seq !== seqRef.current) {
           return; // superseded by a newer navigation
         }
-        // the final URL after redirects (e.g. POST /preferences -> /)
-        const finalUrl = new URL(resp.url, window.location.href).href;
-        if (historyMode !== "none") {
-          const historyMethod = historyMode === "replace" ? "replaceState" : "pushState";
-          // keep the payload out of the history state — the page data already
-          // lives in React state and popstate re-fetches by URL, so storing
-          // it here would only duplicate memory for every visited page
-          window.history[historyMethod](null, "", finalUrl);
-        }
+        pushHistory();
         setHref(finalUrl);
         setData(pageData);
         setLoading(false);
         document.title = pageTitle(pageData);
-        // instant jump on purpose ("auto" never fights reduced motion)
         window.scrollTo(0, 0);
       } catch (err) {
         if (controller.signal.aborted || seq !== seqRef.current) {

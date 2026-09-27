@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { LoaderCircle, Search, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -38,13 +38,22 @@ export function SearchBox({
   onQueryChange,
   variant = "compact",
   onSubmitQuery,
+  trailing,
+  placeholder,
 }: {
   initialQuery: string;
   /** Optional controlled mode (used on the index page). */
   query?: string;
   onQueryChange?: (q: string) => void;
-  variant?: "hero" | "compact";
+  /** bare: no pill chrome and no submit circle -- for compositions that
+      wrap the box in their own card and submit externally (morphic card) */
+  variant?: "hero" | "compact" | "bare";
   onSubmitQuery: (q: string) => void;
+  /** optional element at the pill's trailing edge, before the submit
+      button (ignored with the bare variant) */
+  trailing?: ReactNode;
+  /** override the input's placeholder (the AI hero asks instead of searches) */
+  placeholder?: string;
 }) {
   const t = useT();
   const { loading } = useRouter();
@@ -231,11 +240,17 @@ export function SearchBox({
   return (
     <div className="relative w-full" ref={boxRef}>
       <form
-        className={`flex w-full items-center gap-1 rounded-full border border-line bg-surface transition-shadow ${
-          variant === "hero"
-            ? "h-14 ps-6 pe-2.5 shadow-card focus-within:border-ink-3/40 focus-within:shadow-pop"
-            : "h-12 ps-5 pe-2 shadow-card focus-within:border-ink-3/40"
-        }`}
+        className={
+          variant === "bare"
+            ? // fixed height: the clear button appearing on first keystroke
+              // must not grow the row (the ask-card would jump)
+              "flex h-9 w-full items-center gap-1"
+            : `flex w-full items-center gap-1 rounded-full border border-line bg-surface transition-shadow ${
+                variant === "hero"
+                  ? "h-14 ps-6 pe-2.5 shadow-card focus-within:border-ink-3/40 focus-within:shadow-pop"
+                  : "h-12 ps-5 pe-2 shadow-card focus-within:border-ink-3/40"
+              }`
+        }
         onSubmit={onSubmit}
         role="search"
       >
@@ -277,7 +292,7 @@ export function SearchBox({
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
-            placeholder={t("search_placeholder")}
+            placeholder={placeholder ?? t("search_placeholder")}
             ref={inputRef}
             role="combobox"
             spellCheck={false}
@@ -298,22 +313,35 @@ export function SearchBox({
             <X className="size-4.5" />
           </button>
         ) : null}
-        <button
-          aria-label={t("search")}
-          className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover disabled:opacity-70"
-          disabled={loading}
-          type="submit"
-        >
-          {loading ? <LoaderCircle className="size-4.5 animate-spin-slow" /> : <Search className="size-4.5" />}
-        </button>
+        {variant !== "bare"
+          ? (trailing ?? (
+              <button
+                aria-label={t("search")}
+                className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover disabled:opacity-70"
+                disabled={loading}
+                type="submit"
+              >
+                {loading ? <LoaderCircle className="size-4.5 animate-spin-slow" /> : <Search className="size-4.5" />}
+              </button>
+            ))
+          : null}
       </form>
 
       {renderSuggest && exitSuggestions.length > 0 ? (
         <ul
           aria-label={t("search_suggestions")}
-          className={`absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
-            suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
-          }`}
+          className={
+            variant === "bare"
+              ? // in-flow inside the wrapping card (morphic): the card grows
+                // to fit the list, no overlay chrome of its own -- capped at
+                // four rows, the rest scroll
+                `max-h-36 w-full overflow-auto py-1 ${
+                  suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
+                }`
+              : `absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
+                  suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
+                }`
+          }
           id={listboxId}
           inert={suggestClosing || undefined}
           role="listbox"
