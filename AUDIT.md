@@ -101,6 +101,10 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | Surface | Query / URL | Expect |
 |---|---|---|
 | Direct URL boot | `/search?q=test` (no homepage hop) | React mounts, results render |
+| SPA search (homepage) | submit from the ask-card | leaves the hero IMMEDIATELY (pending skeleton), results swap in when engines settle; the page must never sit on the homepage or show a ghost of it |
+| SPA re-search (results) | new query from the results header | pending skeleton with the NEW query — never the previous query's results/input text |
+| Race | submit query B while query A streams | B wins; A's late payload is dropped (seq guard) |
+| Back/forward | back from search B to search A | content matches the URL (pending skeleton → A's results), never a foreign page |
 | Zero results | `zzxxqq11223344 +notpresentwordxyz` (`+` = `%2B`) | engines panel open, NO pager, Sorry state |
 | Themes | `simple_style=light/dark/black` cookie | palette flips, skeleton included |
 | Mobile | 390×844 viewport | filter rows swipe, no layout break |
@@ -227,11 +231,33 @@ rules and the shared-token inventory from AGENTS.md, covering:
    gate, image SSRF path).
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,
    `alt` on images, keyboard reachability.
+10. **Prompts (agentic)** — both AI system prompts must COMPOSE the shared
+   fragments in `searx/zjsearch/ai/prompts.py` (citation grammar, the full
+   markdown surface, language directive, grounding fallback, opening
+   rule) — never hand-copied copies (the drift this caught: the search
+   copy was missing task lists / strikethrough / the once-only LaTeX
+   rule).  Round policy lives ONLY in the depth branches (a base-level
+   round cap contradicts quality/goal).  The reply language follows the
+   ACTIVE UI locale: the client resolves it to the SHIPPED catalog tag
+   (`themeLocaleTag`, zh-Hant → en included) and `language_directive` is
+   a DATA TABLE from catalog tag → language name — adding an i18n
+   language is one client catalog plus one server table row, never a new
+   branch.  The `web_search` tool exposes the parameter surface SearXNG
+   actually supports (category, time_range), the precision operators the
+   advanced_search_syntax plugin enforces (site: / filetype: / quotes /
+   before:after:), the engine-bang escape hatch (user-named engines only,
+   e.g. `!baidu`), and the empty-result fallback (retry once without the
+   filter).  Verify with composition asserts over `_answer_system` /
+   `_initial_messages` / `_tool_spec`.
 
 ## 8. Known environment traps
 
 - `pnpm run audit` needs Chrome (`ChromeNotInstalledError`) —
-  not a theme regression; run on a machine with Chrome.
+  not a theme regression; any Chromium works via `CHROME_PATH`, e.g. on
+  macOS with only Edge installed:
+  `CHROME_PATH="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" pnpm run audit`.
+  Headless Edge/Chrome sometimes DIES mid-run ("Failed to fetch browser
+  webSocket URL"); the audit script relaunches it and carries on.
 - `manage`-anything re-runs pip; a mirror serving 0-byte wheels fails the
   hash check → start granian directly (§1) and/or pin `-i` to a working
   index.

@@ -153,6 +153,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   events render around that one state machine.  Multimodal (text/image
   parts) is part of the canonical message contract on `llm.py`; the
   abandoned-stream cancel discipline lives in `run_agent`'s finally.
+- DEPLOYMENT (public instances): `/ai/answer` and `/ai/search` sit
+  OUTSIDE upstream botdetection's `/search` burst limits, and the HMAC
+  gate token ships in every page-data payload (TTL 1h) — it authenticates,
+  it does not rate-limit.  A public deployment must front the AI routes
+  with its own per-IP limit (reverse proxy or a custom limiter); each
+  `/ai/search` drives real engine fan-outs plus a dozen LLM calls.
 - AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`): the model analyses the question, states a one-line
   intent, then calls the `web_search` tool — several calls per turn run
   as REAL instance searches (the `SearchWithPlugins` path, plugins
@@ -176,22 +182,41 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   dropped the queue sits silent through the think phase and the idle
   timeout kills the completion before any content arrives).
   Config: transport =
-  `zjsearch.ai`, feature flag = `zjsearch.ai.search.enabled` (ships
-  disabled; needs a tool-capable model — gemma-4-26b-a4b-qat in LM
+  `zjsearch.ai`; feature flags = `zjsearch.ai.search.enabled` and
+  `zjsearch.ai.overview.enabled`, BOTH DEFAULTING TO TRUE — setting one
+  false makes the endpoint answer 404 AND the page-data drop the
+  capability (globals.ai / globals.ai_search absent), which hides the UI
+  entry point (the AI Overview trigger / the [classic|AI] switch; the
+  hero also ignores `?ai=1` without the capability).  AI Search needs a
+  tool-capable model — gemma-4-26b-a4b-qat in LM
   Studio intermittently skips tool calls ENTIRELY and answers from
   memory even when the prompt demands a search; qwen3.6 is reliable).
   AI mode is a FULL TAKEOVER:
   `ai=1` + capability makes `stream.py` skip the raw query's engine
   fan-out entirely (`ZjsearchAiModeSearch` — an empty, instant payload;
   `globals.ai_mode` tells the client) and ResultsPage renders ONLY the
-  agent experience — the `[classic|AI]` switch (`AiModeSwitch`, hero +
-  results header, ghost-mirrored in skeleton.html/boot.css) writes the
+  agent experience — the `[classic|AI]` switch (`AiModeSwitch`, now
+  HOMEPAGE-ONLY: it lives in the ask-card's bottom row; the results
+  header dropped it, so the boot skeleton no longer mirrors it either)
+  writes the
   `ai` URL/body flag (`searchParams.ts`), the homepage's AI hero is
   morphic's ask-card — SearchBox `variant="bare"` (no pill chrome, no
   submit circle) inside a bordered card whose bottom row carries the
   mode switch, the research-depth dropdown and the circular submit —
   and the depth pick travels as the `mode` URL param to seed
-  `researchMode`.  ResultsPage auto-runs one
+  `researchMode` (both hero and results page re-read `mode` from the
+  URL on navigation, and `buildParams` re-emits it whenever the ai flag
+  is set).  The depths are speed / balanced / quality / goal --
+  speed/balanced/quality raise the research budget AND change the output
+  shape (speed = one dense "what is this" paragraph with no sections;
+  quality = structured "## " sections, tables, heavy citation); goal is
+  the iterate-until-met tier: the model plans the evidence the target
+  needs, self-checks the gap after each round and keeps searching until
+  the goal is demonstrably met (6 rounds / 16 calls / 600s ceiling --
+  every tier still ends with a forced no-tools answer), and closes with
+  a GFM task-list evidence ledger.  The client parses `mode` through
+  parseDepthMode (depth.tsx, single source of truth; server mirror:
+  SEARCH_MODES).  ResultsPage auto-runs one
   `POST /ai/search` (`useAiSearch`, `fetchEventStream` NDJSON client;
   the classic tabs/filters/meta/suggestions/results/pagination are all
   hidden).  The page is a THREADED Vane-style layout: every question —
@@ -261,7 +286,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
 - i18n is theme-owned: `client/zjsearch/src/lib/i18n.ts` is the runtime (context,
   `useT()`, locale fallback) and `src/lib/i18n/` holds one catalog file per
   locale — `en.ts` is the source and defines the `StringKey` union, `zh-CN.ts`
-  must implement it fully; every other locale falls back to English. Add new
+  must implement it fully; every other locale falls back to English.  The
+  AI reply language follows the SAME two-language rule server-side
+  (`language_directive` in `searx/zjsearch/ai/prompts.py` mirrors
+  `themeLocaleTag`): zh* → Simplified Chinese, everything else (incl.
+  zh-Hant) → English.  Add new
   keys to `en.ts` first (then the other catalogs), render via `useT()` /
   `t("key")` — unknown keys are compile errors. `t(key, params)` interpolates
   `{name}` placeholders (the DESIGN.md §10 family API). Adding a language = one new
@@ -327,6 +356,22 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   parseable `#page-data`, see `parseEmbeddedPageData`). Never let a
   streamed response end silently after the shell — the client would hang
   pending forever.
+- **`#page-data` payloads are SINGLE-USE** and this is load-bearing for
+  SPA searches: `main.tsx` removes the document's `#page-data` when the
+  boot payload was consumed directly (not pending), and the router's
+  pending-consumer removes every element it has read.  Why: the element
+  lives in the ORIGINAL document forever during SPA navigation — when a
+  new search's pending boot payload applies, the consumer's "late chunk
+  may already sit in the DOM" check would find the STALE element and
+  re-apply the OLD page over the fresh navigation.  The symptom (before
+  this contract existed) was exactly "SPA search looks broken": a search
+  from the homepage flipped the view back to the homepage for the whole
+  engine round (results popped in late with no skeleton), a re-search
+  from the results page kept showing the previous query's results, and
+  back/forward restored mismatched content.  The same router path also
+  routes fetched `page_redirect` / `page_error` payloads like the boot
+  path does (the boot path always did; `load()` gained it in the same
+  fix).
 - Theme style light/dark uses the `simple_style` cookie; `black` is OLED black
   (html gets both `dark` and `black` classes). Auto = no cookie + system setting.
   The `dark`/`black` classes are rendered SERVER-SIDE into the `<html>` tag
@@ -494,6 +539,15 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   the stale bundle — wait the 30 s out or reload twice before concluding a
   change "didn't work". Template edits additionally need an instance
   restart (Jinja caches compiled templates).
+- A CSS transition FROZEN at its start value (computed
+  `grid-template-rows: 0px` while the inline style says `1fr`, a
+  `CSSTransition` stuck `playState: "running"`) is the JAM, not a theme
+  bug: the occluded/jammed pane never renders the transition's first
+  frame.  Trust the DOM truth (`aria-expanded`, the inline style, the
+  content being present) — Collapse's 120 ms timeout fallback has
+  already committed the end state; only the paint is missing.  Close and
+  reopen the pane and re-measure (a jammed probe validates this before
+  any "broken animation" conclusion).
 - In-app-browser screenshots can serve a STALE compositor frame: a page
   whose DOM says "visible, opacity 1" may still capture blank right after
   load/animation. Nudge the compositor (`scrollBy(0, 1)`) and wait before
@@ -550,9 +604,9 @@ Type scale — one size per text role:
   `text-2xl font-semibold`, both `font-serif` (registered DESIGN.md §4
   variant: result titles and UI section headings stay sans for scan
   density). The wordmark period is a geometric gold dot (`bg-accent-strong`
-  fill, aria-hidden — echoes the favicon's brand period, §2.2); on the hero
-  it stays interactive — hover powers the "Powered by SearXNG" reveal,
-  click opens About.
+  fill, aria-hidden — echoes the favicon's brand period, §2.2) — INERT on
+  every surface including the hero (the hover-reveal "Powered by SearXNG"
+  flourish was removed as noise; About lives in the header actions).
 - Thumbnail corner badges / floating overlay chips: 11px `font-medium`
   (badge tier, the sanctioned sub-12px exception along with the mini
   player's tabular clock and the weather SVG chart labels).
@@ -571,7 +625,11 @@ Motion & disclosure:
   `inert` + `aria-hidden`. Pass `unmountAfterHide` when folded children
   must not stay alive (iframes keep playing, hotkey targets poll the DOM —
   media embeds and category blocks unmount; the cheap meta strips stay
-  mounted). Apply the spacing margin CONDITIONALLY on the Collapse wrapper
+  mounted). An AUTO-OPENED disclosure (the zero-results engines panel)
+  passes `animateOnMount` so the reveal PLAYS — without it an initially-
+  open Collapse paints at 1fr and pops in fully expanded (the user reads
+  this as "no animation"). Apply the spacing margin CONDITIONALLY on the
+  Collapse wrapper
   (`open ? "mt-2" : ""`) — a static margin under a folded panel reads as a
   stray gap. Triggers keep `aria-expanded` + the rotating chevron. The
   open path mounts at 0fr and expands on the next frames with a 120 ms
@@ -778,8 +836,11 @@ results meta line on both desktop and mobile: the line reads 「找到 N 条
 table (`table-fixed` so the `w-24` name truncation works) through the
 shared `Collapse` (both strips animate) — unresponsive
 engines share the same grid (AlertTriangle + red error label + empty
-bar, seconds column aligned); the panel starts expanded when there are
-zero results.  Infinite scroll never engages on a zero-result page (the
+bar, seconds column aligned).  With ZERO results the page is
+empty-state-FIRST: the NoResults hero leads the column and the meta line
++ engine-messages panel follow as supporting detail; the engines toggle
+reads 「来自搜索引擎的消息」 (never 「耗时 0 秒」 when nothing was
+found) and starts expanded with `animateOnMount`.  Infinite scroll never engages on a zero-result page (the
 empty state is final — no phantom loader hunting page 2), and the
 sentinel renders its spinner only while a page is actually loading
 (idle = quiet spacer, error = red message).  The export chips in the results strip (RSS/JSON/CSV) download
