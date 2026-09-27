@@ -98,6 +98,30 @@
     background: var(--accent-strong);
     color: var(--accent-contrast);
   }
+  /* ghost of the [classic|AI] mode switch (AiModeSwitch): two SEGMENT_SM
+     chips in a rounded well; the label settles the width like the real one */
+  .zjs-boot-mode {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem;
+    border-radius: 0.75rem;
+    background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  }
+  .zjs-boot-mode-seg {
+    display: inline-block;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    color: var(--ink-2);
+  }
+  .zjs-boot-mode-seg.is-on {
+    background: var(--accent-strong);
+    color: var(--accent-contrast);
+    font-weight: 500;
+  }
   /* ghost HeaderActions: the 36px ghost circles of the real icon buttons */
   .zjs-boot-actions {
     flex: none;

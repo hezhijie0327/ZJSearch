@@ -58,6 +58,12 @@ pipeline features without any Python changes. -#}
   {%- if ai %}
   ,"ai": {"tk": {{ ai.tk|tojson }}, "model": {{ ai.model|tojson }} }
   {%- endif %}
+  {%- if ai_search %}
+  ,"ai_search": {"tk": {{ ai_search.tk|tojson }}, "model": {{ ai_search.model|tojson }} }
+  {%- endif %}
+  {%- if ai_mode %}
+  ,"ai_mode": true
+  {%- endif %}
 }
 {%- endmacro %}
 
@@ -71,7 +77,8 @@ pipeline features without any Python changes. -#}
 {%- endmacro %}
 
 {#- One search result.  Emits the union of all fields used by the 11 result
-    layouts; ``template`` tells the client which one to render. -#}
+    layouts; ``template`` tells the client which one to render.  Python
+    code serializes through the public ``result_data`` wrapper below. -#}
 {% macro _result_data(result) -%}
 {
   {%- if result.parsed_url %}
@@ -227,6 +234,13 @@ pipeline features without any Python changes. -#}
   "priority": {{ (result.priority or '')|tojson }}
 }
 {%- endmacro %}
+
+{#- Server-side serialization entry point: identical output to
+    ``_result_data``, exposed under a public name because Jinja refuses to
+    import underscore names -- the theme's Python (the AI search executor)
+    renders results through this macro via ``render_template_string``, so
+    the wire shape stays defined in this one place. -#}
+{% macro result_data(result) -%}{{ _result_data(result) }}{%- endmacro %}
 
 {#- Answers (legacy text, translations, weather). -#}
 {% macro _weather_item(data, answer) -%}

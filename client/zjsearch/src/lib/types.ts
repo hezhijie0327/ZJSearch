@@ -62,6 +62,12 @@ export interface GlobalData {
   search_syntax_url: string;
   rtl: boolean;
   ai?: AiCapability;
+  /** AI Search mode capability (same token shape): absent when the
+      zjsearch.ai.search flag is off — the client hides its mode switch */
+  ai_search?: AiCapability;
+  /** true when THIS request runs in AI search takeover (ai=1 + capability):
+      the classic engine fan-out was skipped, the page is the agent */
+  ai_mode?: boolean;
 }
 
 // ------------------------------------------------------------------ results

@@ -21,6 +21,9 @@ export interface SearchParams {
   timeout_limit?: string;
   engine_data?: Record<string, Record<string, string>>;
   theme?: string;
+  /** AI Search mode (the [classic|AI] switch): true adds `ai=1` to the
+      URL / POST body; the flag is otherwise absent, never `ai=0` */
+  ai?: boolean;
 }
 
 /** One entry per search parameter, shared by the URL builder and the POST
@@ -44,6 +47,9 @@ export function searchParamEntries(params: SearchParams): Array<[string, string]
   }
   if (params.pageno !== undefined && params.pageno > 1) {
     entries.push(["pageno", String(params.pageno)]);
+  }
+  if (params.ai) {
+    entries.push(["ai", "1"]);
   }
   if (params.categories && params.categories.length > 0) {
     entries.push(["categories", params.categories.join(",")]);
@@ -119,6 +125,7 @@ export function parseSearchUrl(url: URL): SearchParams {
     safesearch: query.has("safesearch") ? Number(query.get("safesearch")) : undefined,
     timeout_limit: query.get("timeout_limit") ?? undefined,
     theme: query.get("theme") ?? undefined,
+    ai: query.get("ai") === "1",
     engine_data: Object.keys(engine_data).length > 0 ? engine_data : undefined,
   };
 }

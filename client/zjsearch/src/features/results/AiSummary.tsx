@@ -605,7 +605,7 @@ function markdownComponents(
     （定界符短暂裸奔，与 mermaid 占位符同一模式）。 */
 const MATH_FENCE = /\$\$[\s\S]+?\$\$|\$[^\s$][^$\n]*\$/;
 
-const MarkdownAnswer = memo(function MarkdownAnswer({
+export const MarkdownAnswer = memo(function MarkdownAnswer({
   markdown,
   meta,
   onCite,
@@ -646,7 +646,7 @@ const MarkdownAnswer = memo(function MarkdownAnswer({
 
 /** The capped reasoning scroll area: while the stream runs it keeps the
     newest line in view (no-op once settled or folded). */
-function ThinkScroll({ active, text }: { active: boolean; text: string }) {
+export function ThinkScroll({ active, text }: { active: boolean; text: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the live stream tail
   useEffect(() => {

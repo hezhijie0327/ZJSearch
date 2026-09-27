@@ -18,7 +18,7 @@ the random/statistics answerers).
 
 Licensing: every theme-authored file — client sources and tools,
 `searx/templates/zjsearch/`, and our python additions
-(`searx/plugins/stock_quote.py`, `searx/zjsearch_stream.py`, including all
+(`searx/plugins/stock_quote.py`, the `searx/zjsearch/` package, including all
 future additions) — carries
 `SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0`, matching
 `client/zjsearch/package.json`. Upstream files keep their original licenses;
@@ -82,10 +82,13 @@ The server renders **no UI**. Every zjsearch Jinja template is a thin shell that
 serializes the render context into `<script id="page-data" type="application/json">`
 and boots `zjsearch.min.js`; React renders 100% of the interface.
 
-- Search HTML responses **stream** (`searx/zjsearch_stream.py`, registered by a
+- Search HTML responses **stream** (`searx/zjsearch/stream.py`, registered by a
   single `install(app)` + before_request hook appended at the end of
   `webapp.py` — the upstream file is otherwise untouched so rebases stay
-  conflict-free): the head + static boot skeleton (`zjsearch/skeleton.html`,
+  conflict-free; the hook chains the whole `searx/zjsearch/` package,
+  whose AI endpoints live in `searx/zjsearch/ai/` on the shared agent
+  framework (`searx/zjsearch/ai/llm.py` transport + `searx/zjsearch/ai/agent.py`
+  loop/ThinkGate): the head + static boot skeleton (`zjsearch/skeleton.html`,
   inside `#app` via base.html's `app_skeleton` block) flush immediately and
   the app **boots right away** into a pending payload (`#boot-data`,
   `page_boot` macro, `pending: true` — `import()` from a classic inline
@@ -106,7 +109,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   errors fall through to the upstream view unchanged. `_render_context` in
   the module mirrors `webapp.render`'s context building — re-sync it if
   upstream changes `render`.
-- The AI Overview (`searx/zjsearch_ai.py`, route `POST /ai/answer`; client
+- The AI Overview (`searx/zjsearch/ai/overview.py`, route `POST /ai/answer`; client
   `features/results/AiSummary.tsx` + `aiAnswer.ts`): the gate is an HMAC
   token in the page-data globals, the client assembles the numbered source
   context from the payload it already has, and the endpoint streams a cited
@@ -130,6 +133,91 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   Studio deployments must set a real key. Lighthouse-critical: the
   feature adds zero bytes to the eager graph (the trigger lives in the
   results chunk; KaTeX/mermaid load only when the answer uses them).
+- Both AI features run ONE agent framework (`searx/zjsearch/ai/agent.py`):
+  `run_agent` drives turns over the `llm.py` transport (the four dialect
+  pumps collect `think`/`delta`/`tool_calls`; a turn ends in tool calls
+  only when a `tools` spec + executor are given).  The executor is a
+  generator that yields feature events and MUST end with aligned
+  `("tool_results", [(call, text), ...])`; budgets (tool rounds / calls
+  per round / calls total / wall clock) bound the loop, and an exhausted
+  budget forces the next turn to run WITHOUT tools so the model must
+  answer.  `ThinkGate` owns the `<think>` semantics (open on first
+  reasoning, close on first content, stray reasoning after content
+  dropped) — the Overview's raw-text adapter and AI Search's NDJSON
+  events render around that one state machine.  Multimodal (text/image
+  parts) is part of the canonical message contract on `llm.py`; the
+  abandoned-stream cancel discipline lives in `run_agent`'s finally.
+- AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`): the model analyses the question, states a one-line
+  intent, then calls the `web_search` tool — several calls per turn run
+  as REAL instance searches (the `SearchWithPlugins` path, plugins
+  included) in a worker pool whose callables are wrapped in
+  `copy_current_request_context` (the search machinery needs a live
+  request context; construct the search objects inside the wrapper).
+  Each search's results are serialized through the `_result_data` macro
+  — import it via the public `result_data` wrapper macro (Jinja refuses
+  underscore imports) and keep array separators as block-ifs — and
+  stream as page-data-shaped `results` events; the model consumes a
+  globally numbered `[n]` feed (5 deep + 5 shallow per search) and
+  answers with citations over the same renderer contract as the
+  Overview.  Wire protocol: NDJSON lines (`think`/`delta`/`calls`/
+  `search`/`results`/`sources`/`error`/`end`); a stream that dies before
+  its first line answers 502 like the Overview.  `end` settles the run
+  FIRST and `related` trails as a post-end event: the small completion
+  behind the follow-up suggestions can think for the better part of a
+  minute on reasoning models, and the follow-up box must not wait for
+  it (the client accepts `related` after phase=done; the related
+  completion itself needs `relay_reasoning=True` — with the channel
+  dropped the queue sits silent through the think phase and the idle
+  timeout kills the completion before any content arrives).
+  Config: transport =
+  `zjsearch.ai`, feature flag = `zjsearch.ai.search.enabled` (ships
+  disabled; needs a tool-capable model — gemma-4-26b-a4b-qat in LM
+  Studio intermittently skips tool calls ENTIRELY and answers from
+  memory even when the prompt demands a search; qwen3.6 is reliable).
+  AI mode is a FULL TAKEOVER:
+  `ai=1` + capability makes `stream.py` skip the raw query's engine
+  fan-out entirely (`ZjsearchAiModeSearch` — an empty, instant payload;
+  `globals.ai_mode` tells the client) and ResultsPage renders ONLY the
+  agent experience — the `[classic|AI]` switch (`AiModeSwitch`, hero +
+  results header, ghost-mirrored in skeleton.html/boot.css) writes the
+  `ai` URL/body flag (`searchParams.ts`), ResultsPage auto-runs one
+  `POST /ai/search` (`useAiSearch`, `fetchEventStream` NDJSON client;
+  the classic tabs/filters/meta/suggestions/results/pagination are all
+  hidden).  The page is a THREADED Vane-style layout: every question —
+  the initial one and each follow-up (`followup()`, prior Q&A travels
+  as history, `sources_base` continues the global [n] numbering) —
+  appends an `AiSearchRunSection` behind a `border-t` divider
+  (auto-scrolled into view), in the production order: the question
+  heading, the collapsible Research box, the cited synthesis, the run's
+  OWN source cards (skeleton until its searches settle), and the run's
+  Related questions (each spawns another run); the thread's follow-up
+  pill floats `sticky bottom-6` above a palette fog fade (Perplexica's
+  pinned input).  `useAiSearch` rebuilds a CHRONOLOGICAL step
+  timeline per run (`AiSearchStep`: collapsible think segment →
+  intent line → expandable parallel call rows — a settled row with
+  results toggles a swipe strip of that search's result cards, fed
+  from the run's registry slice; no step/time statistics are shown),
+  in the model's own order; a
+  round's `calls` event freezes its pending prose as the intent step.
+  Prose after the first `calls` streams into the answer live AND is
+  held as the turn's pending slice — when the turn's own `calls` land,
+  that slice is split back out of the answer into the intent step, so
+  the settled answer is the final synthesis alone.  State-discipline
+  trap learned the hard way: EVERY event handler in `applyEvent` that
+  touches `runs` must return `{...core, runs}` — returning `core`
+  discards the freshly built array (React bails out on the identical
+  reference) and the event silently never applies (this once froze all
+  call rows at "searching…" and starved the sources grid, whose
+  `sources` event case had also been dropped outright).
+  `ai=1` WITHOUT the capability (hand-crafted URL,
+  feature switched off) falls back to the classic page client-side;
+  the server-side skip only fires when the capability exists.  The raw
+  results are deliberately NOT fed to the agent as a seed — reference
+  material makes it skip searching (live-verified).  LM Studio +
+  qwen3.6 note: enable_thinking must be off via extra_body, otherwise
+  the model routes the whole answer into the reasoning channel; gemma-4
+  ignores that knob and streams a reasoning channel regardless (harmless
+  — think segments render in the Research timeline).
 - The boot skeleton (`zjsearch/skeleton.html` + the `.zjs-boot` block in
   `src/styles/boot.css`) is a **geometry mirror of the real results page**, not an
   invented loading screen — it only covers the JS-boot window (server flush →
@@ -222,7 +310,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   boots into the skeleton FOREVER (homepage SPA navigation still works,
   which misdirects the debugging; see Debugging notes for the recipe).
 - The streamed search page fails SAFE: a late-chunk serialization error
-  (a malformed result field reaching a macro) makes `zjsearch_stream`
+  (a malformed result field reaching a macro) makes `searx.zjsearch.stream`
   emit a recovery `page_error` payload (a leading `</script>` closes a
   script the failure may have left open; the client prefers the LAST
   parseable `#page-data`, see `parseEmbeddedPageData`). Never let a

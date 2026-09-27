@@ -2,6 +2,7 @@
 
 import { Lightbulb, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
+import { AiModeSwitch } from "@/components/AiModeSwitch.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox } from "@/components/SearchBox.tsx";
@@ -25,6 +26,10 @@ export function IndexPage({ data }: { data: IndexData }) {
   const globals = data.globals;
   const { openOverlay } = useOverlay();
   const [query, setQuery] = useState("");
+  // the AI mode choice on the hero is session-local state (initialized from
+  // the URL so back/forward into ?ai=1 lands in AI mode); it rides along
+  // with every search as the `ai` flag
+  const [aiMode, setAiMode] = useState(() => new URLSearchParams(window.location.search).get("ai") === "1");
   const [selected, setSelected] = useState<string[]>(
     data.selected_categories && data.selected_categories.length > 0
       ? data.selected_categories
@@ -45,6 +50,7 @@ export function IndexPage({ data }: { data: IndexData }) {
       time_range: filters.time_range,
       safesearch: filters.safesearch,
       pageno: 1,
+      ai: aiMode || undefined,
     });
   };
 
@@ -114,7 +120,8 @@ export function IndexPage({ data }: { data: IndexData }) {
             shared Collapse animates both directions); the hero is top-anchored
             (30vh), so growth extends downward only and the brand/search box
             never move */}
-        <div className="mt-3 flex w-full justify-end animate-fade-up [animation-delay:120ms]">
+        <div className="mt-3 flex w-full items-center justify-between gap-2 animate-fade-up [animation-delay:120ms]">
+          <AiModeSwitch ai={aiMode} onChange={setAiMode} />
           <button
             aria-expanded={optionsOpen}
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] transition-colors ${
@@ -129,6 +136,11 @@ export function IndexPage({ data }: { data: IndexData }) {
             {t("search_options")}
           </button>
         </div>
+        {aiMode ? (
+          <p className="mt-2 text-center text-[13px] text-ink-3 animate-fade-up [animation-delay:150ms]">
+            {t("ai_hero_hint")}
+          </p>
+        ) : null}
         <Collapse className={optionsOpen ? "mt-3" : ""} open={optionsOpen}>
           <div className="relative z-10 w-full">
             <CategoryTabs

@@ -27,7 +27,7 @@ import type { GlobalData, ResultItem } from "@/lib/types.ts";
 /** The grid views for the categories that have one; everything else falls
     back to the standard card list (papers/packages cards dispatch inside).
     Grid cells take `indexOffset` so hotkey indices stay page-global. */
-function CategoryCollectionView({
+export function CategoryCollectionView({
   category,
   results,
   globals,

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+import { ArrowUp, SlidersHorizontal, Star, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AiModeSwitch } from "@/components/AiModeSwitch.tsx";
 import { BackToTop } from "@/components/BackToTop.tsx";
+import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox } from "@/components/SearchBox.tsx";
 import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
@@ -10,12 +13,15 @@ import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
 import {
+  type AiSourceMeta,
   aiSourceMeta,
   buildAiContext,
   citedSourceNumbers,
   collectAiImages,
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
+import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
+import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
 import { CacheUrlProvider } from "@/features/results/CacheUrlProvider.tsx";
@@ -82,6 +88,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // while the UI actually renders in the browser language)
   const uiLocale = useLocale();
   const aiAnswer = useAiAnswer(globals.ai, uiLocale || globals.locale || "en");
+  // AI Search mode: the [classic|AI] switch writes `ai=1` into the URL; the
+  // panel leads the results column and auto-runs once the results settle
+  const aiSearchCap = globals.ai_search;
+  const aiModeRaw = urlParams?.ai === true || globals.ai_mode === true;
+  const aiMode = aiModeRaw && Boolean(aiSearchCap);
+  const aiSearch = useAiSearch(aiSearchCap);
 
   // re-sync filters after any navigation (back/forward, payload change);
   // a new search invalidates the Quick Answer and its citation marks
@@ -89,6 +101,8 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   useEffect(() => {
     setFilterValues(filterValuesFrom());
     aiAnswer.reset();
+    aiSearch.reset();
+    aiSearchRan.current = false;
     setAiMarks(null);
   }, [href]);
 
@@ -101,6 +115,8 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const flashTimer = useRef<number | null>(null);
   const hrefRef = useRef(href);
   hrefRef.current = href;
+  const [followupQuery, setFollowupQuery] = useState("");
+  const [researchMode, setResearchMode] = useState<AiSearchMode>("balanced");
   const [appended, setAppended] = useState<ResultItem[]>([]);
   const [appendState, setAppendState] = useState<"idle" | "loading" | "error" | "done">("idle");
   const appendedHref = useRef(href);
@@ -126,6 +142,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       language: string;
       time_range: string;
       safesearch: number;
+      ai: boolean;
     }>,
   ) => ({
     q: overrides?.q ?? data.q,
@@ -135,6 +152,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     time_range: overrides?.time_range ?? filterValues.time_range,
     safesearch: overrides?.safesearch ?? filterValues.safesearch,
     timeout_limit: data.timeout_limit || undefined,
+    ai: overrides?.ai ?? (aiModeRaw || globals.ai_mode || undefined),
     engine_data: data.engine_data && Object.keys(data.engine_data).length > 0 ? data.engine_data : undefined,
   });
 
@@ -253,7 +271,75 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     setHelpOpen((open) => !open);
   });
 
+  const onModeChange = (ai: boolean) => {
+    search(buildParams({ ai }));
+  };
+
   const allResults = useMemo(() => [...data.results, ...appended], [data.results, appended]);
+
+  // AI Search auto-run: once per search, after the results settled.  The raw
+  // results are NOT fed to the agent as a seed — with reference material in
+  // the prompt the model skips the web_search calls and answers directly
+  // (live-verified against LM Studio + qwen3.6), defeating the whole "AI
+  // drives the searches" point.  The agent runs on the question alone.
+  const aiSearchRan = useRef(false);
+  // no dependency array on purpose: the guard ref makes it run once per
+  // search.  allResults is deliberately NOT a gate — the takeover page has
+  // no classic results to wait for (the server skipped the raw fan-out)
+  useEffect(() => {
+    if (!aiMode || showSkeletons || error || aiSearchRan.current) {
+      return;
+    }
+    aiSearchRan.current = true;
+    aiSearch.start(data.q, uiLocale || globals.locale || "en", researchMode);
+  });
+  // a hand-crafted ?ai=1 (or the feature switched off mid-session) without
+  // the capability: the server ran no classic search either — fall back to
+  // the classic page so the user is never stuck on an empty takeover
+  // no dependency array on purpose: fires once per navigation state
+  useEffect(() => {
+    if (aiModeRaw && !aiSearchCap && !showSkeletons && !loading) {
+      search(buildParams({ ai: false }), { replace: true });
+    }
+  });
+  // citation chips of run N resolve against the thread's sources up to and
+  // including that run: a follow-up may cite earlier [n] sources, so its
+  // meta stays cumulative while each run's grid shows only its own finds
+  const runSourceMeta = (runIndex: number): AiSourceMeta[] =>
+    aiSearch.runs
+      .slice(0, runIndex + 1)
+      .flatMap((run) => run.sources)
+      .map((source) => ({
+        domain: source.netloc,
+        favicon: source.favicon,
+        t: source.title,
+        u: source.url,
+      }));
+  // answer citation [n] -> open the cited source page (Vane behaviour:
+  // there are no result rows to jump to on the takeover page)
+  const openRunSource = (runIndex: number, index: number): boolean => {
+    const source = aiSearch.runs.slice(0, runIndex + 1).flatMap((run) => run.sources)[index - 1];
+    if (!source?.url) {
+      return false;
+    }
+    window.open(source.url, "_blank", "noopener,noreferrer");
+    return true;
+  };
+  // a follow-up appends its run section: bring the new question into view
+  const runsCount = aiSearch.runs.length;
+  const seenRuns = useRef(0);
+  // no dependency array on purpose: the guard ref fires it on growth only
+  useEffect(() => {
+    const appended = runsCount > seenRuns.current;
+    seenRuns.current = runsCount;
+    if (!appended || runsCount < 2) {
+      return;
+    }
+    const el = document.getElementById(`ai-run-${runsCount}`);
+    if (el) {
+      scrollIntoViewAnimated(el, "start");
+    }
+  });
   const aiImages = useMemo(() => collectAiImages(allResults), [allResults]);
   const aiMeta = useMemo(() => aiSourceMeta(allResults), [allResults]);
 
@@ -376,7 +462,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // keeps the width reservation (matching the static skeleton so the swap
   // never shifts); afterwards it stays only with content — an absent rail
   // frees the column and the container-query grids widen into it
-  const showRail = showSkeletons || data.infoboxes.length > 0 || globals.method === "POST";
+  const showRail = !aiMode && (showSkeletons || data.infoboxes.length > 0 || globals.method === "POST");
   // a freed rail column is only useful to container-query grids; card-list
   // presentations render borderless rows capped at the reading measure, so
   // the full freed width would read as a formless void. They keep instead
@@ -388,70 +474,194 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   return (
     <Shell globals={globals} hideTopNav>
       <header>
-        {/* the query is the page's heading — visually carried by the query
-            pill, kept as an sr-only h1 for document outline / SEO */}
-        <h1 className="sr-only">{data.q}</h1>
-        <div className="zjs-results-header-row mx-auto flex w-full items-center gap-4 px-4 pt-3 sm:px-6">
-          {/* brand links back to the home page (SPA navigation);
-              hidden on small screens so the query box keeps enough width */}
-          <Link
-            ariaLabel={globals.instance_name}
-            className="hidden min-[480px]:block shrink-0 select-none font-serif text-2xl font-semibold tracking-tight text-ink"
-            href="/"
-            title={globals.instance_name}
-          >
-            {globals.instance_name}
-            {/* 品牌句号（DESIGN.md §2.2）：实心金点收尾，与 favicon 句号同色系 */}
-            <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
-          </Link>
-          <div className="min-w-0 flex-1 max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
-            <SearchBox initialQuery={data.q} onSubmitQuery={submitQuery} />
-          </div>
-          <div className="ms-auto">
-            <HeaderActions globals={globals} />
-          </div>
-        </div>
+        {!aiMode ? (
+          // classic header: brand + query pill + mode switch + actions
+          <>
+            <h1 className="sr-only">{data.q}</h1>
+            <div className="zjs-results-header-row mx-auto flex w-full items-center gap-4 px-4 pt-3 sm:px-6">
+              <Link
+                ariaLabel={globals.instance_name}
+                className="hidden min-[480px]:block shrink-0 select-none font-serif text-2xl font-semibold tracking-tight text-ink"
+                href="/"
+                title={globals.instance_name}
+              >
+                {globals.instance_name}
+                <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
+              </Link>
+              <div className="min-w-0 flex-1 max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
+                <SearchBox initialQuery={data.q} onSubmitQuery={submitQuery} />
+              </div>
+              {aiSearchCap ? <AiModeSwitch ai={aiModeRaw} onChange={onModeChange} /> : null}
+              <div className="ms-auto">
+                <HeaderActions globals={globals} />
+              </div>
+            </div>
+          </>
+        ) : (
+          // AI takeover header: a slim Vane-style bar -- small brand, the
+          // question heading lives in the column, mode switch + actions right
+          <>
+            <h1 className="sr-only">{data.q}</h1>
+            <div className="mx-auto flex w-full items-center gap-3 px-4 pt-3 sm:px-6">
+              <Link
+                ariaLabel={globals.instance_name}
+                className="shrink-0 select-none font-serif text-xl font-semibold tracking-tight text-ink"
+                href="/"
+                title={globals.instance_name}
+              >
+                {globals.instance_name}
+                <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
+              </Link>
+              <div className="ms-auto flex items-center gap-3">
+                {aiSearchCap ? <AiModeSwitch ai={aiModeRaw} onChange={onModeChange} /> : null}
+                <HeaderActions globals={globals} />
+              </div>
+            </div>
+          </>
+        )}
       </header>
 
       <main className="zjs-results-main mx-auto w-full flex-1 px-4 sm:px-6">
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
           {/* @container: grid density keys off the actual column width, so
               widescreen adds a column and centered mode drops one */}
-          <div className={`@container min-w-0 flex-1 pt-4 ${columnCap}`} ref={listRef}>
+          <div
+            className={`@container min-w-0 flex-1 pt-4 ${columnCap} ${aiMode ? "mx-auto w-full max-w-3xl" : ""}`}
+            ref={listRef}
+          >
             {/* Kagi layout: the tabs and filters live in the results column so
-                the infobox sidebar rises to the top of the page */}
-            <CategoryTabs
-              globals={globals}
-              onSearch={onSearchCategories}
-              onSelectionChange={setSelectedCategories}
-              selected={selectedCategories}
-            />
-            <div className="mt-1">
-              <SearchFilters globals={globals} onChange={onFilters} values={filterValues} />
-            </div>
-            {!showSkeletons && !error ? (
+                the infobox sidebar rises to the top of the page.  The AI
+                takeover hides both — the agent picks its own categories. */}
+            {!aiMode ? (
               <>
-                <div className="mt-2">
-                  <DebugPanels
-                    actions={
-                      globals.ai && allResults.length > 0 ? (
-                        <AiAnswerTrigger
-                          onToggle={() => {
-                            aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
-                          }}
-                          phase={aiAnswer.phase}
-                        />
-                      ) : null
-                    }
-                    data={data}
-                    results={allResults}
-                    searchUrl={shareableSearchUrl(data)}
-                  />
-                </div>
-                <div className="mt-3.5">
-                  <SuggestionsBox data={data} onSearch={submitQuery} />
+                <CategoryTabs
+                  globals={globals}
+                  onSearch={onSearchCategories}
+                  onSelectionChange={setSelectedCategories}
+                  selected={selectedCategories}
+                />
+                <div className="mt-1">
+                  <SearchFilters globals={globals} onChange={onFilters} values={filterValues} />
                 </div>
               </>
+            ) : null}
+            {!showSkeletons && !error ? (
+              aiMode ? (
+                <div className="space-y-8">
+                  {aiSearch.runs.map((run, index) => (
+                    <AiSearchRunSection
+                      isFirst={index === 0}
+                      isLast={index === aiSearch.runs.length - 1}
+                      key={run.runNo}
+                      live={index === aiSearch.runs.length - 1 && aiSearch.phase === "streaming"}
+                      onCite={(n) => {
+                        return openRunSource(index, n);
+                      }}
+                      onFallback={() => {
+                        onModeChange(false);
+                      }}
+                      onRegenerate={() => {
+                        const lang = uiLocale || globals.locale || "en";
+                        aiSearch.reset();
+                        aiSearch.start(data.q, lang, researchMode);
+                      }}
+                      onRelated={(question) => {
+                        setFollowupQuery("");
+                        aiSearch.followup(question, uiLocale || globals.locale || "en", researchMode);
+                      }}
+                      onStop={() => {
+                        aiSearch.stop();
+                      }}
+                      run={run}
+                      sourceMeta={runSourceMeta(index)}
+                    />
+                  ))}
+                  {aiSearch.phase === "done" ? (
+                    // Perplexica's floating follow-up: pinned above the fold
+                    // while the thread scrolls under it, a palette fog fading
+                    // the content beneath the pill
+                    <div className="sticky bottom-6 z-10">
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute -inset-x-6 -bottom-8 -top-8 -z-10 bg-gradient-to-t from-surface via-surface/90 to-transparent"
+                      />
+                      <form
+                        aria-label={t("ai_search_followup")}
+                        className="flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-card transition-colors focus-within:border-accent"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          const value = followupQuery.trim();
+                          if (!value) {
+                            return;
+                          }
+                          setFollowupQuery("");
+                          aiSearch.followup(value, uiLocale || globals.locale || "en", researchMode);
+                        }}
+                      >
+                        <Dropdown
+                          ariaLabel={t("research_mode")}
+                          onChange={(value) => {
+                            setResearchMode(value as AiSearchMode);
+                          }}
+                          options={[
+                            { value: "speed", label: t("mode_speed"), icon: <Zap className="size-3.5 text-ink-3" /> },
+                            {
+                              value: "balanced",
+                              label: t("mode_balanced"),
+                              icon: <SlidersHorizontal className="size-3.5 text-ink-3" />,
+                            },
+                            {
+                              value: "quality",
+                              label: t("mode_quality"),
+                              icon: <Star className="size-3.5 text-ink-3" />,
+                            },
+                          ]}
+                          value={researchMode}
+                        />
+                        <input
+                          className="min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+                          onChange={(event) => {
+                            setFollowupQuery(event.target.value);
+                          }}
+                          placeholder={t("ai_search_followup")}
+                          value={followupQuery}
+                        />
+                        <button
+                          aria-label={t("ai_search_followup")}
+                          className="grid size-8 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-opacity disabled:opacity-40"
+                          disabled={!followupQuery.trim()}
+                          type="submit"
+                        >
+                          <ArrowUp className="size-4" />
+                        </button>
+                      </form>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <div className="mt-2">
+                    <DebugPanels
+                      actions={
+                        globals.ai && allResults.length > 0 ? (
+                          <AiAnswerTrigger
+                            onToggle={() => {
+                              aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
+                            }}
+                            phase={aiAnswer.phase}
+                          />
+                        ) : null
+                      }
+                      data={data}
+                      results={allResults}
+                      searchUrl={shareableSearchUrl(data)}
+                    />
+                  </div>
+                  <div className="mt-3.5">
+                    <SuggestionsBox data={data} onSearch={submitQuery} />
+                  </div>
+                </>
+              )
             ) : null}
 
             {error ? (
@@ -469,7 +679,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                   <ResultSkeleton key={index} />
                 ))}
               </div>
-            ) : (
+            ) : aiMode ? // AI takeover: the panel + blocks above ARE the page; the
+            // classic lower half (fed by the skipped raw search) stays off
+            null : (
               <>
                 <Corrections data={data} onSearch={submitQuery} />
                 <div className="mt-3 space-y-3">

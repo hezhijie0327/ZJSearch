@@ -24,11 +24,12 @@ import flask
 from flask_babel import gettext
 from markupsafe import escape
 
-from searx import logger, settings, zjsearch_ai
+from searx import logger, settings
 from searx.extended_types import sxng_request
 from searx.locales import RTL_LOCALES, match_locale
 from searx.webadapter import get_search_query_from_webapp
 from searx.webutils import get_translated_errors, highlight_content
+from searx.zjsearch.ai import llm, search as ai_search
 
 logger = logger.getChild('zjsearch_stream')
 
@@ -282,20 +283,48 @@ def _render_context(webapp, template_name: str, **kwargs):  # pylint: disable=un
     )
     kwargs['urlparse'] = webapp.urlparse
 
-    # zjsearch AI summary capability (token + model) -- absent when the
-    # feature is off or unconfigured; the templates omit the key then and
-    # the client hides its chips.  The upstream render fallback path does
-    # not run this mirror, so it never carries the key either.
-    kwargs['ai'] = zjsearch_ai.capability()
+    # zjsearch AI capability (token + model) -- absent when the feature is
+    # off or unconfigured; the templates omit the key then and the client
+    # hides its chips.  The upstream render fallback path does not run this
+    # mirror, so it never carries the key either.
+    kwargs['ai'] = llm.capability()
+
+    # the AI Search mode switch rides the same gate shape (token + model);
+    # absent when the feature flag is off -- the client hides the switch
+    kwargs['ai_search'] = ai_search.capability()
+    # AI search takeover active for THIS request (ai=1 + capability): the
+    # client renders the agent experience instead of the classic results
+    kwargs['ai_mode'] = sxng_request.form.get('ai') == '1' and ai_search.capability() is not None
 
     return kwargs
 
 
-def _search_stream_response(search_query, raw_text_query, selected_locale) -> flask.Response:
+class ZjsearchAiModeSearch(ZjsearchStreamedSearch):
+    """AI search mode (``ai=1``): the raw query's engine fan-out is SKIPPED
+    -- every search on this page is driven by the agent (``POST /ai/search``),
+    so running the classic search would double the engine load and duplicate
+    the results.  The payload resolves immediately with an empty result set;
+    the client renders the agent experience and falls back to the classic
+    page itself when the AI capability is missing."""
+
+    def _run(self):
+        if self._data is not None:
+            return
+        self._data = {
+            'search_language': match_locale(
+                self.search_query.lang,
+                settings['search']['languages'],
+                fallback=sxng_request.preferences.get_value("language"),
+            ),
+        }
+
+
+def _search_stream_response(search_query, raw_text_query, selected_locale, streamed=None) -> flask.Response:
     """Build the streaming response for a zjsearch HTML search."""
     from searx import webapp  # pylint: disable=import-outside-toplevel,cyclic-import
 
-    streamed = ZjsearchStreamedSearch(search_query, raw_text_query, selected_locale)
+    if streamed is None:
+        streamed = ZjsearchStreamedSearch(search_query, raw_text_query, selected_locale)
     context = _render_context(
         webapp,
         'results.html',
@@ -383,16 +412,20 @@ def _before_request():  # pylint: disable=too-many-return-statements
     except Exception:  # pylint: disable=broad-except
         return None
 
+    if sxng_request.form.get('ai') == '1' and ai_search.capability():
+        # AI search mode: the agent owns the page -- no classic engine run
+        streamed = ZjsearchAiModeSearch(search_query, raw_text_query, selected_locale)
+        response = _search_stream_response(search_query, raw_text_query, selected_locale, streamed)
+        return response
     return _search_stream_response(search_query, raw_text_query, selected_locale)
 
 
 def install(app: flask.Flask) -> None:
-    """Register the streaming hook; called once at the end of webapp.py.
+    """Register the streaming hook; chained from the package ``install``
+    (``searx.zjsearch``), which webapp.py calls once.
 
     Registered after the upstream before_request hooks, so the preferences
-    (theme) and the merged GET/POST form are already prepared.  Chains the
-    AI summary module (its own route registration) so webapp.py keeps a
-    single theme entry point.
+    (theme) and the merged GET/POST form are already prepared.  The AI
+    routes are chained by the package ``install`` as well.
     """
-    zjsearch_ai.install(app)
     app.before_request(_before_request)

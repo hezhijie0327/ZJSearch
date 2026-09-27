@@ -18,6 +18,12 @@
         </svg>
       </span>
     </div>
+    {%- if ai_search %}
+    <div aria-hidden="true" class="zjs-boot-mode">
+      <span class="zjs-boot-mode-seg is-on">Classic</span>
+      <span class="zjs-boot-mode-seg"></span>
+    </div>
+    {%- endif %}
     <div aria-hidden="true" class="zjs-boot-actions">
       <span class="zjs-skeleton zjs-boot-action"></span>
       <span class="zjs-skeleton zjs-boot-action"></span>

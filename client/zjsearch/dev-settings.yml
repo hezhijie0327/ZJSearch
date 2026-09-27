@@ -143,6 +143,15 @@ zjsearch:
     base_url: "http://localhost:1234/v1"
     api_key: ""
     model: "qwen/qwen3.6-35b-a3b"
+    # AI Search rides the same transport; the model must support native
+    # tool calls (endpoints without tool support answer 400/404 -- the
+    # AI Overview keeps working either way).
+    search:
+      enabled: true
+      # max_rounds: 3            # tool rounds before the forced final turn
+      # max_calls_per_round: 4   # parallel searches per round
+      # max_calls_total: 8       # searches per AI search request
+      # budget_seconds: 240      # wall-clock cap for the whole loop
     # online examples -- swap sdk/base_url/model and the ZJSEARCH_AI_KEY:
     #   sdk: openai_chat_completions
     #   base_url: "https://api.openai.com/v1"

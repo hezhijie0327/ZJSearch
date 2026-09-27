@@ -1,0 +1,445 @@
+// SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+
+import {
+  BookMarked,
+  Brain,
+  Check,
+  ChevronDown,
+  CircleStop,
+  Copy,
+  CornerDownRight,
+  Disc3,
+  Globe,
+  Lightbulb,
+  LoaderCircle,
+  Plus,
+  Repeat2,
+  Search,
+  X,
+} from "lucide-react";
+import { useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
+import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
+import { type AiSourceMeta, CITATION_RE } from "@/features/results/aiAnswer.ts";
+import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
+import type {
+  AiSearchCall,
+  AiSearchRun,
+  AiSearchSource,
+  AiSearchStep,
+} from "@/features/results/aiSearch/useAiSearch.ts";
+import { useCopyToast } from "@/lib/clipboard.ts";
+import { useT } from "@/lib/i18n.ts";
+import { SCROLLBAR_NONE } from "@/lib/styles.ts";
+
+/**
+ * One threaded Q&A section of the AI Search page, in the production
+ * order: the question as a heading, the collapsible Research box (the
+ * CHRONOLOGICAL step timeline -- collapsible think segment,
+ * lightbulb-marked conclusion line, and EXPANDABLE tool-call rows: a
+ * settled row with results opens a swipe strip of that search's result
+ * cards), the flowing cited synthesis, the run's own source-card grid
+ * behind it, and the run's Related questions.  The FIRST section of the
+ * thread carries the large page title; follow-up sections lead with a
+ * smaller heading behind a thread divider.
+ */
+
+function citeToLinks(text: string): string {
+  let inFence = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(?:```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) {
+        return line;
+      }
+      return line
+        .split(/(`[^`]*`)/)
+        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION_RE, rewriteCitation)))
+        .join("");
+    })
+    .join("\n");
+}
+
+function rewriteCitation(match: string, group: string | undefined): string {
+  if (!group) {
+    return match;
+  }
+  return group
+    .split(/\s*[,，]\s*/)
+    .map((n: string) => `[${n}](#ref-${n})`)
+    .join("");
+}
+
+/** One settled search's result cards (DeltaV's expandable tool row): a
+    swipe strip of small title + favicon + domain cards, each opening the
+    result page.  Fed from the run's [n] registry slice for that call. */
+function CallResults({ results }: { results: AiSearchSource[] }) {
+  return (
+    <div className={`mt-1 flex gap-2 overflow-x-auto pb-1 ${SCROLLBAR_NONE} [&>*]:shrink-0`}>
+      {results.map((source) => (
+        <a
+          className="w-44 rounded-lg bg-surface-2/70 p-2 transition-colors hover:bg-surface-2"
+          href={source.url}
+          key={source.n}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <p className="line-clamp-2 text-xs font-medium leading-snug text-ink" dir="auto">
+            {source.title}
+          </p>
+          <span className="mt-1.5 flex min-w-0 items-center gap-1">
+            {source.favicon ? (
+              <img alt="" aria-hidden="true" className="size-3.5 rounded object-contain" src={source.favicon} />
+            ) : (
+              <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
+            )}
+            <span className="truncate text-xs text-ink-3">{source.netloc}</span>
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/** One tool-call row: status + query + result count, EXPANDABLE when the
+    search returned anything -- toggling reveals its result cards. */
+function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const ok = call.status === "ok";
+  const expandable = results.length > 0;
+  return (
+    <div>
+      <button
+        aria-expanded={expandable ? open : undefined}
+        className={`flex min-h-6 w-full items-center gap-1.5 px-1 text-xs ${
+          call.status === "error" || call.status === "timeout" ? "text-danger" : "text-ink-3"
+        } ${expandable ? "transition-colors hover:text-ink" : ""}`}
+        onClick={() => {
+          if (expandable) {
+            setOpen(!open);
+          }
+        }}
+        type="button"
+      >
+        {call.status === "pending" ? (
+          <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
+        ) : ok ? (
+          <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
+        ) : (
+          <X aria-hidden="true" className="size-3 shrink-0 text-danger" />
+        )}
+        <Search aria-hidden="true" className="size-3 shrink-0" />
+        <span className="truncate" dir="auto">
+          {call.q}
+        </span>
+        <span className="ms-auto shrink-0 ps-2 tabular-nums">
+          {call.status === "pending"
+            ? t("ai_search_running")
+            : ok
+              ? `(${call.n ?? 0})`
+              : call.status === "timeout"
+                ? t("ai_search_row_timeout")
+                : t("ai_search_row_failed")}
+        </span>
+        {expandable ? (
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        ) : null}
+      </button>
+      {open && expandable ? <CallResults results={results} /> : null}
+    </div>
+  );
+}
+
+/** One collapsible reasoning segment: the header carries the Brain icon,
+    the label and the segment's streaming duration; the raw think stream
+    stays inside.  Open while THIS segment is the one streaming (unless
+    the user toggled), folded once later steps take over. */
+function ThinkSegment({
+  step,
+  open,
+  live,
+}: {
+  step: Extract<AiSearchStep, { kind: "think" }>;
+  open: boolean;
+  /** true while this segment's think stream is still growing */
+  live: boolean;
+}) {
+  const t = useT();
+  const [forced, setForced] = useState<boolean | null>(null);
+  const expanded = forced ?? open;
+  return (
+    <div>
+      <button
+        aria-expanded={expanded}
+        className="inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink-2"
+        onClick={() => {
+          setForced(!expanded);
+        }}
+        type="button"
+      >
+        <Brain aria-hidden="true" className="size-3 shrink-0" />
+        {t("ai_thinking")}
+        <ChevronDown aria-hidden="true" className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      <Collapse className={expanded ? "mt-1" : ""} open={expanded}>
+        <ThinkScroll active={live && expanded} text={step.text} />
+      </Collapse>
+    </div>
+  );
+}
+
+function StepSegment({
+  index,
+  run,
+  step,
+  streaming,
+}: {
+  index: number;
+  run: AiSearchRun;
+  step: AiSearchStep;
+  streaming: boolean;
+}) {
+  if (step.kind === "think") {
+    return (
+      <div className={index > 0 ? "mt-2.5" : ""}>
+        <ThinkSegment
+          live={streaming && index === run.steps.length - 1}
+          open={streaming && index === run.steps.length - 1}
+          step={step}
+        />
+      </div>
+    );
+  }
+  if (step.kind === "intent") {
+    return (
+      <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
+        <Lightbulb aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
+        <p className="py-0.5 text-[13px] leading-relaxed text-ink-2" dir="auto">
+          {step.text}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className={`flex flex-col gap-0.5 ${index > 0 ? "mt-1.5" : ""}`}>
+      {step.calls.map((call) => (
+        <CallRow
+          call={call}
+          key={`${step.round}-${call.id}`}
+          results={run.sources.filter((source) => source.round === step.round && source.callId === call.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function AiSearchRunSection({
+  run,
+  isFirst,
+  isLast,
+  live,
+  sourceMeta,
+  onCite,
+  onRegenerate,
+  onFallback,
+  onRelated,
+  onStop,
+}: {
+  run: AiSearchRun;
+  isFirst: boolean;
+  isLast: boolean;
+  /** true while THIS run is the one streaming */
+  live: boolean;
+  /** citation-chip meta: the thread's sources up to and including this run */
+  sourceMeta: AiSourceMeta[];
+  onCite?: (index: number) => boolean;
+  onRegenerate?: () => void;
+  onFallback?: () => void;
+  /** a Related question was picked: start a follow-up run */
+  onRelated?: (question: string) => void;
+  onStop?: () => void;
+}) {
+  const t = useT();
+  const copyToast = useCopyToast();
+  const [researchForced, setResearchForced] = useState<boolean | null>(null);
+  const streaming = run.status === "streaming" && live;
+  const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
+  const researchOpen = researchForced ?? streaming;
+  const hasThink = run.steps.some((step) => step.kind === "think" && step.text.trim());
+  const failed = run.status === "error" || (run.status === "done" && !run.answer && !hasThink && totalCalls === 0);
+
+  return (
+    <section
+      aria-busy={streaming}
+      aria-label={run.q}
+      className={`animate-fade-up space-y-5 ${isFirst ? "" : "border-t border-line pt-8"}`}
+      id={`ai-run-${run.runNo}`}
+    >
+      <h2 className={`break-words font-medium leading-tight text-ink ${isFirst ? "text-3xl" : "text-2xl"}`} dir="auto">
+        {run.q}
+      </h2>
+
+      {/* research: think stream + intent + parallel tool calls */}
+      <section aria-busy={streaming} aria-label={t("ai_search_process")}>
+        <div className="flex items-center gap-2">
+          {streaming ? (
+            <Disc3 aria-hidden="true" className="size-5 shrink-0 animate-spin text-ink-3" />
+          ) : (
+            <Search aria-hidden="true" className="size-5 text-ink-3" />
+          )}
+          <button
+            aria-expanded={researchOpen}
+            className="inline-flex min-h-6 items-center gap-1.5 text-xl font-medium text-ink transition-colors hover:text-ink-2"
+            onClick={() => {
+              setResearchForced(!researchOpen);
+            }}
+            type="button"
+          >
+            {t("ai_search_process")}
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {streaming ? (
+            <button
+              aria-label={t("stop")}
+              className="ms-auto grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={onStop}
+              title={t("stop")}
+              type="button"
+            >
+              <CircleStop className="size-4" />
+            </button>
+          ) : null}
+        </div>
+        <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
+          <div className="rounded-lg border border-line p-3">
+            {run.steps.map((step, index) => (
+              <StepSegment index={index} key={`${step.kind}-${index}`} run={run} step={step} streaming={streaming} />
+            ))}
+            {streaming && !run.steps.length ? (
+              <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
+            ) : null}
+          </div>
+        </Collapse>
+      </section>
+
+      {/* synthesis */}
+      {run.answer ? (
+        <section aria-label={t("ai_search_answer")}>
+          <div className="flex items-center gap-2">
+            {streaming ? (
+              <Disc3 aria-hidden="true" className="size-5 shrink-0 animate-spin text-ink-3" />
+            ) : (
+              <BookMarked aria-hidden="true" className="size-5 text-ink-3" />
+            )}
+            <h3 className="text-xl font-medium text-ink">{t("ai_search_answer")}</h3>
+          </div>
+          <div className="mt-3 text-[15px] leading-relaxed text-ink">
+            <MarkdownAnswer markdown={citeToLinks(run.answer)} meta={sourceMeta} onCite={onCite} settled={!streaming} />
+          </div>
+          {!streaming && isLast ? (
+            <div className="mt-3 flex items-center gap-1">
+              <button
+                aria-label={t("copy")}
+                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={() => {
+                  copyToast(run.answer);
+                }}
+                title={t("copy")}
+                type="button"
+              >
+                <Copy className="size-4" />
+              </button>
+              <button
+                aria-label={t("regenerate")}
+                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={onRegenerate}
+                title={t("regenerate")}
+                type="button"
+              >
+                <Disc3 className="size-4" />
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* this run's own source cards -- the evidence behind the answer,
+          shown after it (the production order: research -> answer ->
+          sources -> related) */}
+      {run.sources.length > 0 ? (
+        <AiSearchSources sources={run.sources} />
+      ) : streaming ? (
+        <AiSearchSourcesSkeleton />
+      ) : null}
+
+      {/* this run's follow-up suggestions */}
+      {run.related.length > 0 ? (
+        <section aria-label={t("related")}>
+          <div className="flex items-center gap-2">
+            <Repeat2 aria-hidden="true" className="size-5 text-ink-3" />
+            <h3 className="text-xl font-medium text-ink">{t("related")}</h3>
+          </div>
+          <div className="mt-1">
+            {run.related.map((question, i) => (
+              <div key={i}>
+                <div className="h-px bg-line" />
+                <button
+                  className="group flex w-full items-center justify-between gap-3 py-3 text-left"
+                  onClick={() => {
+                    onRelated?.(question);
+                  }}
+                  type="button"
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <CornerDownRight
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                    />
+                    <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
+                      {question}
+                    </span>
+                  </span>
+                  <Plus
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                  />
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {failed ? (
+        <div className="rounded-lg border border-line p-3 text-xs text-danger">
+          <p>{t("ai_search_failed")}</p>
+          {run.error ? (
+            <p className="mt-1 break-words text-danger/80" dir="auto">
+              {run.error}
+            </p>
+          ) : null}
+          {onFallback ? (
+            <button
+              className="mt-2 inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+              onClick={onFallback}
+              type="button"
+            >
+              {t("ai_search_try_classic")}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
