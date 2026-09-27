@@ -641,16 +641,27 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
     newest line in view (no-op once settled or folded). */
 export function ThinkScroll({ active, text }: { active: boolean; text: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // tail-follow must not fight the reader: while streaming the tail is
+  // followed ONLY until the user scrolls away from it; scrolling back to
+  // the bottom re-pins (the classic live-log pattern)
+  const pinnedRef = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the live stream tail
   useEffect(() => {
-    if (active && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (active && el && pinnedRef.current) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [active, text]);
   return (
     <div
-      className="max-h-32 overflow-y-auto pe-1 whitespace-pre-wrap text-xs leading-relaxed text-ink-3"
+      className="max-h-40 overflow-y-auto overscroll-contain pe-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-ink-3"
       dir="auto"
+      onScroll={() => {
+        const el = scrollRef.current;
+        if (el) {
+          pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+        }
+      }}
       ref={scrollRef}
     >
       {text.trim()}

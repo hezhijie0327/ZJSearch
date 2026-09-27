@@ -293,7 +293,7 @@ function AiSearchRunSectionImpl({
           ) : null}
         </div>
         <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
-          <div className="rounded-lg border border-line p-3">
+          <div className="break-words rounded-lg border border-line p-3">
             {run.steps.map((step, index) => (
               <StepSegment index={index} key={`${step.kind}-${index}`} run={run} step={step} streaming={streaming} />
             ))}
