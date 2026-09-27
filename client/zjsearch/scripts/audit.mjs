@@ -253,6 +253,15 @@ async function main() {
           res.end(llmsTxt);
           return;
         }
+        // anything else that is not the page itself is a REAL 404 — a
+        // 200-HTML answer for e.g. the agentic-browsing audit's
+        // /ai-catalog.json probe turns "absent" into "malformed JSON" and
+        // fails the category
+        if (_req.url !== "/nojs.html" && _req.url !== "/") {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end("not found");
+          return;
+        }
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(stripped);
       });
@@ -266,12 +275,25 @@ async function main() {
     // emulation and the (mild) desktop throttling in one go
     const config = MOBILE ? undefined : (await import("lighthouse/core/config/desktop-config.js")).default;
 
+    /** Headless Chromium occasionally dies outright between traces
+        (Edge/Chrome "Failed to fetch browser webSocket URL") — relaunch it
+        so one crashed process does not fail the whole audit. */
+    async function relaunchChrome() {
+      try {
+        await chrome.kill();
+      } catch {
+        /* already gone */
+      }
+      chrome = await launch({ chromeFlags: ["--headless=new"] });
+      console.log("  … browser process died — relaunched");
+    }
+
     /** One Lighthouse run.  Headless Chrome occasionally aborts a trace
         (Lantern "missing metric scores" / interstitial errors) — those come
         back as all-zero categories and are retried once. */
     async function runPage(url, ignoreStatusCode) {
       let lastError;
-      for (let attempt = 1; attempt <= 2; attempt++) {
+      for (let attempt = 1; attempt <= 4; attempt++) {
         try {
           const pageConfig = ignoreStatusCode
             ? { ...(config ?? {}), settings: { ...(config?.settings ?? {}), ignoreStatusCode: true } }
@@ -285,6 +307,10 @@ async function main() {
           lastError = new Error(lhr.runtimeError?.message ?? "all categories scored 0 (load error)");
         } catch (error) {
           lastError = error;
+        }
+        if (String(lastError?.message ?? lastError).includes("webSocket URL")) {
+          await relaunchChrome();
+          continue;
         }
         if (attempt === 1) {
           console.log("  … lighthouse trace failed, retrying once");
