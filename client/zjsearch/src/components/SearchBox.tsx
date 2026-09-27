@@ -316,9 +316,14 @@ export function SearchBox({
             aria-label={t("search")}
             autoCapitalize="none"
             autoComplete="off"
-            className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 selection:bg-transparent ${
-              ghost ? "text-transparent caret-ink" : ""
-            }`}
+            className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${
+              ghost || activeSuggestion
+                ? // the ghost mirror (or a non-extending suggestion) owns the
+                  // visual: the global accent ::selection must not paint over it
+                  "selection:bg-transparent"
+                : // plain typed text: Ctrl+A shows the site-wide accent selection
+                  "selection:bg-accent/30"
+            } ${ghost ? "text-transparent caret-ink" : ""}`}
             dir="auto"
             name="q"
             onChange={(event) => {
