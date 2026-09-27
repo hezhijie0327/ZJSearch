@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ArrowUp, Lightbulb, LoaderCircle, SlidersHorizontal, X } from "lucide-react";
+import { Lightbulb, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
 import { AiModeSwitch } from "@/components/AiModeSwitch.tsx";
+import { BrandDot } from "@/components/Brand.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
-import { SearchBox } from "@/components/SearchBox.tsx";
+import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
 import { CategoryTabs, defaultFilterValues, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
-import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
-import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
+import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -27,15 +27,23 @@ interface IndexData extends BasicPageData {
 export function IndexPage({ data }: { data: IndexData }) {
   const { search, loading } = useRouter();
   const globals = data.globals;
-  const { openOverlay } = useOverlay();
   const [query, setQuery] = useState("");
   // the AI mode choice on the hero is session-local state (initialized from
   // the URL so back/forward into ?ai=1 lands in AI mode); it rides along
-  // with every search as the `ai` flag
-  const [aiMode, setAiMode] = useState(() => new URLSearchParams(window.location.search).get("ai") === "1");
+  // with every search as the `ai` flag.  The switch only exists when the
+  // server ships the ai_search capability (zjsearch.ai.search.enabled) --
+  // without it the hero stays classic and ?ai=1 is ignored.
+  const aiSearchCap = Boolean(globals.ai_search);
+  const [aiMode, setAiMode] = useState(
+    () => Boolean(globals.ai_search) && new URLSearchParams(window.location.search).get("ai") === "1",
+  );
   // the hero's research-depth pick rides to the results page as the `mode`
-  // param, where the agent run starts at that depth
-  const [aiDepth, setAiDepth] = useState<AiSearchMode>("balanced");
+  // param, where the agent run starts at that depth; back/forward into a
+  // ?mode= URL re-opens the hero at that depth (validated — anything
+  // unknown falls back to balanced)
+  const [aiDepth, setAiDepth] = useState<AiSearchMode>(() =>
+    parseDepthMode(new URLSearchParams(window.location.search).get("mode")),
+  );
   const [selected, setSelected] = useState<string[]>(
     data.selected_categories && data.selected_categories.length > 0
       ? data.selected_categories
@@ -83,31 +91,13 @@ export function IndexPage({ data }: { data: IndexData }) {
   return (
     <Shell globals={globals} variant="hero">
       <main className="mx-auto flex w-full max-w-2xl flex-col items-center px-4 pb-24">
-        {/* the accent dot is the attribution: hovering (or focusing) it fades
-            in "Powered by SearXNG" beside the wordmark — absolutely positioned
-            so the centered brand never shifts — and tapping it opens About.
+        {/* 品牌句号（DESIGN.md §2.2）：实心金点收尾，与 favicon 句号同色系。
             The wordmark NEVER changes size across modes: every hero block
             below either stays mounted or animates its height (Collapse), so
             the mode flip cannot jump the layout. */}
         <h1 className="animate-fade-up font-serif text-6xl font-black tracking-tight text-ink sm:text-7xl">
           {globals.instance_name}
-          <button
-            aria-label={`${t("powered_by")} SearXNG`}
-            className="group/dot relative cursor-pointer"
-            onClick={() => {
-              openOverlay(globals.about_url, t("about"), "about");
-            }}
-            type="button"
-          >
-            {/* 品牌句号（DESIGN.md §2.2）：实心金点收尾，与 favicon 句号同色系 */}
-            <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute bottom-1.5 left-full ms-3 hidden whitespace-nowrap text-xs font-medium tracking-normal text-ink-3 opacity-0 transition-opacity duration-150 group-focus-visible/dot:opacity-100 group-hover/dot:opacity-100 sm:block"
-            >
-              {t("powered_by")} SearXNG
-            </span>
-          </button>
+          <BrandDot />
         </h1>
         {/* ONE ask-card for both modes (morphic's ask-anything): the input
             on top, the bottom row carries the [classic|AI] switch, the
@@ -132,7 +122,7 @@ export function IndexPage({ data }: { data: IndexData }) {
           />
           <div className="mt-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <AiModeSwitch ai={aiMode} onChange={setAiMode} />
+              {aiSearchCap ? <AiModeSwitch ai={aiMode} onChange={setAiMode} /> : null}
               {aiMode ? (
                 <Dropdown
                   ariaLabel={t("research_mode")}
@@ -158,21 +148,16 @@ export function IndexPage({ data }: { data: IndexData }) {
                 </button>
               )}
             </div>
-            <button
-              aria-label={t("search")}
-              className="grid size-10 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-opacity hover:bg-accent-strong-hover disabled:opacity-40"
+            <SubmitCircle
               disabled={!query.trim()}
+              label={t("search")}
+              large
+              loading={loading}
               onClick={() => {
                 submitSearch(query);
               }}
-              type="button"
-            >
-              {loading ? (
-                <LoaderCircle aria-hidden="true" className="size-4.5 animate-spin-slow" />
-              ) : (
-                <ArrowUp className="size-4.5" />
-              )}
-            </button>
+              send
+            />
           </div>
         </div>
         {/* classic-only tabs + filters: forced closed in AI mode (an agent run

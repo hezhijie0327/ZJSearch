@@ -2,6 +2,7 @@
 
 import { ChevronLeft, Info, RefreshCw, Search, SearchX } from "lucide-react";
 import { useT } from "@/lib/i18n.ts";
+import { OUTLINE_PILL } from "@/lib/styles.ts";
 import type { SearchPageData } from "@/lib/types.ts";
 
 export function NoResults({
@@ -39,20 +40,12 @@ export function NoResults({
       <p className="mt-1.5 text-sm text-ink-2">{firstPage ? t("no_results_found") : t("go_previous_page")}</p>
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         {firstPage ? (
-          <button
-            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink-2 transition-colors hover:border-accent hover:text-accent"
-            onClick={() => window.location.reload()}
-            type="button"
-          >
+          <button className={OUTLINE_PILL} onClick={() => window.location.reload()} type="button">
             <RefreshCw className="size-3.5" />
             {t("refresh_page")}
           </button>
         ) : onPrev ? (
-          <button
-            className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink-2 transition-colors hover:border-accent hover:text-accent"
-            onClick={onPrev}
-            type="button"
-          >
+          <button className={OUTLINE_PILL} onClick={onPrev} type="button">
             <ChevronLeft className="size-3.5" />
             {t("previous_page")}
           </button>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Calendar, Eye, Globe, User, X } from "lucide-react";
+import { Calendar, Eye, Globe, type LucideIcon, User, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { EnginesLine, ResultLink } from "@/features/results/cardParts.tsx";
@@ -243,5 +243,18 @@ export function TileCenterAction({
     <button aria-label={label} className={className} onClick={onClick} title={label} type="button">
       {icon}
     </button>
+  );
+}
+
+/** The empty-tile placeholder: ONE composition for every grid (muted
+    surface + accent-soft disc + glyph) — the per-grid bare glyphs used to
+    drift in size and tone. */
+export function TilePlaceholder({ icon: Icon }: { icon: LucideIcon }) {
+  return (
+    <span className="grid size-full place-items-center bg-surface-2 text-ink-3">
+      <span className="grid size-12 place-items-center rounded-full bg-accent-soft text-accent">
+        <Icon className="size-6" />
+      </span>
+    </span>
   );
 }

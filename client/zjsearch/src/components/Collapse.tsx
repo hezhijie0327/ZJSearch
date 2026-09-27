@@ -17,23 +17,25 @@ import { type ReactNode, useEffect, useState } from "react";
 export function Collapse({
   open,
   unmountAfterHide = false,
+  animateOnMount = false,
   className = "",
-  innerClassName = "",
   id,
   children,
 }: {
   open: boolean;
   /** unmount the children once the closing transition has finished */
   unmountAfterHide?: boolean;
+  /** an initially-open panel still plays its 0fr → 1fr reveal on mount
+      (auto-opened disclosures — without it the strip pops in expanded) */
+  animateOnMount?: boolean;
   /** spacing etc. on the animating wrapper (apply margins conditionally:
       a static margin under a folded panel reads as a stray gap) */
   className?: string;
-  innerClassName?: string;
   id?: string;
   children: ReactNode;
 }) {
   const [present, setPresent] = useState(open);
-  const [expanded, setExpanded] = useState(open);
+  const [expanded, setExpanded] = useState(open && !animateOnMount);
 
   useEffect(() => {
     if (open) {
@@ -81,7 +83,7 @@ export function Collapse({
       inert={!expanded}
       style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
     >
-      <div className={`min-h-0 overflow-hidden ${innerClassName}`}>{children}</div>
+      <div className="min-h-0 overflow-hidden">{children}</div>
     </div>
   );
 }

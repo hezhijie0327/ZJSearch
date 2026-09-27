@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ArrowUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
+import { Brand } from "@/components/Brand.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
-import { SearchBox } from "@/components/SearchBox.tsx";
+import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
 import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
-import { HeaderActions, Link, Shell } from "@/components/Shell.tsx";
+import { HeaderActions, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
@@ -20,8 +20,8 @@ import {
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
-import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
-import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
+import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
+import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
 import { CacheUrlProvider } from "@/features/results/CacheUrlProvider.tsx";
@@ -37,7 +37,7 @@ import { Sidebar } from "@/features/results/Sidebar.tsx";
 import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
-import { useLocale, useT } from "@/lib/i18n.ts";
+import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
@@ -87,7 +87,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // runtime's locale — the server preference alone can be a stale default
   // while the UI actually renders in the browser language)
   const uiLocale = useLocale();
-  const aiAnswer = useAiAnswer(globals.ai, uiLocale || globals.locale || "en");
+  // the AI reply language as a RESOLVED catalog tag (zh-CN | en): the raw
+  // locale falls back like the UI does, server-side stays a data table
+  const aiLang = themeLocaleTag(uiLocale || globals.locale || "en");
+  const aiAnswer = useAiAnswer(globals.ai, aiLang);
   // AI Search mode: the [classic|AI] switch writes `ai=1` into the URL; the
   // panel leads the results column and auto-runs once the results settle
   const aiSearchCap = globals.ai_search;
@@ -100,6 +103,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: URL is the source of truth
   useEffect(() => {
     setFilterValues(filterValuesFrom());
+    // the research depth re-reads the URL too: back/forward between
+    // searches with different `mode` params must restore the picker
+    setResearchMode(parseDepthMode(urlParams?.mode));
     aiAnswer.reset();
     aiSearch.reset();
     aiSearchRan.current = false;
@@ -112,16 +118,19 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const [collapsedBlocks, setCollapsedBlocks] = useState<Record<string, boolean>>({});
   const [hotkeysSelected, setHotkeysSelected] = useState(-1);
   const listRef = useRef<HTMLDivElement | null>(null);
+  // identity anchors for the per-run cumulative citation meta (see
+  // runSourceMetas): the last runs array and the meta arrays it produced
+  const runSourceMetaRuns = useRef<AiSearchRun[]>([]);
+  const runSourceMetaOut = useRef<AiSourceMeta[][]>([]);
   const flashTimer = useRef<number | null>(null);
   const hrefRef = useRef(href);
   hrefRef.current = href;
   const [followupQuery, setFollowupQuery] = useState("");
   // the hero's depth pick travels as the `mode` URL param (validated --
   // anything unknown falls back to balanced)
-  const [researchMode, setResearchMode] = useState<AiSearchMode>(() => {
-    const raw = new URLSearchParams(window.location.search).get("mode");
-    return raw === "speed" || raw === "quality" ? raw : "balanced";
-  });
+  const [researchMode, setResearchMode] = useState<AiSearchMode>(() =>
+    parseDepthMode(new URLSearchParams(window.location.search).get("mode")),
+  );
   const [appended, setAppended] = useState<ResultItem[]>([]);
   const [appendState, setAppendState] = useState<"idle" | "loading" | "error" | "done">("idle");
   const appendedHref = useRef(href);
@@ -158,6 +167,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     safesearch: overrides?.safesearch ?? filterValues.safesearch,
     timeout_limit: data.timeout_limit || undefined,
     ai: overrides?.ai ?? (aiModeRaw || globals.ai_mode || undefined),
+    // the hero's depth pick travels along; searchParamEntries only serializes
+    // it when the ai flag is set, so classic URLs stay clean
+    mode: researchMode,
     engine_data: data.engine_data && Object.keys(data.engine_data).length > 0 ? data.engine_data : undefined,
   });
 
@@ -276,10 +288,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     setHelpOpen((open) => !open);
   });
 
-  const onModeChange = (ai: boolean) => {
-    search(buildParams({ ai }));
-  };
-
   const allResults = useMemo(() => [...data.results, ...appended], [data.results, appended]);
 
   // AI Search auto-run: once per search, after the results settled.  The raw
@@ -296,7 +304,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     aiSearchRan.current = true;
-    aiSearch.start(data.q, uiLocale || globals.locale || "en", researchMode);
+    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language);
   });
   // a hand-crafted ?ai=1 (or the feature switched off mid-session) without
   // the capability: the server ran no classic search either — fall back to
@@ -309,27 +317,74 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   });
   // citation chips of run N resolve against the thread's sources up to and
   // including that run: a follow-up may cite earlier [n] sources, so its
-  // meta stays cumulative while each run's grid shows only its own finds
-  const runSourceMeta = (runIndex: number): AiSourceMeta[] =>
-    aiSearch.runs
-      .slice(0, runIndex + 1)
-      .flatMap((run) => run.sources)
-      .map((source) => ({
-        domain: source.netloc,
-        favicon: source.favicon,
-        t: source.title,
-        u: source.url,
-      }));
-  // answer citation [n] -> open the cited source page (Vane behaviour:
-  // there are no result rows to jump to on the takeover page)
-  const openRunSource = (runIndex: number, index: number): boolean => {
-    const source = aiSearch.runs.slice(0, runIndex + 1).flatMap((run) => run.sources)[index - 1];
+  // meta stays cumulative while each run's grid shows only its own finds.
+  // IDENTITY STABILITY IS THE POINT: the runs array is rebuilt by every
+  // NDJSON chunk, but settled run OBJECTS keep identity — when a run object
+  // is unchanged its cumulative meta array is REUSED, so a settled
+  // section's memo holds and its markdown is not re-parsed per chunk.
+  const runSourceMetas = useMemo(() => {
+    const prevRuns = runSourceMetaRuns.current;
+    const prevMetas = runSourceMetaOut.current;
+    const out: AiSourceMeta[][] = [];
+    let cumulative: AiSourceMeta[] = [];
+    aiSearch.runs.forEach((run, index) => {
+      if (prevRuns[index] === run && prevMetas[index]) {
+        cumulative = prevMetas[index];
+      } else {
+        cumulative = [
+          ...cumulative,
+          ...run.sources.map((source) => ({
+            domain: source.netloc,
+            favicon: source.favicon,
+            t: source.title,
+            u: source.url,
+          })),
+        ];
+      }
+      out[index] = cumulative;
+    });
+    runSourceMetaRuns.current = aiSearch.runs;
+    runSourceMetaOut.current = out;
+    return out;
+  }, [aiSearch.runs]);
+  // The run sections are memoized with their handler props excluded, so
+  // those handlers must be IMMUNE to stale closures: they read the live
+  // state through refs.  A depth pick or filter change made after a run
+  // settled must reach that run's Related/Regenerate/Fallback buttons.
+  const aiSearchRef = useRef(aiSearch);
+  aiSearchRef.current = aiSearch;
+  const aiViewState = { aiLang, data, filterValues, globals, researchMode, uiLocale };
+  const aiViewStateRef = useRef(aiViewState);
+  aiViewStateRef.current = aiViewState;
+  const buildParamsRef = useRef<(overrides?: Parameters<typeof buildParams>[0]) => ReturnType<typeof buildParams>>(
+    (overrides) => buildParams(overrides),
+  );
+  buildParamsRef.current = (overrides) => buildParams(overrides);
+  const onRunCite = useCallback((runIndex: number, index: number) => {
+    const sources = aiSearchRef.current.runs.slice(0, runIndex + 1).flatMap((run) => run.sources);
+    const source = sources[index - 1];
     if (!source?.url) {
       return false;
     }
     window.open(source.url, "_blank", "noopener,noreferrer");
     return true;
-  };
+  }, []);
+  const onRunFallback = useCallback(() => {
+    search(buildParamsRef.current({ ai: false }), { replace: true });
+  }, [search]);
+  const onRunRegenerate = useCallback(() => {
+    const view = aiViewStateRef.current;
+    aiSearchRef.current.reset();
+    aiSearchRef.current.start(view.data.q, view.aiLang, view.researchMode, view.filterValues.search_language);
+  }, []);
+  const onRunRelated = useCallback((question: string) => {
+    const view = aiViewStateRef.current;
+    setFollowupQuery("");
+    aiSearchRef.current.followup(question, view.aiLang, view.researchMode, view.filterValues.search_language);
+  }, []);
+  const onRunStop = useCallback(() => {
+    aiSearchRef.current.stop();
+  }, []);
   // a follow-up appends its run section: bring the new question into view
   const runsCount = aiSearch.runs.length;
   const seenRuns = useRef(0);
@@ -422,8 +477,18 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     const { answer } = splitAnswerStream(aiAnswer.text);
-    setAiMarks({ href: hrefRef.current, indices: new Set(citedSourceNumbers(answer).map((n) => n - 1)) });
-  }, [aiAnswer.phase, aiAnswer.text]);
+    // [n] beyond the numbered results (the infobox trails the context as a
+    // bare chip) must not mark a phantom row: clamp to the meta length
+    const limit = aiMeta.length;
+    setAiMarks({
+      href: hrefRef.current,
+      indices: new Set(
+        citedSourceNumbers(answer)
+          .filter((n) => n <= limit)
+          .map((n) => n - 1),
+      ),
+    });
+  }, [aiAnswer.phase, aiAnswer.text, aiMeta.length]);
 
   // (re-)apply the frames from the set — idempotent, so it doubles as the
   // re-marker for cards whose DOM was recreated while folded
@@ -484,15 +549,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           <>
             <h1 className="sr-only">{data.q}</h1>
             <div className="zjs-results-header-row mx-auto flex w-full items-center gap-4 px-4 pt-3 sm:px-6">
-              <Link
-                ariaLabel={globals.instance_name}
-                className="hidden min-[480px]:block shrink-0 select-none font-serif text-2xl font-semibold tracking-tight text-ink"
-                href="/"
-                title={globals.instance_name}
-              >
-                {globals.instance_name}
-                <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
-              </Link>
+              <div className="hidden min-[480px]:block">
+                <Brand className="text-2xl" globals={globals} />
+              </div>
               <div className="min-w-0 flex-1 max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
                 <SearchBox initialQuery={data.q} onSubmitQuery={submitQuery} />
               </div>
@@ -507,15 +566,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           <>
             <h1 className="sr-only">{data.q}</h1>
             <div className="mx-auto flex w-full items-center gap-3 px-4 pt-3 sm:px-6">
-              <Link
-                ariaLabel={globals.instance_name}
-                className="shrink-0 select-none font-serif text-xl font-semibold tracking-tight text-ink"
-                href="/"
-                title={globals.instance_name}
-              >
-                {globals.instance_name}
-                <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />
-              </Link>
+              <Brand className="text-xl" globals={globals} />
               <div className="ms-auto flex items-center gap-3">
                 <HeaderActions globals={globals} />
               </div>
@@ -558,25 +609,14 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       key={run.runNo}
                       live={index === aiSearch.runs.length - 1 && aiSearch.phase === "streaming"}
                       onCite={(n) => {
-                        return openRunSource(index, n);
+                        return onRunCite(index, n);
                       }}
-                      onFallback={() => {
-                        onModeChange(false);
-                      }}
-                      onRegenerate={() => {
-                        const lang = uiLocale || globals.locale || "en";
-                        aiSearch.reset();
-                        aiSearch.start(data.q, lang, researchMode);
-                      }}
-                      onRelated={(question) => {
-                        setFollowupQuery("");
-                        aiSearch.followup(question, uiLocale || globals.locale || "en", researchMode);
-                      }}
-                      onStop={() => {
-                        aiSearch.stop();
-                      }}
+                      onFallback={onRunFallback}
+                      onRegenerate={onRunRegenerate}
+                      onRelated={onRunRelated}
+                      onStop={onRunStop}
                       run={run}
-                      sourceMeta={runSourceMeta(index)}
+                      sourceMeta={runSourceMetas[index] ?? []}
                     />
                   ))}
                   {aiSearch.phase === "done" ? (
@@ -584,9 +624,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                     // while the thread scrolls under it, a palette fog fading
                     // the content beneath the pill
                     <div className="sticky bottom-6 z-10">
+                      {/* the fog masks content emerging ABOVE the pinned
+                          pill; it must not wrap below it -- a translucent
+                          band under the pill reads as a stray shadow box */}
                       <div
                         aria-hidden="true"
-                        className="pointer-events-none absolute -inset-x-6 -bottom-8 -top-8 -z-10 bg-gradient-to-t from-surface via-surface/90 to-transparent"
+                        className="pointer-events-none absolute -inset-x-6 -top-8 bottom-full -z-10 bg-gradient-to-t from-bg to-transparent"
                       />
                       <form
                         aria-label={t("ai_search_followup")}
@@ -598,11 +641,14 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             return;
                           }
                           setFollowupQuery("");
-                          aiSearch.followup(value, uiLocale || globals.locale || "en", researchMode);
+                          aiSearch.followup(value, aiLang, researchMode, filterValues.search_language);
                         }}
                       >
                         <input
+                          aria-label={t("ai_search_followup")}
+                          autoComplete="off"
                           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+                          dir="auto"
                           onChange={(event) => {
                             setFollowupQuery(event.target.value);
                           }}
@@ -619,14 +665,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             value={researchMode}
                           />
                           <div className="flex items-center gap-2">
-                            <button
-                              aria-label={t("ai_search_followup")}
-                              className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-opacity hover:bg-accent-strong-hover disabled:opacity-40"
-                              disabled={!followupQuery.trim()}
-                              type="submit"
-                            >
-                              <ArrowUp className="size-4" />
-                            </button>
+                            <SubmitCircle disabled={!followupQuery.trim()} label={t("ai_search_followup")} send />
                           </div>
                         </div>
                       </form>
@@ -635,6 +674,18 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                 </div>
               ) : (
                 <>
+                  {/* the empty state LEADS a zero-result page (the hero must
+                      not sit below the diagnostics strip); the meta line and
+                      its engine-messages panel follow as supporting detail */}
+                  {allResults.length === 0 && data.answers.length === 0 ? (
+                    <div className="mt-6">
+                      <NoResults
+                        hasInfobox={data.infoboxes.length > 0}
+                        onPrev={data.pageno > 1 ? () => onPage(data.pageno - 1) : undefined}
+                        pageno={data.pageno}
+                      />
+                    </div>
+                  ) : null}
                   <div className="mt-2">
                     <DebugPanels
                       actions={
@@ -643,6 +694,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             onToggle={() => {
                               aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
                             }}
+                            open={aiAnswer.open}
                             phase={aiAnswer.phase}
                           />
                         ) : null
@@ -696,15 +748,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                   </div>
                 ) : null}
 
-                {allResults.length === 0 && data.answers.length === 0 ? (
-                  <div className="mt-6">
-                    <NoResults
-                      hasInfobox={data.infoboxes.length > 0}
-                      onPrev={data.pageno > 1 ? () => onPage(data.pageno - 1) : undefined}
-                      pageno={data.pageno}
-                    />
-                  </div>
-                ) : (
+                {allResults.length === 0 && data.answers.length === 0 ? null : (
+                  // the zero-result NoResults hero leads the page above the
+                  // meta line — nothing further down for it
                   <CacheUrlProvider cacheUrl={globals.cache_url}>
                     <ResultsView
                       collapsedBlocks={collapsedBlocks}

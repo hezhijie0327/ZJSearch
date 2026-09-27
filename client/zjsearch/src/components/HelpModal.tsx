@@ -121,6 +121,7 @@ export function HelpModal({
 
   return (
     <div
+      aria-label={t("help_title")}
       aria-modal="true"
       className={`fixed inset-0 z-50 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
       inert={closing || undefined}

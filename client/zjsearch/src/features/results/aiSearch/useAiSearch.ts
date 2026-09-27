@@ -25,7 +25,7 @@ import type { AiCapability } from "@/lib/types.ts";
  * continues after the existing sources (sources_base).
  */
 
-export type AiSearchMode = "speed" | "balanced" | "quality";
+export type AiSearchMode = "speed" | "balanced" | "quality" | "goal";
 export type AiSearchPhase = "idle" | "streaming" | "done" | "error";
 
 export interface AiSearchCall {
@@ -49,7 +49,6 @@ export interface AiSearchSource {
   runNo: number;
   round: number;
   callId: number;
-  idx: number;
   title: string;
   url: string;
   netloc: string;
@@ -59,7 +58,6 @@ export interface AiSearchSource {
 export interface AiSearchRun {
   runNo: number;
   q: string;
-  mode: AiSearchMode;
   status: "streaming" | "done" | "error";
   error: string | null;
   /** the run's research timeline in the model's own order */
@@ -74,19 +72,17 @@ export interface AiSearchRun {
 
 export interface AiSearchState {
   phase: AiSearchPhase;
-  mode: AiSearchMode;
   runs: AiSearchRun[];
   sources: AiSearchSource[];
   error: string | null;
-  start(q: string, lang: string, mode?: AiSearchMode): void;
-  followup(q: string, lang: string, mode?: AiSearchMode): void;
+  start(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
+  followup(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   stop(): void;
   reset(): void;
 }
 
 interface Core {
   phase: AiSearchPhase;
-  mode: AiSearchMode;
   runs: AiSearchRun[];
   /** the flat global [n] registry across every run (the follow-up
       sources_base derives from its length) */
@@ -105,7 +101,6 @@ interface Core {
 
 const IDLE: Core = {
   phase: "idle",
-  mode: "balanced",
   runs: [],
   sources: [],
   error: null,
@@ -252,7 +247,6 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
           runNo: run.runNo,
           round: Number(item.round) || 0,
           callId: Number(item.id) || 0,
-          idx: Number(item.idx) || 0,
           title: String(item.title ?? ""),
           url,
           netloc: String(item.netloc ?? ""),
@@ -265,14 +259,25 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       const sources = [...core.sources, ...fresh]
         .filter((source, index, all) => all.findIndex((entry) => entry.n === source.n) === index)
         .sort((a, b) => a.n - b.n);
-      runs[lastIdx] = { ...run, sources: [...run.sources, ...fresh] };
+      runs[lastIdx] = {
+        ...run,
+        sources: [...run.sources, ...fresh].filter(
+          (source, index, all) => all.findIndex((entry) => entry.n === source.n) === index,
+        ),
+      };
       return { ...core, runs, sources };
     }
     case "related":
       runs[lastIdx] = { ...run, related: ((event.items as string[]) ?? []).map(String).slice(0, 3) };
       return { ...core, runs };
-    case "error":
-      return { ...core, error: String(event.reason ?? "error") };
+    case "error": {
+      // mid-stream failure: terminal for the LLM turn, not necessarily for
+      // the run (the agent may still force a no-tools answer).  Record the
+      // reason on the run -- the failed box shows it if no answer lands.
+      const reason = String(event.reason ?? "error");
+      runs[lastIdx] = { ...run, error: reason };
+      return { ...core, runs, error: reason };
+    }
     case "end":
       return settle(core, null);
     default:
@@ -292,6 +297,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     history: Array<{ q: string; a: string }>,
     sourcesBase: number,
     mode: AiSearchMode,
+    /** the page's result-language filter -- the tool searches inherit it */
+    searchLanguage = "",
   ) => {
     if (!capability) {
       return;
@@ -311,7 +318,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     };
     void fetchEventStream(
       "/ai/search",
-      { tk: capability.tk, q, lang, mode, history, sources_base: sourcesBase },
+      { tk: capability.tk, q, lang, mode, history, sources_base: sourcesBase, search_language: searchLanguage },
       apply,
       controller.signal,
     )
@@ -330,18 +337,16 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       });
   };
 
-  const start = (q: string, lang: string, mode: AiSearchMode = "balanced") => {
+  const start = (q: string, lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
     if (!capability) {
       return;
     }
     setCore({
       phase: "streaming",
-      mode,
       runs: [
         {
           runNo: 1,
           q,
-          mode,
           status: "streaming",
           error: null,
           steps: [],
@@ -356,10 +361,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       answerFrom: 0,
       thinkOpen: false,
     });
-    beginRun(q, lang, [], 0, mode);
+    beginRun(q, lang, [], 0, mode, searchLanguage);
   };
 
-  const followup = (q: string, lang: string, mode: AiSearchMode = "balanced") => {
+  const followup = (q: string, lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
     const trimmed = q.trim();
     if (core.phase !== "done" || !trimmed) {
       return;
@@ -370,6 +375,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       core.runs.map((run) => ({ q: run.q, a: run.answer })),
       core.sources.length,
       mode,
+      searchLanguage,
     );
     setCore((prev) => ({
       ...prev,
@@ -382,7 +388,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         {
           runNo: prev.runs.length + 1,
           q: trimmed,
-          mode,
           status: "streaming" as const,
           error: null,
           steps: [] as AiSearchStep[],
@@ -396,21 +401,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
 
   const stop = () => {
     abortRef.current?.abort();
-    setCore((prev) => {
-      if (prev.phase !== "streaming") {
-        return prev;
-      }
-      const runs = [...prev.runs];
-      const run = runs[runs.length - 1];
-      if (run) {
-        runs[runs.length - 1] = {
-          ...run,
-          status: run.status === "streaming" ? "done" : run.status,
-        };
-      }
-      const hasContent = runs.some((item) => item.answer || item.steps.length > 0);
-      return { ...prev, runs, phase: hasContent ? "done" : "idle" };
-    });
+    // settle() folds the streamed narration the same way a natural end
+    // would -- stopping must not throw away prose the user watched stream
+    setCore((prev) => (prev.phase === "streaming" ? settle(prev, null) : prev));
   };
 
   const reset = () => {

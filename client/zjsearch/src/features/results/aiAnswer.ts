@@ -149,3 +149,40 @@ export function citedSourceNumbers(answer: string): number[] {
   }
   return [...out].sort((a, b) => a - b);
 }
+
+/** One [n] / [n,m] match -> the `#ref-n` markdown links (one per number);
+    `[*]` stays literal text. */
+function rewriteCitation(match: string, group: string | undefined): string {
+  if (!group) {
+    return match;
+  }
+  return group
+    .split(/\s*[,，]\s*/)
+    .map((n: string) => `[${n}](#ref-${n})`)
+    .join("");
+}
+
+/** Rewrite [n] / [n,m] citations into `#ref-n` links that the markdown `a`
+    override renders as citation chips -- OUTSIDE code: the rewrite runs on
+    the raw markdown, so fenced blocks and inline spans must pass through
+    untouched (a `[1]` in a code example is an array index, not a source).
+    Shared by the AI Overview and the AI Search synthesis renderer. */
+export function citeToLinks(text: string): string {
+  let inFence = false;
+  return text
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(?:```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) {
+        return line;
+      }
+      return line
+        .split(/(`[^`]*`)/)
+        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION_RE, rewriteCitation)))
+        .join("");
+    })
+    .join("\n");
+}

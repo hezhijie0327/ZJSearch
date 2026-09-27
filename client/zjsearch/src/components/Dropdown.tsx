@@ -25,7 +25,6 @@ export function Dropdown({
   ariaLabel,
   align = "start",
   variant = "bare",
-  menuClassName = "",
   icon,
   triggerLabel,
   triggerClassName,
@@ -51,11 +50,9 @@ export function Dropdown({
   /** bare trigger only: render the tab-style active underline */
   underline?: boolean;
   isSelected?: (value: string) => boolean;
-  menuClassName?: string;
   /** optional icon shown before the label in the trigger; defaults to the
       selected option's icon */
   icon?: ReactNode;
-  /** trigger renders only the icon (kebab-style menus) */
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -186,7 +183,6 @@ export function Dropdown({
         }}
         onKeyDown={onKeyDown}
         ref={triggerRef}
-        role="combobox"
         type="button"
       >
         {icon ?? (current?.icon ? <span className="shrink-0 text-ink-3">{current.icon}</span> : null)}
@@ -206,7 +202,7 @@ export function Dropdown({
               aria-label={ariaLabel}
               className={`fixed z-50 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
                 menuClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
-              } ${menuClassName}`}
+              }`}
               inert={menuClosing || undefined}
               ref={menuRef}
               role="listbox"

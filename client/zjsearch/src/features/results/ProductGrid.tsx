@@ -2,7 +2,7 @@
 
 import { Globe, Package, Tag, Truck } from "lucide-react";
 import { ResultLink } from "@/features/results/cardParts.tsx";
-import { TileCell, TileEngines, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
+import { TileCell, TileEngines, TilePlaceholder, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
 import { imageAlt } from "@/lib/format.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
@@ -25,15 +25,7 @@ export function ProductGrid({
         globals={globals}
         result={result}
       >
-        <TileThumb
-          alt={imageAlt(result)}
-          placeholder={
-            <span className="grid size-full place-items-center text-ink-3">
-              <Package className="size-8" />
-            </span>
-          }
-          src={result.thumbnail}
-        />
+        <TileThumb alt={imageAlt(result)} placeholder={<TilePlaceholder icon={Package} />} src={result.thumbnail} />
       </ResultLink>
       <TileTitle globals={globals} result={result} />
       {result.price ? (

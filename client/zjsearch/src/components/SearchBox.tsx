@@ -1,16 +1,58 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { LoaderCircle, Search, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { LoaderCircle, Search, SendHorizontal, X } from "lucide-react";
+import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
-import { ICON_BTN } from "@/lib/styles.ts";
+import { DISABLED, ICON_BTN } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 interface Suggestion {
   text: string;
+}
+
+/** The accent-filled circular submit (36px, the search glyph; the AI
+    ask variant swaps in the paper plane at 40px — distinct from
+    BackToTop's ArrowUp) — one definition so the disabled treatment and
+    hover stay identical everywhere. */
+export function SubmitCircle({
+  label,
+  loading = false,
+  send = false,
+  large = false,
+  disabled = false,
+  onClick,
+}: {
+  label: string;
+  loading?: boolean;
+  /** paper plane (the AI "ask/submit" affordance) instead of the glass */
+  send?: boolean;
+  /** 40px hero size (the ask-card) — the default is the 36px control tier */
+  large?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      aria-label={label}
+      className={`grid shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover ${DISABLED} ${
+        large ? "size-10" : "size-9"
+      }`}
+      disabled={disabled || loading}
+      onClick={onClick}
+      type={onClick ? "button" : "submit"}
+    >
+      {loading ? (
+        <LoaderCircle aria-hidden="true" className="size-4.5 animate-spin-slow" />
+      ) : send ? (
+        <SendHorizontal aria-hidden="true" className="size-4.5" />
+      ) : (
+        <Search aria-hidden="true" className="size-4.5" />
+      )}
+    </button>
+  );
 }
 
 async function fetchSuggestions(q: string, signal: AbortSignal): Promise<string[]> {
@@ -38,7 +80,6 @@ export function SearchBox({
   onQueryChange,
   variant = "compact",
   onSubmitQuery,
-  trailing,
   placeholder,
 }: {
   initialQuery: string;
@@ -49,9 +90,6 @@ export function SearchBox({
       wrap the box in their own card and submit externally (morphic card) */
   variant?: "hero" | "compact" | "bare";
   onSubmitQuery: (q: string) => void;
-  /** optional element at the pill's trailing edge, before the submit
-      button (ignored with the bare variant) */
-  trailing?: ReactNode;
   /** override the input's placeholder (the AI hero asks instead of searches) */
   placeholder?: string;
 }) {
@@ -305,7 +343,13 @@ export function SearchBox({
             aria-label={t("clear")}
             className={ICON_BTN}
             onClick={() => {
+              // full reset: typed is the autocomplete baseline — leaving it
+              // set keeps the stale dropdown open over an empty input and
+              // lets Escape "restore" text the user just deleted
               setQuery("");
+              setTyped("");
+              setSuggestions([]);
+              setActive(-1);
               inputRef.current?.focus();
             }}
             type="button"
@@ -313,18 +357,7 @@ export function SearchBox({
             <X className="size-4.5" />
           </button>
         ) : null}
-        {variant !== "bare"
-          ? (trailing ?? (
-              <button
-                aria-label={t("search")}
-                className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover disabled:opacity-70"
-                disabled={loading}
-                type="submit"
-              >
-                {loading ? <LoaderCircle className="size-4.5 animate-spin-slow" /> : <Search className="size-4.5" />}
-              </button>
-            ))
-          : null}
+        {variant !== "bare" ? <SubmitCircle label={t("search")} loading={loading} /> : null}
       </form>
 
       {renderSuggest && exitSuggestions.length > 0 ? (

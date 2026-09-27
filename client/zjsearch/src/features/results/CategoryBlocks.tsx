@@ -12,6 +12,7 @@ import { Collapse } from "@/components/Collapse.tsx";
 import { AppsGrid } from "@/features/results/AppsGrid.tsx";
 import { collectBlocks } from "@/features/results/blocks.ts";
 import { CardList } from "@/features/results/CardList.tsx";
+import { DictionaryCard } from "@/features/results/cards/DictionaryCard.tsx";
 import { FilesGrid } from "@/features/results/FilesGrid.tsx";
 import { GroupHeader } from "@/features/results/GroupHeader.tsx";
 import { ImageGrid } from "@/features/results/image/ImageGrid.tsx";
@@ -60,6 +61,17 @@ export function CategoryCollectionView({
       return <AppsGrid globals={globals} indexOffset={indexOffset} results={results} selected={selected} />;
     case "products":
       return <ProductGrid globals={globals} indexOffset={indexOffset} results={results} selected={selected} />;
+    case "dictionaries":
+    case "define":
+      // same presentation as the !dictionaries single-category page
+      return (
+        <CardList
+          entries={results.map((result, index) => ({ result, index: indexOffset + index }))}
+          globals={globals}
+          renderItem={(result) => <DictionaryCard globals={globals} result={result} />}
+          selected={selected}
+        />
+      );
     default:
       return (
         <CardList

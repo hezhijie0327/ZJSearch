@@ -6,7 +6,14 @@ import { imageAlt } from "@/lib/format.ts";
 
 import { Clapperboard } from "lucide-react";
 import { ResultLink } from "@/features/results/cardParts.tsx";
-import { TileCell, TileEngines, TileFavicon, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
+import {
+  TileCell,
+  TileEngines,
+  TileFavicon,
+  TilePlaceholder,
+  TileThumb,
+  TileTitle,
+} from "@/features/results/tileParts.tsx";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
 export function PosterGrid({
@@ -31,11 +38,7 @@ export function PosterGrid({
         <TileThumb
           alt={imageAlt(result)}
           eager={indexOffset + index < 4}
-          placeholder={
-            <span className="grid size-full place-items-center text-ink-3">
-              <Clapperboard className="size-8" />
-            </span>
-          }
+          placeholder={<TilePlaceholder icon={Clapperboard} />}
           src={result.thumbnail}
         />
         {result.favicon ? <TileFavicon src={result.favicon} /> : null}

@@ -15,7 +15,7 @@ import {
 import { Fragment } from "react";
 import { categoryLabel } from "@/lib/categories.ts";
 import { languageOptions, useT } from "@/lib/i18n.ts";
-import { SEGMENT_ACTIVE, SEGMENT_SM } from "@/lib/styles.ts";
+import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
 import { Card, CategoryTab, SectionLabel, Select, SettingRow, Switch } from "@/pages/preferences/parts.tsx";
 import type { PreferencesForm } from "@/pages/preferences/usePreferencesForm.ts";
@@ -178,7 +178,7 @@ export function GeneralTab({
                 {(["POST", "GET"] as const).map((value) => (
                   <button
                     aria-pressed={form.method === value}
-                    className={`${SEGMENT_SM} rounded-lg ${form.method === value ? SEGMENT_ACTIVE : "text-ink-2 hover:text-ink"}`}
+                    className={`${SEGMENT_SM} rounded-lg ${form.method === value ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
                     key={value}
                     onClick={() => {
                       form.setMethod(value);

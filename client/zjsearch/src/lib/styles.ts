@@ -16,7 +16,6 @@ export const SCROLLBAR_NONE_SM = "sm:[scrollbar-width:none] sm:[&::-webkit-scrol
 /** Single-line swipe row: children never wrap or shrink — overflow swipes
     horizontally instead, like the mobile category tabs.  Callers add their
     own gap (e.g. gap-1 / gap-x-2). */
-export const SWIPE_ROW = `flex flex-nowrap items-center overflow-x-auto ${SCROLLBAR_NONE} [&>*]:shrink-0`;
 
 /** Multi-part meta row that swipes horizontally on overflow (same hidden
     scrollbar, children never shrink).  Callers add their own gap and text
@@ -69,6 +68,11 @@ export const META_TOGGLE = "inline-flex min-h-6 items-center gap-1 transition-co
     (the selected language lives in the design contract, not here). */
 export const PILL =
   "inline-flex items-center rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors";
+
+/** Outlined action pill (empty-state actions, pagination, strip buttons):
+    bordered round chip that raises to the accent on hover. */
+export const OUTLINE_PILL =
+  "inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-4 py-2 text-[13px] font-medium text-ink-2 transition-colors hover:border-accent hover:text-accent";
 
 /** Shared disabled treatment for secondary controls (pager arrows, sliders):
     dimmed and click-transparent, never invisible. */

@@ -59,7 +59,10 @@ type CatalogTag = keyof typeof CATALOGS;
 /** Resolve any BCP-47 tag the server may send onto a catalog we ship.
     Simplified Chinese only (zh-CN, zh-Hans-CN, zh); Traditional stays
     English until someone contributes it. */
-function themeLocaleTag(locale: string): CatalogTag {
+/** Resolve a raw locale to the SHIPPED catalog tag ("zh-CN" | "en") --
+    the AI reply-language param travels as this tag so the server maps it
+    to a language name without re-implementing the fallback rule. */
+export function themeLocaleTag(locale: string): CatalogTag {
   const tag = locale.toLowerCase();
   if (tag.startsWith("zh") && !tag.includes("hant")) {
     return "zh-CN";

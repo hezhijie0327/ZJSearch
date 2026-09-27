@@ -14,13 +14,15 @@ import {
   LoaderCircle,
   Plus,
   Repeat2,
+  RotateCw,
   Search,
+  Waypoints,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
-import { type AiSourceMeta, CITATION_RE } from "@/features/results/aiAnswer.ts";
+import { type AiSourceMeta, citeToLinks } from "@/features/results/aiAnswer.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import type {
   AiSearchCall,
@@ -43,36 +45,6 @@ import { SCROLLBAR_NONE } from "@/lib/styles.ts";
  * thread carries the large page title; follow-up sections lead with a
  * smaller heading behind a thread divider.
  */
-
-function citeToLinks(text: string): string {
-  let inFence = false;
-  return text
-    .split("\n")
-    .map((line) => {
-      if (/^\s*(?:```|~~~)/.test(line)) {
-        inFence = !inFence;
-        return line;
-      }
-      if (inFence) {
-        return line;
-      }
-      return line
-        .split(/(`[^`]*`)/)
-        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION_RE, rewriteCitation)))
-        .join("");
-    })
-    .join("\n");
-}
-
-function rewriteCitation(match: string, group: string | undefined): string {
-  if (!group) {
-    return match;
-  }
-  return group
-    .split(/\s*[,，]\s*/)
-    .map((n: string) => `[${n}](#ref-${n})`)
-    .join("");
-}
 
 /** One settled search's result cards (DeltaV's expandable tool row): a
     swipe strip of small title + favicon + domain cards, each opening the
@@ -241,7 +213,7 @@ function StepSegment({
   );
 }
 
-export function AiSearchRunSection({
+function AiSearchRunSectionImpl({
   run,
   isFirst,
   isLast,
@@ -290,11 +262,10 @@ export function AiSearchRunSection({
       {/* research: think stream + intent + parallel tool calls */}
       <section aria-busy={streaming} aria-label={t("ai_search_process")}>
         <div className="flex items-center gap-2">
-          {streaming ? (
-            <Disc3 aria-hidden="true" className="size-5 shrink-0 animate-spin text-ink-3" />
-          ) : (
-            <Search aria-hidden="true" className="size-5 text-ink-3" />
-          )}
+          <Waypoints
+            aria-hidden="true"
+            className={`size-5 shrink-0 ${streaming ? "animate-pulse text-ink-2" : "text-ink-3"}`}
+          />
           <button
             aria-expanded={researchOpen}
             className="inline-flex min-h-6 items-center gap-1.5 text-xl font-medium text-ink transition-colors hover:text-ink-2"
@@ -344,11 +315,21 @@ export function AiSearchRunSection({
             )}
             <h3 className="text-xl font-medium text-ink">{t("ai_search_answer")}</h3>
           </div>
-          <div className="mt-3 text-[15px] leading-relaxed text-ink">
+          <div className="mt-3 text-sm leading-relaxed text-ink">
             <MarkdownAnswer markdown={citeToLinks(run.answer)} meta={sourceMeta} onCite={onCite} settled={!streaming} />
           </div>
           {!streaming && isLast ? (
             <div className="mt-3 flex items-center gap-1">
+              {/* [retry | copy] -- the reference order: the filled chip leads */}
+              <button
+                aria-label={t("regenerate")}
+                className="grid size-8 place-items-center rounded-full bg-surface-2 text-ink-2 transition-colors hover:text-accent"
+                onClick={onRegenerate}
+                title={t("regenerate")}
+                type="button"
+              >
+                <RotateCw className="size-4" />
+              </button>
               <button
                 aria-label={t("copy")}
                 className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
@@ -359,15 +340,6 @@ export function AiSearchRunSection({
                 type="button"
               >
                 <Copy className="size-4" />
-              </button>
-              <button
-                aria-label={t("regenerate")}
-                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                onClick={onRegenerate}
-                title={t("regenerate")}
-                type="button"
-              >
-                <Disc3 className="size-4" />
               </button>
             </div>
           ) : null}
@@ -443,3 +415,21 @@ export function AiSearchRunSection({
     </section>
   );
 }
+
+/**
+ * Memoized against the NDJSON stream: every chunk rebuilds the runs array,
+ * but only the LAST run object is recreated — settled sections keep their
+ * `run`/`sourceMeta` identity and skip re-render (a settled section's
+ * markdown would otherwise re-parse on every live chunk).  The callback
+ * props are event handlers only, so they are deliberately excluded from
+ * the comparison.
+ */
+export const AiSearchRunSection = memo(
+  AiSearchRunSectionImpl,
+  (prev, next) =>
+    prev.run === next.run &&
+    prev.sourceMeta === next.sourceMeta &&
+    prev.isFirst === next.isFirst &&
+    prev.isLast === next.isLast &&
+    prev.live === next.live,
+);

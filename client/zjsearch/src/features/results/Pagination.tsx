@@ -2,11 +2,12 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useT } from "@/lib/i18n.ts";
+import { OUTLINE_PILL } from "@/lib/styles.ts";
 
 /** Shared pill button for the prev/next arrows (numbered pages swap the
-    border for the accent fill when current). */
-const pageBtn =
-  "flex h-9 items-center gap-1 rounded-full border border-line bg-surface px-3 text-[13px] text-ink-2 transition-colors hover:border-accent hover:text-accent";
+    border for the accent fill when current); the px-3/h-9 trim is the
+    compact pager variant of the outlined pill. */
+const pageBtn = `${OUTLINE_PILL} px-3 h-9`;
 
 /** Numbered pagination window (up to 11 pages, sliding after page 5). */
 export function Pagination({

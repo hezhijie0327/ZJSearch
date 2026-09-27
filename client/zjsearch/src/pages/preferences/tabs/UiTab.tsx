@@ -4,7 +4,7 @@ import { AlignCenterVertical, Globe, Languages, Link as LinkIcon, Monitor, Moon,
 import { Fragment } from "react";
 import { cap } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import { SEGMENT_ACTIVE, SEGMENT_SM } from "@/lib/styles.ts";
+import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 import type { ThemeStyle } from "@/lib/theme.ts";
 import { applyCenterAlignment, applyThemeStyle } from "@/lib/theme.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
@@ -72,7 +72,7 @@ export function UiTab({
                 ).map(([value, label, icon]) => (
                   <button
                     aria-pressed={form.themeStyle === value}
-                    className={`${SEGMENT_SM} gap-1.5 rounded-lg ${form.themeStyle === value ? SEGMENT_ACTIVE : "text-ink-2 hover:text-ink"}`}
+                    className={`${SEGMENT_SM} gap-1.5 rounded-lg ${form.themeStyle === value ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
                     key={value}
                     onClick={() => {
                       form.setThemeStyle(value);

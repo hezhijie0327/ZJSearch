@@ -18,6 +18,7 @@ import {
   TileMeta,
   TileMetaAuthor,
   TileMetaDate,
+  TilePlaceholder,
   TileThumb,
   TileTitle,
 } from "@/features/results/tileParts.tsx";
@@ -155,11 +156,7 @@ export function MusicGrid({
             <TileThumb
               alt={imageAlt(result)}
               eager={indexOffset + index < 4}
-              placeholder={
-                <span className="grid size-full place-items-center bg-gradient-to-br from-surface-2 to-surface text-ink-3">
-                  <MusicIcon className="size-10" />
-                </span>
-              }
+              placeholder={<TilePlaceholder icon={MusicIcon} />}
               src={result.thumbnail}
             />
             {length ? <TileBadge>{length}</TileBadge> : null}

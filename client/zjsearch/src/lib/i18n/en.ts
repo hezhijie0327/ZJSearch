@@ -15,7 +15,6 @@ export const EN = {
   recenter: "Recenter to location",
   pagination: "Pagination",
   show_engine_info: "Show engine details",
-  powered_by: "Powered by",
   engine_stats: "Engine stats",
   search_language: "Search language",
   default_language: "Default language",
@@ -184,6 +183,7 @@ export const EN = {
   mode_speed: "Speed",
   mode_balanced: "Balanced",
   mode_quality: "Quality",
+  mode_goal: "Goal",
   related: "Related",
   ai_hero_ask: "Ask anything...",
   ai_hero_search: "Search for anything...",
@@ -222,6 +222,7 @@ export const EN = {
   url_restore_desc:
     "A URL containing your preferences. This URL can be used to restore your settings on a different device.",
   saved: "Saved",
+  help_title: "Keyboard shortcuts & search syntax",
   help_shortcuts: "Keyboard shortcuts",
   help_operators: "Search operators",
   help_bangs: "Bangs",

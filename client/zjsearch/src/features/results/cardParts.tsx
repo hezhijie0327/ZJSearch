@@ -21,7 +21,7 @@ import { useCacheUrl } from "@/features/results/CacheUrlProvider.tsx";
 import { formatDate, formatLength, formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { newTabLinkProps } from "@/lib/link.ts";
-import { CHIP, CHIP_HOVER, META_ROW, PILL, TILE_BADGE } from "@/lib/styles.ts";
+import { CHIP, CHIP_HOVER, META_ROW, META_TOGGLE, PILL, TILE_BADGE } from "@/lib/styles.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
 
@@ -473,12 +473,7 @@ export function Snippet({ className = "", contentHtml }: { className?: string; c
         style={{ maxHeight: animPx ?? undefined }}
       />
       {overflow || expanded ? (
-        <button
-          aria-expanded={expanded}
-          className="mt-0.5 inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
-          onClick={toggle}
-          type="button"
-        >
+        <button aria-expanded={expanded} className={`${META_TOGGLE} mt-0.5 text-xs`} onClick={toggle} type="button">
           {expanded ? t("collapse") : t("expand")}
           <ChevronDown className={`size-3 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
         </button>

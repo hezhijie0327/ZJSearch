@@ -6,7 +6,7 @@ import { imageAlt } from "@/lib/format.ts";
 
 import { Image } from "lucide-react";
 import { ResultLink } from "@/features/results/cardParts.tsx";
-import { TileCell, TileEngines, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
+import { TileCell, TileEngines, TilePlaceholder, TileThumb, TileTitle } from "@/features/results/tileParts.tsx";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 
 export function AppsGrid({
@@ -28,11 +28,7 @@ export function AppsGrid({
           <TileThumb
             alt={imageAlt(result)}
             imgClassName="size-14 rounded-xl border border-line object-cover"
-            placeholder={
-              <span className="grid size-14 place-items-center rounded-xl border border-line bg-surface-2 text-ink-3">
-                <Image className="size-6" />
-              </span>
-            }
+            placeholder={<TilePlaceholder icon={Image} />}
             src={result.thumbnail}
           />
         </ResultLink>

@@ -14,12 +14,31 @@ import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
-import { type AiSourceMeta, CITATION_RE, splitAnswerStream } from "@/features/results/aiAnswer.ts";
+import { type AiSourceMeta, citeToLinks, splitAnswerStream } from "@/features/results/aiAnswer.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { CODE_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
+
+/** mermaid is initialized ONCE per palette (global state — re-running
+    initialize per rendered block per theme flip is wasted work); the lazy
+    import only happens when an answer really carries a diagram. */
+let mermaidInitKey: string | null = null;
+async function mermaidFor(dark: boolean) {
+  const mermaid = (await import("mermaid")).default;
+  const key = dark ? "dark" : "neutral";
+  if (mermaidInitKey !== key) {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      fontFamily: "var(--font-sans)",
+      theme: key,
+    });
+    mermaidInitKey = key;
+  }
+  return mermaid;
+}
 
 /** 基础 remark 插件集 —— 系统 Prompt 实际广告的语法面（GFM / 表情 shortcode /
     定义列表），随 results chunk 加载；KaTeX 数学管线因体积懒加载，见
@@ -153,12 +172,28 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
 }
 
 /** Meta-row entry (the 12px toggle tier of 「found N results · took X s」). */
-export function AiAnswerTrigger({ phase, onToggle }: { phase: AiAnswerPhase; onToggle: () => void }) {
+export function AiAnswerTrigger({
+  phase,
+  open,
+  onToggle,
+}: {
+  phase: AiAnswerPhase;
+  /** the card's visibility — the trigger is its disclosure */
+  open: boolean;
+  onToggle: () => void;
+}) {
   const t = useT();
   return (
-    <button className={`${META_TOGGLE} text-xs`} onClick={onToggle} type="button">
+    <button
+      aria-controls="ai-answer-card"
+      aria-expanded={open}
+      className={`${META_TOGGLE} text-xs`}
+      onClick={onToggle}
+      type="button"
+    >
       <Sparkles className="size-3 shrink-0" />
       {phase === "streaming" ? t("ai_answering") : phase === "error" ? t("ai_answer_failed") : t("ai_answer")}
+      <ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
     </button>
   );
 }
@@ -194,42 +229,6 @@ type MdProps = {
   src?: string;
   [key: string]: unknown;
 };
-
-/** One [n] / [n,m] match -> the `#ref-n` markdown links (one per number);
-    `[*]` stays literal text. */
-function rewriteCitation(match: string, group: string | undefined): string {
-  if (!group) {
-    return match;
-  }
-  return group
-    .split(/\s*[,，]\s*/)
-    .map((n: string) => `[${n}](#ref-${n})`)
-    .join("");
-}
-
-/** Rewrite [n] / [n,m] citations into `#ref-n` links that the markdown `a`
-    override renders as citation chips -- OUTSIDE code: the rewrite runs on
-    the raw markdown, so fenced blocks and inline spans must pass through
-    untouched (a `[1]` in a code example is an array index, not a source). */
-function citeToLinks(text: string): string {
-  let inFence = false;
-  return text
-    .split("\n")
-    .map((line) => {
-      if (/^\s*(?:```|~~~)/.test(line)) {
-        inFence = !inFence;
-        return line;
-      }
-      if (inFence) {
-        return line;
-      }
-      return line
-        .split(/(`[^`]*`)/)
-        .map((part, index) => (index % 2 === 1 ? part : part.replace(CITATION_RE, rewriteCitation)))
-        .join("");
-    })
-    .join("\n");
-}
 
 /** Compact [n] citation chip: hovering opens a floating preview panel with
     the source favicon, site and title (portalled to <body> so the clamp
@@ -447,13 +446,7 @@ function MermaidBlock({ chart }: { chart: string }) {
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
-        const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "strict",
-          fontFamily: "var(--font-sans)",
-          theme: theme ? "dark" : "neutral",
-        });
+        const mermaid = await mermaidFor(theme);
         await mermaid.parse(chart);
         const rendered = await mermaid.render(`zjs-mmd-${(mermaidSeq++).toString(36)}`, chart);
         if (!cancelled) {
@@ -684,6 +677,13 @@ export function AiAnswerCard({
 }) {
   const t = useT();
   const [thinkForced, setThinkForced] = useState<boolean | null>(null);
+  // a regenerate / new query starts a fresh run: drop the manual fold so
+  // the new run's reasoning follows the auto behaviour again
+  useEffect(() => {
+    if (state.phase === "streaming") {
+      setThinkForced(null);
+    }
+  }, [state.phase]);
   const { think, answer, thinking } = splitAnswerStream(state.text);
   const hasThink = think.trim().length > 0;
   const hasAnswer = answer.trim().length > 0;
@@ -699,7 +699,7 @@ export function AiAnswerCard({
   const markdown = useMemo(() => citeToLinks(answer), [answer]);
 
   return (
-    <div className="animate-fade-up rounded-2xl border border-line bg-surface p-4">
+    <div className="animate-fade-up rounded-2xl border border-line bg-surface p-4" id="ai-answer-card">
       <div className="flex min-w-0 items-center gap-2">
         <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
           <Sparkles className="size-3.5" />
@@ -726,7 +726,7 @@ export function AiAnswerCard({
         <div className="mt-2">
           <button
             aria-expanded={thinkOpen}
-            className="inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
+            className={`${META_TOGGLE} text-xs`}
             onClick={() => {
               setThinkForced(!thinkOpen);
             }}

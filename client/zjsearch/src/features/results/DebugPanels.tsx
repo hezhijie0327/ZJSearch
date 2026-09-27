@@ -75,10 +75,10 @@ export function DebugPanels({
   const copyToast = useCopyToast();
   const { openOverlay } = useOverlay();
   const hasEnginesPanel = data.unresponsive_engines.length > 0 || data.timings.length > 0;
-  // with zero results the engine messages matter most — start expanded
-  const [openPanel, setOpenPanel] = useState<null | "engines" | "results">(() =>
-    hasEnginesPanel && data.results.length === 0 ? "engines" : null,
-  );
+  // with zero results the engine messages matter most — start expanded (and
+  // let the reveal play: an auto-opened strip must not pop in at full height)
+  const autoEngines = hasEnginesPanel && results.length === 0;
+  const [openPanel, setOpenPanel] = useState<null | "engines" | "results">(() => (autoEngines ? "engines" : null));
   const toggle = (panel: "engines" | "results") => {
     setOpenPanel((current) => (current === panel ? null : panel));
   };
@@ -86,7 +86,7 @@ export function DebugPanels({
   const maxTime = data.max_response_time ?? 0;
 
   return (
-    <div>
+    <div className="animate-fade-in">
       {/* single line at every width — narrow viewports scroll the row
           (left-right swipe), exactly like the filter dropdown row above */}
       <div
@@ -114,7 +114,11 @@ export function DebugPanels({
             type="button"
           >
             <Timer className="size-3 shrink-0" />
-            {roundedTime !== null ? `${t("took")} ${roundedTime} ${t("seconds")}` : t("engines_messages")}
+            {results.length === 0
+              ? t("engines_messages")
+              : roundedTime !== null
+                ? `${t("took")} ${roundedTime} ${t("seconds")}`
+                : t("engines_messages")}
             <ChevronDown className={`size-3.5 transition-transform ${openPanel === "engines" ? "rotate-180" : ""}`} />
           </button>
         ) : null}
@@ -189,7 +193,7 @@ export function DebugPanels({
         </div>
       </Collapse>
 
-      <Collapse className={openPanel === "engines" ? "mt-2" : ""} open={openPanel === "engines"}>
+      <Collapse animateOnMount className={openPanel === "engines" ? "mt-2" : ""} open={openPanel === "engines"}>
         <div className="rounded-2xl border border-line bg-surface px-4 py-3">
           {/* one fixed-layout table for every engine: timings get seconds +
               bar, unresponsive engines their error label + an empty track on
