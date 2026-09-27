@@ -33,7 +33,7 @@ export interface AiSearchCall {
   id: number;
   q: string;
   category: string;
-  status: "pending" | "ok" | "error" | "timeout";
+  status: "pending" | "ok" | "error" | "timeout" | "interrupted";
   n?: number;
 }
 
@@ -128,6 +128,27 @@ function settle(core: Core, failed: { error: string } | null): Core {
       ? { ...settled, status: "error", error: failed.error }
       : { ...settled, status: settled.status === "streaming" ? "done" : settled.status };
   }
+  // in-flight searches can never report a status once the run ends (budget
+  // truncation, user stop, stream close) -- settle them as interrupted so
+  // no timeline row spins forever
+  const interruptedRuns = runs.map((item) =>
+    item.steps.some((step) => step.kind === "calls" && step.calls.some((call) => call.status === "pending"))
+      ? {
+          ...item,
+          steps: item.steps.map((step) =>
+            step.kind === "calls"
+              ? {
+                  ...step,
+                  calls: step.calls.map((call) =>
+                    call.status === "pending" ? { ...call, status: "interrupted" as const } : call,
+                  ),
+                }
+              : step,
+          ),
+        }
+      : item,
+  );
+  runs.splice(0, runs.length, ...interruptedRuns);
   const hasContent = runs.some((item) => item.answer || item.steps.length > 0);
   return {
     ...core,

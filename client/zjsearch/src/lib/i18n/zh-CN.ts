@@ -193,6 +193,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_search_thinking_plan: "正在规划搜索…",
   ai_search_view_more: "查看全部 {n} 条",
   ai_search_row_timeout: "超时",
+  ai_search_row_interrupted: "已中断",
   stop: "停止",
   mode_classic: "经典",
   mode_ai: "AI",

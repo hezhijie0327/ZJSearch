@@ -12,6 +12,7 @@ import {
   Globe,
   Lightbulb,
   LoaderCircle,
+  Minus,
   Plus,
   Repeat2,
   RotateCw,
@@ -102,6 +103,8 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
         ) : ok ? (
           <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
+        ) : call.status === "interrupted" ? (
+          <Minus aria-hidden="true" className="size-3 shrink-0" />
         ) : (
           <X aria-hidden="true" className="size-3 shrink-0 text-danger" />
         )}
@@ -116,7 +119,9 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
               ? `(${call.n ?? 0})`
               : call.status === "timeout"
                 ? t("ai_search_row_timeout")
-                : t("ai_search_row_failed")}
+                : call.status === "interrupted"
+                  ? t("ai_search_row_interrupted")
+                  : t("ai_search_row_failed")}
         </span>
         {expandable ? (
           <ChevronDown
