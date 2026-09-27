@@ -697,23 +697,29 @@ async def _pump_gemini(
         model=str(cfg.get("model")), contents=contents, config=config
     )
     calls: list[dict[str, str]] = []
-    async for chunk in stream:
-        candidates = chunk.candidates or []
-        parts = candidates[0].content.parts if candidates and candidates[0].content else []
-        for part in parts or []:
-            fc = getattr(part, "function_call", None)
-            if fc is not None and getattr(fc, "name", None):
-                calls.append(
-                    {"id": f"call_{len(calls)}", "name": str(fc.name), "arguments": json.dumps(dict(fc.args or {}))}
-                )
-                continue
-            if not part.text:
-                continue
-            if part.thought:
-                if relay_reasoning:
-                    events.put(("think", str(part.text)))
-            else:
-                events.put(("delta", str(part.text)))
+    try:
+        async for chunk in stream:
+            candidates = chunk.candidates or []
+            parts = candidates[0].content.parts if candidates and candidates[0].content else []
+            for part in parts or []:
+                fc = getattr(part, "function_call", None)
+                if fc is not None and getattr(fc, "name", None):
+                    calls.append(
+                        {"id": f"call_{len(calls)}", "name": str(fc.name), "arguments": json.dumps(dict(fc.args or {}))}
+                    )
+                    continue
+                if not part.text:
+                    continue
+                if part.thought:
+                    if relay_reasoning:
+                        events.put(("think", str(part.text)))
+                else:
+                    events.put(("delta", str(part.text)))
+    finally:
+        # a cancelled pump (idle timeout, client disconnect, budget) must
+        # not abandon the SDK generator with its HTTP connection open --
+        # every sibling pump closes in a finally
+        await stream.close()
     if calls:
         events.put(("tool_calls", calls))
 

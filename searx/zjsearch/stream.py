@@ -29,7 +29,7 @@ from searx.extended_types import sxng_request
 from searx.locales import RTL_LOCALES, match_locale
 from searx.webadapter import get_search_query_from_webapp
 from searx.webutils import get_translated_errors, highlight_content
-from searx.zjsearch.ai import llm, search as ai_search
+from searx.zjsearch.ai import search as ai_search
 
 logger = logger.getChild('zjsearch_stream')
 
@@ -283,15 +283,10 @@ def _render_context(webapp, template_name: str, **kwargs):  # pylint: disable=un
     )
     kwargs['urlparse'] = webapp.urlparse
 
-    # zjsearch AI capability (token + model) -- absent when the feature is
-    # off or unconfigured; the templates omit the key then and the client
-    # hides its chips.  The upstream render fallback path does not run this
-    # mirror, so it never carries the key either.
-    kwargs['ai'] = llm.capability()
-
-    # the AI Search mode switch rides the same gate shape (token + model);
-    # absent when the feature flag is off -- the client hides the switch
-    kwargs['ai_search'] = ai_search.capability()
+    # The AI capability payloads (globals.ai / globals.ai_search) are NOT
+    # render kwargs: the data macro pulls them from the zjs_ai_capabilities
+    # jinja global (see searx/zjsearch/ai/__init__.py) so every render path
+    # -- homepage included -- carries them behind each feature flag.
     # AI search takeover active for THIS request (ai=1 + capability): the
     # client renders the agent experience instead of the classic results
     kwargs['ai_mode'] = sxng_request.form.get('ai') == '1' and ai_search.capability() is not None
@@ -358,7 +353,10 @@ def _search_stream_response(search_query, raw_text_query, selected_locale, strea
     )
 
     def generate():
-        buf = None
+        # buffer the whole early shell and flush it as ONE chunk at the
+        # <!--zjs-shell--> end marker (boot skeleton + boot-data land in a
+        # single write); after the marker the late chunks stream raw
+        buf: list[str] = []
         shell_done = False
         try:
             for chunk in template.stream(context):

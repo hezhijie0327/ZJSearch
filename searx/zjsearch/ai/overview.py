@@ -29,7 +29,6 @@ Design contract:
 
 import asyncio
 import base64
-import datetime
 import functools
 import importlib.util
 import ipaddress
@@ -44,7 +43,7 @@ from searx.extended_types import sxng_request
 from searx.network.client import get_loop
 from searx.network.network import Network
 from searx.utils import gen_useragent
-from searx.zjsearch.ai import agent, llm
+from searx.zjsearch.ai import agent, llm, prompts
 
 logger = logging.getLogger(__name__)
 
@@ -167,15 +166,21 @@ def _image_fetch_candidate(url: str, absolute: str) -> str | None:
     it (a rejection is logged).  Same-origin ``/image_proxy`` links carry
     the original URL as their target: fetch it directly through the image
     network (the outgoing proxies apply) instead of hopping through the
-    instance's own proxy view; other same-origin references fetch the
-    instance itself, no gate."""
-    original = _proxied_original(absolute) if url.startswith("/") else None
-    if original is not None:
-        if _check_url(original):
-            return original
-        logger.warning("zjsearch_ai: image URL rejected by the SSRF gate: %r", original)
-        return None
-    if url.startswith("/") or _check_url(absolute):
+    instance's own proxy view.  "Same-origin" means the RESOLVED absolute
+    keeps the request's host -- a protocol-relative ``//internal.host/x``
+    must not masquerade as a relative link -- and every non-same-origin
+    candidate passes the SSRF gate."""
+    ref_host = (urlsplit(absolute).hostname or "").lower()
+    own_host = (urlsplit(sxng_request.host_url).hostname or "").lower()
+    if url.startswith("/") and ref_host == own_host:
+        original = _proxied_original(absolute)
+        if original is not None:
+            if _check_url(original):
+                return original
+            logger.warning("zjsearch_ai: image URL rejected by the SSRF gate: %r", original)
+            return None
+        return absolute
+    if _check_url(absolute):
         return absolute
     logger.warning("zjsearch_ai: image URL rejected by the SSRF gate: %r", absolute)
     return None
@@ -203,7 +208,11 @@ def _attached_images(payload: dict[str, t.Any], cfg: dict[str, t.Any]) -> list[d
         if not absolute:
             continue
         if mode == "url":
-            parts.append({"type": "image_url", "image_url": {"url": absolute}})
+            # the endpoint does the fetching, but the reference passes the
+            # same gate -- an unchecked internal URL must not ride out
+            candidate = _image_fetch_candidate(url, absolute)
+            if candidate is not None:
+                parts.append({"type": "image_url", "image_url": {"url": candidate}})
             continue
         candidate = _image_fetch_candidate(url, absolute)
         if candidate is not None:
@@ -219,34 +228,26 @@ def _attached_images(payload: dict[str, t.Any], cfg: dict[str, t.Any]) -> list[d
 
 # --------------------------------------------------------------- answer view
 
-_ANSWER_SYSTEM_PROMPT = """\
-You are the "AI Overview" feature of a search engine: answer the user's
-question directly, grounded in the numbered sources provided.
-Today is {today}.
-Rules:
-- Write the answer in {lang}.
-- Cite sources right after the statements they support: [1] for one source,
-  [1,3] for several. Use [*] only for common knowledge that no source covers.
-- Format freely in GitHub-flavored markdown -- the renderer supports all of
-  it: "## " section headings, bullet / numbered lists (task lists "- [x]"
-  for step checklists), **bold**, ~~strikethrough~~, tables for
-  comparisons, > blockquotes for short source quotes, `inline code` and
-  fenced code blocks, --- horizontal rules, definition lists ("Term" on
-  one line, ": definition" below), emoji shortcodes like :tada: used
-  sparingly, and links when a source URL genuinely helps.
-- When a diagram clarifies structure or flow better than prose, emit a
-  ```mermaid fenced block (flowchart, sequence, state, ER, gantt, pie,
-  mindmap, timeline).  Keep diagrams small -- around 15 nodes at most --
-  and quote every node label that contains punctuation or parentheses:
-  A["降水(雨/雪)"] -- not A[降水(雨/雪)].
-- Math typesets as real equations -- write LaTeX: inline $E=mc^2$ or
-  display $$\\int_0^1 f(x)\\,dx$$ blocks.  Each formula appears ONCE, in
-  LaTeX only -- never repeat it as plain text beside the equation.  No raw
-  HTML and no markdown images (![alt](url)) -- visual evidence arrives as
-  attachments instead.
-- If the sources do not answer the question, say so in one short line and
-  answer from common knowledge marked with [*].
-- Get to the point in the first sentence. No preamble, no closing remark."""
+
+def _answer_system(lang: str) -> str:
+    """The AI Overview system prompt: composed from the SHARED fragments in
+    ai/prompts.py (citation grammar, markdown surface, language directive)
+    so the two AI features cannot drift apart."""
+    return "\n".join(
+        [
+            "You are the \"AI Overview\" feature of a search engine: answer"
+            " the user's question directly, grounded in the numbered sources"
+            " provided.",
+            prompts.today_line(),
+            "Rules:",
+            prompts.language_directive(lang),
+            prompts.citation_rules(),
+            prompts.markdown_surface(),
+            prompts.grounding_fallback("sources"),
+            prompts.opening_rule(),
+        ]
+    )
+
 
 _ANSWER_USER_PROMPT = "<q>{q}</q>\n<sources>\n{context}\n</sources>"
 
@@ -254,7 +255,7 @@ _ANSWER_USER_PROMPT = "<q>{q}</q>\n<sources>\n{context}\n</sources>"
 def _build_answer_messages(
     query: str, context: str, lang: str, image_parts: list[dict[str, t.Any]]
 ) -> list[dict[str, t.Any]]:
-    system = _ANSWER_SYSTEM_PROMPT.format(today=datetime.date.today().isoformat(), lang=lang)
+    system = _answer_system(lang)
     if image_parts:
         system += (
             "\n- Images are attached after this text; they come from the numbered "
@@ -286,13 +287,34 @@ def _upstream_error_response(first_kind: str, first: str | None) -> flask.Respon
     return resp
 
 
+def _cfg() -> dict[str, t.Any]:
+    """The ``zjsearch.ai.overview`` settings block."""
+    cfg = llm.ai_cfg().get("overview")
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _enabled() -> bool:
+    """The overview feature flag: ``zjsearch.ai.overview.enabled`` --
+    ``True`` unless explicitly switched off."""
+    return bool(_cfg().get("enabled", True))
+
+
+def capability() -> dict[str, str] | None:
+    """The page-data ``ai`` payload (token + model label); ``None`` when the
+    overview feature is switched off or the transport is unconfigured -- the
+    client hides its AI Overview entry point then."""
+    if not _enabled():
+        return None
+    return llm.capability()
+
+
 def _answer() -> flask.Response:
     """AI Overview: the client assembles the numbered source context from the
     page payload it already has, this view streams the answer.  Reasoning
     deltas are relayed wrapped in ``<think>...</think>`` so the client can
     fold them away."""
     cfg = llm.ai_cfg()
-    if not llm.configured(cfg):
+    if not _enabled() or not llm.configured(cfg):
         flask.abort(404)
     payload = sxng_request.get_json(silent=True) or {}
     if not llm.check_token(str(payload.get("tk") or "")):
@@ -365,6 +387,8 @@ def install(app: flask.Flask) -> None:
     warning and the feature stays off."""
     cfg = llm.ai_cfg()
     if not cfg.get("enabled"):
+        return
+    if not _enabled():
         return
     if not llm.configured(cfg):
         logger.warning("zjsearch.ai is enabled but model/base_url are missing -- AI answers stay off")

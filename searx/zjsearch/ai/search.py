@@ -31,14 +31,15 @@ silently):
 A stream that dies before its first line answers 502 with a truncated
 upstream reason (same contract as the AI Overview).  Configuration: the
 transport is the shared ``zjsearch.ai`` block; this feature ships
-disabled and opts in via ``zjsearch.ai.search.enabled``.
+enabled and opts out via ``zjsearch.ai.search.enabled: false`` (the AI
+Overview mirrors that under ``zjsearch.ai.overview.enabled``).
 """
 
 import concurrent.futures
-import datetime
 import importlib.util
 import json
 import logging
+import re
 import time
 import typing as t
 from html import escape
@@ -49,7 +50,7 @@ from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
 from searx.webutils import highlight_content
-from searx.zjsearch.ai import agent, llm
+from searx.zjsearch.ai import agent, llm, prompts
 
 logger = logging.getLogger(__name__)
 
@@ -75,14 +76,17 @@ FEED_SNIPPET_CHARS = 300
 head) + 5 shallow (title only), numbered with the global [n] registry."""
 
 
-SEARCH_MODES = ("speed", "balanced", "quality")
+SEARCH_MODES = ("speed", "balanced", "quality", "goal")
 
 _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # speed: one focused round; balanced: main facets, optional gap-filler;
-    # quality: multi-round deep research with cross-verification
+    # quality: multi-round deep research with cross-verification;
+    # goal: the question is a target -- iterate in self-checked rounds until
+    # the goal is demonstrably met (budget is still the hard ceiling).
     "speed": {"max_rounds": 1, "max_calls_per_round": 2, "max_calls_total": 3, "budget_seconds": 150},
     "balanced": {"max_rounds": 2, "max_calls_per_round": 3, "max_calls_total": 6, "budget_seconds": 240},
     "quality": {"max_rounds": 4, "max_calls_per_round": 4, "max_calls_total": 10, "budget_seconds": 420},
+    "goal": {"max_rounds": 6, "max_calls_per_round": 4, "max_calls_total": 16, "budget_seconds": 600},
 }
 
 
@@ -90,6 +94,12 @@ def _cfg() -> dict[str, t.Any]:
     """The ``zjsearch.ai.search`` settings block."""
     cfg = llm.ai_cfg().get("search")
     return cfg if isinstance(cfg, dict) else {}
+
+
+def _enabled() -> bool:
+    """The search feature flag: ``zjsearch.ai.search.enabled`` -- ``True``
+    unless explicitly switched off."""
+    return bool(_cfg().get("enabled", True))
 
 
 def _budget(key: str, mode: str, default: int) -> int:
@@ -109,7 +119,7 @@ def capability() -> dict[str, str] | None:
     ``None`` when AI search is off or the transport is unconfigured -- the
     client hides its ``[classic|AI]`` mode switch then."""
     cfg = llm.ai_cfg()
-    if not (_cfg().get("enabled") and llm.configured(cfg)):
+    if not (_enabled() and llm.configured(cfg)):
         return None
     return {"tk": llm.issue_token(), "model": str(cfg.get("model"))}
 
@@ -130,8 +140,17 @@ def _tool_spec() -> dict[str, t.Any]:
             " Search like a skilled human: short keyword sets (never full"
             " sentences), distinct facets of the question, alternative phrasings"
             " or translations when the wording is uncertain. Prefer several"
-            " parallel calls over one broad query. Results arrive as globally"
-            " numbered [n] sources to cite in the final answer."
+            " parallel calls over one broad query. Precision operators are"
+            " applied authoritatively by the engine and are welcome when they"
+            " sharpen the results: site: / -site:, filetype:, \"exact phrase\","
+            " before:YYYY-MM-DD / after:YYYY-MM-DD. Optional filters"
+            " (time_range) are not supported by every engine: when a filtered"
+            " search comes back EMPTY, retry the same intent once without the"
+            " filter before concluding. Never use bangs unless the user"
+            " explicitly names an engine (then prefix the query, e.g. \"!baidu"
+            " keywords\") -- a category search already fans out across every"
+            " engine in that vertical. Results arrive as globally numbered [n]"
+            " sources to cite in the final answer."
         ),
         "parameters": {
             "type": "object",
@@ -145,58 +164,52 @@ def _tool_spec() -> dict[str, t.Any]:
                         " current events); general when unsure."
                     ),
                 },
+                "time_range": {
+                    "type": "string",
+                    "enum": list(_TIME_RANGES),
+                    "description": (
+                        "Optional freshness window -- use it when the question"
+                        " is about recent material (news, releases, changelogs);"
+                        " omit otherwise."
+                    ),
+                },
             },
             "required": ["query"],
         },
     }
 
 
-_SYSTEM_PROMPT = """\
-You are the "AI Search" mode of the zjsearch metasearch engine: the user
-asks a question, YOU decide which keyword searches answer it, run them
-with the {tool} tool, then answer from their numbered sources.
-Today is {today}.
-How to search:
-- First write ONE short sentence stating how you read the question's
-  intent (the UI shows it as the lead of your search plan). Then call
-  {tool} -- several calls in the same turn are encouraged: they run in
-  parallel.
-- ALWAYS run at least one {tool} call before writing the final answer --
-  even for topics you already know: the user expects live, cited sources,
-  not your memory.  No search results, no answer.
-- No search-engine operators (site:, filetype:, "quotes") and no !bangs.
-- If the first round leaves a real gap, run at most one more round; never
-  repeat a query you already ran.
-- When the sources suffice, write the final answer WITHOUT tool calls.
-Answer rules:
-- Write the answer in {lang}.
-- Cite sources right after the statements they support: [1] for one
-  source, [1,3] for several. Use [*] only for common knowledge that no
-  source covers. Source numbers are the global [n] labels your search
-  results carry.
-- Format freely in GitHub-flavored markdown -- the renderer supports all
-  of it: "## " section headings, bullet / numbered lists, **bold**,
-  tables for comparisons, > blockquotes for short source quotes, `inline
-  code` and fenced code blocks, definition lists, emoji shortcodes like
-  :tada: used sparingly, and links when a source URL genuinely helps.
-- When a diagram clarifies structure or flow better than prose, emit a
-  ```mermaid fenced block (flowchart, sequence, state, ER, gantt, pie,
-  mindmap, timeline).  Keep diagrams small -- around 15 nodes at most --
-  and quote every node label that contains punctuation or parentheses.
-- Math typesets as real equations -- write LaTeX: inline $E=mc^2$ or
-  display $$\\\\int_0^1 f(x)\\\\,dx$$ blocks.  Each formula appears ONCE, in
-  LaTeX only.  No raw HTML and no markdown images.
-- If the searches do not answer the question, say so in one short line
-  and answer from common knowledge marked with [*].
-- Get to the point in the first sentence. No preamble, no closing remark.
-"""  # noqa: E501  (the formatting rules mirror ai/overview.py -- keep in sync)
-
-_RESULT_TEMPLATE = (
-    '{%- from "zjsearch/data/macros.html" import result_data with context -%}'
-    # the separator is a block-if ON PURPOSE: inline-if string literals come
-    # out autoescaped ("&#34;, &#34;") and break the JSON (the repo gotcha)
-    '[{%- for result in results %}{% if not loop.first %},{% endif %}{{ result_data(result) }}{%- endfor %}]'
-)
+_DEPTH_PROMPTS: dict[str, str] = {
+    # Round policy AND output shape live here and only here: the base
+    # prompt must never contradict the chosen depth.
+    "speed": "Depth: SPEED -- the user mostly wants to know WHAT this is."
+    " One focused round, then answer in ONE short dense paragraph: name the"
+    " subject (bold on first mention), define it in a sentence or two, add"
+    " at most two or three key facts -- each cited.  NO headings, lists,"
+    " tables or diagrams; if the subject is ambiguous, say which sense you"
+    " picked in one clause.",
+    "balanced": "Depth: BALANCED -- round out the main facets: what it is,"
+    " how it works or why it matters, and whatever context the reader needs"
+    " not to be misled.  One search round covers it; run a second only for a"
+    " real gap.  Short paragraphs with the key terms in **bold**; a bullet"
+    " list or definition list when enumerating; a table only for a genuine"
+    " 2-3 way comparison.  Keep it moderate.",
+    "quality": "Depth: QUALITY -- a thorough, structured answer in \"##\""
+    " sections: definitions, mechanics, comparisons, recent developments."
+    "  Cross-verify load-bearing claims against independent sources (several"
+    " rounds are fine, but run only as many searches as the question actually"
+    " needs) and cite every major claim.",
+    "goal": "Depth: GOAL -- treat the question as a TARGET the user wants"
+    " reached, not a casual question.  Work toward it iteratively: first"
+    " state what evidence would demonstrate the goal is met, then search for"
+    " it; after each round, explicitly check what is still missing and run"
+    " further rounds until the goal is demonstrably achieved (verify"
+    " load-bearing claims against independent sources).  Structure the final"
+    " answer around the goal with \"##\" sections, and close with a GFM task"
+    " list (- [x] met / - [ ] open) as the evidence ledger -- every checked"
+    " item cited.  If the research budget runs out first, leave the missing"
+    " items unchecked and name the evidence that would close them.",
+}
 
 
 def _initial_messages(
@@ -206,29 +219,59 @@ def _initial_messages(
     sources_base: int,
     depth: str,
 ) -> list[dict[str, t.Any]]:
-    system = _SYSTEM_PROMPT.format(today=datetime.date.today().isoformat(), lang=lang, tool=TOOL_NAME)
+    """The conversation opener: the role + search policy, the depth branch
+    (round policy AND output shape), then the SHARED answer contract from
+    ai/prompts.py (language, citations, markdown, grounding, hygiene) --
+    fragments composed, never hand-copied, so the two AI features cannot
+    drift."""
+    role = (
+        "You are the \"AI Search\" mode of the zjsearch metasearch engine:"
+        " the user asks a question, YOU decide which keyword searches answer"
+        " it, run them with the {tool} tool, then answer from their numbered"
+        " sources.".format(tool=TOOL_NAME)
+    )
+    follow_up = ""
     if sources_base:
-        system += (
-            f"\nThis is a follow-up in an ongoing research session: sources"
+        follow_up = (
+            "\n- This is a follow-up in an ongoing research session: sources"
             f" [1]..[{sources_base}] were already found in earlier turns. Your"
-            f" new searches continue the numbering from [{sources_base + 1}]."
-            " Cite earlier sources by their numbers when they support the"
-            " answer -- but unless they already answer THIS follow-up"
-            " completely, run at least one fresh web_search for its"
-            " specifics: never answer from the conversation history alone."
+            " new searches continue the numbering from"
+            f" [{sources_base + 1}].  Cite earlier sources by their numbers"
+            " when they support the answer -- but unless they already answer"
+            " THIS follow-up completely, run at least one fresh web_search"
+            " for its specifics: never answer from the conversation history"
+            " alone."
         )
-    system += {
-        "speed": "\nDepth: SPEED -- cover the question with one focused round and a"
-        " compact answer; do not run extra rounds.",
-        "balanced": "\nDepth: BALANCED -- cover the question's main facets in one"
-        " round; run a second round only for a real gap.",
-        "quality": "\nDepth: QUALITY -- you may use up to several rounds and"
-        " cross-verify key claims against independent sources, but run only as"
-        " many searches as the question actually needs; a simple question may"
-        " need just one. Cover definitions, mechanics, comparisons and recent"
-        " developments before synthesizing.",
-    }.get(depth, "\nDepth: BALANCED.")
-    messages: list[dict[str, t.Any]] = [{"role": "system", "content": system}]
+    how_to_search = [
+        "How to search:",
+        "- First write ONE short sentence stating how you read the question's"
+        " intent (the UI shows it as the lead of your search plan). Then call"
+        f" {TOOL_NAME} -- several calls in the same turn are encouraged: they"
+        " run in parallel.",
+        "- ALWAYS run at least one {tool} call before writing the final"
+        " answer -- even for topics you already know: the user expects live,"
+        " cited sources, not your memory.  No search results, no answer.".format(tool=TOOL_NAME),
+        "- Optional filters (time_range) are not supported by every engine:"
+        " when a filtered search comes back EMPTY, retry the same intent once"
+        " without the filter before concluding there is nothing to find.",
+        "- Never repeat a query you already ran; never use !bangs unless the"
+        " user explicitly names an engine (then prefix the query with its"
+        " engine bang, e.g. !baidu) -- without one, the category parameter"
+        " already fans out across every engine in that vertical.",
+    ]
+    depth_line = _DEPTH_PROMPTS.get(depth, _DEPTH_PROMPTS["balanced"])
+    answer_rules = [
+        "Answer rules:",
+        prompts.language_directive(lang),
+        prompts.citation_rules() + " Source numbers are the global [n] labels your search results" " carry.",
+        prompts.markdown_surface(),
+        prompts.grounding_fallback("searches"),
+        prompts.opening_rule(),
+    ]
+    lines = [role, prompts.today_line(), *how_to_search, depth_line, *answer_rules]
+    if follow_up:
+        lines.append(follow_up)
+    messages: list[dict[str, t.Any]] = [{"role": "system", "content": "\n".join(lines)}]
     for turn in history:
         messages.append({"role": "user", "content": f"<q>{turn.get('q') or ''}</q>"})
         messages.append({"role": "assistant", "content": str(turn.get("a") or "")[:2000]})
@@ -236,21 +279,45 @@ def _initial_messages(
     return messages
 
 
-def _parse_call(call: dict[str, t.Any]) -> tuple[str, str]:
-    """(query, category) of one tool call -- sanitized: bangs stripped,
-    whitespace collapsed, category whitelist-checked."""
+_RESULT_TEMPLATE = (
+    '{%- from "zjsearch/data/macros.html" import result_data with context -%}'
+    # the separator is a block-if ON PURPOSE: inline-if string literals come
+    # out autoescaped ("&#34;, &#34;") and break the JSON (the repo gotcha)
+    '[{%- for result in results %}{% if not loop.first %},{% endif %}{{ result_data(result) }}{%- endfor %}]'
+)
+
+
+_BANG_PREFIX_RE = re.compile(r"^(?:\s*![a-z0-9_-]+)*(?:\s+|$)", re.IGNORECASE)
+_TIME_RANGES = ("day", "week", "month", "year")
+
+
+def _parse_call(call: dict[str, t.Any]) -> tuple[str, str, str]:
+    """(query, category, time_range) of one tool call -- sanitized: a
+    LEADING group of engine bangs (e.g. "!baidu") survives because the
+    model may only use one when the user explicitly names the engine;
+    every other "!" is noise, whitespace collapses, the category and the
+    freshness window are whitelist-checked."""
     try:
         args = json.loads(str(call.get("arguments") or "") or "{}")
     except ValueError:
         args = {}
     if not isinstance(args, dict):
         args = {}
-    query = str(args.get("query") or "").replace("!", "")
-    query = " ".join(query.split())[:200]
+    query = str(args.get("query") or "")
+    bang_match = _BANG_PREFIX_RE.match(query)
+    bang = ""
+    if bang_match and bang_match.group(0).strip():
+        bang = " ".join(token.lower() for token in bang_match.group(0).split())
+        query = query[bang_match.end() :]
+    query = query.replace("!", "")
+    query = " ".join((bang + " " + query).split())[:200]
     category = str(args.get("category") or "general").strip().lower()
     if category not in SEARCH_CATEGORIES:
         category = "general"
-    return query, category
+    time_range = str(args.get("time_range") or "").strip().lower()
+    if time_range not in _TIME_RANGES:
+        time_range = ""
+    return query, category, time_range
 
 
 def _serialize(raw_results: list[t.Any], query: str) -> list[dict[str, t.Any]]:
@@ -262,6 +329,7 @@ def _serialize(raw_results: list[t.Any], query: str) -> list[dict[str, t.Any]]:
             result["content"] = highlight_content(escape(result["content"][:1024]), query)
         if "title" in result and result["title"]:
             result["title"] = highlight_content(escape(result["title"] or ""), query)
+    rendered = None
     try:
         # the macro speaks the render context's helper functions -- pass the
         # very same callables webapp.render / the stream mirror pass
@@ -275,11 +343,14 @@ def _serialize(raw_results: list[t.Any], query: str) -> list[dict[str, t.Any]]:
             image_proxify=webapp.image_proxify,
         )
         return json.loads(rendered)
-    except (ValueError, TypeError) as exc:
+    except Exception as exc:  # pylint: disable=broad-except
+        # a malformed field reaching the macro raises anything from
+        # ValueError to jinja2.TemplateError; one bad result degrades to no
+        # serialized feed for THAT search, never a crashed round
         logger.warning(
             "zjsearch_ai_search: result serialization failed: %r -- head: %.240r",
             exc,
-            rendered if isinstance(rendered, str) else b"",
+            rendered if isinstance(rendered, str) else "",
         )
         return []
 
@@ -289,21 +360,27 @@ class _Searches:  # pylint: disable=too-few-public-methods
     pool.  Yields the feature events for the wire protocol and ends with
     the agent framework's ``("tool_results", ...)`` alignment."""
 
-    def __init__(self, prefs: t.Any, user_plugins: list[str], sources_base: int = 0):
+    def __init__(self, prefs: t.Any, user_plugins: list[str], sources_base: int = 0, search_language: str = ""):
         self.prefs = prefs
         self.user_plugins = user_plugins
+        self.search_language = search_language
         self.round_no = 0
         # follow-up runs continue the global [n] numbering after the base
         self.next_n = sources_base + 1
 
-    def _search_one(self, query: str, category: str) -> list[t.Any]:
+    def _search_one(self, query: str, category: str, time_range: str) -> list[t.Any]:
         """One real instance search -- the webapp path with a synthesized
-        form (user preferences apply: language, safesearch, engines).
-        Runs in a worker thread inside a COPIED request context (the
-        executor submits it wrapped in ``copy_current_request_context``):
+        form (user preferences apply: safesearch, engines; the page's
+        result language filter applies via ``search_language``).  Runs in a
+        worker thread inside a COPIED request context (the executor
+        submits it wrapped in ``copy_current_request_context``):
         SearchWithPlugins stores the request proxy and ``search()`` copies
         the context again for each of its engine threads."""
         form = {"q": query, "categories": category}
+        if time_range:
+            form["time_range"] = time_range
+        if self.search_language:
+            form["language"] = self.search_language
         search_query, _raw, _unknown, _notoken, _locale = get_search_query_from_webapp(self.prefs, form)
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
         return search_obj.search().get_ordered_results()
@@ -366,7 +443,9 @@ class _Searches:  # pylint: disable=too-few-public-methods
         rnd = self.round_no
         prepared = [_parse_call(call) for call in calls]
         feeds: list[str | None] = [None] * len(calls)
-        submittable = [(idx, query, category) for idx, (query, category) in enumerate(prepared) if query]
+        submittable = [
+            (idx, query, category, time_range) for idx, (query, category, time_range) in enumerate(prepared) if query
+        ]
         # the pool is deliberately NOT in a with-block: after the batch
         # deadline the timeout events must stream immediately -- a with-exit
         # would wait for the still-running searches and stall the response
@@ -375,7 +454,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
             yield from self._dispatch(pool, rnd, submittable, feeds)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
-        for wire_id, (query, _category) in enumerate(prepared, 1):
+        for wire_id, (query, _category, _time_range) in enumerate(prepared, 1):
             if not query:
                 feeds[wire_id - 1] = "error: empty query"
                 yield ("search", {"round": rnd, "id": wire_id, "status": "error", "n": 0, "ms": 0})
@@ -388,16 +467,16 @@ class _Searches:  # pylint: disable=too-few-public-methods
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
-        submittable: list[tuple[int, str, str]],
+        submittable: list[tuple[int, str, str, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[int, float]] = {}
-        for idx, query, category in submittable:
+        for idx, query, category, time_range in submittable:
             # the worker needs a request context of its own: SearchWithPlugins
             # stores the request proxy and search() copies the context again
             # for each of its engine threads (mirrors the webapp view thread)
             worker = flask.copy_current_request_context(self._search_one)
-            futures[pool.submit(worker, query, category)] = (idx + 1, time.monotonic())
+            futures[pool.submit(worker, query, category, time_range)] = (idx + 1, time.monotonic())
         pending = dict(futures)
         batch_deadline = time.monotonic() + SEARCH_TIMEOUT
         while pending:
@@ -409,7 +488,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
             )
             for fut in done:
                 wire_id, started = pending.pop(fut)
-                _idx, query, category = submittable[wire_id - 1]
+                _idx, query, category, _time_range = submittable[wire_id - 1]
                 yield from self._finish(rnd, wire_id, query, category, fut, started, feeds)
         for fut, (wire_id, _started) in pending.items():
             fut.cancel()
@@ -421,8 +500,8 @@ class _Searches:  # pylint: disable=too-few-public-methods
 
 
 def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
-    query, category = _parse_call(call)
-    return {"id": idx, "q": query, "category": category}
+    query, category, time_range = _parse_call(call)
+    return {"id": idx, "q": query, "category": category, "time_range": time_range or None}
 
 
 def _related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: str) -> list[str]:
@@ -508,9 +587,11 @@ def _generate(
     think_parts: list[str] = []
     answer_parts: list[str] = []
 
+    last_kind = first[0]
     yield emit(*first)
     for event in events:
         kind, payload = event
+        last_kind = kind
         if kind == "think":
             think_parts.append(str(payload or ""))
         elif kind == "delta":
@@ -521,13 +602,19 @@ def _generate(
             answer_parts.clear()
         yield emit(*event)
     answer_text = "".join(answer_parts).strip()
-    if not answer_text and think_parts:
+    if last_kind != "error" and not answer_text and think_parts:
         # the model routed the whole answer into the reasoning channel:
         # promote it so the user always gets a readable answer
         promoted = "".join(think_parts).strip()
         yield emit("delta", promoted)
         answer_parts.append(promoted)
         answer_text = promoted
+    # `end` settles the run FIRST so the client's follow-up box opens
+    # immediately; the related questions trail as a post-end event (the
+    # small completion behind them can think for the better part of a
+    # minute on reasoning models -- the client accepts `related` after
+    # phase=done by design)
+    yield json.dumps({"e": "end"}, ensure_ascii=False) + "\n"
     if answer_text:
         try:
             related = _related_questions(cfg, question, answer_text, lang)
@@ -536,11 +623,6 @@ def _generate(
             related = []
     else:
         related = []
-    # `end` settles the run FIRST so the client's follow-up box opens
-    # immediately; the related questions trail as a post-end event (the
-    # small completion behind them can think for the better part of a
-    # minute on reasoning models)
-    yield json.dumps({"e": "end"}, ensure_ascii=False) + "\n"
     if related:
         yield emit("related", {"items": related})
 
@@ -548,7 +630,7 @@ def _generate(
 def _search() -> flask.Response:
     """AI Search: the agent loop with the ``web_search`` tool."""
     cfg = llm.ai_cfg()
-    if not (_cfg().get("enabled") and llm.configured(cfg)):
+    if not (_enabled() and llm.configured(cfg)):
         flask.abort(404)
     payload = sxng_request.get_json(silent=True) or {}
     if not llm.check_token(str(payload.get("tk") or "")):
@@ -574,7 +656,12 @@ def _search() -> flask.Response:
     if lang in ("", "all", "auto"):
         lang = "en"
 
-    state = _Searches(sxng_request.preferences, list(sxng_request.user_plugins), sources_base)
+    raw_search_language = str(payload.get("search_language") or "").strip()
+    if raw_search_language.lower() in ("", "auto", "all"):
+        raw_search_language = ""
+    state = _Searches(
+        sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
+    )
     events = agent.run_agent(
         cfg,
         _initial_messages(q, lang, history, sources_base, mode),
@@ -588,7 +675,8 @@ def _search() -> flask.Response:
     try:
         first = next(events)
     except StopIteration:
-        first = ("end", None)
+        # an upstream that answers 200 with zero events (empty gateways do)
+        first = ("error", RuntimeError("upstream returned an empty stream"))
     if first[0] == "error":
         logger.warning("zjsearch_ai_search: upstream failed before the first line: %s", first[1])
         resp = flask.Response(f"AI upstream error: {llm.reason_of(first[1])}", status=502, mimetype="text/plain")
@@ -609,7 +697,7 @@ def install(app: flask.Flask) -> None:
     Stays off unless ``zjsearch.ai.search.enabled`` and the shared
     transport are fully configured."""
     cfg = llm.ai_cfg()
-    if not _cfg().get("enabled"):
+    if not _enabled():
         return
     if not llm.configured(cfg):
         logger.warning("zjsearch.ai.search is enabled but the transport is missing -- AI search stays off")

@@ -143,11 +143,31 @@ zjsearch:
     base_url: "http://localhost:1234/v1"
     api_key: ""
     model: "qwen/qwen3.6-35b-a3b"
+    # thinking-intensity knobs live in params under each SDK's own name:
+    #   openai_chat_completions -> reasoning_effort: low | medium | high
+    #   openai_responses        -> reasoning: {effort: low, summary: auto}
+    #                              (summary deltas surface in the thinking
+    #                              block; reasoning models only)
+    #   anthropic               -> thinking: {type: enabled, budget_tokens: 2048}
+    #   gemini                  -> thinking_config: {thinking_budget: 1024}
+    params:
+      reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
+    # extra_body:  # LM Studio / vLLM only -- drop it for online providers.
+    #   chat_template_kwargs:
+    #     enable_thinking: false
+    #   NOTE: reasoning_effort and this LM Studio hard-off are mutually
+    #   exclusive -- sending an effort implies a reasoning request and
+    #   re-enables thinking despite the template kwarg.
+    # feature switches -- both default to true; setting one to false makes
+    # the endpoint answer 404 AND the client hide its entry point (the AI
+    # Overview trigger / the [classic|AI] switch).
+    overview:
+      enabled: true
     # AI Search rides the same transport; the model must support native
     # tool calls (endpoints without tool support answer 400/404 -- the
     # AI Overview keeps working either way).
     search:
-      enabled: true
+      # enabled: true            # default true -- opt out with false
       # max_rounds: 3            # tool rounds before the forced final turn
       # max_calls_per_round: 4   # parallel searches per round
       # max_calls_total: 8       # searches per AI search request
@@ -162,18 +182,3 @@ zjsearch:
     #   sdk: gemini
     #   base_url: "https://generativelanguage.googleapis.com"
     #   model: "gemini-..."
-    # thinking-intensity knobs live in params under each SDK's own name:
-    #   openai_chat_completions -> reasoning_effort: low | medium | high
-    #   openai_responses        -> reasoning: {effort: low, summary: auto}
-    #                              (summary deltas surface in the thinking
-    #                              block; reasoning models only)
-    #   anthropic               -> thinking: {type: enabled, budget_tokens: 2048}
-    #   gemini                  -> thinking_config: {thinking_budget: 1024}
-    params:
-      reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
-    # NOTE: reasoning_effort and the LM Studio hard-off below are mutually
-    # exclusive -- sending an effort implies a reasoning request and
-    # re-enables thinking despite the template kwarg
-    # extra_body:  # LM Studio / vLLM only -- drop it for online providers
-    #   chat_template_kwargs:
-    #     enable_thinking: false
