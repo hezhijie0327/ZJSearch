@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "@/app.tsx";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
-import { type AnyPageData, isErrorPageData, isRedirectPageData } from "@/lib/types.ts";
+import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 import "./styles/global.css";
 
 /**
@@ -67,6 +67,15 @@ async function bootstrap(): Promise<void> {
   // swap static → pending → results gapless
   if (initialData?.globals.page === "results") {
     await import("@/pages/ResultsPage.tsx");
+  }
+  // A non-pending boot already consumed the document's #page-data payload
+  // (a fast stream may have settled before the module even ran) — drop the
+  // script so no later pending window (an SPA search's boot payload
+  // applying) can mistake this STALE element for its own late chunk and
+  // re-apply the boot page over the fresh navigation. A pending boot keeps
+  // the element: the streaming late chunk completes it.
+  if (initialData && !isPendingSearchData(initialData)) {
+    document.getElementById("page-data")?.remove();
   }
   const settings = parseClientSettings();
   createRoot(container).render(<App initialData={initialData} settings={settings} />);

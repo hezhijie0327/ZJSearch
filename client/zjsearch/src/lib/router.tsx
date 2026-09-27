@@ -143,6 +143,18 @@ export function RouterProvider({
         }
         pushHistory();
         setHref(finalUrl);
+        // a fetched stream can settle into a redirect / error payload the
+        // same way a full page boot can (external bangs, mid-stream
+        // serialization failures) — route them like the boot path does
+        if (isRedirectPageData(pageData)) {
+          window.location.replace(pageData.url);
+          return;
+        }
+        if (isErrorPageData(pageData)) {
+          setError(pageData.message);
+          setLoading(false);
+          return;
+        }
         setData(pageData);
         setLoading(false);
         document.title = pageTitle(pageData);
@@ -250,6 +262,11 @@ export function RouterProvider({
       const parsed = parseEmbeddedPageData();
       if (!parsed) {
         return;
+      }
+      // payloads are single-use: drop what was read so a later pending
+      // window can never re-apply a stale element as its own late chunk
+      for (const el of document.querySelectorAll("#page-data")) {
+        el.remove();
       }
       if (isRedirectPageData(parsed)) {
         window.location.replace(parsed.url);
