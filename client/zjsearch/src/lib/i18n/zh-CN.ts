@@ -194,6 +194,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_search_view_more: "查看全部 {n} 条",
   ai_search_row_timeout: "超时",
   ai_search_row_interrupted: "已中断",
+  ai_elapsed_seconds: "已调研 {n} 秒",
+  ai_elapsed_minutes: "已调研 {n} 分 {s} 秒",
   ai_search_row_duplicate: "重复",
   ai_clarify_more: "补充说明（可选）",
   ai_clarify_confirm: "开始调研",

@@ -86,6 +86,11 @@ export interface AiSearchRun {
   reviewing: boolean;
   /** the budget forced the wrap-up: partial prose was discarded */
   wrappingUp: boolean;
+  /** client clock when the run's RESEARCH began (reset on clarify
+      submit -- the question wait is not research time) */
+  startedAt: number;
+  /** client clock when the run settled (research duration display) */
+  endedAt: number | null;
 }
 
 export interface AiSearchState {
@@ -146,9 +151,14 @@ function settle(core: Core, failed: { error: string } | null): Core {
       settled = { ...settled, answer: core.pending.trim() };
     }
     const awaiting = !failed && settled.ask !== null && !settled.answer.trim();
+    const endedAt = awaiting ? null : Date.now();
     runs[runs.length - 1] = failed
-      ? { ...settled, status: "error", error: failed.error }
-      : { ...settled, status: awaiting ? "awaiting" : settled.status === "streaming" ? "done" : settled.status };
+      ? { ...settled, status: "error", error: failed.error, endedAt }
+      : {
+          ...settled,
+          endedAt,
+          status: awaiting ? "awaiting" : settled.status === "streaming" ? "done" : settled.status,
+        };
   }
   // in-flight searches can never report a status once the run ends (budget
   // truncation, user stop, stream close) -- settle them as interrupted so
@@ -450,6 +460,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           clarify: undefined,
           reviewing: false,
           wrappingUp: false,
+          startedAt: Date.now(),
+          endedAt: null,
         },
       ],
       sources: [],
@@ -495,6 +507,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           clarify: undefined,
           reviewing: false,
           wrappingUp: false,
+          startedAt: Date.now(),
+          endedAt: null,
         },
       ],
     }));
@@ -537,6 +551,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
               clarify: text ?? "",
               reviewing: false,
               wrappingUp: false,
+              startedAt: Date.now(),
+              endedAt: null,
             }
           : run,
       ),

@@ -192,6 +192,8 @@ export const EN = {
   ai_search_view_more: "View {n} more",
   ai_search_row_timeout: "timed out",
   ai_search_row_interrupted: "interrupted",
+  ai_elapsed_seconds: "researched {n}s",
+  ai_elapsed_minutes: "researched {n}m {s}s",
   ai_search_row_duplicate: "duplicate",
   ai_clarify_more: "Add context (optional)",
   ai_clarify_confirm: "Start research",

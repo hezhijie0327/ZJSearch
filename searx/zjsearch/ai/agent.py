@@ -39,7 +39,8 @@ from searx.zjsearch.ai import llm
 logger = logging.getLogger(__name__)
 
 FIRST_EVENT_TIMEOUT = 135.0
-"""Budget for connect + first token of a turn (see llm.LlmStream)."""
+"""Budget for connect + first token of a turn (see llm.LlmStream).  A
+transport health guard against dead upstreams -- NOT a research limit."""
 
 IDLE_TIMEOUT = 125.0
 """Per-event queue budget while a turn streams."""
@@ -127,25 +128,26 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     ``("calls", ...)``: the executor runs every call of the round -- the
     model decides how many one round carries (the per-batch wall-clock
     timeout is the backstop) -- results are appended and the next turn
-    starts.  The only budgets are the ROUND count and the wall clock.
+    starts.  The ROUND count is the only research budget: time limits are
+    removed on purpose (the user's stop button is the control), so
+    ``deadline``/``answer_reserve`` stay supported for callers that want
+    them but AI Search passes none.
 
     The forced-answer transition is EXPLAINED, never silent: when the
-    rounds or the ``answer_reserve`` slice of the wall clock take the
-    tools away, ``wrapup_message`` is injected as a user message and a
-    ``("wrapup", None)`` event flies -- a model that merely loses its
-    tools keeps emitting tool-call markup as raw text instead of writing
-    the answer.  A deadline that cuts a turn MID-STREAM gets the same
-    treatment plus a grace turn: the partial prose is discarded (the
+    rounds (or a caller-set ``answer_reserve`` slice of the wall clock)
+    take the tools away, ``wrapup_message`` is injected as a user message
+    and a ``("wrapup", None)`` event flies -- a model that merely loses
+    its tools keeps emitting tool-call markup as raw text instead of
+    writing the answer.  A deadline that cuts a turn MID-STREAM gets the
+    same treatment plus a grace turn: the partial prose is discarded (the
     client drops it on the ``wrapup`` event) and the model rewrites the
     complete answer from scratch under ``wrapup_grace`` seconds.
 
     ``review`` (the answer gate) re-checks a naturally finished answer:
     a fail injects the critique and re-opens research for exactly one
     patch round before the next review; wrap-up answers are never
-    reviewed.  The wall-clock ``deadline`` is enforced per event --
-    including mid-turn, so a reasoning-looping model cannot stream
-    forever; on exhaustion the stream is cancelled and the run settles
-    gracefully or ends with an error.
+    reviewed.  The FIRST_EVENT/IDLE timeouts are transport health guards
+    (a dead upstream), not research limits.
     """
     rounds = 0
     reviews_left = 1

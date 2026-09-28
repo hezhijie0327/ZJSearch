@@ -21,7 +21,7 @@ silently):
 - ``{"e": "calls", "round", "intent", "items": [{id, q, category}]}`` --
   a parallel batch announced (the model decides the batch size);
 - ``{"e": "search", "round", "id", "status", "n", "ms"}`` -- one search
-  finished (ok / error / timeout / duplicate);
+  finished (ok / error / duplicate);
 - ``{"e": "results", "round", "id", "results"}`` -- page-data-shaped
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
@@ -69,15 +69,12 @@ TOOL_NAME = "web_search"
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The verticals the model may pick; each has a dedicated client layout."""
 
-SEARCH_TIMEOUT = 25.0
-"""Wall-clock budget for one parallel batch of searches (engines carry
-their own per-request timeouts; this guards the executor)."""
-
 MAX_PARALLEL = 3
 """Worker threads per parallel batch -- uncapped per-round call counts
 (the model's call) queue behind these few slots so a chatty round cannot
-stampede the instance; the batch's wall-clock timeout (scaled by the
-number of waves) truncates whatever is still waiting."""
+stampede the instance.  Every queued search gets to run; each engine
+request carries its own per-request timeout, which is what bounds a
+batch -- no artificial wall clock."""
 
 RESULTS_CAP = 30
 """Results per search sent to the client (the model only sees the feed)."""
@@ -95,15 +92,15 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # speed: one focused round; balanced: main facets, optional gap-filler;
     # quality: multi-round deep research with cross-verification;
     # goal: the question is a target -- iterate in self-checked rounds until
-    # the goal is demonstrably met (budget is still the hard ceiling).
-    # Per-round call counts are the MODEL's call -- uncapped, the parallel
-    # batch's wall-clock timeout is the backstop; the budgets bound ROUNDS
-    # and the WALL CLOCK only (answer_reserve_s is the synthesis window
-    # ring-fenced before the tools go away).
-    "speed": {"max_rounds": 2, "budget_seconds": 150, "answer_reserve_s": 30},
-    "balanced": {"max_rounds": 4, "budget_seconds": 300, "answer_reserve_s": 30},
-    "quality": {"max_rounds": 8, "budget_seconds": 450, "answer_reserve_s": 45},
-    "goal": {"max_rounds": 16, "budget_seconds": 600, "answer_reserve_s": 60},
+    # the goal is demonstrably met.
+    # The ROUND count is the only research budget -- TIME limits are gone
+    # on purpose: the model may take as long as it needs, the user's stop
+    # button is the control.  Per-round call counts are the MODEL's call
+    # (uncapped); each engine request carries its own per-request timeout.
+    "speed": {"max_rounds": 2},
+    "balanced": {"max_rounds": 4},
+    "quality": {"max_rounds": 8},
+    "goal": {"max_rounds": 16},
 }
 
 _WRAPUP_MESSAGE = (
@@ -522,9 +519,10 @@ class _Searches:  # pylint: disable=too-few-public-methods
             else:
                 self.ran[_norm_query(query)] = [query, 0]
                 submittable.append((wire_id, query, category, time_range))
-        # the pool is deliberately NOT in a with-block: after the batch
-        # deadline the timeout events must stream immediately -- a with-exit
-        # would wait for the still-running searches and stall the response
+        # the pool is deliberately NOT in a with-block: when the consumer
+        # disappears (client disconnect / stop) the generator closes right
+        # here -- a with-exit would wait for the still-running searches and
+        # stall the shutdown
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=min(max(1, len(submittable)), MAX_PARALLEL))
         try:
             yield from self._dispatch(pool, rnd, submittable, feeds)
@@ -550,35 +548,14 @@ class _Searches:  # pylint: disable=too-few-public-methods
             worker = flask.copy_current_request_context(self._search_one)
             futures[pool.submit(worker, query, category, time_range)] = (wire_id, query, category, time.monotonic())
         pending = dict(futures)
-        # the batch timeout covers every WAVE of the bounded pool: a chatty
-        # uncapped round queues behind MAX_PARALLEL slots, and the queued
-        # searches get their full SEARCH_TIMEOUT too instead of inheriting
-        # whatever the first wave left of a flat deadline
-        waves = max(1, -(-len(submittable) // MAX_PARALLEL))
-        batch_deadline = time.monotonic() + SEARCH_TIMEOUT * waves
+        # no batch wall clock: every queued search gets to run and every
+        # engine request carries its own per-request timeout, which is what
+        # bounds a batch -- the user's stop button is the only control
         while pending:
-            timeout = batch_deadline - time.monotonic()
-            if timeout <= 0:
-                break
-            done, _not_done = concurrent.futures.wait(
-                pending, timeout=timeout, return_when=concurrent.futures.FIRST_COMPLETED
-            )
+            done, _not_done = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
             for fut in done:
                 wire_id, query, category, started = pending.pop(fut)
                 yield from self._finish(rnd, wire_id, query, category, fut, started, feeds)
-        for fut, (wire_id, _query, _category, _started) in pending.items():
-            fut.cancel()
-            feeds[wire_id - 1] = feeds[wire_id - 1] or "error: the search timed out"
-            yield (
-                "search",
-                {
-                    "round": rnd,
-                    "id": wire_id,
-                    "status": "timeout",
-                    "n": 0,
-                    "ms": int(SEARCH_TIMEOUT * waves * 1000),
-                },
-            )
 
 
 def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
@@ -925,8 +902,6 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         tools=_tool_spec(),
         executor=state.execute,
         max_rounds=max_rounds,
-        deadline=time.monotonic() + float(_budget("budget_seconds", mode, 300)),
-        answer_reserve=float(_budget("answer_reserve_s", mode, 30)),
         wrapup_message=_WRAPUP_MESSAGE,
         review=_reviewer(cfg, q, lang, clarifications, state.ran) if mode in _CLARIFY_MODES else None,
     )

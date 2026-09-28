@@ -168,10 +168,10 @@ zjsearch:
     # AI Overview keeps working either way).
     search:
       # enabled: true            # default true -- opt out with false
-      # max_rounds: 3            # tool rounds before the forced final turn
-      # max_calls_per_round: 4   # parallel searches per round
-      # max_calls_total: 8       # searches per AI search request
-      # budget_seconds: 240      # wall-clock cap for the whole loop
+      # max_rounds: 4            # research rounds before the wrap-up turn
+      #   (rounds are the ONLY research budget -- no time limits: the
+      #    stop button is the control, every engine request carries its
+      #    own per-request timeout)
     # online examples -- swap sdk/base_url/model and the ZJSEARCH_AI_KEY:
     #   sdk: openai_chat_completions
     #   base_url: "https://api.openai.com/v1"

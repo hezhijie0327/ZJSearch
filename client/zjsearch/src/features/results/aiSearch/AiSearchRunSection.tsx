@@ -22,7 +22,7 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import { type AiSourceMeta, citeToLinks } from "@/features/results/aiAnswer.ts";
@@ -255,6 +255,32 @@ function StepSegment({
   );
 }
 
+/** Live research duration ("已调研 X 秒" while running, "已调研 X 秒"
+    settled): ticks once a second off the run's own clock -- the honest
+    substitute for the removed time budgets (the stop button is the
+    control, the elapsed time is the visibility). */
+function ElapsedTimer({ startedAt, endedAt }: { startedAt: number; endedAt: number | null }) {
+  const t = useT();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (endedAt !== null) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [endedAt]);
+  const seconds = Math.max(0, Math.round(((endedAt ?? now) - startedAt) / 1000));
+  const label =
+    seconds < 60
+      ? t("ai_elapsed_seconds", { n: String(seconds) })
+      : t("ai_elapsed_minutes", { n: String(Math.floor(seconds / 60)), s: String(seconds % 60) });
+  return <span className="ms-auto shrink-0 tabular-nums text-xs text-ink-3">{label}</span>;
+}
+
 /** The clarify gate's question card: the run waits for the user's
     direction -- chips pick the options, one free-text line adds nuance,
     and the skip link researches without answers. */
@@ -451,10 +477,11 @@ function AiSearchRunSectionImpl({
                   className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
                 />
               </button>
+              <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
               {streaming ? (
                 <button
                   aria-label={t("stop")}
-                  className="ms-auto grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                  className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
                   onClick={onStop}
                   title={t("stop")}
                   type="button"
