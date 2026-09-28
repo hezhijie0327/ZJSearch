@@ -360,19 +360,31 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     (overrides) => buildParams(overrides),
   );
   buildParamsRef.current = (overrides) => buildParams(overrides);
-  const onRunCite = useCallback((runIndex: number, index: number) => {
-    const sources = aiSearchRef.current.runs.slice(0, runIndex + 1).flatMap((run) => run.sources);
-    const source = sources[index - 1];
-    if (!source?.url) {
-      return false;
+  const onRunCite = useCallback(async (runIndex: number, index: number) => {
+    const run = aiSearchRef.current.runs[runIndex];
+    const source = aiSearchRef.current.runs.slice(0, runIndex + 1).flatMap((r) => r.sources)[index - 1];
+    if (!run || !source?.url) {
+      return;
     }
-    // same locate-and-flash contract as the AI Overview's citation jumps,
-    // aimed at THIS run's source-card grid; a card hidden behind the
-    // grid's view-more cap is not in the DOM -- open the page instead
-    const card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
+    // ONE logic for every citation: locate the source card in this run's
+    // grid and flash it.  A card behind the grid's view-more cap is not in
+    // the DOM yet -- expand that run's grid, wait for the commit, then
+    // locate.  Only a truly missing card (should not happen) opens the
+    // page instead.
+    let card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
+    if (!card) {
+      const more = document.getElementById(`ai-run-${run.runNo}`)?.querySelector<HTMLElement>("[data-view-more]");
+      if (more) {
+        more.click();
+        for (let i = 0; i < 10 && !card; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
+        }
+      }
+    }
     if (!card) {
       window.open(source.url, "_blank", "noopener,noreferrer");
-      return true;
+      return;
     }
     scrollIntoViewAnimated(card, "center");
     if (flashTimer.current !== null) {
@@ -385,7 +397,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       card.removeAttribute("data-ai-flash");
       flashTimer.current = null;
     }, 1900);
-    return true;
   }, []);
   const onRunFallback = useCallback(() => {
     search(buildParamsRef.current({ ai: false }), { replace: true });

@@ -437,7 +437,7 @@ function AiSearchRunSectionImpl({
   live: boolean;
   /** citation-chip meta: the thread's sources up to and including this run */
   sourceMeta: AiSourceMeta[];
-  onCite?: (index: number) => boolean;
+  onCite?: (index: number) => void;
   onRegenerate?: () => void;
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */

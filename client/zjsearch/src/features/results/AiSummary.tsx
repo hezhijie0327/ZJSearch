@@ -234,7 +234,7 @@ type MdProps = {
     the source favicon, site and title (portalled to <body> so the clamp
     wrapper's overflow-hidden cannot clip it); clicking jumps to the
     matching result row.  Moving between chip and panel keeps it open. */
-function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; onCite?: (index: number) => boolean }) {
+function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; onCite?: (index: number) => void }) {
   const t = useT();
   const [panel, setPanel] = useState<{ x: number; y: number } | null>(null);
   const hideTimer = useRef<number | null>(null);
@@ -498,7 +498,7 @@ function textOf(node: ReactNode): string {
 
 function markdownComponents(
   meta: AiSourceMeta[],
-  onCite: ((index: number) => boolean) | undefined,
+  onCite: ((index: number) => void) | undefined,
   settled: boolean,
 ): Record<string, (props: MdProps) => ReactNode> {
   const heading = ({ children }: MdProps) => (
@@ -609,7 +609,7 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
 }: {
   markdown: string;
   meta: AiSourceMeta[];
-  onCite?: (index: number) => boolean;
+  onCite?: (index: number) => void;
   settled: boolean;
 }) {
   const needsMath = MATH_FENCE.test(markdown);
@@ -687,7 +687,7 @@ export function AiAnswerCard({
   state: AiAnswerState;
   /** favicon + domain + title per result, in citation order (position = [n]) */
   sourceMeta?: AiSourceMeta[];
-  onCite?: (index: number) => boolean;
+  onCite?: (index: number) => void;
 }) {
   const t = useT();
   const [thinkForced, setThinkForced] = useState<boolean | null>(null);

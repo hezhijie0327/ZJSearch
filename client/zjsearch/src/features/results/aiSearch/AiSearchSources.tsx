@@ -61,6 +61,7 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
             aria-expanded={false}
             aria-label={t("ai_search_view_more", { n: cap.hidden })}
             className="flex flex-col gap-2 rounded-lg bg-surface-2/70 p-3 transition-colors hover:bg-surface-2"
+            data-view-more=""
             onClick={cap.toggle}
             type="button"
           >
