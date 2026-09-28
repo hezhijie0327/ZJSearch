@@ -50,7 +50,7 @@ export type AiSearchStep =
   | { kind: "think"; text: string }
   | { kind: "intent"; text: string }
   | { kind: "calls"; round: number; calls: AiSearchCall[] }
-  | { kind: "draft"; text: string };
+  | { kind: "draft"; text: string; critique: string };
 
 export interface AiSearchSource {
   /** global [n] citation number (contiguous from 1) */
@@ -350,10 +350,11 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       return { ...core, runs };
     case "review_failed": {
       // the draft was rejected: keep it as a collapsible timeline step
-      // while the model re-opens research to patch the gaps
+      // (with the reviewer's critique -- the same transparency the think
+      // stream gets) while the model re-opens research to patch the gaps
       const steps = [...run.steps];
       if (run.answer.trim()) {
-        steps.push({ kind: "draft", text: run.answer });
+        steps.push({ kind: "draft", text: run.answer, critique: String(event.critique ?? "") });
       }
       runs[lastIdx] = { ...run, steps, answer: "", reviewing: false };
       return { ...core, runs, pending: "", answerFrom: 0, thinkOpen: false };

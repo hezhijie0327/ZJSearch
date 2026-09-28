@@ -252,7 +252,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                     ok, critique = True, ""
                 if ok:
                     return
-                yield ("review_failed", None)
+                yield ("review_failed", critique)
                 messages.append({"role": "assistant", "content": turn_text})
                 messages.append({"role": "user", "content": critique})
                 max_rounds = rounds + 1

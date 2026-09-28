@@ -794,7 +794,7 @@ def _generate(
 ) -> t.Iterator[str]:
     """Map agent/executor events to the NDJSON wire protocol."""
 
-    def emit(kind: str, payload: t.Any) -> str:
+    def emit(kind: str, payload: t.Any) -> str:  # pylint: disable=too-many-return-statements
         if kind == "think":
             return json.dumps({"e": "think", "t": str(payload or "")}, ensure_ascii=False) + "\n"
         if kind == "delta":
@@ -812,10 +812,14 @@ def _generate(
                 )
                 + "\n"
             )
-        if kind in ("wrapup", "verifying", "review_failed"):
+        if kind in ("wrapup", "verifying"):
             # payload-less state markers: the client flips its run state
-            # (wrap-up hint / answer-gate spinner / draft step) on them
+            # (wrap-up hint / answer-gate spinner) on them
             return json.dumps({"e": kind}, ensure_ascii=False) + "\n"
+        if kind == "review_failed":
+            # the gate rejected the draft: the critique rides the event so
+            # the client can show WHY next to the kept draft step
+            return json.dumps({"e": "review_failed", "critique": str(payload or "")}, ensure_ascii=False) + "\n"
         if kind == "error":
             return json.dumps({"e": "error", "reason": llm.reason_of(payload)}, ensure_ascii=False) + "\n"
         return json.dumps({"e": kind, **payload}, ensure_ascii=False) + "\n"

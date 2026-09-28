@@ -196,6 +196,8 @@ export const EN = {
   ai_elapsed_minutes: "researched {n}m {s}s",
   ai_search_row_duplicate: "duplicate",
   ai_clarify_more: "Add context (optional)",
+  ai_clarify_title: "Confirm the research direction",
+  ai_review_rejected: "Rejected by the answer review — research re-opened",
   ai_clarify_confirm: "Start research",
   ai_clarify_skip: "Search without clarifying",
   ai_clarify_summary: "Confirmed direction",

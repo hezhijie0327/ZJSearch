@@ -180,8 +180,10 @@ function ThinkSegment({
 
 /** The rejected first draft of the answer (the gate sent it back): kept
     as a collapsible timeline step so nothing the user watched stream
-    just vanishes. */
-function DraftSegment({ text }: { text: string }) {
+    just vanishes -- with the reviewer's critique shown on top, the same
+    transparency the think stream gets.  Citations keep their chips via
+    the thread's source meta. */
+function DraftSegment({ critique, meta, text }: { critique: string; meta: AiSourceMeta[]; text: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
@@ -199,8 +201,16 @@ function DraftSegment({ text }: { text: string }) {
         <ChevronDown aria-hidden="true" className={`size-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       <Collapse className={open ? "mt-1" : ""} open={open}>
-        <div className="text-sm leading-relaxed text-ink-2">
-          <MarkdownAnswer markdown={citeToLinks(text)} meta={[]} settled />
+        <div className="rounded-lg border border-line p-3">
+          <p className="text-xs font-medium text-danger">{t("ai_review_rejected")}</p>
+          {critique ? (
+            <p className="mt-1 border-s-2 border-line ps-3 text-xs leading-relaxed text-ink-2" dir="auto">
+              {critique}
+            </p>
+          ) : null}
+          <div className="mt-2 text-sm leading-relaxed text-ink-2">
+            <MarkdownAnswer markdown={citeToLinks(text)} meta={meta} settled />
+          </div>
         </div>
       </Collapse>
     </div>
@@ -209,11 +219,13 @@ function DraftSegment({ text }: { text: string }) {
 
 function StepSegment({
   index,
+  meta,
   run,
   step,
   streaming,
 }: {
   index: number;
+  meta: AiSourceMeta[];
   run: AiSearchRun;
   step: AiSearchStep;
   streaming: boolean;
@@ -230,7 +242,7 @@ function StepSegment({
     );
   }
   if (step.kind === "draft") {
-    return <DraftSegment text={step.text} />;
+    return <DraftSegment critique={step.critique} meta={meta} text={step.text} />;
   }
   if (step.kind === "intent") {
     return (
@@ -317,12 +329,16 @@ function AskCard({
   };
   return (
     <div
-      aria-label={t("ai_clarify_confirm")}
+      aria-label={t("ai_clarify_title")}
       className="animate-fade-up rounded-2xl border border-line bg-surface p-4"
       role="form"
     >
+      <div className="flex items-center gap-2">
+        <Compass aria-hidden="true" className="size-5 shrink-0 text-ink-3" />
+        <h3 className="text-xl font-medium text-ink">{t("ai_clarify_title")}</h3>
+      </div>
       {ask.intro ? (
-        <p className="text-sm leading-relaxed text-ink-2" dir="auto">
+        <p className="mt-2 text-sm leading-relaxed text-ink-2" dir="auto">
           {ask.intro}
         </p>
       ) : null}
@@ -496,6 +512,7 @@ function AiSearchRunSectionImpl({
                   <StepSegment
                     index={index}
                     key={`${step.kind}-${index}`}
+                    meta={sourceMeta}
                     run={run}
                     step={step}
                     streaming={streaming}

@@ -198,6 +198,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_elapsed_minutes: "已调研 {n} 分 {s} 秒",
   ai_search_row_duplicate: "重复",
   ai_clarify_more: "补充说明（可选）",
+  ai_clarify_title: "确认调研方向",
+  ai_review_rejected: "评审未通过，已重新开启研究",
   ai_clarify_confirm: "开始调研",
   ai_clarify_skip: "不澄清，直接搜索",
   ai_clarify_summary: "已确认方向",
