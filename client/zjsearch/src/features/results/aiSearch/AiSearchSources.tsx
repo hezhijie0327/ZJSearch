@@ -33,6 +33,7 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
         {shown.map((source) => (
           <a
             className="flex flex-col gap-2 rounded-lg bg-surface-2/70 p-3 transition-colors hover:bg-surface-2"
+            data-ai-n={source.n}
             href={source.url}
             key={source.n}
             rel="noreferrer"

@@ -91,6 +91,9 @@ export interface AiSearchRun {
   startedAt: number;
   /** client clock when the run settled (research duration display) */
   endedAt: number | null;
+  /** the depth this run RAN with -- the pill displays it (the truthful
+      last-run value), picking a new depth affects the next run */
+  mode: AiSearchMode;
 }
 
 export interface AiSearchState {
@@ -463,6 +466,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           wrappingUp: false,
           startedAt: Date.now(),
           endedAt: null,
+          mode,
         },
       ],
       sources: [],
@@ -510,6 +514,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           wrappingUp: false,
           startedAt: Date.now(),
           endedAt: null,
+          mode,
         },
       ],
     }));
@@ -554,6 +559,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
               wrappingUp: false,
               startedAt: Date.now(),
               endedAt: null,
+              mode,
             }
           : run,
       ),

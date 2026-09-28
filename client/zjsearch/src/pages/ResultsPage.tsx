@@ -366,7 +366,25 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     if (!source?.url) {
       return false;
     }
-    window.open(source.url, "_blank", "noopener,noreferrer");
+    // same locate-and-flash contract as the AI Overview's citation jumps,
+    // aimed at THIS run's source-card grid; a card hidden behind the
+    // grid's view-more cap is not in the DOM -- open the page instead
+    const card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
+    if (!card) {
+      window.open(source.url, "_blank", "noopener,noreferrer");
+      return true;
+    }
+    scrollIntoViewAnimated(card, "center");
+    if (flashTimer.current !== null) {
+      window.clearTimeout(flashTimer.current);
+    }
+    card.removeAttribute("data-ai-flash");
+    void card.offsetWidth;
+    card.setAttribute("data-ai-flash", "");
+    flashTimer.current = window.setTimeout(() => {
+      card.removeAttribute("data-ai-flash");
+      flashTimer.current = null;
+    }, 1900);
     return true;
   }, []);
   const onRunFallback = useCallback(() => {
@@ -661,7 +679,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                         <input
                           aria-label={t("ai_search_followup")}
                           autoComplete="off"
-                          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+                          className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
                           dir="auto"
                           onChange={(event) => {
                             setFollowupQuery(event.target.value);
@@ -676,7 +694,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                               setResearchMode(value as AiSearchMode);
                             }}
                             options={depthOptions(t)}
-                            value={researchMode}
+                            value={aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode}
                           />
                           <div className="flex items-center gap-2">
                             <SubmitCircle disabled={!followupQuery.trim()} label={t("ai_search_followup")} send />

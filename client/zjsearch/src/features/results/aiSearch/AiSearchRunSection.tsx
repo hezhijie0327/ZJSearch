@@ -387,7 +387,7 @@ function AskCard({
       </div>
       <input
         aria-label={t("ai_clarify_more")}
-        className="mt-3 h-9 w-full rounded-lg border border-line bg-transparent px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+        className="mt-3 h-9 w-full rounded-lg border border-line bg-transparent px-3 text-base text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
         dir="auto"
         onChange={(event) => {
           setNote(event.target.value);
