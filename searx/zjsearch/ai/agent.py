@@ -118,6 +118,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     wrapup_message: str | None = None,
     wrapup_grace: float = 90.0,
     review: t.Callable[[str], tuple[bool, str]] | None = None,
+    round_progress: t.Callable[[int], str | None] | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
 ) -> t.Iterator[tuple[str, t.Any]]:
@@ -126,22 +127,26 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     Zero-tool features (AI Overview) pass no ``tools``/``executor`` and
     get exactly one streamed turn.  With tools, each turn may end in
     ``("calls", ...)``: the executor runs every call of the round -- the
-    model decides how many one round carries (the per-batch wall-clock
-    timeout is the backstop) -- results are appended and the next turn
-    starts.  The ROUND count is the only research budget: time limits are
-    removed on purpose (the user's stop button is the control), so
+    model decides how many one round carries -- results are appended and
+    the next turn starts.  The ROUND count (``max_rounds``) is a SAFETY
+    ceiling, not a plan: productive research runs as long as it is
+    productive.  ``round_progress`` (called after each executed round
+    with its 1-based number) is the real termination policy -- it returns
+    None to continue or a message explaining the research has gone stale
+    (no new information for N consecutive rounds); time limits are gone
+    on purpose (the user's stop button is the control), so
     ``deadline``/``answer_reserve`` stay supported for callers that want
     them but AI Search passes none.
 
     The forced-answer transition is EXPLAINED, never silent: when the
-    rounds (or a caller-set ``answer_reserve`` slice of the wall clock)
-    take the tools away, ``wrapup_message`` is injected as a user message
-    and a ``("wrapup", None)`` event flies -- a model that merely loses
-    its tools keeps emitting tool-call markup as raw text instead of
-    writing the answer.  A deadline that cuts a turn MID-STREAM gets the
-    same treatment plus a grace turn: the partial prose is discarded (the
-    client drops it on the ``wrapup`` event) and the model rewrites the
-    complete answer from scratch under ``wrapup_grace`` seconds.
+    ceiling, the progress verdict or a caller-set ``answer_reserve``
+    takes the tools away, the explaining message is injected as a user
+    message and a ``("wrapup", None)`` event flies -- a model that merely
+    loses its tools keeps emitting tool-call markup as raw text instead
+    of writing the answer.  A deadline that cuts a turn MID-STREAM gets
+    the same treatment plus a grace turn: the partial prose is discarded
+    (the client drops it on the ``wrapup`` event) and the model rewrites
+    the complete answer from scratch under ``wrapup_grace`` seconds.
 
     ``review`` (the answer gate) re-checks a naturally finished answer:
     a fail injects the critique and re-opens research for exactly one
@@ -155,16 +160,27 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     budget_note_injected = False
     wrapping_up = False
     interrupted_text = ""
+    halt_message: str | None = None
     while True:
         reserve_ok = deadline is None or deadline - time.monotonic() > answer_reserve
-        budget_left = bool(tools and executor is not None and not wrapping_up and rounds < max_rounds and reserve_ok)
-        if not budget_left and prev_budget_left and not budget_note_injected and wrapup_message:
+        budget_left = bool(
+            tools
+            and executor is not None
+            and not wrapping_up
+            and rounds < max_rounds
+            and halt_message is None
+            and reserve_ok
+        )
+        if not budget_left and prev_budget_left and not budget_note_injected:
             # the forced-answer turn must be TOLD: a model that silently
             # loses its tools keeps "calling" them as raw text instead of
-            # summarizing (the leaked-markup failure mode)
-            messages.append({"role": "user", "content": wrapup_message})
-            budget_note_injected = True
-            yield ("wrapup", None)
+            # summarizing (the leaked-markup failure mode).  The progress
+            # verdict (stale research) is the more specific explanation.
+            note = halt_message or wrapup_message
+            if note:
+                messages.append({"role": "user", "content": note})
+                budget_note_injected = True
+                yield ("wrapup", None)
         prev_budget_left = budget_left
         stream = llm.LlmStream(cfg, messages, relay_reasoning=True, tools=tools if budget_left else None)
         turn_text = ""
@@ -265,3 +281,12 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             messages.append(
                 tool_result_message(call, pair[1] if pair else f"error: the {call.get('name')} tool failed")
             )
+        if round_progress is not None:
+            # the progress verdict lands AFTER the round's results are in
+            # the conversation: the next loop iteration sees the halt and
+            # transitions to the explained wrap-up turn
+            try:
+                halt_message = round_progress(rounds)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("zjsearch agent: round progress check failed: %r", exc)
+                halt_message = None

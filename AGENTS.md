@@ -144,14 +144,18 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   pumps collect `think`/`delta`/`tool_calls`; a turn ends in tool calls
   only when a `tools` spec + executor are given).  The executor is a
   generator that yields feature events and MUST end with aligned
-  `("tool_results", [(call, text), ...])`; the ROUND count is the only
-  research budget -- TIME limits are removed on purpose (the model may
-  take as long as it needs; the user's stop button is the control and a
-  live 已调研 X 秒 timer the visibility; every engine request carries its
-  own per-request timeout and per-round call counts are the MODEL's
-  call -- uncapped, queued through MAX_PARALLEL slots), and an exhausted
-  budget forces the next turn to run WITHOUT tools.  The forced-answer
-  transition is EXPLAINED, never
+  `("tool_results", [(call, text), ...])`; the research budget is
+  PROGRESS, not time or counts: max_rounds is only a safety ceiling, and
+  the real termination is the stall detector -- a round that adds no new
+  information (repeats/empty results) is unproductive, and
+  stall_rounds consecutive unproductive rounds (1/2/2/3 by tier) end the
+  research with a stale-research explanation.  TIME limits are removed
+  on purpose (the model may take as long as it needs; the user's stop
+  button is the control and a live 已调研 X 秒 timer the visibility;
+  every engine request carries its own per-request timeout and
+  per-round call counts are the MODEL's call -- uncapped, queued through
+  MAX_PARALLEL slots).  An exhausted budget forces the next turn to run
+  WITHOUT tools.  The forced-answer transition is EXPLAINED, never
   silent: the model gets a wrap-up message (a silently tool-less model
   emits tool-call markup as raw text -- the DSML leak) and a `wrapup`
   wire event (the client discards partial prose); a deadline cutting a

@@ -93,14 +93,15 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # quality: multi-round deep research with cross-verification;
     # goal: the question is a target -- iterate in self-checked rounds until
     # the goal is demonstrably met.
-    # The ROUND count is the only research budget -- TIME limits are gone
-    # on purpose: the model may take as long as it needs, the user's stop
-    # button is the control.  Per-round call counts are the MODEL's call
-    # (uncapped); each engine request carries its own per-request timeout.
-    "speed": {"max_rounds": 2},
-    "balanced": {"max_rounds": 4},
-    "quality": {"max_rounds": 8},
-    "goal": {"max_rounds": 16},
+    # max_rounds is a SAFETY ceiling, not the plan; the plan is PROGRESS:
+    # a round that adds no new information (only repeats or empty results)
+    # is stalled, and stall_rounds consecutive stalled rounds end the
+    # research.  Per-round call counts are the MODEL's call (uncapped);
+    # every engine request carries its own per-request timeout.
+    "speed": {"max_rounds": 2, "stall_rounds": 1},
+    "balanced": {"max_rounds": 4, "stall_rounds": 2},
+    "quality": {"max_rounds": 8, "stall_rounds": 2},
+    "goal": {"max_rounds": 16, "stall_rounds": 3},
 }
 
 _WRAPUP_MESSAGE = (
@@ -109,6 +110,15 @@ _WRAPUP_MESSAGE = (
     " gathered (their [n] numbers are in the conversation).  Do not announce"
     " or attempt further searches, and do not mention the budget -- deliver"
     " the best possible cited answer for the question."
+)
+
+_STALL_MESSAGE = (
+    "Your recent rounds produced NO new information -- only repeated queries"
+    " or empty result sets.  The research has gone stale: further searching"
+    " cannot improve the answer.  Write the final answer NOW, based only on"
+    " the sources already gathered (their [n] numbers are in the"
+    " conversation); where they are silent, answer from common knowledge"
+    " marked with [*].  Do not announce or attempt further searches."
 )
 
 _CLARIFY_MODES = ("quality", "goal")
@@ -300,10 +310,13 @@ def _initial_messages(
     lines = [role, prompts.today_line(), *how_to_search, depth_line, *answer_rules]
     if max_rounds:
         lines.append(
-            f"Research budget: at most {max_rounds} rounds of parallel"
-            " searches (a round = one batch).  Pace yourself: plan what the"
-            " answer still needs, and make the LAST round close the gaps so"
-            " you can answer without asking for more."
+            "Research policy: there is NO time limit, and no cap on how many"
+            f" searches you may run -- only a safety ceiling of {max_rounds}"
+            " rounds (a round = one parallel batch).  The REAL rule is"
+            " progress: every round must add NEW information.  Repeating a"
+            " query or finding nothing new wastes the run -- if your latest"
+            " round produced no new leads, write the answer from what you"
+            " have instead of searching again."
         )
     if clarifications:
         lines.append(
@@ -424,6 +437,11 @@ class _Searches:  # pylint: disable=too-few-public-methods
         # ``duplicate`` without hitting the engines) and the reviewer's
         # coverage summary both read it
         self.ran: dict[str, list] = {}
+        # progress bookkeeping for the stall detector: fresh queries with
+        # results in the CURRENT round, and the consecutive-round count of
+        # rounds without any
+        self.round_new_hits = 0
+        self.stalled_rounds = 0
 
     def _search_one(self, query: str, category: str, time_range: str) -> list[t.Any]:
         """One real instance search -- the webapp path with a synthesized
@@ -462,6 +480,8 @@ class _Searches:  # pylint: disable=too-few-public-methods
             return
         items = _serialize(raw, query)
         self.ran[_norm_query(query)][1] = len(items)
+        if items:
+            self.round_new_hits += 1
         entries: list[dict[str, t.Any]] = []
         feed_lines = [f'Search "{query}" (category: {category}) returned {len(items)} results:']
         for pos, item in enumerate(items[: FEED_DEEP + FEED_SHALLOW]):
@@ -501,6 +521,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
         the engines again; their feed tells the model to move on."""
         self.round_no += 1
         rnd = self.round_no
+        self.round_new_hits = 0
         prepared = [_parse_call(call) for call in calls]
         feeds: list[str | None] = [None] * len(calls)
         submittable: list[tuple[int, str, str, str]] = []
@@ -595,6 +616,25 @@ def _json_object_of(text: str) -> dict[str, t.Any] | None:
     except ValueError:
         return None
     return value if isinstance(value, dict) else None
+
+
+def _round_progress(state: _Searches, stall_rounds: int) -> t.Callable[[int], str | None]:
+    """The progress-based termination policy: called by the agent loop
+    after each executed round.  A round is PRODUCTIVE when at least one
+    fresh query returned results; ``stall_rounds`` consecutive
+    unproductive rounds end the research (the returned message explains
+    the staleness to the model).  Productive research is UNLIMITED."""
+
+    def verdict(_round_no: int) -> str | None:
+        if state.round_new_hits > 0:
+            state.stalled_rounds = 0
+            return None
+        state.stalled_rounds += 1
+        if state.stalled_rounds < stall_rounds:
+            return None
+        return _STALL_MESSAGE
+
+    return verdict
 
 
 def _clarify_gate(cfg: dict[str, t.Any], question: str, lang: str, mode: str) -> dict[str, t.Any] | None:
@@ -903,6 +943,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         executor=state.execute,
         max_rounds=max_rounds,
         wrapup_message=_WRAPUP_MESSAGE,
+        round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
         review=_reviewer(cfg, q, lang, clarifications, state.ran) if mode in _CLARIFY_MODES else None,
     )
     try:

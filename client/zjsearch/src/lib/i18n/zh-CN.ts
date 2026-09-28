@@ -204,7 +204,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_clarify_skipped: "未澄清方向，直接研究",
   ai_verifying: "正在核对答案",
   ai_draft: "第一版草稿",
-  ai_wrapup: "研究预算已用尽，正在收尾总结",
+  ai_wrapup: "研究已无新线索，正在收尾总结",
   stop: "停止",
   mode_classic: "经典",
   mode_ai: "AI",

@@ -202,7 +202,7 @@ export const EN = {
   ai_clarify_skipped: "Researching without a clarified direction",
   ai_verifying: "Verifying",
   ai_draft: "First draft",
-  ai_wrapup: "Research budget exhausted — writing the final summary",
+  ai_wrapup: "Research has gone stale — writing the final summary",
   stop: "Stop",
   mode_classic: "Classic",
   mode_ai: "AI",
