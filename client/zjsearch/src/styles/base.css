@@ -7,6 +7,25 @@
 @layer base {
   html {
     height: 100%;
+    /* pages scroll vertically ONLY — every page (the AI search surface
+        renders arbitrary model output) is locked against horizontal panning.
+        `clip` clips without creating a scroll container, so position:sticky
+        keeps working; browsers without it keep the `hidden` fallback. */
+    overflow-x: hidden;
+  }
+
+  @supports (overflow: clip) {
+    html {
+      overflow-x: clip;
+    }
+
+    /* body-level clip is the strong form: unlike the root value (which the
+        spec demotes to `hidden` on the viewport — programmatically
+        scrollable), body clip makes overflow unreachable in EVERY way and
+        still is not a scroll container, so sticky keeps working. */
+    body {
+      overflow-x: clip;
+    }
   }
 
   body {

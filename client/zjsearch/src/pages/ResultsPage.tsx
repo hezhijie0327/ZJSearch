@@ -562,11 +562,15 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           </>
         ) : (
           // AI takeover header: a slim Vane-style bar -- small brand, the
-          // question heading lives in the column, mode switch + actions right
+          // question heading lives in the column, mode switch + actions right.
+          // The brand hides below 480px like the classic header: a long
+          // instance name must never push the slim bar into a horizontal pan
           <>
             <h1 className="sr-only">{data.q}</h1>
             <div className="mx-auto flex w-full items-center gap-3 px-4 pt-3 sm:px-6">
-              <Brand className="text-xl" globals={globals} />
+              <div className="hidden min-[480px]:block">
+                <Brand className="text-xl" globals={globals} />
+              </div>
               <div className="ms-auto flex items-center gap-3">
                 <HeaderActions globals={globals} />
               </div>
@@ -626,10 +630,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                     <div className="sticky bottom-6 z-10">
                       {/* the fog masks content emerging ABOVE the pinned
                           pill; it must not wrap below it -- a translucent
-                          band under the pill reads as a stray shadow box */}
+                          band under the pill reads as a stray shadow box.
+                          The bleed mirrors the main column's own padding
+                          (px-4 / sm:px-6) so it ends AT the viewport edge
+                          instead of spilling past it into a horizontal pan */}
                       <div
                         aria-hidden="true"
-                        className="pointer-events-none absolute -inset-x-6 -top-8 bottom-full -z-10 bg-gradient-to-t from-bg to-transparent"
+                        className="pointer-events-none absolute -inset-x-4 -top-8 bottom-full -z-10 bg-gradient-to-t from-bg to-transparent sm:-inset-x-6"
                       />
                       <form
                         aria-label={t("ai_search_followup")}

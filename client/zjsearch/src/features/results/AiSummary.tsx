@@ -548,13 +548,13 @@ function markdownComponents(
     ),
     hr: () => <hr className="my-3 border-line" />,
     li: ({ children }) => (
-      <li className="marker:text-accent" dir="auto">
+      <li className="break-words marker:text-accent" dir="auto">
         {children}
       </li>
     ),
     ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 ps-5 first:mt-0">{children}</ol>,
     p: ({ children }) => (
-      <p className="my-2 first:mt-0" dir="auto">
+      <p className="my-2 break-words first:mt-0" dir="auto">
         {children}
       </p>
     ),
@@ -574,13 +574,16 @@ function markdownComponents(
       return <CodeBlock>{children}</CodeBlock>;
     },
     table: ({ children }) => (
-      <table className="my-2 w-full border-collapse text-xs" dir="auto">
-        {children}
-      </table>
+      // a wide table scrolls INSIDE its block (same language as the code
+      // blocks) — a bare table's min-content width would push the whole
+      // page into a horizontal pan on narrow screens
+      <div className="zjs-md-table my-2 overflow-x-auto" dir="auto">
+        <table className="w-full border-collapse text-xs">{children}</table>
+      </div>
     ),
-    td: ({ children }) => <td className="border border-line px-2 py-1 align-top">{children}</td>,
+    td: ({ children }) => <td className="break-words border border-line px-2 py-1 align-top">{children}</td>,
     th: ({ children }) => (
-      <th className="border border-line bg-surface-2 px-2 py-1 text-start font-medium">{children}</th>
+      <th className="break-words border border-line bg-surface-2 px-2 py-1 text-start font-medium">{children}</th>
     ),
     ul: ({ children }) => <ul className="my-2 list-disc space-y-1 ps-5 first:mt-0">{children}</ul>,
   };
