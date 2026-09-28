@@ -19,9 +19,10 @@ silently):
   deltas of the current turn (a turn's prose becomes the next event's
   intent);
 - ``{"e": "calls", "round", "intent", "items": [{id, q, category}]}`` --
-  a parallel batch announced;
+  a parallel batch announced (the model decides the batch size; calls
+  beyond the remaining total budget settle as ``skipped`` right away);
 - ``{"e": "search", "round", "id", "status", "n", "ms"}`` -- one search
-  finished (ok / error / timeout);
+  finished (ok / error / timeout / skipped);
 - ``{"e": "results", "round", "id", "results"}`` -- page-data-shaped
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
@@ -63,8 +64,11 @@ SEARCH_TIMEOUT = 25.0
 """Wall-clock budget for one parallel batch of searches (engines carry
 their own per-request timeouts; this guards the executor)."""
 
-MAX_PARALLEL = 4
-"""Worker threads per batch -- the per-round call cap mirrors it."""
+MAX_PARALLEL = 3
+"""Worker threads per parallel batch -- uncapped per-round call counts
+(the model's call) queue behind these few slots so a chatty round cannot
+stampede the instance; the batch's wall-clock timeout (scaled by the
+number of waves) truncates whatever is still waiting."""
 
 RESULTS_CAP = 30
 """Results per search sent to the client (the model only sees the feed)."""
@@ -83,10 +87,13 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # quality: multi-round deep research with cross-verification;
     # goal: the question is a target -- iterate in self-checked rounds until
     # the goal is demonstrably met (budget is still the hard ceiling).
-    "speed": {"max_rounds": 1, "max_calls_per_round": 2, "max_calls_total": 3, "budget_seconds": 150},
-    "balanced": {"max_rounds": 2, "max_calls_per_round": 3, "max_calls_total": 6, "budget_seconds": 240},
-    "quality": {"max_rounds": 4, "max_calls_per_round": 4, "max_calls_total": 10, "budget_seconds": 420},
-    "goal": {"max_rounds": 6, "max_calls_per_round": 4, "max_calls_total": 16, "budget_seconds": 600},
+    # Per-round call counts are the MODEL's call -- uncapped, the parallel
+    # batch's wall-clock timeout is the backstop; the budgets bound rounds,
+    # total calls and wall clock only.
+    "speed": {"max_rounds": 2, "max_calls_total": 4, "budget_seconds": 150},
+    "balanced": {"max_rounds": 4, "max_calls_total": 8, "budget_seconds": 300},
+    "quality": {"max_rounds": 8, "max_calls_total": 16, "budget_seconds": 450},
+    "goal": {"max_rounds": 16, "max_calls_total": 32, "budget_seconds": 600},
 }
 
 
@@ -478,7 +485,12 @@ class _Searches:  # pylint: disable=too-few-public-methods
             worker = flask.copy_current_request_context(self._search_one)
             futures[pool.submit(worker, query, category, time_range)] = (idx + 1, time.monotonic())
         pending = dict(futures)
-        batch_deadline = time.monotonic() + SEARCH_TIMEOUT
+        # the batch timeout covers every WAVE of the bounded pool: a chatty
+        # uncapped round queues behind MAX_PARALLEL slots, and the queued
+        # searches get their full SEARCH_TIMEOUT too instead of inheriting
+        # whatever the first wave left of a flat deadline
+        waves = max(1, -(-len(submittable) // MAX_PARALLEL))
+        batch_deadline = time.monotonic() + SEARCH_TIMEOUT * waves
         while pending:
             timeout = batch_deadline - time.monotonic()
             if timeout <= 0:
@@ -495,7 +507,13 @@ class _Searches:  # pylint: disable=too-few-public-methods
             feeds[wire_id - 1] = feeds[wire_id - 1] or "error: the search timed out"
             yield (
                 "search",
-                {"round": rnd, "id": wire_id, "status": "timeout", "n": 0, "ms": int(SEARCH_TIMEOUT * 1000)},
+                {
+                    "round": rnd,
+                    "id": wire_id,
+                    "status": "timeout",
+                    "n": 0,
+                    "ms": int(SEARCH_TIMEOUT * waves * 1000),
+                },
             )
 
 
@@ -572,6 +590,16 @@ def _generate(
                         "intent": payload["intent"],
                         "items": [_display_item(idx, call) for idx, call in enumerate(payload["calls"], 1)],
                     },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+        if kind == "call_skipped":
+            # an over-total-budget call: settle its timeline row on the
+            # existing "search" wire shape so the client never spins
+            return (
+                json.dumps(
+                    {"e": "search", "round": payload["round"], "id": payload["id"], "status": "skipped", "n": 0},
                     ensure_ascii=False,
                 )
                 + "\n"
@@ -668,9 +696,8 @@ def _search() -> flask.Response:
         tools=_tool_spec(),
         executor=state.execute,
         max_rounds=_budget("max_rounds", mode, 2),
-        max_calls_per_round=_budget("max_calls_per_round", mode, 4),
         max_calls_total=_budget("max_calls_total", mode, 8),
-        deadline=time.monotonic() + float(_budget("budget_seconds", mode, 240)),
+        deadline=time.monotonic() + float(_budget("budget_seconds", mode, 300)),
     )
     try:
         first = next(events)

@@ -192,6 +192,7 @@ export const EN = {
   ai_search_view_more: "View {n} more",
   ai_search_row_timeout: "timed out",
   ai_search_row_interrupted: "interrupted",
+  ai_search_row_skipped: "skipped",
   stop: "Stop",
   mode_classic: "Classic",
   mode_ai: "AI",

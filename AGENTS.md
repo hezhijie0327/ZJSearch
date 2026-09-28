@@ -145,9 +145,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   only when a `tools` spec + executor are given).  The executor is a
   generator that yields feature events and MUST end with aligned
   `("tool_results", [(call, text), ...])`; budgets (tool rounds / calls
-  per round / calls total / wall clock) bound the loop, and an exhausted
-  budget forces the next turn to run WITHOUT tools so the model must
-  answer.  `ThinkGate` owns the `<think>` semantics (open on first
+  total / wall clock) bound the loop, and an exhausted budget forces the
+  next turn to run WITHOUT tools so the model must answer.  Per-round
+  call counts are the MODEL's call (uncapped -- the parallel batch's
+  wall-clock timeout truncates a runaway round); calls beyond the total
+  budget settle on the wire as `search ... status:"skipped"` immediately,
+  so a timeline row never spins while the next turn streams.  `ThinkGate` owns the `<think>` semantics (open on first
   reasoning, close on first content, stray reasoning after content
   dropped) — the Overview's raw-text adapter and AI Search's NDJSON
   events render around that one state machine.  Multimodal (text/image
@@ -212,7 +215,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   quality = structured "## " sections, tables, heavy citation); goal is
   the iterate-until-met tier: the model plans the evidence the target
   needs, self-checks the gap after each round and keeps searching until
-  the goal is demonstrably met (6 rounds / 16 calls / 600s ceiling --
+  the goal is demonstrably met (16 rounds / 32 calls / 600s ceiling --
   every tier still ends with a forced no-tools answer), and closes with
   a GFM task-list evidence ledger.  The client parses `mode` through
   parseDepthMode (depth.tsx, single source of truth; server mirror:

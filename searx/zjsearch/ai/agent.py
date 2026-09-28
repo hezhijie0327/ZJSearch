@@ -111,7 +111,6 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     tools: dict[str, t.Any] | None = None,
     executor: t.Callable[[list[dict[str, t.Any]]], t.Iterator[tuple[str, t.Any]]] | None = None,
     max_rounds: int = 1,
-    max_calls_per_round: int = 4,
     max_calls_total: int = 8,
     deadline: float | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
@@ -121,14 +120,17 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
 
     Zero-tool features (AI Overview) pass no ``tools``/``executor`` and
     get exactly one streamed turn.  With tools, each turn may end in
-    ``("calls", ...)``: the executor runs within the remaining budget,
-    results are appended (calls beyond the budget get a "skipped" result
-    so every call is answered -- an API requirement), and the next turn
-    starts.  When the budget is exhausted the next turn runs without
-    tools: the model must answer.  The wall-clock ``deadline`` is enforced
-    per event -- including mid-turn, so a reasoning-looping model cannot
-    stream forever; on exhaustion the stream is cancelled and the run
-    either settles the prose already streamed or ends with an error.
+    ``("calls", ...)``: the executor runs within the remaining total-call
+    budget -- the model decides how many calls one round carries (the
+    per-batch wall-clock timeout is the backstop) -- results are appended
+    (calls beyond the budget get a "skipped" result so every call is
+    answered -- an API requirement -- plus a ``call_skipped`` wire event
+    so the client settles the row instead of spinning forever), and the
+    next turn starts.  When the budget is exhausted the next turn runs
+    without tools: the model must answer.  The wall-clock ``deadline`` is
+    enforced per event -- including mid-turn, so a reasoning-looping model
+    cannot stream forever; on exhaustion the stream is cancelled and the
+    run either settles the prose already streamed or ends with an error.
     """
     executed = 0
     rounds = 0
@@ -175,9 +177,14 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
         if not calls or not budget_left:
             # the deltas of this turn were the final answer
             return
-        keep = max(0, min(max_calls_per_round, max_calls_total - executed))
+        keep = max(0, max_calls_total - executed)
         executable, skipped = calls[:keep], calls[keep:]
         yield ("calls", {"round": rounds, "intent": turn_text, "calls": calls})
+        # settle the over-budget calls on the wire immediately: the client
+        # rendered a row per displayed call -- without this event it would
+        # spin "searching..." forever while the next turn streams
+        for skip_id in range(len(executable), len(calls)):
+            yield ("call_skipped", {"round": rounds, "id": skip_id + 1})
         filled: list[tuple[dict[str, t.Any], str] | None] = [None] * len(executable)
         try:
             for event in executor(executable):

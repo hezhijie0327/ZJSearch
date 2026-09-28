@@ -33,7 +33,7 @@ export interface AiSearchCall {
   id: number;
   q: string;
   category: string;
-  status: "pending" | "ok" | "error" | "timeout" | "interrupted";
+  status: "pending" | "ok" | "error" | "timeout" | "interrupted" | "skipped";
   n?: number;
 }
 
