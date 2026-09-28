@@ -22,8 +22,8 @@ messages once, every pump converts to its own wire shape):
 - tool results: ``{"role": "tool", "tool_call_id", "name", "content"}``
 
 A turn streams as ``("think"|"delta"|"tool_calls"|"error"|"end", payload)``
-queue events.  ``tools`` -- one ``{"name", "description", "parameters"}``
-spec, converted per dialect -- makes the pumps collect the model's
+queue events.  ``tools`` -- ``{"name", "description", "parameters"}``
+specs (one or more), converted per dialect -- makes the pumps collect the model's
 tool-call fragments into a single ``("tool_calls", calls)`` event that
 closes a clean turn.  Without a spec no dialect can emit calls at all,
 so single-turn consumers are unaffected.
@@ -506,15 +506,15 @@ async def _pump_openai_chat(
     messages: list[dict[str, t.Any]],
     events: "queue.Queue[tuple[str, t.Any]]",
     relay_reasoning: bool,
-    tools: dict[str, t.Any] | None = None,
+    tools: list[dict[str, t.Any]] | None = None,
 ) -> None:
     """The chat-completions dialect: relay ``delta.content``, plus the
     deepseek-style ``reasoning_content`` / openrouter-style ``reasoning``
-    extras as think events when ``relay_reasoning`` is set.  With a tool
-    spec, ``delta.tool_calls`` fragments (keyed by index) accumulate into
+    extras as think events when ``relay_reasoning`` is set.  With tool
+    specs, ``delta.tool_calls`` fragments (keyed by index) accumulate into
     one ``("tool_calls", calls)`` event that closes a clean turn."""
     client = _openai_client(cfg, base)
-    extra: dict[str, t.Any] = {"tools": [{"type": "function", "function": tools}]} if tools else {}
+    extra = {"tools": [{"type": "function", "function": tool} for tool in tools]} if tools else {}
     stream = await client.chat.completions.create(
         model=str(cfg.get("model")),
         messages=messages,
@@ -561,13 +561,13 @@ async def _pump_openai_responses(
     messages: list[dict[str, t.Any]],
     events: "queue.Queue[tuple[str, t.Any]]",
     relay_reasoning: bool,
-    tools: dict[str, t.Any] | None = None,
+    tools: list[dict[str, t.Any]] | None = None,
 ) -> None:
     """The Responses-API dialect: relay the output text deltas, the reasoning
     text / summary deltas as think events.  Function-call items stream as
     ``output_item.added`` + ``function_call_arguments.delta`` fragments."""
     client = _openai_client(cfg, base)
-    extra: dict[str, t.Any] = {"tools": [dict(tools, type="function")]} if tools else {}
+    extra: dict[str, t.Any] = {"tools": [dict(tool, type="function") for tool in tools]} if tools else {}
     stream = await client.responses.create(
         model=str(cfg.get("model")),
         input=_responses_input(messages),
@@ -619,7 +619,7 @@ async def _pump_anthropic(
     messages: list[dict[str, t.Any]],
     events: "queue.Queue[tuple[str, t.Any]]",
     relay_reasoning: bool,
-    tools: dict[str, t.Any] | None = None,
+    tools: list[dict[str, t.Any]] | None = None,
 ) -> None:
     """The Messages-API dialect: relay ``text_delta`` and -- when
     ``relay_reasoning`` is set -- ``thinking_delta`` events.  ``tool_use``
@@ -627,7 +627,12 @@ async def _pump_anthropic(
     fragments, collected per block index."""
     client = _anthropic_client(cfg, base)
     extra: dict[str, t.Any] = (
-        {"tools": [{"name": tools["name"], "description": tools["description"], "input_schema": tools["parameters"]}]}
+        {
+            "tools": [
+                {"name": tool["name"], "description": tool["description"], "input_schema": tool["parameters"]}
+                for tool in tools
+            ]
+        }
         if tools
         else {}
     )
@@ -678,7 +683,7 @@ async def _pump_gemini(
     messages: list[dict[str, t.Any]],
     events: "queue.Queue[tuple[str, t.Any]]",
     relay_reasoning: bool,
-    tools: dict[str, t.Any] | None = None,
+    tools: list[dict[str, t.Any]] | None = None,
 ) -> None:
     """The Gemini dialect: relay chunk text; thought parts (Gemini 2.5
     thinking) become think events.  ``functionCall`` parts arrive fully
@@ -692,7 +697,7 @@ async def _pump_gemini(
     if tools:
         # the declarations take an OpenAPI-schema dict; lowercase JSON-schema
         # type names are accepted by the v1beta API
-        config.tools = [types.Tool(function_declarations=[types.FunctionDeclaration(**tools)])]
+        config.tools = [types.Tool(function_declarations=[types.FunctionDeclaration(**tool) for tool in tools])]
     stream = await client.aio.models.generate_content_stream(
         model=str(cfg.get("model")), contents=contents, config=config
     )
@@ -731,7 +736,7 @@ async def _llm_pump(
     messages: list[dict[str, t.Any]],
     events: "queue.Queue[tuple[str, t.Any]]",
     relay_reasoning: bool = False,
-    tools: dict[str, t.Any] | None = None,
+    tools: list[dict[str, t.Any]] | None = None,
 ) -> None:
     """Drive the dialect's SDK stream and relay it into ``events``; runs on
     the shared network event loop (see :py:class:`LlmStream`).  SDK client
@@ -764,7 +769,7 @@ class LlmStream:
         cfg: dict[str, t.Any],
         messages: list[dict[str, t.Any]],
         relay_reasoning: bool = False,
-        tools: dict[str, t.Any] | None = None,
+        tools: list[dict[str, t.Any]] | None = None,
     ):
         self.events: "queue.Queue[tuple[str, t.Any]]" = queue.Queue()
         self.loop = get_loop()

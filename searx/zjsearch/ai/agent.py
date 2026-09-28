@@ -119,6 +119,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     wrapup_grace: float = 90.0,
     review: t.Callable[[str], tuple[bool, str]] | None = None,
     round_progress: t.Callable[[int], str | None] | None = None,
+    ask_tool: str | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
 ) -> t.Iterator[tuple[str, t.Any]]:
@@ -180,6 +181,10 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             if note:
                 messages.append({"role": "user", "content": note})
                 budget_note_injected = True
+                # mark the run as wrapping up: the wrap-up answer is FINAL
+                # (never reviewed) and a mid-stream cut of this turn goes
+                # to the settle-for-partial path, not another grace loop
+                wrapping_up = True
                 yield ("wrapup", None)
         prev_budget_left = budget_left
         stream = llm.LlmStream(cfg, messages, relay_reasoning=True, tools=tools if budget_left else None)
@@ -236,6 +241,16 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 return
             yield ("error", "the AI budget was exhausted before the model answered")
             return
+        if ask_tool and not wrapping_up:
+            # the human-in-the-loop escape hatch: the model realized
+            # MID-research that the request is genuinely ambiguous and
+            # asked the user instead of guessing through the budget.  End
+            # the run here -- the client settles it as awaiting and the
+            # answers travel back as clarifications on the next request.
+            ask_call = next((c for c in calls if str(c.get("name")) == ask_tool), None)
+            if ask_call is not None:
+                yield ("ask_user", str(ask_call.get("arguments") or "{}"))
+                return
         if not calls or not budget_left:
             if wrapping_up:
                 return  # the wrap-up summary is final: never reviewed
@@ -256,6 +271,10 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 messages.append({"role": "assistant", "content": turn_text})
                 messages.append({"role": "user", "content": critique})
                 max_rounds = rounds + 1
+                # the critique is the new directive: a stall verdict that
+                # triggered before the draft must not strangle its patch
+                # round (the round needs its tools back)
+                halt_message = None
                 continue
             return
         # rounds count EXECUTED call rounds only -- the wire round must stay

@@ -349,9 +349,9 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       runs[lastIdx] = { ...run, reviewing: true };
       return { ...core, runs };
     case "review_failed": {
-      // the draft was rejected: keep it as a collapsible timeline step
-      // (with the reviewer's critique -- the same transparency the think
-      // stream gets) while the model re-opens research to patch the gaps
+      // the draft was rejected: it stays as a collapsible timeline step
+      // (with the reviewer's critique) while the model re-opens research
+      // to patch the gaps
       const steps = [...run.steps];
       if (run.answer.trim()) {
         steps.push({ kind: "draft", text: run.answer, critique: String(event.critique ?? "") });

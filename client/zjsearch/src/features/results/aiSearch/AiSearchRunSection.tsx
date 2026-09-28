@@ -179,15 +179,26 @@ function ThinkSegment({
 }
 
 /** The rejected first draft of the answer (the gate sent it back): kept
-    as a collapsible timeline step so nothing the user watched stream
-    just vanishes -- with the reviewer's critique shown on top, the same
-    transparency the think stream gets.  Citations keep their chips via
-    the thread's source meta. */
-function DraftSegment({ critique, meta, text }: { critique: string; meta: AiSourceMeta[]; text: string }) {
+    as a collapsible timeline step -- the text the user watched stream
+    stays inspectable, with the reviewer's critique on top and live
+    citation chips via the thread's source meta.  The step margin is
+    index-based (NOT open-conditional): a folded draft still needs its
+    gap against the neighbouring steps. */
+function DraftSegment({
+  critique,
+  index,
+  meta,
+  text,
+}: {
+  critique: string;
+  index: number;
+  meta: AiSourceMeta[];
+  text: string;
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   return (
-    <div className={open ? "mt-2.5" : ""}>
+    <div className={index > 0 ? "mt-2.5" : ""}>
       <button
         aria-expanded={open}
         className="inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink-2"
@@ -198,6 +209,7 @@ function DraftSegment({ critique, meta, text }: { critique: string; meta: AiSour
       >
         <FileText aria-hidden="true" className="size-3 shrink-0" />
         {t("ai_draft")}
+        <span className="font-medium text-danger">{t("ai_review_rejected")}</span>
         <ChevronDown aria-hidden="true" className={`size-3 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       <Collapse className={open ? "mt-1" : ""} open={open}>
@@ -242,7 +254,7 @@ function StepSegment({
     );
   }
   if (step.kind === "draft") {
-    return <DraftSegment critique={step.critique} meta={meta} text={step.text} />;
+    return <DraftSegment critique={step.critique} index={index} meta={meta} text={step.text} />;
   }
   if (step.kind === "intent") {
     return (

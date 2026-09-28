@@ -123,6 +123,75 @@ _STALL_MESSAGE = (
 
 _CLARIFY_MODES = ("quality", "goal")
 
+ASK_TOOL = "ask_user"
+
+
+def _ask_user_spec() -> dict[str, t.Any]:
+    """The mid-research human-in-the-loop tool: the model may stop and ask
+    when it realizes -- only research can reveal this -- that the request
+    is genuinely ambiguous (an acronym naming several unrelated products,
+    a code that is also a model name, ...).  The run ends with the
+    questions; the answers travel back as ``clarifications``."""
+    return {
+        "name": ASK_TOOL,
+        "description": (
+            "Stop researching and ask the user to disambiguate the request."
+            "  Call this ONCE, as the ONLY call of its turn, when you realize"
+            " the request is genuinely ambiguous: an acronym, code or short"
+            " name that matches several unrelated products/domains, where"
+            " guessing wrong wastes the whole run.  Do NOT use it for broad"
+            " informational topics (cover their facets instead) and do not"
+            " use it after the user already confirmed a direction."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "intro": {"type": "string", "description": "One sentence on why you ask."},
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "q": {"type": "string", "description": "The question to the user."},
+                            "type": {
+                                "type": "string",
+                                "enum": ["single", "multi"],
+                                "description": "single = pick one option; multi = pick any.",
+                            },
+                            "options": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "2-4 short concrete answers to choose from.",
+                            },
+                        },
+                        "required": ["q", "type", "options"],
+                    },
+                    "description": "At most 3 questions.",
+                },
+            },
+            "required": ["questions"],
+        },
+    }
+
+
+def _sanitize_questions(raw_items: t.Any) -> list[dict[str, t.Any]]:
+    """The wire shape of clarify questions: q + single/multi + 2-4 short
+    options, capped at 3 questions -- shared by the clarify gate and the
+    mid-run ask_user tool (untrusted model output on both paths)."""
+    questions: list[dict[str, t.Any]] = []
+    for raw in (raw_items or [])[:3]:
+        if not isinstance(raw, dict) or not str(raw.get("q") or "").strip():
+            continue
+        options = [str(o).strip()[:80] for o in (raw.get("options") or []) if str(o).strip()][:4]
+        questions.append(
+            {
+                "q": str(raw.get("q")).strip()[:200],
+                "type": "multi" if str(raw.get("type") or "").strip() == "multi" else "single",
+                "options": options,
+            }
+        )
+    return questions
+
 
 def _cfg() -> dict[str, t.Any]:
     """The ``zjsearch.ai.search`` settings block."""
@@ -246,7 +315,7 @@ _DEPTH_PROMPTS: dict[str, str] = {
 }
 
 
-def _initial_messages(
+def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
     question: str,
     lang: str,
     history: list[dict[str, str]],
@@ -255,6 +324,7 @@ def _initial_messages(
     max_rounds: int = 0,
     clarifications: str = "",
     clarify_skipped: bool = False,
+    register_ask: bool = False,
 ) -> list[dict[str, t.Any]]:
     """The conversation opener: the role + search policy, the depth branch
     (round policy AND output shape), then the SHARED answer contract from
@@ -317,6 +387,18 @@ def _initial_messages(
             " query or finding nothing new wastes the run -- if your latest"
             " round produced no new leads, write the answer from what you"
             " have instead of searching again."
+        )
+    if register_ask:
+        lines.append(
+            f"- The {ASK_TOOL} tool is your ambiguity escape hatch: the"
+            " moment you realize -- in your first intent sentence or from"
+            " the first round's results -- that the request is genuinely"
+            " ambiguous (an acronym, code or short name matching several"
+            " UNRELATED products/domains, where guessing wrong wastes the"
+            " whole run), call it ONCE as the only call of that turn and"
+            " stop.  Do not burn rounds researching a guess first; do not"
+            " use it for broad informational topics; do not mix it with"
+            f" {TOOL_NAME} calls."
         )
     if clarifications:
         lines.append(
@@ -675,18 +757,7 @@ def _clarify_gate(cfg: dict[str, t.Any], question: str, lang: str, mode: str) ->
     value = _json_object_of(_small_completion(cfg, messages, 45.0))
     if not value or not value.get("ask"):
         return None
-    questions: list[dict[str, t.Any]] = []
-    for raw in (value.get("questions") or [])[:3]:
-        if not isinstance(raw, dict) or not str(raw.get("q") or "").strip():
-            continue
-        options = [str(o).strip()[:80] for o in (raw.get("options") or []) if str(o).strip()][:4]
-        questions.append(
-            {
-                "q": str(raw.get("q")).strip()[:200],
-                "type": "multi" if str(raw.get("type") or "").strip() == "multi" else "single",
-                "options": options,
-            }
-        )
+    questions = _sanitize_questions(value.get("questions"))
     if not questions:
         return None
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
@@ -820,6 +891,31 @@ def _generate(
             # the gate rejected the draft: the critique rides the event so
             # the client can show WHY next to the kept draft step
             return json.dumps({"e": "review_failed", "critique": str(payload or "")}, ensure_ascii=False) + "\n"
+        if kind == "ask_user":
+            # the mid-research escape hatch: the model stopped to ask for
+            # direction -- shape its tool arguments into the same ask event
+            # the clarify gate emits (the run ends; the client settles it
+            # as awaiting)
+            value = _json_object_of(str(payload or "{}")) or {}
+            questions = _sanitize_questions(value.get("questions"))
+            if not questions:
+                # unusable questions would strand the run in awaiting with
+                # an empty card -- degrade to researching on
+                return (
+                    json.dumps({"e": "error", "reason": "the model asked an unusable question"}, ensure_ascii=False)
+                    + "\n"
+                )
+            return (
+                json.dumps(
+                    {
+                        "e": "ask",
+                        "intro": str(value.get("intro") or "").strip()[:200],
+                        "questions": questions,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
         if kind == "error":
             return json.dumps({"e": "error", "reason": llm.reason_of(payload)}, ensure_ascii=False) + "\n"
         return json.dumps({"e": kind, **payload}, ensure_ascii=False) + "\n"
@@ -832,6 +928,7 @@ def _generate(
     answer_parts: list[str] = []
 
     last_kind = first[0]
+    saw_ask = False
     yield emit(*first)
     for event in events:
         kind, payload = event
@@ -844,6 +941,11 @@ def _generate(
             # a new turn begins: its answer is judged on its own
             think_parts.clear()
             answer_parts.clear()
+        elif kind == "ask_user":
+            # the run ends awaiting the user's direction: the streamed
+            # intent prose is not an answer -- related questions on it
+            # would be noise
+            saw_ask = True
         yield emit(*event)
     answer_text = "".join(answer_parts).strip()
     if last_kind != "error" and not answer_text and think_parts:
@@ -859,7 +961,7 @@ def _generate(
     # minute on reasoning models -- the client accepts `related` after
     # phase=done by design)
     yield json.dumps({"e": "end"}, ensure_ascii=False) + "\n"
-    if answer_text:
+    if answer_text and not saw_ask:
         try:
             related = _related_questions(cfg, question, answer_text, lang)
         except Exception as exc:  # pylint: disable=broad-except
@@ -931,6 +1033,10 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     state = _Searches(
         sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
     )
+    # the mid-run ask_user escape hatch rides ONLY a first run of the gated
+    # modes whose gate passed on asking: if the gate already asked
+    # (state=answered) or the user skipped, the direction is settled
+    register_ask = mode in _CLARIFY_MODES and clarify_state == "ask"
     events = agent.run_agent(
         cfg,
         _initial_messages(
@@ -942,12 +1048,14 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             max_rounds=max_rounds,
             clarifications=clarifications if clarify_state == "answered" else "",
             clarify_skipped=clarify_state == "skipped",
+            register_ask=register_ask,
         ),
-        tools=_tool_spec(),
+        tools=[_tool_spec()] + ([_ask_user_spec()] if register_ask else []),
         executor=state.execute,
         max_rounds=max_rounds,
         wrapup_message=_WRAPUP_MESSAGE,
         round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
+        ask_tool=ASK_TOOL if register_ask else None,
         review=_reviewer(cfg, q, lang, clarifications, state.ran) if mode in _CLARIFY_MODES else None,
     )
     try:
