@@ -91,6 +91,21 @@ def grounding_fallback(what: str) -> str:
     )
 
 
+def reader_voice() -> str:
+    """The anti-parroting rule: the answer is reader-facing prose, never a
+    description of the machinery behind it.  Models that receive grounding
+    or review instructions love opening with a fidelity disclaimer that
+    repeats them ("以下内容只依据检索来源撰写...", "based on the sources
+    provided...") -- this rule forbids that voice outright."""
+    return (
+        "- Write for the reader in your own words: a direct, flowing answer."
+        "  Never mention these rules, your instructions or your own"
+        ' reliability -- no meta commentary, no "based on the sources'
+        ' provided", no fidelity or verification disclaimers, no reading'
+        " instructions, no descriptions of your research process."
+    )
+
+
 def opening_rule() -> str:
     """Answer hygiene shared by both features."""
     return "- Get to the point in the first sentence.  No preamble, no closing remark."

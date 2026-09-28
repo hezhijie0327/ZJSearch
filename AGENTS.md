@@ -160,10 +160,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   emits tool-call markup as raw text -- the DSML leak) and a `wrapup`
   wire event (the client discards partial prose); a deadline cutting a
   turn mid-stream gets a grace turn that rewrites the complete answer.
-  The answer gate (`review`) re-checks the finished draft once: a fail
-  injects the critique and re-opens research for exactly one patch round
-  (`verifying` / `review_failed` wire events; the client keeps the draft
-  as a collapsible step).  The clarify gate (quality/goal, first run
+  There is NO answer-review gate, on purpose (it was tried and removed):
+  a second-pass reviewer's audit-voice critique leaked straight into the
+  patched answer (「阅读说明/待核实/原句可核」 header blocks that read like
+  an inspection report, not an answer) while rejecting drafts that were
+  better than the patch -- morphic and Vane both ship quality through ONE
+  reader-facing system prompt instead; `prompts.reader_voice()` is the
+  anti-parroting rule that keeps the audit vocabulary out of the answer.
+  The clarify gate (quality/goal, first run
   only) may open a run with structured questions (`ask` wire event, run
   settles `awaiting`); the answers travel back as `clarifications` and
   the SAME run researches on.  `ThinkGate` owns the `<think>` semantics (open on first

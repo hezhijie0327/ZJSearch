@@ -49,8 +49,7 @@ export interface AiSearchCall {
 export type AiSearchStep =
   | { kind: "think"; text: string }
   | { kind: "intent"; text: string }
-  | { kind: "calls"; round: number; calls: AiSearchCall[] }
-  | { kind: "draft"; text: string; critique: string };
+  | { kind: "calls"; round: number; calls: AiSearchCall[] };
 
 export interface AiSearchSource {
   /** global [n] citation number (contiguous from 1) */
@@ -82,8 +81,6 @@ export interface AiSearchRun {
   ask: { intro: string; questions: AiAskQuestion[] } | null;
   /** the user's answer text after submitClarify ("" = skipped) */
   clarify: string | undefined;
-  /** the answer gate: a draft was rejected -- the model is patching */
-  reviewing: boolean;
   /** the budget forced the wrap-up: partial prose was discarded */
   wrappingUp: boolean;
   /** client clock when the run's RESEARCH began (reset on clarify
@@ -149,7 +146,7 @@ function settle(core: Core, failed: { error: string } | null): Core {
   const runs = [...core.runs];
   const run = runs[runs.length - 1];
   if (run) {
-    let settled: AiSearchRun = { ...run, reviewing: false };
+    let settled: AiSearchRun = { ...run };
     if (!hasCalls(settled) && !settled.answer && core.pending.trim()) {
       settled = { ...settled, answer: core.pending.trim() };
     }
@@ -348,20 +345,6 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       runs[lastIdx] = { ...run, answer: "", wrappingUp: true };
       return { ...core, runs, pending: "", answerFrom: 0, thinkOpen: false };
     }
-    case "verifying":
-      runs[lastIdx] = { ...run, reviewing: true };
-      return { ...core, runs };
-    case "review_failed": {
-      // the draft was rejected: it stays as a collapsible timeline step
-      // (with the reviewer's critique) while the model re-opens research
-      // to patch the gaps
-      const steps = [...run.steps];
-      if (run.answer.trim()) {
-        steps.push({ kind: "draft", text: run.answer, critique: String(event.critique ?? "") });
-      }
-      runs[lastIdx] = { ...run, steps, answer: "", reviewing: false };
-      return { ...core, runs, pending: "", answerFrom: 0, thinkOpen: false };
-    }
     case "related":
       runs[lastIdx] = { ...run, related: ((event.items as string[]) ?? []).map(String).slice(0, 3) };
       return { ...core, runs };
@@ -462,7 +445,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           related: [],
           ask: null,
           clarify: undefined,
-          reviewing: false,
           wrappingUp: false,
           startedAt: Date.now(),
           endedAt: null,
@@ -510,7 +492,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           related: [] as string[],
           ask: null,
           clarify: undefined,
-          reviewing: false,
           wrappingUp: false,
           startedAt: Date.now(),
           endedAt: null,
@@ -555,7 +536,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
               steps: [] as AiSearchStep[],
               answer: "",
               clarify: text ?? "",
-              reviewing: false,
               wrappingUp: false,
               startedAt: Date.now(),
               endedAt: null,

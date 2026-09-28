@@ -117,7 +117,6 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     answer_reserve: float = 0.0,
     wrapup_message: str | None = None,
     wrapup_grace: float = 90.0,
-    review: t.Callable[[str], tuple[bool, str]] | None = None,
     round_progress: t.Callable[[int], str | None] | None = None,
     ask_tool: str | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
@@ -149,14 +148,10 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     (the client drops it on the ``wrapup`` event) and the model rewrites
     the complete answer from scratch under ``wrapup_grace`` seconds.
 
-    ``review`` (the answer gate) re-checks a naturally finished answer:
-    a fail injects the critique and re-opens research for exactly one
-    patch round before the next review; wrap-up answers are never
-    reviewed.  The FIRST_EVENT/IDLE timeouts are transport health guards
+    The FIRST_EVENT/IDLE timeouts are transport health guards
     (a dead upstream), not research limits.
     """
     rounds = 0
-    reviews_left = 1
     prev_budget_left = False
     budget_note_injected = False
     wrapping_up = False
@@ -182,7 +177,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 messages.append({"role": "user", "content": note})
                 budget_note_injected = True
                 # mark the run as wrapping up: the wrap-up answer is FINAL
-                # (never reviewed) and a mid-stream cut of this turn goes
+                # and a mid-stream cut of this turn goes
                 # to the settle-for-partial path, not another grace loop
                 wrapping_up = True
                 yield ("wrapup", None)
@@ -252,30 +247,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 yield ("ask_user", str(ask_call.get("arguments") or "{}"))
                 return
         if not calls or not budget_left:
-            if wrapping_up:
-                return  # the wrap-up summary is final: never reviewed
-            if review is not None and turn_text.strip() and reviews_left > 0:
-                # the answer gate: a fail injects the critique and re-opens
-                # research for exactly one patch round (bounded by the same
-                # wall clock and call budget)
-                reviews_left -= 1
-                yield ("verifying", None)
-                try:
-                    ok, critique = review(turn_text)
-                except Exception as exc:  # pylint: disable=broad-except
-                    logger.warning("zjsearch agent: answer review failed: %r", exc)
-                    ok, critique = True, ""
-                if ok:
-                    return
-                yield ("review_failed", critique)
-                messages.append({"role": "assistant", "content": turn_text})
-                messages.append({"role": "user", "content": critique})
-                max_rounds = rounds + 1
-                # the critique is the new directive: a stall verdict that
-                # triggered before the draft must not strangle its patch
-                # round (the round needs its tools back)
-                halt_message = None
-                continue
+            # no tool calls (or none allowed): the turn's prose IS the answer
             return
         # rounds count EXECUTED call rounds only -- the wire round must stay
         # aligned with the executor's own numbering or the client cannot

@@ -29,9 +29,6 @@ silently):
 - ``{"e": "wrapup"}`` -- the budget took the tools away: the model was
   TOLD to summarize now (the client drops any partial prose and shows
   the wrap-up state);
-- ``{"e": "verifying"}`` / ``{"e": "review_failed"}`` -- the answer gate:
-  the draft is being reviewed; a fail re-opens research for one patch
-  round (the client keeps the draft as a collapsible step);
 - ``{"e": "ask", "intro", "questions": [{q, type, options}]}`` -- the
   clarify gate wants the user's direction BEFORE researching; the run
   settles as ``awaiting`` (``{"e": "end"}`` follows; the answers travel
@@ -375,6 +372,7 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
         prompts.citation_rules() + " Source numbers are the global [n] labels your search results" " carry.",
         prompts.markdown_surface(),
         prompts.grounding_fallback("searches"),
+        prompts.reader_voice(),
         prompts.opening_rule(),
     ]
     lines = [role, prompts.today_line(), *how_to_search, depth_line, *answer_rules]
@@ -516,8 +514,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
         self.next_n = sources_base + 1
         # every query this run already executed, normalized -> [query, n
         # results] -- the executor-side dedup (a repeated query settles as
-        # ``duplicate`` without hitting the engines) and the reviewer's
-        # coverage summary both read it
+        # ``duplicate`` without hitting the engines)
         self.ran: dict[str, list] = {}
         # progress bookkeeping for the stall detector: fresh queries with
         # results in the CURRENT round, and the consecutive-round count of
@@ -667,10 +664,10 @@ def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
 
 
 def _small_completion(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]], budget: float) -> str:
-    """One small non-tool completion collected to text (the clarify gate,
-    the answer reviewer, the related questions all ride this): reasoning
-    stays relayed so a thinking model's silent think phase cannot stall
-    the queue; any failure answers ``""`` (callers fail open)."""
+    """One small non-tool completion collected to text (the clarify gate
+    and the related questions both ride this): reasoning stays relayed so
+    a thinking model's silent think phase cannot stall the queue; any
+    failure answers ``""`` (callers fail open)."""
     stream = llm.LlmStream(cfg, messages, relay_reasoning=True)
     text = ""
     deadline = time.monotonic() + budget
@@ -763,54 +760,6 @@ def _clarify_gate(cfg: dict[str, t.Any], question: str, lang: str, mode: str) ->
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
 
 
-def _reviewer(
-    cfg: dict[str, t.Any],
-    question: str,
-    lang: str,
-    clarifications: str,
-    ran: dict[str, list],
-) -> t.Callable[[str], tuple[bool, str]]:
-    """The answer gate: one small completion re-reads the draft answer
-    against the question, the clarified direction and the searches
-    actually run -- a fail returns the critique the agent loop injects
-    for one patch round.  Fail-open by contract (the agent treats a
-    raised review as a pass)."""
-    coverage = "\n".join(f"- {q_} ({n} results)" for q_, n in ran.values()) or "- none yet"
-
-    def review(draft: str) -> tuple[bool, str]:
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are the answer reviewer of a deep-research search"
-                    " engine.  Judge whether the DRAFT answers the question"
-                    " and is safe to ship: does it address the clarified"
-                    " direction, are the load-bearing claims cited with [n]"
-                    " numbers from the searches that ran, and is anything"
-                    " essential still missing or contradicted by the"
-                    " sources?  Be strict about substance, not style. "
-                    " Output ONLY a JSON object: {\"pass\": true|false,"
-                    " \"critique\": \"<when false: the concrete gaps to"
-                    f" close, in {lang}>\"}}."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Question: {question}\n\n"
-                    + (f"Clarified direction:\n{clarifications}\n\n" if clarifications else "")
-                    + f"Searches that ran:\n{coverage}\n\nDraft answer:\n{draft[:4000]}"
-                ),
-            },
-        ]
-        value = _json_object_of(_small_completion(cfg, messages, 60.0)) or {}
-        if not isinstance(value.get("pass"), bool):
-            return True, ""  # an unreadable review must not block the answer
-        return value["pass"], str(value.get("critique") or "")[:1500]
-
-    return review
-
-
 def _related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: str) -> list[str]:
     """Three follow-up questions for the Related section -- one small
     non-tool completion after the answer settles; empty on any failure."""
@@ -883,14 +832,10 @@ def _generate(
                 )
                 + "\n"
             )
-        if kind in ("wrapup", "verifying"):
-            # payload-less state markers: the client flips its run state
-            # (wrap-up hint / answer-gate spinner) on them
+        if kind == "wrapup":
+            # payload-less state marker: the client flips its run state
+            # (the wrap-up hint) on it
             return json.dumps({"e": kind}, ensure_ascii=False) + "\n"
-        if kind == "review_failed":
-            # the gate rejected the draft: the critique rides the event so
-            # the client can show WHY next to the kept draft step
-            return json.dumps({"e": "review_failed", "critique": str(payload or "")}, ensure_ascii=False) + "\n"
         if kind == "ask_user":
             # the mid-research escape hatch: the model stopped to ask for
             # direction -- shape its tool arguments into the same ask event
@@ -1056,7 +1001,6 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         wrapup_message=_WRAPUP_MESSAGE,
         round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
         ask_tool=ASK_TOOL if register_ask else None,
-        review=_reviewer(cfg, q, lang, clarifications, state.ran) if mode in _CLARIFY_MODES else None,
     )
     try:
         first = next(events)

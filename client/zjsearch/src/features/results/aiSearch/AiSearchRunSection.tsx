@@ -10,7 +10,6 @@ import {
   Copy,
   CornerDownRight,
   Disc3,
-  FileText,
   Globe,
   Lightbulb,
   LoaderCircle,
@@ -178,66 +177,13 @@ function ThinkSegment({
   );
 }
 
-/** The rejected first draft of the answer (the gate sent it back): kept
-    as a collapsible timeline step -- the text the user watched stream
-    stays inspectable, with the reviewer's critique on top and live
-    citation chips via the thread's source meta.  The step margin is
-    index-based (NOT open-conditional): a folded draft still needs its
-    gap against the neighbouring steps. */
-function DraftSegment({
-  critique,
-  index,
-  meta,
-  text,
-}: {
-  critique: string;
-  index: number;
-  meta: AiSourceMeta[];
-  text: string;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={index > 0 ? "mt-2.5" : ""}>
-      <button
-        aria-expanded={open}
-        className="inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink-2"
-        onClick={() => {
-          setOpen(!open);
-        }}
-        type="button"
-      >
-        <FileText aria-hidden="true" className="size-3 shrink-0" />
-        {t("ai_draft")}
-        <span className="font-medium text-danger">{t("ai_review_rejected")}</span>
-        <ChevronDown aria-hidden="true" className={`size-3 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      <Collapse className={open ? "mt-1" : ""} open={open}>
-        <div className="rounded-lg border border-line p-3">
-          <p className="text-xs font-medium text-danger">{t("ai_review_rejected")}</p>
-          {critique ? (
-            <p className="mt-1 border-s-2 border-line ps-3 text-xs leading-relaxed text-ink-2" dir="auto">
-              {critique}
-            </p>
-          ) : null}
-          <div className="mt-2 text-sm leading-relaxed text-ink-2">
-            <MarkdownAnswer markdown={citeToLinks(text)} meta={meta} settled />
-          </div>
-        </div>
-      </Collapse>
-    </div>
-  );
-}
-
 function StepSegment({
   index,
-  meta,
   run,
   step,
   streaming,
 }: {
   index: number;
-  meta: AiSourceMeta[];
   run: AiSearchRun;
   step: AiSearchStep;
   streaming: boolean;
@@ -252,9 +198,6 @@ function StepSegment({
         />
       </div>
     );
-  }
-  if (step.kind === "draft") {
-    return <DraftSegment critique={step.critique} index={index} meta={meta} text={step.text} />;
   }
   if (step.kind === "intent") {
     return (
@@ -337,7 +280,11 @@ function AskCard({
     if (note.trim()) {
       lines.push(`${t("ai_clarify_more")}：${note.trim()}`);
     }
-    onSubmit(lines.join("\n"));
+    // confirmed with NOTHING picked and nothing typed: the "answers" would
+    // reach the model as a string of "—" placeholders -- degrade to the
+    // skip path (research without a clarified direction) instead
+    const hasInput = ask.questions.some((_, qi) => (picked[qi] ?? []).length > 0) || note.trim().length > 0;
+    onSubmit(hasInput ? lines.join("\n") : null);
   };
   return (
     <div
@@ -417,6 +364,40 @@ function AskCard({
   );
 }
 
+/** The clarify round-trip after submission: the confirmed direction (or
+    the skip) the research below is built on, as a collapsible segment --
+    OPEN by default so the user can always review what shaped the run
+    (morphic keeps the clarification exchange in the transcript; a thin
+    one-line summary just reads as broken). */
+function ClarifySegment({ clarify }: { clarify: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(true);
+  const text = clarify.trim();
+  return (
+    <div>
+      <button
+        aria-expanded={open}
+        className="inline-flex min-h-6 items-center gap-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+        onClick={() => {
+          setOpen(!open);
+        }}
+        type="button"
+      >
+        <Compass aria-hidden="true" className="size-3.5 shrink-0 text-accent" />
+        {text ? t("ai_clarify_summary") : t("ai_clarify_skipped")}
+        <ChevronDown aria-hidden="true" className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {text ? (
+        <Collapse className={open ? "mt-1" : ""} open={open}>
+          <p className="whitespace-pre-wrap break-words ps-5 text-[13px] leading-relaxed text-ink-2" dir="auto">
+            {text}
+          </p>
+        </Collapse>
+      ) : null}
+    </div>
+  );
+}
+
 function AiSearchRunSectionImpl({
   run,
   isFirst,
@@ -474,14 +455,9 @@ function AiSearchRunSectionImpl({
       ) : (
         <>
           {run.ask && run.clarify !== undefined ? (
-            // the clarify round-trip summary: the confirmed direction (or
-            // the skip) the research below is built on
-            <p className="flex items-start gap-1.5 text-[13px] leading-relaxed text-ink-3">
-              <Compass aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-              <span dir="auto">
-                {run.clarify ? `${t("ai_clarify_summary")}：${run.clarify}` : t("ai_clarify_skipped")}
-              </span>
-            </p>
+            // the clarify round-trip: the confirmed direction (or the
+            // skip) the research below is built on -- inspectable
+            <ClarifySegment clarify={run.clarify} />
           ) : null}
 
           {/* research: think stream + intent + parallel tool calls */}
@@ -505,6 +481,13 @@ function AiSearchRunSectionImpl({
                   className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
                 />
               </button>
+              {/* the research shape at a glance (morphic/Vane carry a step
+                  count in the collapsed label too) */}
+              {totalCalls > 0 ? (
+                <span className="shrink-0 text-xs text-ink-3">
+                  {t("ai_search_calls_count", { n: String(totalCalls) })}
+                </span>
+              ) : null}
               <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
               {streaming ? (
                 <button
@@ -524,7 +507,6 @@ function AiSearchRunSectionImpl({
                   <StepSegment
                     index={index}
                     key={`${step.kind}-${index}`}
-                    meta={sourceMeta}
                     run={run}
                     step={step}
                     streaming={streaming}
@@ -556,12 +538,6 @@ function AiSearchRunSectionImpl({
                   <BookMarked aria-hidden="true" className="size-5 text-ink-3" />
                 )}
                 <h3 className="text-xl font-medium text-ink">{t("ai_search_answer")}</h3>
-                {run.reviewing ? (
-                  <span className="ms-auto inline-flex items-center gap-1 text-xs text-ink-3">
-                    <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
-                    {t("ai_verifying")}
-                  </span>
-                ) : null}
               </div>
               <div className="mt-3 text-sm leading-relaxed text-ink">
                 <MarkdownAnswer
@@ -573,10 +549,11 @@ function AiSearchRunSectionImpl({
               </div>
               {!streaming && isLast ? (
                 <div className="mt-3 flex items-center gap-1">
-                  {/* [retry | copy] -- the reference order: the filled chip leads */}
+                  {/* [retry | copy] -- twin ghost circles: the fill is HOVER
+                  feedback only (a persistent disc reads as a selected state) */}
                   <button
                     aria-label={t("regenerate")}
-                    className="grid size-8 place-items-center rounded-full bg-surface-2 text-ink-2 transition-colors hover:text-accent"
+                    className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
                     onClick={onRegenerate}
                     title={t("regenerate")}
                     type="button"

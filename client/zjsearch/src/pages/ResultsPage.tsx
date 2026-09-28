@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
@@ -38,7 +39,7 @@ import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
-import { scrollIntoViewAnimated } from "@/lib/motion.ts";
+import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
@@ -435,6 +436,23 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       scrollIntoViewAnimated(el, "start");
     }
   });
+  // "jump to latest" on long threads (morphic's scroll-to-bottom): the
+  // scrolled-up reader gets a one-hop way back to the live run + composer
+  const [jumpLatest, setJumpLatest] = useState(false);
+  useEffect(() => {
+    if (!aiMode) {
+      return;
+    }
+    const onScroll = () => {
+      const fromBottom = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+      setJumpLatest(fromBottom > 480);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [aiMode]);
   const aiImages = useMemo(() => collectAiImages(allResults), [allResults]);
   const aiMeta = useMemo(() => aiSourceMeta(allResults), [allResults]);
 
@@ -574,7 +592,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // the exact width the reserved rail gives the column — which also keeps
   // the streamed boot → payload swap gapless for text pages.
   const cardListLayout = layout.kind === "list" || layout.kind === "dictionary" || layout.kind === "science";
-  const columnCap = !showRail && cardListLayout ? "lg:max-w-[calc(100%-22rem)] xl:max-w-[calc(100%-26rem)]" : "";
+  // aiMode excluded: the takeover's empty payload detects as a card-list
+  // layout, and the rail-width cap would then override max-w-3xl at xl
+  // (the reading column rendered 61rem instead of 48rem on wide screens)
+  const columnCap =
+    !aiMode && !showRail && cardListLayout ? "lg:max-w-[calc(100%-22rem)] xl:max-w-[calc(100%-26rem)]" : "";
 
   return (
     <Shell globals={globals} hideTopNav>
@@ -602,7 +624,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           // instance name must never push the slim bar into a horizontal pan
           <>
             <h1 className="sr-only">{data.q}</h1>
-            <div className="mx-auto flex w-full items-center gap-3 px-4 pt-3 sm:px-6">
+            <div className="zjs-results-header-row mx-auto flex w-full items-center gap-3 px-4 pt-3 sm:px-6">
               <div className="hidden min-[480px]:block">
                 <Brand className="text-xl" globals={globals} />
               </div>
@@ -618,6 +640,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
           {/* @container: grid density keys off the actual column width, so
               widescreen adds a column and centered mode drops one */}
+          {/* AI takeover: ONE always-centered reading column (48rem) — the
+              Perplexity/morphic shape.  center_alignment deliberately has no
+              say here: it widens/narrows the classic results FRAME, while an
+              AI answer page is a prose column in both modes (all reference
+              implementations lock it too). */}
           <div
             className={`@container min-w-0 flex-1 pt-4 ${columnCap} ${aiMode ? "mx-auto w-full max-w-3xl" : ""}`}
             ref={listRef}
@@ -674,6 +701,21 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                         aria-hidden="true"
                         className="pointer-events-none absolute -inset-x-4 -top-8 bottom-full -z-10 bg-gradient-to-t from-bg to-transparent sm:-inset-x-6"
                       />
+                      {jumpLatest ? (
+                        <div className="relative z-10 mb-2 flex justify-center">
+                          <button
+                            aria-label={t("ai_scroll_latest")}
+                            className="grid size-9 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-card transition-colors hover:text-ink"
+                            onClick={() => {
+                              animateScroll(window, { top: document.documentElement.scrollHeight });
+                            }}
+                            title={t("ai_scroll_latest")}
+                            type="button"
+                          >
+                            <ChevronDown aria-hidden="true" className="size-4.5" />
+                          </button>
+                        </div>
+                      ) : null}
                       <form
                         aria-label={t("ai_search_followup")}
                         className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent"

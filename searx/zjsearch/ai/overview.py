@@ -244,6 +244,7 @@ def _answer_system(lang: str) -> str:
             prompts.citation_rules(),
             prompts.markdown_surface(),
             prompts.grounding_fallback("sources"),
+            prompts.reader_voice(),
             prompts.opening_rule(),
         ]
     )
