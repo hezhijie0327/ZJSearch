@@ -10,10 +10,11 @@ The one agent framework every theme AI feature runs on --
   tool calls (only possible with a ``tools`` spec + an ``executor``) the
   executor runs -- yielding its own feature events -- and its results go
   back to the model as tool messages for the next turn.  Budgets (tool
-  rounds, calls, wall clock) bound the loop; an exhausted budget forces
-  the next turn to run WITHOUT tools, so the model must answer from what
-  it has.  Abandoned runs (client disconnect) cancel the underlying
-  stream -- no request outlives its consumer.
+  rounds, wall clock with an answer reserve) bound the loop; an exhausted
+  budget TELLS the model to wrap up (never a silent tool removal) and
+  forces the next turn to run WITHOUT tools, so the model must answer
+  from what it has.  Abandoned runs (client disconnect) cancel the
+  underlying stream -- no request outlives its consumer.
 
 - :py:class:`ThinkGate` owns the ``<think>`` block semantics: the first
   reasoning delta opens the block, the first content delta closes it,
@@ -105,14 +106,17 @@ def _event_wait(deadline: float | None, first: bool, first_event_timeout: float,
     return wait
 
 
-def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-many-locals
+def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-many-locals, too-many-statements
     cfg: dict[str, t.Any],
     messages: list[dict[str, t.Any]],
     tools: dict[str, t.Any] | None = None,
     executor: t.Callable[[list[dict[str, t.Any]]], t.Iterator[tuple[str, t.Any]]] | None = None,
     max_rounds: int = 1,
-    max_calls_total: int = 8,
     deadline: float | None = None,
+    answer_reserve: float = 0.0,
+    wrapup_message: str | None = None,
+    wrapup_grace: float = 90.0,
+    review: t.Callable[[str], tuple[bool, str]] | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
 ) -> t.Iterator[tuple[str, t.Any]]:
@@ -120,22 +124,46 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
 
     Zero-tool features (AI Overview) pass no ``tools``/``executor`` and
     get exactly one streamed turn.  With tools, each turn may end in
-    ``("calls", ...)``: the executor runs within the remaining total-call
-    budget -- the model decides how many calls one round carries (the
-    per-batch wall-clock timeout is the backstop) -- results are appended
-    (calls beyond the budget get a "skipped" result so every call is
-    answered -- an API requirement -- plus a ``call_skipped`` wire event
-    so the client settles the row instead of spinning forever), and the
-    next turn starts.  When the budget is exhausted the next turn runs
-    without tools: the model must answer.  The wall-clock ``deadline`` is
-    enforced per event -- including mid-turn, so a reasoning-looping model
-    cannot stream forever; on exhaustion the stream is cancelled and the
-    run either settles the prose already streamed or ends with an error.
+    ``("calls", ...)``: the executor runs every call of the round -- the
+    model decides how many one round carries (the per-batch wall-clock
+    timeout is the backstop) -- results are appended and the next turn
+    starts.  The only budgets are the ROUND count and the wall clock.
+
+    The forced-answer transition is EXPLAINED, never silent: when the
+    rounds or the ``answer_reserve`` slice of the wall clock take the
+    tools away, ``wrapup_message`` is injected as a user message and a
+    ``("wrapup", None)`` event flies -- a model that merely loses its
+    tools keeps emitting tool-call markup as raw text instead of writing
+    the answer.  A deadline that cuts a turn MID-STREAM gets the same
+    treatment plus a grace turn: the partial prose is discarded (the
+    client drops it on the ``wrapup`` event) and the model rewrites the
+    complete answer from scratch under ``wrapup_grace`` seconds.
+
+    ``review`` (the answer gate) re-checks a naturally finished answer:
+    a fail injects the critique and re-opens research for exactly one
+    patch round before the next review; wrap-up answers are never
+    reviewed.  The wall-clock ``deadline`` is enforced per event --
+    including mid-turn, so a reasoning-looping model cannot stream
+    forever; on exhaustion the stream is cancelled and the run settles
+    gracefully or ends with an error.
     """
-    executed = 0
     rounds = 0
+    reviews_left = 1
+    prev_budget_left = False
+    budget_note_injected = False
+    wrapping_up = False
+    interrupted_text = ""
     while True:
-        budget_left = bool(tools and executor is not None and rounds < max_rounds and executed < max_calls_total)
+        reserve_ok = deadline is None or deadline - time.monotonic() > answer_reserve
+        budget_left = bool(tools and executor is not None and not wrapping_up and rounds < max_rounds and reserve_ok)
+        if not budget_left and prev_budget_left and not budget_note_injected and wrapup_message:
+            # the forced-answer turn must be TOLD: a model that silently
+            # loses its tools keeps "calling" them as raw text instead of
+            # summarizing (the leaked-markup failure mode)
+            messages.append({"role": "user", "content": wrapup_message})
+            budget_note_injected = True
+            yield ("wrapup", None)
+        prev_budget_left = budget_left
         stream = llm.LlmStream(cfg, messages, relay_reasoning=True, tools=tools if budget_left else None)
         turn_text = ""
         calls: list[dict[str, t.Any]] = []
@@ -165,26 +193,60 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             # an abandoned consumer (client disconnect) closes this
             # generator right here -- cancel the pump towards the loop
             stream.cancel()
-        if expired:
-            if turn_text:
-                return  # the prose already streamed is the answer
+        if expired and not wrapping_up:
+            # the deadline cut a turn mid-stream: the partial prose is NOT
+            # an answer.  One graceful no-tools wrap-up turn rewrites the
+            # complete answer under a grace deadline; the client dropped
+            # the partial prose on the wrapup event.
+            wrapping_up = True
+            interrupted_text = turn_text
+            yield ("wrapup", None)
+            note = (
+                "  You were interrupted mid-response; whatever you already"
+                " streamed was discarded -- write the complete final answer"
+                " from scratch."
+            )
+            messages.append({"role": "user", "content": (wrapup_message or "") + note})
+            deadline = time.monotonic() + wrapup_grace
+            continue
+        if expired or kind == "error":
+            # the wrap-up turn itself died: settle for whatever prose
+            # exists (the client re-accepts it as the answer), else error
+            if not turn_text and interrupted_text:
+                yield ("delta", interrupted_text)
+            if turn_text or interrupted_text:
+                return
             yield ("error", "the AI budget was exhausted before the model answered")
             return
-        if kind == "error":
-            yield ("error", payload)
-            return
-        rounds += 1
         if not calls or not budget_left:
-            # the deltas of this turn were the final answer
+            if wrapping_up:
+                return  # the wrap-up summary is final: never reviewed
+            if review is not None and turn_text.strip() and reviews_left > 0:
+                # the answer gate: a fail injects the critique and re-opens
+                # research for exactly one patch round (bounded by the same
+                # wall clock and call budget)
+                reviews_left -= 1
+                yield ("verifying", None)
+                try:
+                    ok, critique = review(turn_text)
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("zjsearch agent: answer review failed: %r", exc)
+                    ok, critique = True, ""
+                if ok:
+                    return
+                yield ("review_failed", None)
+                messages.append({"role": "assistant", "content": turn_text})
+                messages.append({"role": "user", "content": critique})
+                max_rounds = rounds + 1
+                continue
             return
-        keep = max(0, max_calls_total - executed)
-        executable, skipped = calls[:keep], calls[keep:]
+        # rounds count EXECUTED call rounds only -- the wire round must stay
+        # aligned with the executor's own numbering or the client cannot
+        # settle its timeline rows (the forced-answer turns in between do
+        # not execute searches and must not shift the numbering)
+        rounds += 1
+        executable = calls
         yield ("calls", {"round": rounds, "intent": turn_text, "calls": calls})
-        # settle the over-budget calls on the wire immediately: the client
-        # rendered a row per displayed call -- without this event it would
-        # spin "searching..." forever while the next turn streams
-        for skip_id in range(len(executable), len(calls)):
-            yield ("call_skipped", {"round": rounds, "id": skip_id + 1})
         filled: list[tuple[dict[str, t.Any], str] | None] = [None] * len(executable)
         try:
             for event in executor(executable):
@@ -201,8 +263,3 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             messages.append(
                 tool_result_message(call, pair[1] if pair else f"error: the {call.get('name')} tool failed")
             )
-        for call in skipped:
-            messages.append(
-                tool_result_message(call, "skipped: the search budget is exhausted -- answer from what you have")
-            )
-        executed += len(executable)

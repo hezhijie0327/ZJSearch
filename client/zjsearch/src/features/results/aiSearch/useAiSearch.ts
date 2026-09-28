@@ -26,14 +26,22 @@ import type { AiCapability } from "@/lib/types.ts";
  */
 
 export type AiSearchMode = "speed" | "balanced" | "quality" | "goal";
-export type AiSearchPhase = "idle" | "streaming" | "done" | "error";
+/** "awaiting": the clarify gate asked for the user's direction -- the run
+    lives on until they answer (or skip) via submitClarify. */
+export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error";
+
+export interface AiAskQuestion {
+  q: string;
+  type: "single" | "multi";
+  options: string[];
+}
 
 export interface AiSearchCall {
   /** 1-based position of the call within its round */
   id: number;
   q: string;
   category: string;
-  status: "pending" | "ok" | "error" | "timeout" | "interrupted" | "skipped";
+  status: "pending" | "ok" | "error" | "timeout" | "interrupted" | "duplicate";
   n?: number;
 }
 
@@ -41,7 +49,8 @@ export interface AiSearchCall {
 export type AiSearchStep =
   | { kind: "think"; text: string }
   | { kind: "intent"; text: string }
-  | { kind: "calls"; round: number; calls: AiSearchCall[] };
+  | { kind: "calls"; round: number; calls: AiSearchCall[] }
+  | { kind: "draft"; text: string };
 
 export interface AiSearchSource {
   /** global [n] citation number (contiguous from 1) */
@@ -58,7 +67,7 @@ export interface AiSearchSource {
 export interface AiSearchRun {
   runNo: number;
   q: string;
-  status: "streaming" | "done" | "error";
+  status: "streaming" | "awaiting" | "done" | "error";
   error: string | null;
   /** the run's research timeline in the model's own order */
   steps: AiSearchStep[];
@@ -68,6 +77,15 @@ export interface AiSearchRun {
   sources: AiSearchSource[];
   /** follow-up question suggestions generated for this answer */
   related: string[];
+  /** the clarify gate's questions while the run waits for the user's
+      direction (status "awaiting") */
+  ask: { intro: string; questions: AiAskQuestion[] } | null;
+  /** the user's answer text after submitClarify ("" = skipped) */
+  clarify: string | undefined;
+  /** the answer gate: a draft was rejected -- the model is patching */
+  reviewing: boolean;
+  /** the budget forced the wrap-up: partial prose was discarded */
+  wrappingUp: boolean;
 }
 
 export interface AiSearchState {
@@ -77,6 +95,9 @@ export interface AiSearchState {
   error: string | null;
   start(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   followup(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
+  /** answer the awaiting run's clarify questions (null = skip) and start
+      its research on the SAME run */
+  submitClarify(text: string | null, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   stop(): void;
   reset(): void;
 }
@@ -115,18 +136,19 @@ const lastStep = (run: AiSearchRun): AiSearchStep | undefined =>
 const hasCalls = (run: AiSearchRun): boolean => run.steps.some((step) => step.kind === "calls");
 
 /** Settle the streaming run: fold a never-searched run's pending prose
-    into its answer, mark it done. */
+    into its answer, mark it done (awaiting when the clarify gate asked). */
 function settle(core: Core, failed: { error: string } | null): Core {
   const runs = [...core.runs];
   const run = runs[runs.length - 1];
   if (run) {
-    let settled: AiSearchRun = { ...run };
+    let settled: AiSearchRun = { ...run, reviewing: false };
     if (!hasCalls(settled) && !settled.answer && core.pending.trim()) {
       settled = { ...settled, answer: core.pending.trim() };
     }
+    const awaiting = !failed && settled.ask !== null && !settled.answer.trim();
     runs[runs.length - 1] = failed
       ? { ...settled, status: "error", error: failed.error }
-      : { ...settled, status: settled.status === "streaming" ? "done" : settled.status };
+      : { ...settled, status: awaiting ? "awaiting" : settled.status === "streaming" ? "done" : settled.status };
   }
   // in-flight searches can never report a status once the run ends (budget
   // truncation, user stop, stream close) -- settle them as interrupted so
@@ -150,10 +172,11 @@ function settle(core: Core, failed: { error: string } | null): Core {
   );
   runs.splice(0, runs.length, ...interruptedRuns);
   const hasContent = runs.some((item) => item.answer || item.steps.length > 0);
+  const awaiting = runs[runs.length - 1]?.status === "awaiting";
   return {
     ...core,
     runs,
-    phase: failed && !hasContent ? "error" : "done",
+    phase: failed && !hasContent ? "error" : awaiting ? "awaiting" : "done",
     error: failed?.error ?? core.error,
     pending: "",
     answerFrom: 0,
@@ -288,6 +311,43 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       };
       return { ...core, runs, sources };
     }
+    case "ask": {
+      // the clarify gate wants the user's direction BEFORE researching:
+      // hold the questions on the run; the following `end` settles it as
+      // awaiting (the answers travel on the next request)
+      runs[lastIdx] = {
+        ...run,
+        ask: {
+          intro: String(event.intro ?? ""),
+          questions: ((event.questions as Array<Record<string, unknown>>) ?? []).map((raw) => ({
+            q: String(raw.q ?? ""),
+            type: String(raw.type ?? "single") === "multi" ? ("multi" as const) : ("single" as const),
+            options: ((raw.options as unknown[]) ?? []).map(String),
+          })),
+        },
+      };
+      return { ...core, runs };
+    }
+    case "wrapup": {
+      // the budget took the tools away: the model was TOLD to summarize
+      // now and the partial prose it had streamed is discarded -- the
+      // wrap-up turn's output becomes the answer wholesale
+      runs[lastIdx] = { ...run, answer: "", wrappingUp: true };
+      return { ...core, runs, pending: "", answerFrom: 0, thinkOpen: false };
+    }
+    case "verifying":
+      runs[lastIdx] = { ...run, reviewing: true };
+      return { ...core, runs };
+    case "review_failed": {
+      // the draft was rejected: keep it as a collapsible timeline step
+      // while the model re-opens research to patch the gaps
+      const steps = [...run.steps];
+      if (run.answer.trim()) {
+        steps.push({ kind: "draft", text: run.answer });
+      }
+      runs[lastIdx] = { ...run, steps, answer: "", reviewing: false };
+      return { ...core, runs, pending: "", answerFrom: 0, thinkOpen: false };
+    }
     case "related":
       runs[lastIdx] = { ...run, related: ((event.items as string[]) ?? []).map(String).slice(0, 3) };
       return { ...core, runs };
@@ -320,6 +380,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     mode: AiSearchMode,
     /** the page's result-language filter -- the tool searches inherit it */
     searchLanguage = "",
+    /** clarify round-trip fields: clarify_state + clarifications */
+    clarify?: { state: "answered" | "skipped"; text: string },
   ) => {
     if (!capability) {
       return;
@@ -339,7 +401,17 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     };
     void fetchEventStream(
       "/ai/search",
-      { tk: capability.tk, q, lang, mode, history, sources_base: sourcesBase, search_language: searchLanguage },
+      {
+        tk: capability.tk,
+        q,
+        lang,
+        mode,
+        history,
+        sources_base: sourcesBase,
+        search_language: searchLanguage,
+        clarify_state: clarify?.state ?? "ask",
+        clarifications: clarify?.text ?? "",
+      },
       apply,
       controller.signal,
     )
@@ -374,6 +446,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           answer: "",
           sources: [],
           related: [],
+          ask: null,
+          clarify: undefined,
+          reviewing: false,
+          wrappingUp: false,
         },
       ],
       sources: [],
@@ -415,8 +491,55 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           answer: "",
           sources: [] as AiSearchSource[],
           related: [] as string[],
+          ask: null,
+          clarify: undefined,
+          reviewing: false,
+          wrappingUp: false,
         },
       ],
+    }));
+  };
+
+  /** The clarify round-trip: the user answered the awaiting run's
+      questions (or skipped) -- its research starts on the SAME run so
+      the thread keeps one section per question. */
+  const submitClarify = (text: string | null, lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
+    if (core.phase !== "awaiting") {
+      return;
+    }
+    const last = core.runs[core.runs.length - 1];
+    if (!last) {
+      return;
+    }
+    // prior ANSWERED runs travel as history; the awaiting run has none
+    beginRun(
+      last.q,
+      lang,
+      core.runs.slice(0, -1).map((run) => ({ q: run.q, a: run.answer })),
+      core.sources.length,
+      mode,
+      searchLanguage,
+      { state: text === null ? "skipped" : "answered", text: text ?? "" },
+    );
+    setCore((prev) => ({
+      ...prev,
+      phase: "streaming",
+      pending: "",
+      answerFrom: 0,
+      thinkOpen: false,
+      runs: prev.runs.map((run, index) =>
+        index === prev.runs.length - 1
+          ? {
+              ...run,
+              status: "streaming" as const,
+              steps: [] as AiSearchStep[],
+              answer: "",
+              clarify: text ?? "",
+              reviewing: false,
+              wrappingUp: false,
+            }
+          : run,
+      ),
     }));
   };
 
@@ -432,5 +555,5 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setCore(IDLE);
   };
 
-  return { ...core, start, followup, stop, reset };
+  return { ...core, start, followup, submitClarify, stop, reset };
 }

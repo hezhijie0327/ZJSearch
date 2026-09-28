@@ -385,6 +385,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const onRunStop = useCallback(() => {
     aiSearchRef.current.stop();
   }, []);
+  // the awaiting run's clarify card was answered (or skipped): its
+  // research starts on the SAME run, informed by the confirmed direction
+  const onRunClarify = useCallback((text: string | null) => {
+    const view = aiViewStateRef.current;
+    aiSearchRef.current.submitClarify(text, view.aiLang, view.researchMode, view.filterValues.search_language);
+  }, []);
   // a follow-up appends its run section: bring the new question into view
   const runsCount = aiSearch.runs.length;
   const seenRuns = useRef(0);
@@ -619,6 +625,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onRegenerate={onRunRegenerate}
                       onRelated={onRunRelated}
                       onStop={onRunStop}
+                      onSubmitClarify={onRunClarify}
                       run={run}
                       sourceMeta={runSourceMetas[index] ?? []}
                     />

@@ -19,14 +19,23 @@ silently):
   deltas of the current turn (a turn's prose becomes the next event's
   intent);
 - ``{"e": "calls", "round", "intent", "items": [{id, q, category}]}`` --
-  a parallel batch announced (the model decides the batch size; calls
-  beyond the remaining total budget settle as ``skipped`` right away);
+  a parallel batch announced (the model decides the batch size);
 - ``{"e": "search", "round", "id", "status", "n", "ms"}`` -- one search
-  finished (ok / error / timeout / skipped);
+  finished (ok / error / timeout / duplicate);
 - ``{"e": "results", "round", "id", "results"}`` -- page-data-shaped
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
   ``[n]`` registry entries (citation chips jump to ``round``/``id``/``idx``);
+- ``{"e": "wrapup"}`` -- the budget took the tools away: the model was
+  TOLD to summarize now (the client drops any partial prose and shows
+  the wrap-up state);
+- ``{"e": "verifying"}`` / ``{"e": "review_failed"}`` -- the answer gate:
+  the draft is being reviewed; a fail re-opens research for one patch
+  round (the client keeps the draft as a collapsible step);
+- ``{"e": "ask", "intro", "questions": [{q, type, options}]}`` -- the
+  clarify gate wants the user's direction BEFORE researching; the run
+  settles as ``awaiting`` (``{"e": "end"}`` follows; the answers travel
+  on the next request as ``clarifications``);
 - ``{"e": "error", "reason"}`` mid-stream, ``{"e": "end"}`` closes.
 
 A stream that dies before its first line answers 502 with a truncated
@@ -88,13 +97,24 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # goal: the question is a target -- iterate in self-checked rounds until
     # the goal is demonstrably met (budget is still the hard ceiling).
     # Per-round call counts are the MODEL's call -- uncapped, the parallel
-    # batch's wall-clock timeout is the backstop; the budgets bound rounds,
-    # total calls and wall clock only.
-    "speed": {"max_rounds": 2, "max_calls_total": 4, "budget_seconds": 150},
-    "balanced": {"max_rounds": 4, "max_calls_total": 8, "budget_seconds": 300},
-    "quality": {"max_rounds": 8, "max_calls_total": 16, "budget_seconds": 450},
-    "goal": {"max_rounds": 16, "max_calls_total": 32, "budget_seconds": 600},
+    # batch's wall-clock timeout is the backstop; the budgets bound ROUNDS
+    # and the WALL CLOCK only (answer_reserve_s is the synthesis window
+    # ring-fenced before the tools go away).
+    "speed": {"max_rounds": 2, "budget_seconds": 150, "answer_reserve_s": 30},
+    "balanced": {"max_rounds": 4, "budget_seconds": 300, "answer_reserve_s": 30},
+    "quality": {"max_rounds": 8, "budget_seconds": 450, "answer_reserve_s": 45},
+    "goal": {"max_rounds": 16, "budget_seconds": 600, "answer_reserve_s": 60},
 }
+
+_WRAPUP_MESSAGE = (
+    "Your research budget is exhausted: you cannot run any more web_search"
+    " calls. Write the final answer NOW, based only on the sources already"
+    " gathered (their [n] numbers are in the conversation).  Do not announce"
+    " or attempt further searches, and do not mention the budget -- deliver"
+    " the best possible cited answer for the question."
+)
+
+_CLARIFY_MODES = ("quality", "goal")
 
 
 def _cfg() -> dict[str, t.Any]:
@@ -225,12 +245,17 @@ def _initial_messages(
     history: list[dict[str, str]],
     sources_base: int,
     depth: str,
+    max_rounds: int = 0,
+    clarifications: str = "",
+    clarify_skipped: bool = False,
 ) -> list[dict[str, t.Any]]:
     """The conversation opener: the role + search policy, the depth branch
     (round policy AND output shape), then the SHARED answer contract from
     ai/prompts.py (language, citations, markdown, grounding, hygiene) --
     fragments composed, never hand-copied, so the two AI features cannot
-    drift."""
+    drift.  The model is TOLD its round budget (it paces itself) and, on
+    a clarify round-trip, the direction the user confirmed (or the fact
+    that they declined to)."""
     role = (
         "You are the \"AI Search\" mode of the zjsearch metasearch engine:"
         " the user asks a question, YOU decide which keyword searches answer"
@@ -276,6 +301,24 @@ def _initial_messages(
         prompts.opening_rule(),
     ]
     lines = [role, prompts.today_line(), *how_to_search, depth_line, *answer_rules]
+    if max_rounds:
+        lines.append(
+            f"Research budget: at most {max_rounds} rounds of parallel"
+            " searches (a round = one batch).  Pace yourself: plan what the"
+            " answer still needs, and make the LAST round close the gaps so"
+            " you can answer without asking for more."
+        )
+    if clarifications:
+        lines.append(
+            "The user already confirmed the research direction before this"
+            " run (honor it; do not re-ask):\n<clarified>\n"
+            f"{clarifications}\n</clarified>"
+        )
+    elif clarify_skipped:
+        lines.append(
+            "The user declined to clarify the direction: proceed with your"
+            " best interpretation and cover the plausible facets."
+        )
     if follow_up:
         lines.append(follow_up)
     messages: list[dict[str, t.Any]] = [{"role": "system", "content": "\n".join(lines)}]
@@ -296,6 +339,11 @@ _RESULT_TEMPLATE = (
 
 _BANG_PREFIX_RE = re.compile(r"^(?:\s*![a-z0-9_-]+)*(?:\s+|$)", re.IGNORECASE)
 _TIME_RANGES = ("day", "week", "month", "year")
+
+
+def _norm_query(query: str) -> str:
+    """The dedup key of a search query: case- and whitespace-insensitive."""
+    return " ".join(query.lower().split())
 
 
 def _parse_call(call: dict[str, t.Any]) -> tuple[str, str, str]:
@@ -374,6 +422,11 @@ class _Searches:  # pylint: disable=too-few-public-methods
         self.round_no = 0
         # follow-up runs continue the global [n] numbering after the base
         self.next_n = sources_base + 1
+        # every query this run already executed, normalized -> [query, n
+        # results] -- the executor-side dedup (a repeated query settles as
+        # ``duplicate`` without hitting the engines) and the reviewer's
+        # coverage summary both read it
+        self.ran: dict[str, list] = {}
 
     def _search_one(self, query: str, category: str, time_range: str) -> list[t.Any]:
         """One real instance search -- the webapp path with a synthesized
@@ -411,6 +464,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
             yield ("search", {"round": rnd, "id": idx, "status": "error", "n": 0, "ms": ms})
             return
         items = _serialize(raw, query)
+        self.ran[_norm_query(query)][1] = len(items)
         entries: list[dict[str, t.Any]] = []
         feed_lines = [f'Search "{query}" (category: {category}) returned {len(items)} results:']
         for pos, item in enumerate(items[: FEED_DEEP + FEED_SHALLOW]):
@@ -445,14 +499,29 @@ class _Searches:  # pylint: disable=too-few-public-methods
     def execute(self, calls: list[dict[str, t.Any]]) -> t.Iterator[tuple[str, t.Any]]:
         """Run one round of calls in parallel; feature events flow to the
         client while the searches complete.  Wire ids are the 1-based
-        position of the call within this round."""
+        position of the call within this round.  Exact-duplicate queries
+        (normalized) settle instantly as ``duplicate`` -- they never hit
+        the engines again; their feed tells the model to move on."""
         self.round_no += 1
         rnd = self.round_no
         prepared = [_parse_call(call) for call in calls]
         feeds: list[str | None] = [None] * len(calls)
-        submittable = [
-            (idx, query, category, time_range) for idx, (query, category, time_range) in enumerate(prepared) if query
-        ]
+        submittable: list[tuple[int, str, str, str]] = []
+        for wire_id, (query, category, time_range) in enumerate(prepared, 1):
+            if not query:
+                feeds[wire_id - 1] = "error: empty query"
+                yield ("search", {"round": rnd, "id": wire_id, "status": "error", "n": 0, "ms": 0})
+            elif _norm_query(query) in self.ran:
+                feeds[wire_id - 1] = (
+                    "duplicate: this exact query already ran in an earlier"
+                    " round and its results are already in the conversation"
+                    " -- do not repeat it; search a DIFFERENT facet or write"
+                    " the answer from the sources you have."
+                )
+                yield ("search", {"round": rnd, "id": wire_id, "status": "duplicate", "n": 0, "ms": 0})
+            else:
+                self.ran[_norm_query(query)] = [query, 0]
+                submittable.append((wire_id, query, category, time_range))
         # the pool is deliberately NOT in a with-block: after the batch
         # deadline the timeout events must stream immediately -- a with-exit
         # would wait for the still-running searches and stall the response
@@ -461,10 +530,6 @@ class _Searches:  # pylint: disable=too-few-public-methods
             yield from self._dispatch(pool, rnd, submittable, feeds)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
-        for wire_id, (query, _category, _time_range) in enumerate(prepared, 1):
-            if not query:
-                feeds[wire_id - 1] = "error: empty query"
-                yield ("search", {"round": rnd, "id": wire_id, "status": "error", "n": 0, "ms": 0})
         yield (
             "tool_results",
             [(calls[idx], str(feed or "error: the search failed")) for idx, feed in enumerate(feeds)],
@@ -477,13 +542,13 @@ class _Searches:  # pylint: disable=too-few-public-methods
         submittable: list[tuple[int, str, str, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
-        futures: dict[concurrent.futures.Future, tuple[int, float]] = {}
-        for idx, query, category, time_range in submittable:
+        futures: dict[concurrent.futures.Future, tuple[int, str, str, float]] = {}
+        for wire_id, query, category, time_range in submittable:
             # the worker needs a request context of its own: SearchWithPlugins
             # stores the request proxy and search() copies the context again
             # for each of its engine threads (mirrors the webapp view thread)
             worker = flask.copy_current_request_context(self._search_one)
-            futures[pool.submit(worker, query, category, time_range)] = (idx + 1, time.monotonic())
+            futures[pool.submit(worker, query, category, time_range)] = (wire_id, query, category, time.monotonic())
         pending = dict(futures)
         # the batch timeout covers every WAVE of the bounded pool: a chatty
         # uncapped round queues behind MAX_PARALLEL slots, and the queued
@@ -499,10 +564,9 @@ class _Searches:  # pylint: disable=too-few-public-methods
                 pending, timeout=timeout, return_when=concurrent.futures.FIRST_COMPLETED
             )
             for fut in done:
-                wire_id, started = pending.pop(fut)
-                _idx, query, category, _time_range = submittable[wire_id - 1]
+                wire_id, query, category, started = pending.pop(fut)
                 yield from self._finish(rnd, wire_id, query, category, fut, started, feeds)
-        for fut, (wire_id, _started) in pending.items():
+        for fut, (wire_id, _query, _category, _started) in pending.items():
             fut.cancel()
             feeds[wire_id - 1] = feeds[wire_id - 1] or "error: the search timed out"
             yield (
@@ -520,6 +584,143 @@ class _Searches:  # pylint: disable=too-few-public-methods
 def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
     query, category, time_range = _parse_call(call)
     return {"id": idx, "q": query, "category": category, "time_range": time_range or None}
+
+
+def _small_completion(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]], budget: float) -> str:
+    """One small non-tool completion collected to text (the clarify gate,
+    the answer reviewer, the related questions all ride this): reasoning
+    stays relayed so a thinking model's silent think phase cannot stall
+    the queue; any failure answers ``""`` (callers fail open)."""
+    stream = llm.LlmStream(cfg, messages, relay_reasoning=True)
+    text = ""
+    deadline = time.monotonic() + budget
+    while time.monotonic() < deadline:
+        # a REASONING model can think well past 30s before its first
+        # content token -- the per-event wait must outlast the think phase
+        kind, payload = stream.next_event(60.0)
+        if kind == "delta":
+            text += str(payload or "")
+        elif kind in ("error", "end"):
+            break
+    stream.cancel()
+    return text
+
+
+def _json_object_of(text: str) -> dict[str, t.Any] | None:
+    """The first JSON object in a completion's text (models love wrapping
+    their JSON in prose or fences despite being told not to)."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        value = json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _clarify_gate(cfg: dict[str, t.Any], question: str, lang: str, mode: str) -> dict[str, t.Any] | None:
+    """The pre-research human-in-loop gate: one small completion decides
+    whether the run should ask the user for direction first (quality:
+    only on a genuinely ambiguous request; goal: prefers asking when the
+    goal statement lacks a target).  Answers the sanitized question set,
+    or None on any failure or a ``no`` -- the run then researches
+    directly (fail-open: a broken gate must never block research)."""
+    posture = (
+        " The request reads as a GOAL the user wants reached: prefer asking"
+        " when the target, constraints or success criteria are unstated."
+        if mode == "goal"
+        else " Ask ONLY when the research direction genuinely depends on the"
+        " user's intent and guessing wrong would waste the whole run."
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the clarification gate of a deep-research search"
+                " engine: decide whether the request needs the user's"
+                " direction BEFORE any research begins." + posture + " Broad"
+                " informational topics (\"searxng\", \"how do solar panels"
+                " work\") do NOT need clarification -- cover their facets"
+                " instead.  Ask at most 3 questions; each carries 2-4 short"
+                " options (\"single\" = pick one, \"multi\" = pick any) and"
+                " the user can always add free text.  Output ONLY a JSON"
+                " object, no prose, no code fences: {\"ask\": true, \"intro\":"
+                " \"<one sentence on why you ask>\", \"questions\": [{\"q\":"
+                " \"<question>\", \"type\": \"single\", \"options\": [\"<short"
+                " option>\", ...]}]}  -- or {\"ask\": false} when research can"
+                f" start directly.  Write in {lang}."
+            ),
+        },
+        {"role": "user", "content": f"<q>{question}</q>"},
+    ]
+    value = _json_object_of(_small_completion(cfg, messages, 45.0))
+    if not value or not value.get("ask"):
+        return None
+    questions: list[dict[str, t.Any]] = []
+    for raw in (value.get("questions") or [])[:3]:
+        if not isinstance(raw, dict) or not str(raw.get("q") or "").strip():
+            continue
+        options = [str(o).strip()[:80] for o in (raw.get("options") or []) if str(o).strip()][:4]
+        questions.append(
+            {
+                "q": str(raw.get("q")).strip()[:200],
+                "type": "multi" if str(raw.get("type") or "").strip() == "multi" else "single",
+                "options": options,
+            }
+        )
+    if not questions:
+        return None
+    return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
+
+
+def _reviewer(
+    cfg: dict[str, t.Any],
+    question: str,
+    lang: str,
+    clarifications: str,
+    ran: dict[str, list],
+) -> t.Callable[[str], tuple[bool, str]]:
+    """The answer gate: one small completion re-reads the draft answer
+    against the question, the clarified direction and the searches
+    actually run -- a fail returns the critique the agent loop injects
+    for one patch round.  Fail-open by contract (the agent treats a
+    raised review as a pass)."""
+    coverage = "\n".join(f"- {q_} ({n} results)" for q_, n in ran.values()) or "- none yet"
+
+    def review(draft: str) -> tuple[bool, str]:
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are the answer reviewer of a deep-research search"
+                    " engine.  Judge whether the DRAFT answers the question"
+                    " and is safe to ship: does it address the clarified"
+                    " direction, are the load-bearing claims cited with [n]"
+                    " numbers from the searches that ran, and is anything"
+                    " essential still missing or contradicted by the"
+                    " sources?  Be strict about substance, not style. "
+                    " Output ONLY a JSON object: {\"pass\": true|false,"
+                    " \"critique\": \"<when false: the concrete gaps to"
+                    f" close, in {lang}>\"}}."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Question: {question}\n\n"
+                    + (f"Clarified direction:\n{clarifications}\n\n" if clarifications else "")
+                    + f"Searches that ran:\n{coverage}\n\nDraft answer:\n{draft[:4000]}"
+                ),
+            },
+        ]
+        value = _json_object_of(_small_completion(cfg, messages, 60.0)) or {}
+        if not isinstance(value.get("pass"), bool):
+            return True, ""  # an unreadable review must not block the answer
+        return value["pass"], str(value.get("critique") or "")[:1500]
+
+    return review
 
 
 def _related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: str) -> list[str]:
@@ -594,16 +795,10 @@ def _generate(
                 )
                 + "\n"
             )
-        if kind == "call_skipped":
-            # an over-total-budget call: settle its timeline row on the
-            # existing "search" wire shape so the client never spins
-            return (
-                json.dumps(
-                    {"e": "search", "round": payload["round"], "id": payload["id"], "status": "skipped", "n": 0},
-                    ensure_ascii=False,
-                )
-                + "\n"
-            )
+        if kind in ("wrapup", "verifying", "review_failed"):
+            # payload-less state markers: the client flips its run state
+            # (wrap-up hint / answer-gate spinner / draft step) on them
+            return json.dumps({"e": kind}, ensure_ascii=False) + "\n"
         if kind == "error":
             return json.dumps({"e": "error", "reason": llm.reason_of(payload)}, ensure_ascii=False) + "\n"
         return json.dumps({"e": kind, **payload}, ensure_ascii=False) + "\n"
@@ -655,7 +850,15 @@ def _generate(
         yield emit("related", {"items": related})
 
 
-def _search() -> flask.Response:
+def _clarify_stream(gate: dict[str, t.Any]) -> t.Iterator[str]:
+    """The clarify-gate response: the ask event then the closing end -- a
+    run that settles as ``awaiting`` (the user's answers travel on the
+    next request as ``clarifications``)."""
+    yield json.dumps({"e": "ask", "intro": gate["intro"], "questions": gate["questions"]}, ensure_ascii=False) + "\n"
+    yield json.dumps({"e": "end"}, ensure_ascii=False) + "\n"
+
+
+def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements
     """AI Search: the agent loop with the ``web_search`` tool."""
     cfg = llm.ai_cfg()
     if not (_enabled() and llm.configured(cfg)):
@@ -687,17 +890,45 @@ def _search() -> flask.Response:
     raw_search_language = str(payload.get("search_language") or "").strip()
     if raw_search_language.lower() in ("", "auto", "all"):
         raw_search_language = ""
+    # the clarify round-trip: "ask" = the gate may fire (first run of a
+    # gated mode), "answered"/"skipped" = the user responded -- the run
+    # then researches with the confirmed direction (or without one)
+    clarify_state = str(payload.get("clarify_state") or "ask").strip().lower()
+    if clarify_state not in ("ask", "answered", "skipped"):
+        clarify_state = "ask"
+    clarifications = str(payload.get("clarifications") or "").strip()[:2000]
+    max_rounds = _budget("max_rounds", mode, 2)
+    # the clarify gate fires on the FIRST run of a gated mode only: a
+    # follow-up's history already disambiguates the direction
+    if mode in _CLARIFY_MODES and clarify_state == "ask" and not history:
+        gate = _clarify_gate(cfg, q, lang, mode)
+        if gate:
+            resp = flask.Response(flask.stream_with_context(_clarify_stream(gate)), mimetype="application/x-ndjson")
+            resp.headers["X-Accel-Buffering"] = "no"
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
     state = _Searches(
         sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
     )
     events = agent.run_agent(
         cfg,
-        _initial_messages(q, lang, history, sources_base, mode),
+        _initial_messages(
+            q,
+            lang,
+            history,
+            sources_base,
+            mode,
+            max_rounds=max_rounds,
+            clarifications=clarifications if clarify_state == "answered" else "",
+            clarify_skipped=clarify_state == "skipped",
+        ),
         tools=_tool_spec(),
         executor=state.execute,
-        max_rounds=_budget("max_rounds", mode, 2),
-        max_calls_total=_budget("max_calls_total", mode, 8),
+        max_rounds=max_rounds,
         deadline=time.monotonic() + float(_budget("budget_seconds", mode, 300)),
+        answer_reserve=float(_budget("answer_reserve_s", mode, 30)),
+        wrapup_message=_WRAPUP_MESSAGE,
+        review=_reviewer(cfg, q, lang, clarifications, state.ran) if mode in _CLARIFY_MODES else None,
     )
     try:
         first = next(events)
