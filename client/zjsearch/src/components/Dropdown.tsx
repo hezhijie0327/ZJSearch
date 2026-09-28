@@ -98,20 +98,38 @@ export function Dropdown({
     // the menu renders in a portal (fixed positioning) so overflow-x-auto
     // ancestors — the tab and filter rows — cannot clip it.  The position
     // is clamped so the menu never overflows the viewport (triggers near
-    // the right edge would otherwise push it off-screen).
+    // the right edge would otherwise push it off-screen) — and it OPENS
+    // UPWARD when there is no room below: a bottom-pinned trigger (the AI
+    // follow-up pill) would otherwise push every option off-screen.
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
       const margin = 8;
       const minWidth = Math.max(rect.width, 176);
       const maxLeft = window.innerWidth - minWidth - margin;
       const left = Math.max(margin, Math.min(rect.left, maxLeft));
-      setMenuStyle({
+      // ~36px per option row (py-2 + 13px text) + py-1.5 padding, capped
+      // by the panel's own max-h-80
+      const menuHeight = Math.min(options.length * 36 + 12, 320);
+      const roomBelow = window.innerHeight - margin - rect.bottom;
+      const openUp = roomBelow < menuHeight + 6;
+      const style: CSSProperties = {
         position: "fixed",
-        top: rect.bottom + 6,
-        ...(align === "end" ? { right: Math.max(margin, window.innerWidth - rect.right) } : { left }),
         minWidth,
         maxWidth: window.innerWidth - margin * 2,
-      });
+      };
+      if (openUp) {
+        style.bottom = window.innerHeight - rect.top + 6;
+        style.maxHeight = Math.max(120, rect.top - margin - 6);
+      } else {
+        style.top = rect.bottom + 6;
+        style.maxHeight = Math.max(120, roomBelow - 6);
+      }
+      if (align === "end") {
+        style.right = Math.max(margin, window.innerWidth - rect.right);
+      } else {
+        style.left = left;
+      }
+      setMenuStyle(style);
     }
     setOpen(true);
   };
