@@ -224,7 +224,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   reuses that number, a NEW url mints the next `[n]` (a `sources`
   event follows, so the answer can cite the opened page and its card
   joins the grid; favicon stays empty — the client renders the Globe
-  fallback), a re-read settles `duplicate` without rendering again,
+  fallback; the entry carries `crawled: true`, and a re-read of an
+  already-numbered url RE-EMITS its `[n]` so the client upgrades the
+  existing card in place — the 已读全文/Read-in-full badge marks the
+  sources the model verified first-hand), a re-read settles
+  `duplicate` without rendering again,
   and an in-process 10-min TTL cache (128 pages) absorbs repeat reads
   across runs.  `_guard_url` refuses non-public http(s) targets
   (loopback/private/link-local — `not ip.is_global` — plus

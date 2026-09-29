@@ -194,6 +194,7 @@ export const EN = {
   ai_search_research: "Research",
   ai_search_thinking_plan: "Planning the searches…",
   ai_search_view_more: "View {n} more",
+  ai_source_crawled: "Read in full",
   ai_search_row_timeout: "timed out",
   ai_search_row_interrupted: "interrupted",
   ai_elapsed_seconds: "researched {n}s",

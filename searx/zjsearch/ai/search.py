@@ -711,10 +711,10 @@ class _Searches:  # pylint: disable=too-few-public-methods
         norm = browserless.normalize_url(url)
         known_n = self.url_n.get(norm)
         if known_n is not None:
-            n, new_source = known_n, False
+            n = known_n
             cite = f"source [{n}] (already among your sources -- cite it as [{n}])"
         else:
-            n, new_source = self.next_n, True
+            n = self.next_n
             self.next_n += 1
             self.url_n[norm] = n
             cite = f"NEW source [{n}] -- cite it as [{n}]"
@@ -725,26 +725,30 @@ class _Searches:  # pylint: disable=too-few-public-methods
             "page",
             {"round": rnd, "id": idx, "status": "ok", "url": url, "title": title, "chars": len(text), "ms": ms},
         )
-        if new_source:
-            yield (
-                "sources",
-                {
-                    "items": [
-                        {
-                            "n": n,
-                            "round": rnd,
-                            "id": idx,
-                            "idx": 0,
-                            "title": title,
-                            "url": url,
-                            "netloc": netloc,
-                            "favicon": "",
-                            "pretty_url": url,
-                            "published_date": "",
-                        }
-                    ]
-                },
-            )
+        # the read page always rides a sources event: a NEW url registers its
+        # card, an already-numbered one re-emits its [n] with ``crawled``
+        # set -- the client upgrades the existing card in place (the
+        # read-in-full badge marks what the model verified first-hand)
+        yield (
+            "sources",
+            {
+                "items": [
+                    {
+                        "n": n,
+                        "round": rnd,
+                        "id": idx,
+                        "idx": 0,
+                        "title": title,
+                        "url": url,
+                        "netloc": netloc,
+                        "favicon": "",
+                        "pretty_url": url,
+                        "published_date": "",
+                        "crawled": True,
+                    }
+                ]
+            },
+        )
 
     def execute(self, calls: list[dict[str, t.Any]]) -> t.Iterator[tuple[str, t.Any]]:
         """Run one round of calls in parallel -- ``web_search`` and

@@ -39,7 +39,18 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
             rel="noreferrer"
             target="_blank"
           >
-            <p className="truncate text-xs font-medium text-ink">{source.title}</p>
+            <div className="flex items-start justify-between gap-1.5">
+              <p className="truncate text-xs font-medium text-ink">{source.title}</p>
+              {source.crawled ? (
+                <span
+                  className="flex shrink-0 items-center gap-0.5 rounded-full bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium leading-none text-accent"
+                  title={t("ai_source_crawled")}
+                >
+                  <BookOpen aria-hidden="true" className="size-2.5" />
+                  {t("ai_source_crawled")}
+                </span>
+              ) : null}
+            </div>
             <div className="flex items-center justify-between">
               <span className="flex min-w-0 items-center gap-1">
                 {source.favicon ? (

@@ -69,6 +69,8 @@ export interface AiSearchSource {
   url: string;
   netloc: string;
   favicon: string;
+  /** web_crawler read this page in full (the card's read-in-full badge) */
+  crawled?: boolean;
 }
 
 export interface AiSearchRun {
@@ -329,7 +331,10 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
     case "sources": {
       // the global [n] registry of the cited feed -- the entries ride the
       // run that found them (the grid under its question) and the flat
-      // registry powers the follow-up numbering base and chip jumps
+      // registry powers the follow-up numbering base and chip jumps.
+      // Merged by [n]: new entries append; a web_crawler re-emission of an
+      // already-numbered url upgrades the existing card in place (its
+      // read-in-full badge) instead of duplicating it
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
       const fresh: AiSearchSource[] = [];
       for (const item of items) {
@@ -346,21 +351,27 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
           url,
           netloc: String(item.netloc ?? ""),
           favicon: String(item.favicon ?? ""),
+          crawled: Boolean(item.crawled),
         });
       }
       if (!fresh.length) {
         return core;
       }
-      const sources = [...core.sources, ...fresh]
-        .filter((source, index, all) => all.findIndex((entry) => entry.n === source.n) === index)
-        .sort((a, b) => a.n - b.n);
-      runs[lastIdx] = {
-        ...run,
-        sources: [...run.sources, ...fresh].filter(
-          (source, index, all) => all.findIndex((entry) => entry.n === source.n) === index,
-        ),
+      const merge = (list: AiSearchSource[]): AiSearchSource[] => {
+        const merged = [...list];
+        for (const item of fresh) {
+          const idx = merged.findIndex((entry) => entry.n === item.n);
+          const existing = merged[idx];
+          if (existing === undefined) {
+            merged.push(item);
+          } else if (item.crawled && !existing.crawled) {
+            merged[idx] = { ...existing, crawled: true };
+          }
+        }
+        return merged.sort((a, b) => a.n - b.n);
       };
-      return { ...core, runs, sources };
+      runs[lastIdx] = { ...run, sources: merge(run.sources) };
+      return { ...core, runs, sources: merge(core.sources) };
     }
     case "ask": {
       // the clarify gate wants the user's direction BEFORE researching:
