@@ -56,8 +56,6 @@ silently):
   "ms", "text"}`` -- one ``web_crawler`` read finished (ok / error /
   duplicate); a successful read carries the extracted content, and the
   client's row expands into a reading pane of it;
-- ``{"e": "results", "round", "id", "results"}`` -- page-data-shaped
-  result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
   ``[n]`` registry entries (citation chips jump to ``round``/``id``/``idx``);
 - ``{"e": "direct"}`` -- the pre-flight gate judged the request a

@@ -27,7 +27,7 @@ Design contract:
   (``zjsearch.ai.*``); everything ships disabled and a deployment opts in.
 
 Modules (mirroring the ``search`` package's layering):
-:py:mod:`searx.zjsearch.ai.overview.images` -- the multimodal source
+:py:mod:`searx.zjsearch.ai.capabilities.images` -- the multimodal source
 attachments; :py:mod:`searx.zjsearch.ai.overview.prompts` -- the
 answer conversation built from the shared fragments;
 :py:mod:`searx.zjsearch.ai.overview.route` -- the endpoint.

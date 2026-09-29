@@ -65,15 +65,12 @@ _RESULT_TEMPLATE = (
 )
 
 
-def _norm_query(query: str) -> str:
-    """The dedup key of a search query: case- and whitespace-insensitive."""
-    return " ".join(query.lower().split())
-
-
 def _serialize(raw_results: list[t.Any], query: str) -> list[dict[str, t.Any]]:
     """Ordered results as page-data-shaped dicts -- highlighted like the
     search view does, serialized through the very ``_result_data`` macro
-    the page payload uses (runs in the request thread)."""
+    the page payload uses (runs in the request thread).  The FEED builder
+    consumes them; the client's sources grid rides the ``sources`` event,
+    never this serialized payload."""
     for result in raw_results:
         if "content" in result and result["content"]:
             result["content"] = highlight_content(escape(result["content"][:1024]), query)
@@ -251,8 +248,6 @@ class Searches:  # pylint: disable=too-few-public-methods
         self.feed.append(feeds[idx - 1])
         self.feed_chars += len(feeds[idx - 1])
         yield ("search", {"round": rnd, "id": idx, "status": "ok", "n": len(items), "ms": ms})
-        if items:
-            yield ("results", {"round": rnd, "id": idx, "results": items})
         if entries:
             yield ("sources", {"items": entries})
 

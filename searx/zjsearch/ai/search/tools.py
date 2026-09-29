@@ -278,7 +278,8 @@ def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[s
 
 def parse_page_call(call: dict[str, t.Any]) -> str:
     """The url of one ``web_crawler`` tool call -- sanitized: trimmed and
-    capped; the public-url guard runs in :py:mod:`searx.zjsearch.ai.browserless`."""
+    capped; the public-url guard runs in
+    :py:mod:`searx.zjsearch.ai.capabilities.reader.fetch`."""
     try:
         args = json.loads(str(call.get("arguments") or "") or "{}")
     except ValueError:
@@ -288,7 +289,7 @@ def parse_page_call(call: dict[str, t.Any]) -> str:
     return str(args.get("url") or "").strip()[:2000]
 
 
-def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
+def display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
     """One ``calls`` wire item: the client's timeline row.  ``tool``
     discriminates the row kind -- a search renders its query, a page read
     its url.  Site filters display folded into the query so the row shows

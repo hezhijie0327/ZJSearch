@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """Page reader configuration: the settings block, the budgets and the
-shared error type.  The bottom of the browserless package -- fetch and
-extract read their knobs from here."""
+shared error type.  The bottom of the browserless package -- fetch,
+extract and the package ``__init__`` read their knobs from here."""
 
 import os
 import typing as t
@@ -27,30 +27,30 @@ class PageReadError(Exception):
     tool result (a dead end it is taught to move on from)."""
 
 
-def _cfg() -> dict[str, t.Any]:
+def cfg() -> dict[str, t.Any]:
     """The ``zjsearch.ai.browserless`` settings block (absent unless the
     deployment defines it)."""
     ai = settings.get("zjsearch", {}).get("ai", {})
-    cfg = ai.get("browserless") if isinstance(ai, dict) else None
-    return cfg if isinstance(cfg, dict) else {}
+    block = ai.get("browserless") if isinstance(ai, dict) else None
+    return block if isinstance(block, dict) else {}
 
 
-def _key(cfg: dict[str, t.Any]) -> str:
+def api_key(block: dict[str, t.Any]) -> str:
     """The effective API key: the ``key`` setting first, then the
     ``ZJSEARCH_BROWSERLESS_KEY`` environment."""
-    return str(cfg.get("key") or "") or os.environ.get("ZJSEARCH_BROWSERLESS_KEY", "")
+    return str(block.get("key") or "") or os.environ.get("ZJSEARCH_BROWSERLESS_KEY", "")
 
 
 def endpoint() -> str:
     """The Browserless v2 root (``zjsearch.ai.browserless.endpoint``), no
     trailing slash."""
-    return str(_cfg().get("endpoint") or "").strip().rstrip("/")
+    return str(cfg().get("endpoint") or "").strip().rstrip("/")
 
 
 def configured() -> bool:
     """True when ``endpoint`` and ``key`` are both present -- the gate for
     registering the ``web_crawler`` tool at all."""
-    return bool(endpoint() and _key(_cfg()))
+    return bool(endpoint() and api_key(cfg()))
 
 
 def normalize_url(url: str) -> str:
@@ -58,10 +58,10 @@ def normalize_url(url: str) -> str:
     return str(url or "").strip().split("#", 1)[0]
 
 
-def _max_chars() -> int:
+def max_chars() -> int:
     """``zjsearch.ai.browserless.max_chars``, clamped to sane bounds."""
     try:
-        value = int(_cfg().get("max_chars"))  # type: ignore[arg-type]
+        value = int(cfg().get("max_chars"))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return DEFAULT_MAX_CHARS
     return max(2000, min(value, 100_000))

@@ -14,7 +14,7 @@ import flask
 
 from searx.zjsearch.ai import agent, http, llm
 from searx.zjsearch.ai.capabilities.images import attach_images
-from searx.zjsearch.ai.overview.config import _enabled
+from searx.zjsearch.ai.overview.config import enabled
 from searx.zjsearch.ai.overview.prompts import build_answer_messages
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,7 @@ def install(app: flask.Flask) -> None:
     package install so the theme keeps one webapp.py entry point.  An
     enabled-but-incomplete configuration or a missing SDK package logs a
     warning and the feature stays off."""
-    if not llm.ai_cfg().get("enabled") or not _enabled():
+    if not llm.ai_cfg().get("enabled") or not enabled():
         return
     if not llm.configured(llm.ai_cfg()):
         logger.warning("zjsearch.ai is enabled but model/base_url are missing -- AI answers stay off")

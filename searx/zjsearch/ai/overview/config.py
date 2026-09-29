@@ -17,7 +17,7 @@ def _cfg() -> dict[str, t.Any]:
     return llm.feature_cfg("overview")
 
 
-def _enabled() -> bool:
+def enabled() -> bool:
     """The overview feature flag: ``zjsearch.ai.overview.enabled`` --
     ``True`` unless explicitly switched off."""
     return llm.feature_enabled("overview")

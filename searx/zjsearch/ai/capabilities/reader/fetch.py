@@ -15,8 +15,6 @@ import logging
 import re
 from urllib.parse import urlsplit
 
-import httpx
-
 from searx.network.client import get_loop
 from searx.network.network import get_network
 from searx.zjsearch.ai.capabilities.reader.config import (
@@ -24,31 +22,50 @@ from searx.zjsearch.ai.capabilities.reader.config import (
     REJECT_RESOURCE_TYPES,
     SETTLE_MS,
     PageReadError,
-    _cfg,
-    _key,
+    api_key,
+    cfg,
     endpoint,
 )
 
 logger = logging.getLogger(__name__)
 
-FETCH_TIMEOUT = httpx.Timeout(75.0, connect=10.0)
-"""The one browserless request's budget: the goto itself may take 30 s
+FETCH_TIMEOUT = (10.0, 65.0)
+"""The one browserless request's budget as a curl_cffi ``(connect, total)``
+tuple -- the searx network client is curl_cffi, whose timeout conversion
+does not understand httpx.Timeout objects (one would silently disable the
+per-request AND the session default).  The goto itself may take 30 s
 (Browserless' own ceiling) plus render, settle and transfer."""
 
+_DENIED_SUFFIXES = (".local", ".internal", ".lan", ".intranet", ".home.arpa", ".localdomain")
+"""DNS names that only exist inside the Browserless host's network -- the
+render must never reach them."""
 
-def _guard_url(url: str) -> str:
+
+def guard_url(url: str) -> str:
     """Public http(s) URLs only: the model is untrusted input, and the
     render happens inside the Browserless host's network -- loopback,
-    private ranges and the cloud metadata endpoint stay out of reach."""
+    private ranges and the cloud metadata endpoint stay out of reach.
+    Browsers canonicalize more than Python does: a final numeric label
+    (``2130706433``, ``0x7f.0.0.1``, ``0177.0.0.1``) parses as an IPv4
+    address per WHATWG, and single-label / site-local names resolve
+    through the host's search domains -- both are refused up front."""
     candidate = str(url or "").strip()
     if not candidate or len(candidate) > 2000:
         raise PageReadError("not a usable url")
     parts = urlsplit(candidate)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise PageReadError(f"not a public http(s) url: {candidate[:120]}")
-    host = parts.hostname.lower()
-    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+    host = parts.hostname.lower().rstrip(".")
+    if not host or host == "localhost" or host.endswith(_DENIED_SUFFIXES):
         raise PageReadError(f"refusing a non-public host: {host}")
+    if "." not in host:
+        raise PageReadError(f"refusing a single-label host: {host}")
+    last = host.rsplit(".", 1)[-1]
+    if last.isdigit() or (last[:2] == "0x" and len(last) > 2 and all(c in "0123456789abcdefABCDEF" for c in last[2:])):
+        # no public name ends in a numeric label -- this is a browser-
+        # canonicalized IPv4 form, and its expanded address is exactly
+        # the kind of target this gate exists for
+        raise PageReadError(f"refusing a numeric host form: {host}")
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
@@ -80,7 +97,7 @@ def rendered_html(url: str) -> str:
         get_network().request(
             "POST",
             f"{endpoint()}/content",
-            params={"token": _key(_cfg())},
+            params={"token": api_key(cfg())},
             json=body,
             headers={"Content-Type": "application/json"},
             timeout=FETCH_TIMEOUT,
@@ -93,6 +110,9 @@ def rendered_html(url: str) -> str:
     try:
         response = future.result(timeout=80.0)
     except concurrent.futures.TimeoutError as exc:
+        # the wall-clock budget died waiting: cancel the coroutine so a
+        # hung endpoint cannot leak its connection on the shared loop
+        future.cancel()
         raise PageReadError("browserless timed out") from exc
     except Exception as exc:  # pylint: disable=broad-except
         # the network layer re-raises whatever its client dialect raised

@@ -8,7 +8,7 @@ streaming split):
 - infrastructure: :py:mod:`searx.zjsearch.ai.llm` (the LLM transport),
   :py:mod:`searx.zjsearch.ai.agent` (the agent loop + ThinkGate both
   features run on), :py:mod:`searx.zjsearch.ai.prompts` (the shared XML
-  fragments incl. the answer spine), :py:mod:`searx.zjsearch.ai.reader`
+  fragments incl. the answer spine), :py:mod:`searx.zjsearch.ai.capabilities.reader`
   (the page reader: render + extract), :py:mod:`searx.zjsearch.ai.http`
   (the shared streaming/502 route helpers).
 - features: :py:mod:`searx.zjsearch.ai.overview` (``POST /ai/answer``,

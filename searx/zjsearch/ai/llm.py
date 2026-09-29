@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """zjsearch theme: the shared LLM transport layer of the AI endpoints.
 
-Everything the theme's AI features (``ai/overview.py``, ``ai/search.py``)
-need to talk to the configured model: the ``zjsearch.ai`` settings block,
+Everything the theme's AI features (the ``ai/overview`` and
+``ai/search`` packages) need to talk to the configured model: the ``zjsearch.ai`` settings block,
 the HMAC page-data token gate, the cached SDK clients for the four wire
 dialects (openai chat/responses, anthropic, gemini), the per-dialect
 stream pumps and the queue bridge from the shared network event loop to
