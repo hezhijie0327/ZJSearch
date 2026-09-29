@@ -33,6 +33,7 @@ import asyncio
 import base64
 import functools
 import hashlib
+import importlib.util
 import hmac
 import ipaddress
 import json
@@ -289,6 +290,39 @@ def capability() -> dict[str, str] | None:
     if not configured(cfg):
         return None
     return {"tk": issue_token(), "model": str(cfg.get("model"))}
+
+
+def feature_cfg(feature: str) -> dict[str, t.Any]:
+    """The ``zjsearch.ai.<feature>`` settings block (absent unless the
+    deployment defines it)."""
+    cfg = ai_cfg().get(feature)
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def feature_enabled(feature: str) -> bool:
+    """The per-feature flag: ``zjsearch.ai.<feature>.enabled`` -- ``True``
+    unless explicitly switched off."""
+    return bool(feature_cfg(feature).get("enabled", True))
+
+
+def feature_capability(feature: str) -> dict[str, str] | None:
+    """The page-data capability payload for ONE feature (token + model
+    label); ``None`` when the feature flag is off or the transport is
+    unconfigured -- the client hides the feature's entry point then."""
+    if not feature_enabled(feature) or not configured(ai_cfg()):
+        return None
+    return capability()
+
+
+def sdk_missing(cfg: dict[str, t.Any]) -> str | None:
+    """The missing transport SDK package for the configured dialect, or
+    ``None`` when it imports -- the install gate the feature routes
+    share (each logs its own wording)."""
+    kind = endpoint(cfg)[0]
+    package = SDK_PACKAGES[kind]
+    if importlib.util.find_spec(package) is None:
+        return package
+    return None
 
 
 SDK_PACKAGES = {
@@ -878,8 +912,8 @@ reasoning model may think for a while before emitting its single JSON
 payload."""
 
 
-def _lenient_object(text: str) -> dict[str, t.Any] | None:
-    """The first JSON object in a completion's text -- the repair pass of
+def json_object_of(text: str) -> dict[str, t.Any] | None:
+    """The first JSON object in a completion's text -- the lenient repair pass of
     the belt-and-braces: OpenAI-compatible gateways (LM Studio, vLLM,
     proxies) silently ignore ``response_format``/``output_config``, so the
     payload may arrive fenced or prose-wrapped even under native mode."""
@@ -1064,9 +1098,9 @@ def json_completion(
                 str(exc),
             )
             continue
-        value = _lenient_object(text) if text else None
+        value = json_object_of(text) if text else None
         if value is not None:
             _json_tier_cache[cache_key] = offset
             return value
     text = _stream_plain_text(cfg, messages)
-    return _lenient_object(text) if text else None
+    return json_object_of(text) if text else None

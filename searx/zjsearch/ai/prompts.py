@@ -1,19 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """Shared prompt building blocks for the theme's two AI features.
 
-Both features compose these fragments verbatim, so the renderer's
-markdown vocabulary, the citation grammar and the language directive
-are defined ONCE and cannot drift between the features (the drift audit
-found the search copy had quietly fallen behind the overview copy).
-Every fragment is an XML block (``<tag>``) -- the Vane organisation:
-models parse the labelled blocks reliably and the composition sites stay
-flat lists instead of hand-numbered prose.  The language directive
+This module is the COMPOSABLE BLOCK SYSTEM of the AI layer (the prompt
+side of the plugin architecture): every fragment is one XML block
+(``<tag>``) a feature's message builder picks and sequences -- the
+renderer's markdown vocabulary, the citation grammar, the language
+directive, grounding, voice, opening.  The fragments cannot drift
+between the features because both compose them verbatim from here (the
+drift audit once found the search copy quietly behind the overview
+copy), and :func:`answer_contract` is the reader-facing SPINE -- the
+byte-stable block order the prefix cache loves -- that both answer
+paths lay their feature-specific blocks onto.  The language directive
 mirrors the theme's i18n design: exactly TWO UI languages ship --
 Simplified Chinese and English -- and every other locale falls back to
 English, for the AI reply as much as for the interface.
 """
 
 import datetime
+import typing as t
 
 # One row per SHIPPED i18n catalog (mirror of the client's CATALOGS
 # registry in src/lib/i18n/i18n.ts): catalog tag -> reply language name.
@@ -135,3 +139,65 @@ def reader_voice() -> str:
 def opening_rule() -> str:
     """Answer hygiene shared by both features."""
     return "<opening>\nGet to the point in the first sentence.  No preamble, no closing remark.\n</opening>"
+
+
+def answer_contract(
+    lang: str,
+    role: str,
+    shape: str | None = None,
+    sources_note: str | None = None,
+) -> list[str]:
+    """The reader-facing answer spine BOTH features speak, in the
+    cache-friendly order: the byte-stable blocks (role, identity, date,
+    language, citations, markdown, grounding, voice, opening) first, the
+    caller's per-run blocks after.  ``shape`` (the search writer's tier
+    output shape) and ``sources_note`` slot in at their fixed positions;
+    the overview omits both.  Callers append their feature-specific
+    blocks (follow-up fences, gallery contracts, research notes) and the
+    conversation around it -- the spine is what must not drift."""
+    lines: list[str] = [role, identity(), today_line(), language_directive(lang)]
+    if shape:
+        lines.append(f"<shape>\n{shape}\n</shape>")
+    lines.append(citation_rules())
+    lines.append(grounding_fallback("sources"))
+    if sources_note:
+        lines.append(sources_note)
+    lines.append(markdown_surface())
+    lines.append(reader_voice())
+    lines.append(opening_rule())
+    return lines
+
+
+def history_turns(history: list[dict[str, str]], answer_cap: int = 2000) -> list[dict[str, t.Any]]:
+    """Prior thread Q&A as alternating ``<q>`` user / assistant messages;
+    each carried answer is capped (a long past answer is context, not
+    material)."""
+    out: list[dict[str, t.Any]] = []
+    for turn in history:
+        out.append({"role": "user", "content": f"<q>{turn.get('q') or ''}</q>"})
+        out.append({"role": "assistant", "content": str(turn.get("a") or "")[:answer_cap]})
+    return out
+
+
+def user_message(text: str, image_parts: list[dict[str, t.Any]] | None = None) -> dict[str, t.Any]:
+    """The canonical user turn: plain text, or text + multimodal parts
+    (OpenAI-shaped ``image_url`` entries; every dialect pump converts
+    them to its own block shape)."""
+    if image_parts:
+        return {"role": "user", "content": [{"type": "text", "text": text}, *image_parts]}
+    return {"role": "user", "content": text}
+
+
+def build_messages(
+    system: str,
+    user: dict[str, t.Any] | str,
+    history: list[dict[str, str]] | None = None,
+) -> list[dict[str, t.Any]]:
+    """The canonical conversation assembly: ``[system, *history, user]``.
+    ``user`` is a role dict (see :func:`user_message`) or a plain string;
+    ``history`` rides as the prior turns between system and question."""
+    messages: list[dict[str, t.Any]] = [{"role": "system", "content": system}]
+    if history:
+        messages.extend(history_turns(history))
+    messages.append(user if isinstance(user, dict) else {"role": "user", "content": user})
+    return messages

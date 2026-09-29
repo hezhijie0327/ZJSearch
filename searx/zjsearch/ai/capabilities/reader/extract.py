@@ -1,44 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""zjsearch theme: the Browserless v2 page reader of AI Search.
+"""AI Search page reader: the HTML extraction and Markdown conversion.
 
-``web_crawler`` turns one URL into reading material for the research model:
-the page renders in the self-hosted Browserless browser (v2 ``POST
-/content`` -- a real Chrome, so JS/SPA pages come out complete) and the
-HTML condenses to real Markdown with a small lxml pipeline (title,
-main-content heuristic, noise dropping, permalink-anchor stripping) plus
-the ``html-to-markdown`` converter -- ATX headings, GFM tables, code-block
-languages and inline semantics -- and a capped links appendix the model
-can follow with further ``web_crawler`` calls.  The dependency is
-deliberately gentle (MIT, zero runtime dependencies, a compiled core);
-without it the hand-rolled walker below still produces markdown-ish text
-(a logged, degraded fallback).  The HTTP call rides the instance's
-default network (``outgoing.proxies`` apply like for every engine).
-
-Configuration: the ``zjsearch.ai.browserless`` block -- ``endpoint`` (the
-v2 root, e.g. ``https://browser.example.com``) and ``key`` (falls back to
-the ``ZJSEARCH_BROWSERLESS_KEY`` environment, like ``ZJSEARCH_AI_KEY``).
-Unconfigured means the ``web_crawler`` tool never registers (no error, the
-model simply does not see it).  A small TTL cache keeps a re-read page
-(the model coming back to a source) from rendering twice.
+The rendered page condenses in one lxml pass: the main-content element
+(semantic landmark, else the largest content-ish container), noise tags
+dropped, fragment-only anchors stripped, then ``html-to-markdown``
+converts the cleaned subtree to real Markdown -- ATX headings, GFM
+tables, code-block languages, inline semantics.  Without the converter
+the hand-rolled walker produces markdown-ish text (a degraded but
+honest fallback).  A capped links appendix gives the model the page's
+structure to crawl further.
 """
 
-import asyncio
-import concurrent.futures
-import collections
-import ipaddress
 import logging
-import os
 import re
-import time
-import typing as t
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin
 
-import httpx
 from lxml import etree, html as lhtml
 
-from searx import settings
-from searx.network.client import get_loop
-from searx.network.network import get_network
+from searx.zjsearch.ai.capabilities.reader.fetch import PageReadError
 
 logger = logging.getLogger(__name__)
 
@@ -63,28 +42,6 @@ _H2MD_OPTIONS = (
         skip_images=True,
     )
 )
-
-FETCH_TIMEOUT = httpx.Timeout(75.0, connect=10.0)
-"""The one browserless request's budget: the goto itself may take 30 s
-(Browserless' own ceiling) plus render, settle and transfer."""
-
-GOTO_TIMEOUT_MS = 30_000
-SETTLE_MS = 1_200
-"""Wait for ``load`` plus a short settle -- late hydration gets a moment
-without paying a fixed second per page."""
-
-REJECT_RESOURCE_TYPES = ("image", "media", "font")
-"""The reader only needs the DOM: media loads are the bulk of the wall
-time and are rejected at the request level."""
-
-DEFAULT_MAX_CHARS = 12_000
-"""Readable characters per page fed to the model; a long page truncates
-with an honest marker (the model prefers a site:-search then)."""
-
-CACHE_TTL = 600.0
-CACHE_MAX = 128
-"""Same-page re-reads (a model returning to a source) reuse one render
-for ten minutes; the FIFO cap keeps a long-lived worker's memory flat."""
 
 LINKS_MAX = 25
 """The links appendix cap -- enough for the model to follow a site's
@@ -145,139 +102,6 @@ _DROP_TAGS = frozenset(
     }
 )
 _HEADINGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
-
-_cache: "collections.OrderedDict[str, tuple[float, str, str]]" = collections.OrderedDict()
-
-
-class PageReadError(Exception):
-    """A page could not be read -- the message travels to the model as the
-    tool result (a dead end it is taught to move on from)."""
-
-
-def _cfg() -> dict[str, t.Any]:
-    """The ``zjsearch.ai.browserless`` settings block (absent unless the
-    deployment defines it)."""
-    ai = settings.get("zjsearch", {}).get("ai", {})
-    cfg = ai.get("browserless") if isinstance(ai, dict) else None
-    return cfg if isinstance(cfg, dict) else {}
-
-
-def _key(cfg: dict[str, t.Any]) -> str:
-    """The effective API key: the ``key`` setting first, then the
-    ``ZJSEARCH_BROWSERLESS_KEY`` environment."""
-    return str(cfg.get("key") or "") or os.environ.get("ZJSEARCH_BROWSERLESS_KEY", "")
-
-
-def endpoint() -> str:
-    """The Browserless v2 root (``zjsearch.ai.browserless.endpoint``), no
-    trailing slash."""
-    return str(_cfg().get("endpoint") or "").strip().rstrip("/")
-
-
-def configured() -> bool:
-    """True when ``endpoint`` and ``key`` are both present -- the gate for
-    registering the ``web_crawler`` tool at all."""
-    return bool(endpoint() and _key(_cfg()))
-
-
-def normalize_url(url: str) -> str:
-    """The dedup / cache key of a page: whitespace-stripped, fragment-free."""
-    return str(url or "").strip().split("#", 1)[0]
-
-
-def _guard_url(url: str) -> str:
-    """Public http(s) URLs only: the model is untrusted input, and the
-    render happens inside the Browserless host's network -- loopback,
-    private ranges and the cloud metadata endpoint stay out of reach."""
-    candidate = str(url or "").strip()
-    if not candidate or len(candidate) > 2000:
-        raise PageReadError("not a usable url")
-    parts = urlsplit(candidate)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise PageReadError(f"not a public http(s) url: {candidate[:120]}")
-    host = parts.hostname.lower()
-    if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
-        raise PageReadError(f"refusing a non-public host: {host}")
-    try:
-        ip = ipaddress.ip_address(host)
-    except ValueError:
-        return candidate
-    if not ip.is_global:
-        # is_global covers private, loopback, link-local, reserved,
-        # multicast and documentation ranges in one stroke
-        raise PageReadError(f"refusing a non-public address: {host}")
-    return candidate
-
-
-def _max_chars() -> int:
-    """``zjsearch.ai.browserless.max_chars``, clamped to sane bounds."""
-    try:
-        value = int(_cfg().get("max_chars"))  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return DEFAULT_MAX_CHARS
-    return max(2000, min(value, 100_000))
-
-
-def _error_snippet(text: str) -> str:
-    """One truncated, tag-stripped line of a browserless error body (the
-    server answers with HTML pages on some failures)."""
-    plain = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
-    return plain[:200] or "no reason given"
-
-
-def _fetch(url: str) -> str:
-    """The rendered HTML of one URL through Browserless v2 ``POST
-    /content`` (the instance's default network: proxies apply)."""
-    body = {
-        "url": url,
-        "gotoOptions": {"waitUntil": "load", "timeout": GOTO_TIMEOUT_MS},
-        "waitForTimeout": SETTLE_MS,
-        "rejectResourceTypes": list(REJECT_RESOURCE_TYPES),
-    }
-    future = asyncio.run_coroutine_threadsafe(
-        get_network().request(
-            "POST",
-            f"{endpoint()}/content",
-            params={"token": _key(_cfg())},
-            json=body,
-            headers={"Content-Type": "application/json"},
-            timeout=FETCH_TIMEOUT,
-            # status codes are THIS module's message to the model (a 4xx/5xx
-            # body carries the actual reason) -- no network-layer raise
-            raise_for_httperror=False,
-        ),
-        get_loop(),
-    )
-    try:
-        response = future.result(timeout=80.0)
-    except concurrent.futures.TimeoutError as exc:
-        raise PageReadError("browserless timed out") from exc
-    except Exception as exc:  # pylint: disable=broad-except
-        # the network layer re-raises whatever its client dialect raised
-        # (curl_cffi / httpx connection failures) -- one line for the model
-        raise PageReadError(f"browserless unreachable: {type(exc).__name__}") from exc
-    if response.status_code != 200:
-        raise PageReadError(f"browserless HTTP {response.status_code}: {_error_snippet(response.text)}")
-    return response.text
-
-
-def _cache_get(key: str) -> tuple[str, str] | None:
-    item = _cache.get(key)
-    if item is None:
-        return None
-    stamp, title, text = item
-    if time.monotonic() - stamp > CACHE_TTL:
-        _cache.pop(key, None)
-        return None
-    _cache.move_to_end(key)
-    return (title, text)
-
-
-def _cache_put(key: str, title: str, text: str) -> None:
-    _cache[key] = (time.monotonic(), title, text)
-    _cache.move_to_end(key)
-    while len(_cache) > CACHE_MAX:
-        _cache.popitem(last=False)
 
 
 def _text_of(element: lhtml.HtmlElement) -> str:
@@ -439,9 +263,14 @@ def _cap(text: str, max_chars: int) -> str:
     return f"{cut}\n\n[... truncated, the full page is {len(text)} characters ...]"
 
 
-def _extract(html_text: str, base_url: str) -> tuple[str, str]:
-    """(title, markdown text) of a rendered page."""
-    doc = lhtml.document_fromstring(html_text)
+def extract_page(html_text: str, base_url: str, max_chars: int) -> tuple[str, str]:
+    """(title, markdown text) of a rendered page.  Raises
+    :class:`PageReadError` when the markup is unreadable or nothing
+    readable survives the pipeline."""
+    try:
+        doc = lhtml.document_fromstring(html_text)
+    except etree.ParserError as exc:
+        raise PageReadError("the page's markup is unreadable") from exc
     body = doc.body
     if body is None:
         raise PageReadError("the page has no body")
@@ -473,26 +302,4 @@ def _extract(html_text: str, base_url: str) -> tuple[str, str]:
         text = (text + "\n\nLinks on the page:\n" + "\n".join(links)).strip() if text else "\n".join(links)
     if len(text.strip()) < 40:
         raise PageReadError("no readable content found")
-    return title, _cap(text, _max_chars())
-
-
-def read_page(url: str) -> tuple[str, str]:
-    """(title, markdown text) of one URL -- the ``web_crawler`` tool's
-    whole world.  Raises :py:class:`PageReadError` with a message meant
-    for the model (the tool result)."""
-    if not configured():
-        raise PageReadError("the page reader is not configured on this instance")
-    guarded = _guard_url(url)
-    key = normalize_url(guarded)
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
-    html_text = _fetch(guarded)
-    if not html_text.strip():
-        raise PageReadError("the browser rendered an empty page")
-    try:
-        title, text = _extract(html_text, guarded)
-    except etree.ParserError as exc:
-        raise PageReadError("the page's markup is unreadable") from exc
-    _cache_put(key, title, text)
-    return title, text
+    return title, _cap(text, max_chars)

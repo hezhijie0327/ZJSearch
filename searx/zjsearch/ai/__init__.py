@@ -1,13 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """zjsearch theme: the AI endpoints of the theme.
 
-- :py:mod:`searx.zjsearch.ai.overview` -- the whole-page AI Overview
-  (``POST /ai/answer``).
-- :py:mod:`searx.zjsearch.ai.search` -- AI Search, the model-driven
-  keyword searches (``POST /ai/search``).
-- :py:mod:`searx.zjsearch.ai.llm` -- the shared LLM transport layer and
-  :py:mod:`searx.zjsearch.ai.agent` -- the agent loop both features run
-  on.
+The TOP LEVEL is the shared infrastructure; the features are
+subpackages (Vane's agents/* + prompts/* layering, Morphic's tools +
+streaming split):
+
+- infrastructure: :py:mod:`searx.zjsearch.ai.llm` (the LLM transport),
+  :py:mod:`searx.zjsearch.ai.agent` (the agent loop + ThinkGate both
+  features run on), :py:mod:`searx.zjsearch.ai.prompts` (the shared XML
+  fragments incl. the answer spine), :py:mod:`searx.zjsearch.ai.reader`
+  (the page reader: render + extract), :py:mod:`searx.zjsearch.ai.http`
+  (the shared streaming/502 route helpers).
+- features: :py:mod:`searx.zjsearch.ai.overview` (``POST /ai/answer``,
+  the zero-tool single-turn case) and :py:mod:`searx.zjsearch.ai.search`
+  (``POST /ai/search``, the tool-calling researcher/writer split) --
+  each with its own config/tools/prompts/gates/executor/wire/route
+  modules and a thin ``__init__`` re-exporting ``capability`` +
+  ``install``.
 
 The endpoints are stateless and opt-in: nothing registers unless
 ``zjsearch.ai`` is enabled and fully configured in the deployment's

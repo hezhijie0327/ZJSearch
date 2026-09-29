@@ -185,7 +185,22 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   and, with `web_crawler` configured, real Browserless renders (a
   browser launch per read on a server that has its own concurrency
   ceiling, typically 3).
-- AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`):
+- AI Search (the `searx/zjsearch/ai/search/` package, route
+  `POST /ai/search`).  NAMING: underscore = module-private only --
+  every cross-module collaborator is a public name (search/route
+  imports `gates.research_gate`, `tools.tool_spec`,
+  `prompts.initial_messages`, `config.budget`/`enabled`, ...);
+  the AI layer's layout is INFRA + CAPABILITIES +
+  FEATURES: infra lives at the `ai/` top level -- `llm.py` (transport,
+  per-feature config helpers, the JSON gate), `agent.py` (the loop +
+  ThinkGate), `prompts.py` (the composable XML fragments + the shared
+  `answer_contract` spine), `http.py` (the route prologue: authorize /
+  answer_lang / streaming / 502 helpers) -- `capabilities/` holds the
+  cross-feature services (`images.py` the multimodal attachments any
+  feature can compose, `reader/` the page reader); each feature is a
+  subpackage with a thin `__init__` re-exporting `capability` +
+  `install` and its own config/tools/prompts/gates/executor/wire/route
+  modules (overview: route/prompts only) -- research gate and route:
   the RESEARCHER/WRITER split (Vane's shape).  A PRE-FLIGHT GATE
   (`_research_gate`, Vane's skipSearch narrowed) runs one small JSON
   completion first: greetings, chat and writing tasks skip research
@@ -213,7 +228,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the sources grid shows the page once).  When the research ends —
   the model stops calling tools, the ceiling/stall verdict halts it, or
   a research turn's transport dies — agent.py flies a `wrapup` event and
-  a FRESH WRITER completion (`_writer_messages`) writes the cited answer
+  a FRESH WRITER completion (`prompts._writer_messages`) writes the cited answer
   from the accumulated feed: the researcher's prose is STRUCTURALLY
   unable to leak into the answer, and the shared answer contract
   (citations/markdown/grounding/voice — the prompts.py fragments) lives
@@ -229,7 +244,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (Morphic's brand guidance: never claim to be ChatGPT/Claude/…).
   Follow-ups are
   rewritten into self-contained questions first (Vane's standalone
-  follow-up: `_standalone_question`, one small JSON completion, fail-open
+  follow-up: `gates._standalone_question`, one small JSON completion, fail-open
   to the original wording — the thread still shows the user's own
   question).  All four gates (research, clarify, related fallback,
   standalone rewrite)
@@ -279,7 +294,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   channel dropped the queue sits silent through the think phase and the
   idle timeout kills the completion before any content arrives).
   The `web_crawler` tool
-  (`searx/zjsearch/ai/browserless.py`) reads ONE result's page in full
+  (`searx/zjsearch/ai/capabilities/reader/`) reads ONE result's page in full
   through the self-hosted Browserless v2 browser (`POST /content` — a
   real Chrome, so JS/SPA pages come out complete) and feeds the model
   real Markdown from a compact lxml pipeline (main-content heuristic +

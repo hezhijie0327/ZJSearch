@@ -97,7 +97,7 @@ class ThinkGate:
         self.closed = True
 
 
-def assistant_tool_calls_message(text: str, calls: list[dict[str, t.Any]]) -> dict[str, t.Any]:
+def _assistant_tool_calls_message(text: str, calls: list[dict[str, t.Any]]) -> dict[str, t.Any]:
     """Canonical assistant message carrying the turn's prose + tool calls
     (the pumps emit flat ``{"id", "name", "arguments"}`` calls; the
     canonical message nests them under ``"function"``)."""
@@ -115,7 +115,7 @@ def assistant_tool_calls_message(text: str, calls: list[dict[str, t.Any]]) -> di
     }
 
 
-def tool_result_message(call: dict[str, t.Any], text: str) -> dict[str, t.Any]:
+def _tool_result_message(call: dict[str, t.Any], text: str) -> dict[str, t.Any]:
     """Canonical ``tool`` result for one call (``name`` rides along: the
     gemini dialect needs it for the function_response part)."""
     return {
@@ -257,7 +257,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             # tool must be the only call of its turn: anything that rode
             # along is refused (the model re-issues it).
             yield ("plan", {"t": _plan_text(turn_text, calls, plan_tool)})
-            messages.append(assistant_tool_calls_message(turn_text, calls))
+            messages.append(_assistant_tool_calls_message(turn_text, calls))
             for call in calls:
                 ack = (
                     _PLAN_ACK
@@ -267,7 +267,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                         " calls were not executed; re-issue them now."
                     )
                 )
-                messages.append(tool_result_message(call, ack))
+                messages.append(_tool_result_message(call, ack))
             continue
         if not calls or not budget_left:
             # the model stopped researching (or the zero-tool turn spoke):
@@ -290,11 +290,11 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                     yield event
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch agent: tool executor failed: %s: %s", type(exc).__name__, str(exc)[:300])
-        messages.append(assistant_tool_calls_message(turn_text, calls))
+        messages.append(_assistant_tool_calls_message(turn_text, calls))
         for index, call in enumerate(executable):
             pair = filled[index]
             messages.append(
-                tool_result_message(call, pair[1] if pair else f"error: the {call.get('name')} tool failed")
+                _tool_result_message(call, pair[1] if pair else f"error: the {call.get('name')} tool failed")
             )
         if round_progress is not None:
             # the progress verdict lands AFTER the round's results are in
