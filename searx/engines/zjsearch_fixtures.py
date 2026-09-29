@@ -81,6 +81,10 @@ def _general() -> list[dict[str, t.Any]]:
                     f"Fixture snippet #{index}: offline text so the Lighthouse gate audits the "
                     "theme instead of a remote engine. Length varies a little to exercise wrapping."
                 ),
+                # result #1 carries an image: the AI-search audit page's mock
+                # writer embeds exactly this URL as a zjs-images gallery, so
+                # the gate exercises the inline-gallery path offline too
+                "img_src": FIXTURE_IMG if index == 1 else None,
                 "publishedDate": _PUBLISHED - index * _DAYS,
             }
         )

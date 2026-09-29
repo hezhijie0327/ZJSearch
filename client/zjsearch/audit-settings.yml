@@ -62,3 +62,20 @@ engines:
     engine: zjsearch_fixtures
     shortcut: zja
     disabled: false
+
+# the AI surfaces (AI Search `ai=1`, AI Overview `ai_overview=1`) are
+# audited against the deterministic mock transport — scripts/ai-mock.mjs,
+# spawned by the gate on :8909.  It is the AI counterpart of the zjaudit
+# fixture engine: fixed completions keyed by request shape, zero model
+# variance (the transport contract lives in searx/zjsearch/ai/llm.py).
+zjsearch:
+  ai:
+    enabled: true
+    sdk: openai_chat_completions
+    base_url: "http://127.0.0.1:8909/v1"
+    api_key: "zjaudit"
+    model: "zjaudit-mock"
+    overview:
+      enabled: true
+    search:
+      enabled: true

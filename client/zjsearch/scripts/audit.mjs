@@ -13,7 +13,12 @@
  * engine whose fixture sets are keyed by the query token (zjaudit
  * general/images/videos/music/files/science/apps).  Remote engines would
  * make the audited pages variance-sensitive — timeouts, captchas and dead
- * image URLs change the page between runs.
+ * image URLs change the page between runs.  The AI surfaces (AI Search
+ * takeover `ai=1`, auto-opened AI Overview `ai_overview=1`) ride the same
+ * fixture query against a deterministic MOCK transport (ai-mock.mjs on
+ * :8909, spawned here; audit-settings.yml points zjsearch.ai at it) — the
+ * AI counterpart of the fixture engine, so model variance never enters the
+ * gate either.
  *
  * Raw LHR reports are archived under `.lighthouse-archive/<run>/` together
  * with a scores.json (git rev included); compare two runs with
@@ -28,6 +33,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { startAiMock } from "./ai-mock.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLIENT = resolve(HERE, "..");
@@ -44,9 +50,15 @@ const MOBILE = process.env.LH_FORM_FACTOR === "mobile";
     suggestions) and the dedicated category layouts — image masonry,
     video/music/apps grids, torrent grid, science papers, IT packages.
     The `zjaudit <kind>` token picks the fixture set (see
-    searx/engines/zjsearch_fixtures.py). */
+    searx/engines/zjsearch_fixtures.py).  The AI pages ride the SAME
+    fixture query against the mock transport (ai-mock.mjs on :8909 — the
+    settings point zjsearch.ai at it): `ai=1` is the full AI Search
+    takeover (agent timeline + cited synthesis), `ai_overview=1` the
+    auto-opened quick-answer card on the classic page. */
 const SEARCH_PATHS = [
   "/search?q=zjaudit+general",
+  "/search?q=zjaudit+general&ai=1",
+  "/search?q=zjaudit+general&ai_overview=1",
   "/search?q=zjaudit+images&categories=images",
   "/search?q=zjaudit+videos&categories=videos",
   "/search?q=zjaudit+music&categories=music",
@@ -59,13 +71,36 @@ const SEARCH_PATHS = [
 /** Floors.  Every search page's SEO category is EXEMPT (null): upstream
     robots.txt disallows `/*?*q=*` and upstream wants search pages
     unindexed — correct behaviour, not a theme defect.  The fixture engine
-    makes the pages deterministic, so the floors are enforceable without
-    live-engine variance. */
+    AND the mock LLM make the pages deterministic, so the floors are
+    enforceable without live-engine/model variance. */
 function thresholdsFor(path) {
   if (path === "/") {
     return MOBILE
       ? { performance: 85, accessibility: 100, "best-practices": 100, seo: 95, "agentic-browsing": 100 }
       : { performance: 90, accessibility: 100, "best-practices": 100, seo: 95, "agentic-browsing": 100 };
+  }
+  if (path.includes("ai=1") || path.includes("ai_overview=1")) {
+    // the AI surfaces stream their content over NDJSON INSIDE the trace
+    // window (the fetch holds the network busy, so the trace records the
+    // answer/research rendering) — the shift-prone streaming phase earns
+    // them their own, calibrated performance floor.  The auto-opened
+    // overview card also pays a small CLS a real user click never does
+    // (input recency excludes manual opens): the card INSERTS above the
+    // results with no preceding interaction — 0.08 is inside Core Web
+    // Vitals' "good", so its agentic floor sits at 95, not 100.  The AI
+    // search page carries the same reasoning further: at settle the
+    // research timeline FOLDS BY DESIGN (the answer leads once the run
+    // completes — the Perplexity shape), a designed animated reflow the
+    // CLS lens reads as instability; its agentic floor is calibrated to
+    // gate catastrophic breakage, not the intended choreography.
+    if (path.includes("ai_overview=1")) {
+      return MOBILE
+        ? { performance: 70, accessibility: 100, "best-practices": 100, seo: null, "agentic-browsing": 95 }
+        : { performance: 80, accessibility: 100, "best-practices": 100, seo: null, "agentic-browsing": 95 };
+    }
+    return MOBILE
+      ? { performance: 70, accessibility: 100, "best-practices": 100, seo: null, "agentic-browsing": 75 }
+      : { performance: 80, accessibility: 100, "best-practices": 100, seo: null, "agentic-browsing": 75 };
   }
   return MOBILE
     ? { performance: 80, accessibility: 100, "best-practices": 100, seo: null, "agentic-browsing": 100 }
@@ -203,6 +238,9 @@ async function main() {
   const scores = { form_factor: MOBILE ? "mobile" : "desktop", git: gitInfo(), pages: {} };
   const NOJS_PORT = 8908;
 
+  console.log("starting the mock AI transport on :8909 …");
+  const aiMock = await startAiMock(8909);
+
   console.log(`booting offline audit instance on :${PORT} …`);
   // granian's stderr surfaces (boot errors would otherwise die silently
   // behind the waitFor timeout)
@@ -269,7 +307,32 @@ async function main() {
       console.log(`no-JS face served on :${NOJS_PORT}`);
     }
     const { launch } = await import("chrome-launcher");
-    chrome = await launch({ chromeFlags: ["--headless=new"] });
+    /** chrome-launcher scans for Chrome/Chromium only — a machine with a
+        different Chromium browser (Edge) and no CHROME_PATH still runs the
+        gate: fall back to the known Edge app bundles before giving up. */
+    const EDGE_CANDIDATES = [
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "/Applications/Microsoft Edge Canary.app/Contents/Microsoft Edge Canary",
+      "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    ];
+
+    async function launchChrome() {
+      try {
+        return await launch({ chromeFlags: ["--headless=new"] });
+      } catch (error) {
+        if (error?.code !== "ERR_LAUNCHER_NOT_INSTALLED") {
+          throw error;
+        }
+        const fallback = EDGE_CANDIDATES.find((candidate) => existsSync(candidate));
+        if (!fallback) {
+          throw error;
+        }
+        console.log(`  … no Chrome installation — using Edge at ${fallback}`);
+        return launch({ chromeFlags: ["--headless=new"], chromePath: fallback });
+      }
+    }
+
+    chrome = await launchChrome();
     const lighthouse = (await import("lighthouse")).default;
     // desktop preset: the desktop-config preset wires form factor, screen
     // emulation and the (mild) desktop throttling in one go
@@ -284,7 +347,7 @@ async function main() {
       } catch {
         /* already gone */
       }
-      chrome = await launch({ chromeFlags: ["--headless=new"] });
+      chrome = await launchChrome();
       console.log("  … browser process died — relaunched");
     }
 
@@ -378,6 +441,7 @@ async function main() {
     if (nojsServer) {
       nojsServer.close();
     }
+    aiMock.close();
   }
 
   console.log(failed ? "\naudit FAILED" : "\naudit passed");
