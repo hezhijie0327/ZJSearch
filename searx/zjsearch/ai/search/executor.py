@@ -177,7 +177,7 @@ class Searches:  # pylint: disable=too-few-public-methods
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
         return search_obj.search().get_ordered_results()
 
-    def _finish(  # pylint: disable=too-many-locals
+    def _finish(  # pylint: disable=too-many-locals, too-many-branches
         self,
         rnd: int,
         idx: int,
@@ -212,10 +212,11 @@ class Searches:  # pylint: disable=too-few-public-methods
                 # from an earlier search -- point at it instead of minting
                 # a duplicate source (the numbering stays contiguous and
                 # the sources grid shows the page once).  The image still
-                # joins the gallery pool under its KNOWN number: a parallel
-                # page read can number a url before this search does, and
-                # skipping the registration here silently stripped the
-                # result from the writer's gallery eligibility.
+                # joins the gallery pool under its KNOWN number, and an
+                # img-bearing UPGRADE entry reaches the client: a parallel
+                # page read can number a url before this search does (its
+                # entry carries no thumbnail), and without the re-emission
+                # the card would never grow one.
                 if pos < FEED_DEEP:
                     head = str(item.get("content_text") or "")[:FEED_SNIPPET_CHARS]
                     if img and len(self.gallery_pool) < _GALLERY_POOL_MAX:
@@ -223,6 +224,22 @@ class Searches:  # pylint: disable=too-few-public-methods
                     feed_lines.append(f"[{known_n}] {netloc}: {title} - {head} (same source as an earlier result)")
                 else:
                     feed_lines.append(f"[{known_n}] {netloc}: {title} (same source as an earlier result)")
+                if img:
+                    entries.append(
+                        {
+                            "n": known_n,
+                            "round": rnd,
+                            "id": idx,
+                            "idx": pos,
+                            "title": title[:200],
+                            "url": url,
+                            "netloc": netloc,
+                            "favicon": str(item.get("favicon") or ""),
+                            "img": img,
+                            "pretty_url": str(item.get("pretty_url") or ""),
+                            "published_date": str(item.get("published_date") or ""),
+                        }
+                    )
                 continue
             n = self.next_n
             self.next_n += 1
@@ -240,6 +257,8 @@ class Searches:  # pylint: disable=too-few-public-methods
                     "url": url,
                     "netloc": netloc,
                     "favicon": str(item.get("favicon") or ""),
+                    "img": img,
+                    "category": str(item.get("category") or ""),
                     "pretty_url": str(item.get("pretty_url") or ""),
                     "published_date": str(item.get("published_date") or ""),
                 }

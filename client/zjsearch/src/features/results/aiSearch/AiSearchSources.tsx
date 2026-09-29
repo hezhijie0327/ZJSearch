@@ -75,6 +75,19 @@ function SourceCard({ source }: { source: AiSearchSource }) {
           </span>
         </span>
       </span>
+      {source.img ? (
+        // the result's own thumbnail, pinned to the row end (the
+        // infobox-side card language) -- Google's sources carry the same
+        // preview; mobile's two-column grid stays compact without it
+        <img
+          alt=""
+          aria-hidden="true"
+          className="hidden h-10 w-14 shrink-0 rounded-lg object-cover object-top lg:block"
+          decoding="async"
+          loading="lazy"
+          src={source.img}
+        />
+      ) : null}
     </a>
   );
 }

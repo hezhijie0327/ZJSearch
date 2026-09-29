@@ -77,6 +77,12 @@ export interface AiSearchSource {
   url: string;
   netloc: string;
   favicon: string;
+  /** result thumbnail (the classic presentations' img_src) -- the rail
+      card pins it to the row end like the infobox-side cards do */
+  img?: string;
+  /** the result's search category -- the hook for type-aware cards
+      (video duration, torrent filesize, ... the classic presentations) */
+  category?: string;
   /** web_crawler read this page in full (the card's read-in-full badge) */
   crawled?: boolean;
 }
@@ -408,6 +414,8 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
           url,
           netloc: String(item.netloc ?? ""),
           favicon: String(item.favicon ?? ""),
+          img: String(item.img ?? "") || undefined,
+          category: String(item.category ?? "") || undefined,
           crawled: Boolean(item.crawled),
         });
       }
@@ -423,6 +431,10 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
             merged.push(item);
           } else if (item.crawled && !existing.crawled) {
             merged[idx] = { ...existing, crawled: true };
+          } else if (!existing.img && item.img) {
+            // a parallel page read numbered the url first (the crawler's
+            // entry has no thumbnail); the search's own entry carries it
+            merged[idx] = { ...existing, img: item.img, category: item.category ?? existing.category };
           }
         }
         return merged.sort((a, b) => a.n - b.n);
