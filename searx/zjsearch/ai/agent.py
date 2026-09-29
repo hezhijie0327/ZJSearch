@@ -24,12 +24,15 @@ The one agent framework every theme AI feature runs on --
 
 Events yielded by :py:func:`run_agent` are ``(kind, payload)`` tuples:
 ``("think"|"delta", text)``, ``("calls", {"round", "intent", "calls"})``,
+``("plan", {"t": text})`` -- the answer-plan turn's prose re-homed as a
+research step (see ``plan_tool``) --, ``("ask_user", arguments)``,
 ``("error", reason)``, plus the executor's feature events passed
 through.  The executor contract: a generator over the executable calls
 that yields ``(kind, payload)`` feature events and MUST end with
 ``("tool_results", [(call, text), ...])`` aligned with its input.
 """
 
+import json
 import logging
 import time
 import typing as t
@@ -44,6 +47,30 @@ transport health guard against dead upstreams -- NOT a research limit."""
 
 IDLE_TIMEOUT = 125.0
 """Per-event queue budget while a turn streams."""
+
+_PLAN_ACK = (
+    "Plan noted -- it is now visible to the user as your research step."
+    "  Continue researching if you still have gaps; otherwise your NEXT"
+    " message is the final answer itself: written for the reader, the"
+    " first sentence carries the point, no meta commentary and no"
+    " restating of the plan."
+)
+
+
+def _plan_text(turn_text: str, calls: list[dict[str, t.Any]], plan_tool: str) -> str:
+    """The plan step's text: the turn's own prose; a model that put the
+    plan in the tool argument instead gets that."""
+    if turn_text.strip():
+        return turn_text
+    for call in calls:
+        if str(call.get("name")) == plan_tool:
+            try:
+                args = json.loads(str(call.get("arguments") or "") or "{}")
+            except ValueError:
+                return ""
+            if isinstance(args, dict):
+                return str(args.get("plan") or "").strip()
+    return ""
 
 
 class ThinkGate:
@@ -119,6 +146,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     wrapup_grace: float = 90.0,
     round_progress: t.Callable[[int], str | None] | None = None,
     ask_tool: str | None = None,
+    plan_tool: str | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
 ) -> t.Iterator[tuple[str, t.Any]]:
@@ -150,6 +178,14 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
 
     The FIRST_EVENT/IDLE timeouts are transport health guards
     (a dead upstream), not research limits.
+
+    ``plan_tool`` (Vane's reasoning preamble, adapted): when the turn's
+    calls include this tool, the turn is answered WITHOUT executing
+    anything -- the turn's prose (or the tool's ``plan`` argument) is
+    yielded as a ``("plan", ...)`` event, an acknowledgement goes back as
+    the tool result, and the loop continues.  The turn is FREE: no round
+    consumed, no progress verdict.  Like ``ask_tool`` it must be the only
+    call of its turn; riders are refused with a tool error.
     """
     rounds = 0
     prev_budget_left = False
@@ -246,6 +282,27 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             if ask_call is not None:
                 yield ("ask_user", str(ask_call.get("arguments") or "{}"))
                 return
+        if plan_tool and not wrapping_up and any(str(c.get("name")) == plan_tool for c in calls):
+            # the answer-planning escape valve (Vane's reasoning preamble):
+            # the model's deliberation about the SHAPE of its answer reaches
+            # the UI as a plan step instead of leaking into the answer text.
+            # The turn is FREE -- it does not count as a research round and
+            # the progress verdict never sees it.  Like ask_user, the plan
+            # tool must be the only call of its turn: anything that rode
+            # along is refused (the model re-issues it).
+            yield ("plan", {"t": _plan_text(turn_text, calls, plan_tool)})
+            messages.append(assistant_tool_calls_message(turn_text, calls))
+            for call in calls:
+                ack = (
+                    _PLAN_ACK
+                    if str(call.get("name")) == plan_tool
+                    else (
+                        "error: call the plan tool ALONE in its turn -- your other"
+                        " calls were not executed; re-issue them now."
+                    )
+                )
+                messages.append(tool_result_message(call, ack))
+            continue
         if not calls or not budget_left:
             # no tool calls (or none allowed): the turn's prose IS the answer
             return

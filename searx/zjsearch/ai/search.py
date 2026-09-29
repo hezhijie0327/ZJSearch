@@ -133,6 +133,43 @@ _CLARIFY_MODES = ("quality", "goal")
 
 ASK_TOOL = "ask_user"
 
+PLAN_TOOL = "plan"
+_PLAN_MODES = ("quality", "goal")
+"""The tiers whose structured \"##\"-section answers are worth a planning
+turn: the plan tool is registered only here (speed's one dense paragraph
+and balanced's short prose never need it)."""
+
+
+def _plan_spec() -> dict[str, t.Any]:
+    """The answer-planning tool (Vane's reasoning preamble, adapted): the
+    model's deliberation about the SHAPE of its final answer goes HERE --
+    the user sees it as a research step -- instead of leaking into the
+    answer text (the wrapped-up model's "Excellent, [n] is useful..."
+    monologue was exactly that leak)."""
+    return {
+        "name": PLAN_TOOL,
+        "description": (
+            "State how you will structure your final answer BEFORE writing"
+            " it.  Call this ONCE, as the ONLY call of its turn, when you"
+            " catch yourself deliberating about the answer -- triaging"
+            " sources, weighing what belongs where, drafting section"
+            " outlines: put THAT thinking here instead of your reply.  The"
+            " plan is shown to the user as your research step; your NEXT"
+            " message must be the finished answer itself, opening with the"
+            " conclusion -- no meta commentary, no restating of the plan."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "type": "string",
+                    "description": "1-4 sentences: the sections and shape of the answer you are about to write.",
+                },
+            },
+            "required": ["plan"],
+        },
+    }
+
 
 def _ask_user_spec() -> dict[str, t.Any]:
     """The mid-research human-in-the-loop tool: the model may stop and ask
@@ -373,6 +410,7 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
     clarify_skipped: bool = False,
     register_ask: bool = False,
     page_tool: bool = False,
+    plan_tool: bool = False,
 ) -> list[dict[str, t.Any]]:
     """The conversation opener: the role + search policy, the depth branch
     (round policy AND output shape), then the SHARED answer contract from
@@ -436,6 +474,20 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
             " documents prefer one targeted site:-search over opening page"
             " after page.",
         ]
+    how_to_plan: list[str] = []
+    if plan_tool:
+        how_to_plan = [
+            "Planning the answer:",
+            "- When you catch yourself deliberating about the SHAPE of the"
+            f" final answer -- triaging sources, weighing what belongs"
+            f" where, drafting an outline -- call the {PLAN_TOOL} tool with"
+            " that thinking (ALONE in its turn) instead of writing it into"
+            " your reply: the user sees the plan as a research step, and"
+            " your next message is the finished answer alone -- opening"
+            " with the point, never with process talk.  A reply that"
+            " narrates its own planning (\"Let me structure the"
+            " answer...\") is a broken answer.",
+        ]
     depth_line = _DEPTH_PROMPTS.get(depth, _DEPTH_PROMPTS["balanced"])
     answer_rules = [
         "Answer rules:",
@@ -446,7 +498,7 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
         prompts.reader_voice(),
         prompts.opening_rule(),
     ]
-    lines = [role, prompts.today_line(), *how_to_search, *how_to_open, depth_line, *answer_rules]
+    lines = [role, prompts.today_line(), *how_to_search, *how_to_open, *how_to_plan, depth_line, *answer_rules]
     if max_rounds:
         lines.append(
             "Research policy: there is NO time limit, and no cap on how many"
@@ -1083,6 +1135,11 @@ def _generate(
             # a new turn begins: its answer is judged on its own
             think_parts.clear()
             answer_parts.clear()
+        elif kind == "plan":
+            # the plan turn's prose is answer-shape deliberation, not
+            # answer material -- never promote it on a late stream error
+            think_parts.clear()
+            answer_parts.clear()
         elif kind == "ask_user":
             # the run ends awaiting the user's direction: the streamed
             # intent prose is not an answer -- related questions on it
@@ -1123,7 +1180,7 @@ def _clarify_stream(gate: dict[str, t.Any]) -> t.Iterator[str]:
     yield json.dumps({"e": "end"}, ensure_ascii=False) + "\n"
 
 
-def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements
+def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     """AI Search: the agent loop with the ``web_search`` tool."""
     cfg = llm.ai_cfg()
     if not (_enabled() and llm.configured(cfg)):
@@ -1182,6 +1239,8 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # modes whose gate passed on asking: if the gate already asked
     # (state=answered) or the user skipped, the direction is settled
     register_ask = mode in _CLARIFY_MODES and clarify_state == "ask"
+    # the answer-planning tool rides every run of the structured tiers
+    register_plan = mode in _PLAN_MODES
     events = agent.run_agent(
         cfg,
         _initial_messages(
@@ -1195,15 +1254,18 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             clarify_skipped=clarify_state == "skipped",
             register_ask=register_ask,
             page_tool=pages_on,
+            plan_tool=register_plan,
         ),
         tools=[_tool_spec(pages_on)]
         + ([_page_spec()] if pages_on else [])
-        + ([_ask_user_spec()] if register_ask else []),
+        + ([_ask_user_spec()] if register_ask else [])
+        + ([_plan_spec()] if register_plan else []),
         executor=state.execute,
         max_rounds=max_rounds,
         wrapup_message=_WRAPUP_MESSAGE,
         round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
         ask_tool=ASK_TOOL if register_ask else None,
+        plan_tool=PLAN_TOOL if register_plan else None,
     )
     try:
         first = next(events)

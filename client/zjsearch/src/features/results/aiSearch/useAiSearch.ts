@@ -280,6 +280,23 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
         thinkOpen: false,
       };
     }
+    case "plan": {
+      // the model planned its answer via the plan tool: this turn's prose
+      // (which streamed into the answer live, or sat in pending) is
+      // re-homed as the plan's intent step -- the answer stays clean
+      const earlier = hasCalls(run);
+      let answer = run.answer;
+      const intent = (earlier ? answer.slice(core.answerFrom) : core.pending).trim();
+      if (earlier) {
+        answer = answer.slice(0, core.answerFrom);
+      }
+      const steps = [...run.steps];
+      if (intent) {
+        steps.push({ kind: "intent", text: intent });
+      }
+      runs[lastIdx] = { ...run, steps, answer };
+      return { ...core, runs, pending: "", answerFrom: answer.length, thinkOpen: false };
+    }
     case "search": {
       const roundNo = Number(event.round);
       const callId = Number(event.id);

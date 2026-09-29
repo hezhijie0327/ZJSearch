@@ -239,6 +239,15 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `tool` field (`web_search` renders the query, `web_crawler` a
   host+path label and a char count) and a successful read's source
   card becomes the row's swipe strip, same as a search's.
+  The `plan` tool (quality/goal tiers, agent-level like `ask_user`)
+  is the answer-planning escape valve adapted from Vane's reasoning
+  preamble: the model's deliberation about the SHAPE of its final
+  answer goes into the tool (alone in its turn) instead of leaking
+  into the answer text — agent.py answers the turn WITHOUT executing
+  anything (a FREE turn: no round consumed, the progress verdict
+  never sees it) and yields a `plan` wire event; the client re-homes
+  that prose as an intent step and the acknowledgement tells the model
+  its next message must be the finished, reader-facing answer alone.
   Config: transport =
   `zjsearch.ai`; feature flags = `zjsearch.ai.search.enabled` and
   `zjsearch.ai.overview.enabled`, BOTH DEFAULTING TO TRUE — setting one
