@@ -98,50 +98,46 @@ function pageLabel(url: string | undefined): string {
   }
 }
 
-/** The web_crawler row's expansion: a READING PANE of the extracted page
-    content -- what the model actually read, not another link card.  Pages
-    run long, so the pane is a capped internal-scroll box (the ThinkScroll
-    language): the header carries the host+path, an external-open link and
-    the copy path; the text keeps its own line structure. */
+/** The web_crawler row's expansion: the crawled page's markdown revealed
+    DIRECTLY under its row (the same inline language as a search row's
+    result cards -- the row is the title, no second header).  Long pages
+    cap into an internal scroll; the corner chips (hover, the CodeBlock
+    pattern) carry the external-open and copy paths. */
 function PageReading({ call }: { call: AiSearchCall }) {
   const t = useT();
   const copyToast = useCopyToast();
   return (
-    <div aria-label={t("ai_page_content")} className="mt-1 rounded-lg border border-line bg-surface" role="group">
-      <div className="flex items-center gap-1.5 border-b border-line px-2 py-1.5">
-        <BookOpen aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
-        <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink" dir="auto">
-          {pageLabel(call.url)}
-        </span>
+    <div className="group relative mt-1">
+      <div
+        className="max-h-80 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+        dir="auto"
+      >
+        {call.text}
+      </div>
+      <div className="absolute end-2 top-2 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         {call.url ? (
           <a
             aria-label={t("open_source")}
-            className="inline-flex size-6 shrink-0 items-center justify-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent"
+            className="inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-accent"
             href={call.url}
             rel="noreferrer"
             target="_blank"
             title={t("open_source")}
           >
-            <ArrowUpRight aria-hidden="true" className="size-3" />
+            <ArrowUpRight aria-hidden="true" className="size-3.5" />
           </a>
         ) : null}
         <button
           aria-label={t("copy")}
-          className="inline-flex size-6 shrink-0 items-center justify-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          className="inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
           onClick={() => {
             copyToast(call.text ?? "");
           }}
           title={t("copy")}
           type="button"
         >
-          <Copy aria-hidden="true" className="size-3" />
+          <Copy aria-hidden="true" className="size-3.5" />
         </button>
-      </div>
-      <div
-        className="max-h-80 overflow-y-auto overscroll-contain px-2.5 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
-        dir="auto"
-      >
-        {call.text}
       </div>
     </div>
   );

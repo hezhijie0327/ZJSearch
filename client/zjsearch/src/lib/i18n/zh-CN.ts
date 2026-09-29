@@ -181,7 +181,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_search_process: "研究过程",
   ai_search_calls_count: "{n} 次调用",
   ai_page_reading: "读取中…",
-  ai_page_content: "已读内容",
   ai_page_chars: "{n} 字",
   ai_scroll_latest: "回到最新",
   ai_search_deep_thought: "已深度思考",
