@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import {
+  ArrowUpRight,
   BookOpen,
   Brain,
   Check,
@@ -97,14 +98,64 @@ function pageLabel(url: string | undefined): string {
   }
 }
 
-/** One tool-call row: status + query/url + result/char count, EXPANDABLE
-    when the call produced sources -- toggling reveals its result cards. */
+/** The web_crawler row's expansion: a READING PANE of the extracted page
+    content -- what the model actually read, not another link card.  Pages
+    run long, so the pane is a capped internal-scroll box (the ThinkScroll
+    language): the header carries the host+path, an external-open link and
+    the copy path; the text keeps its own line structure. */
+function PageReading({ call }: { call: AiSearchCall }) {
+  const t = useT();
+  const copyToast = useCopyToast();
+  return (
+    <div aria-label={t("ai_page_content")} className="mt-1 rounded-lg border border-line bg-surface" role="group">
+      <div className="flex items-center gap-1.5 border-b border-line px-2 py-1.5">
+        <BookOpen aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-ink" dir="auto">
+          {pageLabel(call.url)}
+        </span>
+        {call.url ? (
+          <a
+            aria-label={t("open_source")}
+            className="inline-flex size-6 shrink-0 items-center justify-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent"
+            href={call.url}
+            rel="noreferrer"
+            target="_blank"
+            title={t("open_source")}
+          >
+            <ArrowUpRight aria-hidden="true" className="size-3" />
+          </a>
+        ) : null}
+        <button
+          aria-label={t("copy")}
+          className="inline-flex size-6 shrink-0 items-center justify-center rounded text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          onClick={() => {
+            copyToast(call.text ?? "");
+          }}
+          title={t("copy")}
+          type="button"
+        >
+          <Copy aria-hidden="true" className="size-3" />
+        </button>
+      </div>
+      <div
+        className="max-h-80 overflow-y-auto overscroll-contain px-2.5 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+        dir="auto"
+      >
+        {call.text}
+      </div>
+    </div>
+  );
+}
+
+/** One tool-call row: status + query/url + result/char count, EXPANDABLE --
+    a search row reveals its result cards, a page read reveals the READING
+    PANE (the crawled content itself). */
 function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const ok = call.status === "ok";
   const isPage = call.tool === "web_crawler";
-  const expandable = results.length > 0;
+  const expandable = isPage ? Boolean(call.text) : results.length > 0;
   return (
     <div>
       <button
@@ -160,7 +211,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           />
         ) : null}
       </button>
-      {open && expandable ? <CallResults results={results} /> : null}
+      {open && expandable ? isPage ? <PageReading call={call} /> : <CallResults results={results} /> : null}
     </div>
   );
 }

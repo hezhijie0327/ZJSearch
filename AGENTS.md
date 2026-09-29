@@ -1223,6 +1223,18 @@ LOADED/NOT LOADED).
   from `lucide-react` (tree-shaken, imported directly per usage site with
   `aria-hidden`); the brand is typeset text — instance_name + accent dot —
   not an SVG mark. Never add an icon font.
+- Prompt caching is designed PER DIALECT in `llm.py`, enabled by one fact:
+  the system prompts are byte-stable per mode+language (stable contract
+  blocks first, per-run notes last — see `_writer_messages`).  OpenAI
+  dialects ride `prompt_cache_key` in extra_body on EVERY endpoint
+  (official API groups the cache; OpenAI-compatible servers ignore the
+  unknown field); Anthropic marks explicit `cache_control` breakpoints —
+  system block + last message, the incremental agent-loop pattern (each
+  turn prefix-hits at 0.1x and writes only the tail, ≤2 of the 4 allowed
+  breakpoints) — on api.anthropic.com, forceable for gateways via
+  `zjsearch.ai.cache_control: true/false`; Gemini runs on implicit prefix
+  caching (no wire field; explicit `cachedContent` resources are a managed
+  TTL/billing surface deliberately not adopted).
 - Drawer/lightbox overlays render conditionally (zero cost when closed).
 
 ## Windows (Git Bash) development notes

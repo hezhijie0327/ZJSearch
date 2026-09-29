@@ -500,17 +500,53 @@ def _gemini_messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.An
     return system or None, contents
 
 
-def _cache_body(cfg: dict[str, t.Any], base: str) -> dict[str, t.Any] | None:
-    """The extra_body with OpenAI's prompt-cache routing key folded in --
-    but ONLY for the real OpenAI API: a stable grouping key helps its
-    automatic prefix cache (the prompts here are byte-stable per
-    mode+language by design), while OpenAI-compatible servers (LM Studio,
-    vLLM, aggregators) can be strict about unknown body fields.  Rides
-    extra_body so no SDK signature is assumed."""
+def _cache_body(cfg: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The extra_body with OpenAI's prompt-cache routing key folded in,
+    UNCONDITIONALLY: ``prompt_cache_key`` improves the automatic prefix
+    cache on the real API and is silently ignored by OpenAI-compatible
+    servers that do not know it (LM Studio, vLLM, aggregators) -- the
+    prompts here are byte-stable per mode+language by design, which is
+    what makes prefix caching applicable anywhere.  Rides extra_body so
+    no SDK signature is assumed."""
     body = dict(_extra_body(cfg) or {})
-    if "api.openai.com" in (base or ""):
-        body.setdefault("prompt_cache_key", "zjsearch-ai")
-    return body or None
+    body.setdefault("prompt_cache_key", "zjsearch-ai")
+    return body
+
+
+def _anthropic_cache_on(cfg: dict[str, t.Any], base: str) -> bool:
+    """Whether to mark Anthropic prompt-cache breakpoints: ON for the real
+    Anthropic API (``cache_control`` is part of the official block shape;
+    the incremental breakpoints are what make the researcher loop cheap --
+    each turn re-reads the cached prefix at 0.1x), forced ON/OFF for ANY
+    endpoint via the ``zjsearch.ai.cache_control`` setting (an
+    Anthropic-format gateway that forwards blocks verbatim usually just
+    works; one that validates strictly needs the off switch)."""
+    flag = cfg.get("cache_control")
+    if isinstance(flag, bool):
+        return flag
+    return "api.anthropic.com" in (base or "")
+
+
+def _anthropic_cache_system(system_text: str) -> list[dict[str, t.Any]]:
+    """The system prompt as one cache-marked block: the breakpoint pins the
+    byte-stable contract (role/identity/citations/markdown/voice -- the
+    writer's ~3k tokens) plus the tools spec as the cached prefix."""
+    return [{"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}]
+
+
+def _anthropic_cache_tail(messages: list[dict[str, t.Any]]) -> None:
+    """Mark the LAST content block of the final message as a cache
+    breakpoint (Anthropic's incremental agent-loop pattern): the request
+    before it is a prefix-cache hit, the new tail is written.  Anthropic
+    allows 4 breakpoints; this design uses 2 (system + tail).  Mutates
+    the pump's throwaway message list in place."""
+    if not messages:
+        return
+    content = messages[-1].get("content")
+    if isinstance(content, str):
+        messages[-1]["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(content, list) and content:
+        content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
 
 
 async def _pump_openai_chat(
@@ -534,7 +570,7 @@ async def _pump_openai_chat(
         stream=True,
         timeout=_sdk_timeout(),
         extra_headers=_extra_headers(cfg),
-        extra_body=_cache_body(cfg, base),
+        extra_body=_cache_body(cfg),
         **_model_kwargs(_params(cfg), "openai_chat_completions"),
         **extra,
     )
@@ -588,7 +624,7 @@ async def _pump_openai_responses(
         stream=True,
         timeout=_sdk_timeout(),
         extra_headers=_extra_headers(cfg),
-        extra_body=_cache_body(cfg, base),
+        extra_body=_cache_body(cfg),
         **_model_kwargs(_params(cfg), "openai_responses"),
         **extra,
     )
@@ -649,10 +685,21 @@ async def _pump_anthropic(
         if tools
         else {}
     )
+    system_text = _system_of(messages)
+    system: t.Any = system_text or None
+    msgs = _anthropic_messages(messages)
+    if _anthropic_cache_on(cfg, base):
+        # explicit prompt caching: a breakpoint on the system block pins the
+        # byte-stable contract + tools as the cached prefix, one on the last
+        # message makes every researcher turn a prefix-hit plus a small tail
+        # write (Anthropic's incremental agent-loop pattern; reads 0.1x)
+        if system_text:
+            system = _anthropic_cache_system(system_text)
+        _anthropic_cache_tail(msgs)
     stream = await client.messages.create(
         model=str(cfg.get("model")),
-        system=_system_of(messages) or None,
-        messages=_anthropic_messages(messages),
+        system=system,
+        messages=msgs,
         stream=True,
         timeout=_sdk_timeout(),
         extra_headers=_extra_headers(cfg),

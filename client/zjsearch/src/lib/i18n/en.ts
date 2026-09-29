@@ -179,6 +179,7 @@ export const EN = {
   ai_search_process: "Research",
   ai_search_calls_count: "{n} calls",
   ai_page_reading: "reading…",
+  ai_page_content: "Page content",
   ai_page_chars: "{n} chars",
   ai_scroll_latest: "Jump to latest",
   ai_search_deep_thought: "Deep thinking",

@@ -152,6 +152,15 @@ zjsearch:
     #   gemini                  -> thinking_config: {thinking_budget: 1024}
     params:
       reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
+    # prompt caching per dialect (the prompts are byte-stable per
+    # mode+language by design, which is what makes prefix caching apply):
+    #   openai dialects -> prompt_cache_key rides every request
+    #     (supported endpoints group the cache; the rest ignore it)
+    #   anthropic -> explicit cache_control breakpoints (system + last
+    #     message) on api.anthropic.com; set cache_control: true/false to
+    #     force it for a gateway endpoint
+    #   gemini -> implicit prefix caching, no wire field needed
+    # cache_control: true
     # extra_body:  # LM Studio / vLLM only -- drop it for online providers.
     #   chat_template_kwargs:
     #     enable_thinking: false

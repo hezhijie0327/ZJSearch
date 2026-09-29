@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+# pylint: disable=too-many-lines
 """zjsearch theme: AI Search -- the model drives the keyword searches.
 
 The tool-calling feature on the shared agent framework
@@ -32,7 +33,9 @@ silently):
 - ``{"e": "search", "round", "id", "status", "n", "ms"}`` -- one search
   finished (ok / error / duplicate);
 - ``{"e": "page", "round", "id", "status", "url", "title", "chars",
-  "ms"}`` -- one ``web_crawler`` read finished (ok / error / duplicate);
+  "ms", "text"}`` -- one ``web_crawler`` read finished (ok / error /
+  duplicate); a successful read carries the extracted content, and the
+  client's row expands into a reading pane of it;
 - ``{"e": "results", "round", "id", "results"}`` -- page-data-shaped
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
@@ -1026,7 +1029,19 @@ class _Searches:  # pylint: disable=too-few-public-methods
         self.round_new_hits += 1
         yield (
             "page",
-            {"round": rnd, "id": idx, "status": "ok", "url": url, "title": title, "chars": len(text), "ms": ms},
+            {
+                "round": rnd,
+                "id": idx,
+                "status": "ok",
+                "url": url,
+                "title": title,
+                "chars": len(text),
+                "ms": ms,
+                # the extracted readable content rides to the client: the
+                # timeline row expands into a READING PANE (what did the
+                # model actually see?) -- capped like the feed copy
+                "text": text,
+            },
         )
         # the read page always rides a sources event: a NEW url registers its
         # card, an already-numbered one re-emits its [n] with ``crawled``

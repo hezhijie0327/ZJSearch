@@ -52,6 +52,9 @@ export interface AiSearchCall {
   n?: number;
   /** web_crawler: characters of readable content returned */
   chars?: number;
+  /** web_crawler: the extracted page content -- the row's expansion is a
+      READING PANE of what the model actually read, not a link card */
+  text?: string;
 }
 
 /** One chronological segment of a run's research timeline. */
@@ -329,9 +332,11 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
     }
     case "page": {
       // an web_crawler read settled: flip its row's status (the readable
-      // character count replaces a search's result count)
+      // character count replaces a search's result count); the extracted
+      // content rides along for the row's reading pane
       const roundNo = Number(event.round);
       const callId = Number(event.id);
+      const text = typeof event.text === "string" ? event.text : "";
       const steps = run.steps.map((step) => {
         if (step.kind !== "calls" || step.round !== roundNo) {
           return step;
@@ -344,6 +349,7 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
                   ...call,
                   status: (event.status as AiSearchCall["status"]) ?? "error",
                   chars: Number(event.chars) || 0,
+                  text: text || undefined,
                 }
               : call,
           ),
