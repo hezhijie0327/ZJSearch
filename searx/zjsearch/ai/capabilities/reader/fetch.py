@@ -29,6 +29,15 @@ from searx.zjsearch.ai.capabilities.reader.config import (
 
 logger = logging.getLogger(__name__)
 
+READER_NETWORK = "zjsearch-reader"
+"""The reader's dedicated outgoing network (``outgoing.networks`` entry).
+The app-initialized DEFAULT network is https-only (``enable_http: false``
+is searx's hard-coded default), so a plain-http Browserless -- a
+self-hosted LAN deployment, the audit gate's mock -- needs its own
+network with ``enable_http: true``; when the entry is absent the reader
+rides the default network like every engine (https endpoints are
+unaffected)."""
+
 FETCH_TIMEOUT = (10.0, 65.0)
 """The one browserless request's budget as a curl_cffi ``(connect, total)``
 tuple -- the searx network client is curl_cffi, whose timeout conversion
@@ -94,7 +103,7 @@ def rendered_html(url: str) -> str:
         "rejectResourceTypes": list(REJECT_RESOURCE_TYPES),
     }
     future = asyncio.run_coroutine_threadsafe(
-        get_network().request(
+        (get_network(READER_NETWORK) or get_network()).request(
             "POST",
             f"{endpoint()}/content",
             params={"token": api_key(cfg())},
@@ -117,7 +126,7 @@ def rendered_html(url: str) -> str:
     except Exception as exc:  # pylint: disable=broad-except
         # the network layer re-raises whatever its client dialect raised
         # (curl_cffi / httpx connection failures) -- one line for the model
-        raise PageReadError(f"browserless unreachable: {type(exc).__name__}") from exc
+        raise PageReadError(f"browserless unreachable: {type(exc).__name__}: {exc}") from exc
     if response.status_code != 200:
         raise PageReadError(f"browserless HTTP {response.status_code}: {_error_snippet(response.text)}")
     return response.text

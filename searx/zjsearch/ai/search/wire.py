@@ -287,7 +287,12 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
         kind, payload = event
         last_kind = kind
         if kind == "think":
+            # BOTH consumers matter: the client renders the reasoning
+            # timeline (a round's think deltas must ALL reach it), and the
+            # promotion guard below needs the accumulated text -- relay the
+            # event AND keep the local copy
             think_parts.append(str(payload or ""))
+            yield emit(*event)
         elif kind == "delta":
             yield from through(str(payload or ""))
         elif kind == "calls":

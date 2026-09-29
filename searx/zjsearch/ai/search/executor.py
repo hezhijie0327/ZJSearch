@@ -206,13 +206,20 @@ class Searches:  # pylint: disable=too-few-public-methods
             known_n = self.url_n.get(norm) if norm else None
             title = str(item.get("title_text") or "")
             netloc = str(item.get("netloc") or "")
+            img = str(item.get("img_src") or item.get("thumbnail") or item.get("thumbnail_src") or "")
             if known_n is not None:
                 # cross-search dedup: this url already holds a global [n]
                 # from an earlier search -- point at it instead of minting
                 # a duplicate source (the numbering stays contiguous and
-                # the sources grid shows the page once)
+                # the sources grid shows the page once).  The image still
+                # joins the gallery pool under its KNOWN number: a parallel
+                # page read can number a url before this search does, and
+                # skipping the registration here silently stripped the
+                # result from the writer's gallery eligibility.
                 if pos < FEED_DEEP:
                     head = str(item.get("content_text") or "")[:FEED_SNIPPET_CHARS]
+                    if img and len(self.gallery_pool) < _GALLERY_POOL_MAX:
+                        self.gallery_pool.setdefault(img, known_n)
                     feed_lines.append(f"[{known_n}] {netloc}: {title} - {head} (same source as an earlier result)")
                 else:
                     feed_lines.append(f"[{known_n}] {netloc}: {title} (same source as an earlier result)")
@@ -221,7 +228,6 @@ class Searches:  # pylint: disable=too-few-public-methods
             self.next_n += 1
             if norm:
                 self.url_n[norm] = n
-            img = str(item.get("img_src") or item.get("thumbnail") or item.get("thumbnail_src") or "")
             if img and len(self.gallery_pool) < _GALLERY_POOL_MAX:
                 self.gallery_pool[img] = n
             entries.append(
