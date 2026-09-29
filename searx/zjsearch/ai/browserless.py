@@ -4,12 +4,15 @@
 ``web_crawler`` turns one URL into reading material for the research model:
 the page renders in the self-hosted Browserless browser (v2 ``POST
 /content`` -- a real Chrome, so JS/SPA pages come out complete) and the
-HTML condenses to compact markdown-ish text with a small lxml extractor
-(title, main-content heuristic, headings, lists, tables, code, plus a
-capped links appendix the model can follow with further ``web_crawler``
-calls).  No new dependency: lxml ships with searxng, and the HTTP call
-rides the instance's default network (``outgoing.proxies`` apply like for
-every engine).
+HTML condenses to real Markdown with a small lxml pipeline (title,
+main-content heuristic, noise dropping, permalink-anchor stripping) plus
+the ``html-to-markdown`` converter -- ATX headings, GFM tables, code-block
+languages and inline semantics -- and a capped links appendix the model
+can follow with further ``web_crawler`` calls.  The dependency is
+deliberately gentle (MIT, zero runtime dependencies, a compiled core);
+without it the hand-rolled walker below still produces markdown-ish text
+(a logged, degraded fallback).  The HTTP call rides the instance's
+default network (``outgoing.proxies`` apply like for every engine).
 
 Configuration: the ``zjsearch.ai.browserless`` block -- ``endpoint`` (the
 v2 root, e.g. ``https://browser.example.com``) and ``key`` (falls back to
@@ -38,6 +41,28 @@ from searx.network.client import get_loop
 from searx.network.network import get_network
 
 logger = logging.getLogger(__name__)
+
+try:  # html-to-markdown 3.x -- MIT, zero runtime deps, a compiled core
+    from html_to_markdown import ConversionOptions, HeadingStyle, convert
+except ImportError:  # the built-in walker keeps the reader alive without it
+    convert = None
+    logger.warning(
+        "html-to-markdown is not installed -- the page reader degrades to"
+        " the built-in walker (pip install html-to-markdown)"
+    )
+
+_H2MD_OPTIONS = (
+    None
+    if convert is None
+    else ConversionOptions(
+        heading_style=HeadingStyle.ATX,
+        extract_metadata=False,
+        # the reader's body is prose for a text model: images never render
+        # (the feed's img= lines carry the useful ones) and metadata side
+        # channels are dead weight
+        skip_images=True,
+    )
+)
 
 FETCH_TIMEOUT = httpx.Timeout(75.0, connect=10.0)
 """The one browserless request's budget: the goto itself may take 30 s
@@ -415,7 +440,7 @@ def _cap(text: str, max_chars: int) -> str:
 
 
 def _extract(html_text: str, base_url: str) -> tuple[str, str]:
-    """(title, markdown-ish text) of a rendered page."""
+    """(title, markdown text) of a rendered page."""
     doc = lhtml.document_fromstring(html_text)
     body = doc.body
     if body is None:
@@ -423,11 +448,22 @@ def _extract(html_text: str, base_url: str) -> tuple[str, str]:
     title = _title_of(doc, body)
     main = _main_of(body)
     for element in list(main.iter()):
-        if isinstance(element.tag, str) and element.tag in _DROP_TAGS and element.getparent() is not None:
+        if not isinstance(element.tag, str) or element.getparent() is None:
+            continue
+        if element.tag in _DROP_TAGS:
             element.drop_tree()
-    lines: list[str] = []
-    _walk(main, lines)
-    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+        elif element.tag == "a" and str(element.get("href") or "").startswith("#"):
+            # fragment-only anchors are permalink / TOC self-links (sphinx's
+            # "¶") -- pure noise once links convert to inline markdown
+            element.drop_tree()
+    if convert is not None:
+        text = convert(lhtml.tostring(main, encoding="unicode"), _H2MD_OPTIONS).content.strip()
+    else:
+        # the degraded fallback: markdown-ISH text from the hand-rolled
+        # walker (no inline semantics, separator-less tables)
+        lines: list[str] = []
+        _walk(main, lines)
+        text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
     # a layout the walker cannot crack (canvas apps, sentence-per-div soup)
     # falls back to the body's raw collapsed text -- noisy but honest
     if len(text) < min(600, len(_text_of(body)) * 0.2):
@@ -441,7 +477,7 @@ def _extract(html_text: str, base_url: str) -> tuple[str, str]:
 
 
 def read_page(url: str) -> tuple[str, str]:
-    """(title, markdown-ish text) of one URL -- the ``web_crawler`` tool's
+    """(title, markdown text) of one URL -- the ``web_crawler`` tool's
     whole world.  Raises :py:class:`PageReadError` with a message meant
     for the model (the tool result)."""
     if not configured():

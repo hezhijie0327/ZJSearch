@@ -282,11 +282,16 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (`searx/zjsearch/ai/browserless.py`) reads ONE result's page in full
   through the self-hosted Browserless v2 browser (`POST /content` — a
   real Chrome, so JS/SPA pages come out complete) and feeds the model
-  markdown-ish text from a compact lxml extractor (main-content
-  heuristic, headings/lists/tables/code + a 25-link appendix the model
-  can follow with further reads; no new dependency — lxml ships with
-  searxng, the HTTP call rides `get_network()` so `outgoing.proxies`
-  apply).  Config = `zjsearch.ai.browserless` (`endpoint` + `key`,
+  real Markdown from a compact lxml pipeline (main-content heuristic +
+  noise/permalink-anchor stripping) converted by `html-to-markdown` —
+  ATX headings, GFM tables with separator rows, code-block languages,
+  inline semantics — plus a 25-link appendix the model can follow with
+  further reads.  The dependency is MIT with ZERO runtime deps and a
+  compiled core (requirements.txt, theme section); without it the reader
+  logs a warning and degrades to the built-in walker (markdown-ish, no
+  inline semantics — the pre-converter fallback lives in the same file).
+  The HTTP call rides `get_network()` so `outgoing.proxies`
+  apply.  Config = `zjsearch.ai.browserless` (`endpoint` + `key`,
   the key via the `ZJSEARCH_BROWSERLESS_KEY` env like `ZJSEARCH_AI_KEY`;
   optional `max_chars`, 12 000 default): UNCONFIGURED = the tool never
   registers (the web_search description's cross-reference is
