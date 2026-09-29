@@ -181,7 +181,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   gate token ships in every page-data payload (TTL 1h) — it authenticates,
   it does not rate-limit.  A public deployment must front the AI routes
   with its own per-IP limit (reverse proxy or a custom limiter); each
-  `/ai/search` drives real engine fan-outs plus a dozen LLM calls.
+  `/ai/search` drives real engine fan-outs plus a dozen LLM calls —
+  and, with `web_crawler` configured, real Browserless renders (a
+  browser launch per read on a server that has its own concurrency
+  ceiling, typically 3).
 - AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`): the model analyses the question, states a one-line
   intent, then calls the `web_search` tool — several calls per turn run
   as REAL instance searches (the `SearchWithPlugins` path, plugins
@@ -195,15 +198,43 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   globally numbered `[n]` feed (5 deep + 5 shallow per search) and
   answers with citations over the same renderer contract as the
   Overview.  Wire protocol: NDJSON lines (`think`/`delta`/`calls`/
-  `search`/`results`/`sources`/`error`/`end`); a stream that dies before
-  its first line answers 502 like the Overview.  `end` settles the run
-  FIRST and `related` trails as a post-end event: the small completion
-  behind the follow-up suggestions can think for the better part of a
-  minute on reasoning models, and the follow-up box must not wait for
-  it (the client accepts `related` after phase=done; the related
-  completion itself needs `relay_reasoning=True` — with the channel
-  dropped the queue sits silent through the think phase and the idle
-  timeout kills the completion before any content arrives).
+  `search`/`results`/`sources`/`page`/`error`/`end`); a stream that dies
+  before its first line answers 502 like the Overview.  `end` settles
+  the run FIRST and `related` trails as a post-end event: the small
+  completion behind the follow-up suggestions can think for the better
+  part of a minute on reasoning models, and the follow-up box must not
+  wait for it (the client accepts `related` after phase=done; the
+  related completion itself needs `relay_reasoning=True` — with the
+  channel dropped the queue sits silent through the think phase and the
+  idle timeout kills the completion before any content arrives).
+  The `web_crawler` tool
+  (`searx/zjsearch/ai/browserless.py`) reads ONE result's page in full
+  through the self-hosted Browserless v2 browser (`POST /content` — a
+  real Chrome, so JS/SPA pages come out complete) and feeds the model
+  markdown-ish text from a compact lxml extractor (main-content
+  heuristic, headings/lists/tables/code + a 25-link appendix the model
+  can follow with further reads; no new dependency — lxml ships with
+  searxng, the HTTP call rides `get_network()` so `outgoing.proxies`
+  apply).  Config = `zjsearch.ai.browserless` (`endpoint` + `key`,
+  the key via the `ZJSEARCH_BROWSERLESS_KEY` env like `ZJSEARCH_AI_KEY`;
+  optional `max_chars`, 12 000 default): UNCONFIGURED = the tool never
+  registers (the web_search description's cross-reference is
+  conditional on the same check).  Its executor shares the search
+  worker pool; a read of a url already in the run's `[n]` registry
+  reuses that number, a NEW url mints the next `[n]` (a `sources`
+  event follows, so the answer can cite the opened page and its card
+  joins the grid; favicon stays empty — the client renders the Globe
+  fallback), a re-read settles `duplicate` without rendering again,
+  and an in-process 10-min TTL cache (128 pages) absorbs repeat reads
+  across runs.  `_guard_url` refuses non-public http(s) targets
+  (loopback/private/link-local — `not ip.is_global` — plus
+  `.local`/`.internal` hostnames): the render happens inside the
+  Browserless host's network and the model is untrusted input.
+  Read events ride the `page` wire event (`status`/`url`/`title`/
+  `chars`); the client's call row branches on the `calls` item's
+  `tool` field (`web_search` renders the query, `web_crawler` a
+  host+path label and a char count) and a successful read's source
+  card becomes the row's swipe strip, same as a search's.
   Config: transport =
   `zjsearch.ai`; feature flags = `zjsearch.ai.search.enabled` and
   `zjsearch.ai.overview.enabled`, BOTH DEFAULTING TO TRUE — setting one

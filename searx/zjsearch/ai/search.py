@@ -5,7 +5,11 @@ The tool-calling feature on the shared agent framework
 (:py:mod:`searx.zjsearch.ai.agent`): the model analyses the question,
 writes a one-line intent, then issues ``web_search`` calls that run as
 REAL instance searches -- the same ``SearchWithPlugins`` path the results
-page uses, plugins included -- in parallel worker threads.  Each search's
+page uses, plugins included -- in parallel worker threads.  A second
+tool, ``web_crawler``, reads one result's page in full through the
+self-hosted Browserless browser (:py:mod:`searx.zjsearch.ai.browserless`)
+when a snippet promises exactly the missing detail; opened pages join the
+same global ``[n]`` source registry.  Each search's
 results are serialized through the very ``_result_data`` macro the
 page-data uses, so the client renders sub-results with its standard
 components; the model consumes a compacted, globally numbered ``[n]``
@@ -18,10 +22,13 @@ silently):
 - ``{"e": "think", "t"}`` / ``{"e": "delta", "t"}`` -- reasoning and prose
   deltas of the current turn (a turn's prose becomes the next event's
   intent);
-- ``{"e": "calls", "round", "intent", "items": [{id, q, category}]}`` --
-  a parallel batch announced (the model decides the batch size);
+- ``{"e": "calls", "round", "intent", "items": [{id, tool, q/url, ...}]}``
+  -- a parallel batch announced (the model decides the batch size;
+  ``tool`` discriminates ``web_search`` rows from ``web_crawler`` rows);
 - ``{"e": "search", "round", "id", "status", "n", "ms"}`` -- one search
   finished (ok / error / duplicate);
+- ``{"e": "page", "round", "id", "status", "url", "title", "chars",
+  "ms"}`` -- one ``web_crawler`` read finished (ok / error / duplicate);
 - ``{"e": "results", "round", "id", "results"}`` -- page-data-shaped
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
@@ -50,6 +57,7 @@ import re
 import time
 import typing as t
 from html import escape
+from urllib.parse import urlsplit
 
 import flask
 
@@ -57,11 +65,13 @@ from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
 from searx.webutils import highlight_content
-from searx.zjsearch.ai import agent, llm, prompts
+from searx.zjsearch.ai import agent, browserless, llm, prompts
 
 logger = logging.getLogger(__name__)
 
 TOOL_NAME = "web_search"
+
+PAGE_TOOL = "web_crawler"
 
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The verticals the model may pick; each has a dedicated client layout."""
@@ -102,11 +112,12 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
 }
 
 _WRAPUP_MESSAGE = (
-    "Your research budget is exhausted: you cannot run any more web_search"
-    " calls. Write the final answer NOW, based only on the sources already"
-    " gathered (their [n] numbers are in the conversation).  Do not announce"
-    " or attempt further searches, and do not mention the budget -- deliver"
-    " the best possible cited answer for the question."
+    "Your research budget is exhausted: you cannot run any more tool calls"
+    " (web_search, web_crawler).  Write the final answer NOW, based only on"
+    " the sources already gathered (their [n] numbers are in the"
+    " conversation).  Do not announce"
+    " or attempt further searches or page reads, and do not mention the"
+    " budget -- deliver the best possible cited answer for the question."
 )
 
 _STALL_MESSAGE = (
@@ -231,8 +242,10 @@ def _int(key: str, default: int) -> int:
         return default
 
 
-def _tool_spec() -> dict[str, t.Any]:
-    """The ``web_search`` tool in the dialect-neutral llm shape."""
+def _tool_spec(with_pages: bool) -> dict[str, t.Any]:
+    """The ``web_search`` tool in the dialect-neutral llm shape; with the
+    page reader configured, the description cross-references it (a model
+    that never sees ``web_crawler`` must not be told about it)."""
     return {
         "name": TOOL_NAME,
         "description": (
@@ -251,6 +264,12 @@ def _tool_spec() -> dict[str, t.Any]:
             " keywords\") -- a category search already fans out across every"
             " engine in that vertical. Results arrive as globally numbered [n]"
             " sources to cite in the final answer."
+            + (
+                "  When a result's snippet promises the exact missing detail,"
+                f" the {PAGE_TOOL} tool can read that result's page in full."
+                if with_pages
+                else ""
+            )
         ),
         "parameters": {
             "type": "object",
@@ -275,6 +294,37 @@ def _tool_spec() -> dict[str, t.Any]:
                 },
             },
             "required": ["query"],
+        },
+    }
+
+
+def _page_spec() -> dict[str, t.Any]:
+    """The ``web_crawler`` tool: one URL's current full content through the
+    self-hosted Browserless browser.  Registered only when
+    ``zjsearch.ai.browserless`` is configured (else the model never sees
+    it).  The description carries the economy policy: reads are for
+    snippets that promise exactly the missing detail, never a substitute
+    for a search round."""
+    return {
+        "name": PAGE_TOOL,
+        "description": (
+            "Open ONE URL and read its current full page content, rendered in"
+            " a real browser and returned as compact markdown.  Reach for it"
+            " when a source's snippet promises exactly the detail you still"
+            " need (specs, prices, tables, documentation, exact numbers) or"
+            " when a load-bearing claim must be checked against its source --"
+            " never as a substitute for searching.  This is a SINGLE-page"
+            " reader, not a recursive crawl: one page per call, and to follow"
+            " a link you open it in another explicit call.  Very long pages"
+            " arrive truncated.  Failed or empty pages are dead ends: move on"
+            " to a different source instead of retrying."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "The absolute http(s) URL of the page to read."},
+            },
+            "required": ["url"],
         },
     }
 
@@ -322,6 +372,7 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
     clarifications: str = "",
     clarify_skipped: bool = False,
     register_ask: bool = False,
+    page_tool: bool = False,
 ) -> list[dict[str, t.Any]]:
     """The conversation opener: the role + search policy, the depth branch
     (round policy AND output shape), then the SHARED answer contract from
@@ -365,6 +416,26 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
         " engine bang, e.g. !baidu) -- without one, the category parameter"
         " already fans out across every engine in that vertical.",
     ]
+    how_to_open: list[str] = []
+    if page_tool:
+        how_to_open = [
+            "How to open pages:",
+            f"- The {PAGE_TOOL} tool reads ONE url's current full content in"
+            " a real browser and returns it as markdown: reach for it when a"
+            " source's snippet promises exactly the missing detail (specs,"
+            " prices, tables, documentation, exact numbers) or when a"
+            " load-bearing claim deserves a first-hand check.",
+            "- Open sparingly: only pages whose snippet already promises what"
+            " you need -- never to \"see what is there\", never in place of a"
+            " search round.  A failed or empty page is a dead end: search a"
+            " different source instead of retrying it.",
+            "- Opened content carries the source's [n] label -- the number it"
+            " already had among your sources, or a fresh one appended for a"
+            " url that was not among the results -- and is cited like any"
+            " other source.  Very long pages arrive truncated: for long"
+            " documents prefer one targeted site:-search over opening page"
+            " after page.",
+        ]
     depth_line = _DEPTH_PROMPTS.get(depth, _DEPTH_PROMPTS["balanced"])
     answer_rules = [
         "Answer rules:",
@@ -375,7 +446,7 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
         prompts.reader_voice(),
         prompts.opening_rule(),
     ]
-    lines = [role, prompts.today_line(), *how_to_search, depth_line, *answer_rules]
+    lines = [role, prompts.today_line(), *how_to_search, *how_to_open, depth_line, *answer_rules]
     if max_rounds:
         lines.append(
             "Research policy: there is NO time limit, and no cap on how many"
@@ -465,6 +536,18 @@ def _parse_call(call: dict[str, t.Any]) -> tuple[str, str, str]:
     return query, category, time_range
 
 
+def _parse_page_call(call: dict[str, t.Any]) -> str:
+    """The url of one ``web_crawler`` tool call -- sanitized: trimmed and
+    capped; the public-url guard runs in :py:mod:`searx.zjsearch.ai.browserless`."""
+    try:
+        args = json.loads(str(call.get("arguments") or "") or "{}")
+    except ValueError:
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+    return str(args.get("url") or "").strip()[:2000]
+
+
 def _serialize(raw_results: list[t.Any], query: str) -> list[dict[str, t.Any]]:
     """Ordered results as page-data-shaped dicts -- highlighted like the
     search view does, serialized through the very ``_result_data`` macro
@@ -516,9 +599,15 @@ class _Searches:  # pylint: disable=too-few-public-methods
         # results] -- the executor-side dedup (a repeated query settles as
         # ``duplicate`` without hitting the engines)
         self.ran: dict[str, list] = {}
+        # every page this run already opened (normalized) -- a re-read
+        # settles as ``duplicate`` without rendering again
+        self.read_urls: set[str] = set()
+        # every source url of this run -> its global [n]: an web_crawler of a
+        # known url reuses the number instead of minting a duplicate source
+        self.url_n: dict[str, int] = {}
         # progress bookkeeping for the stall detector: fresh queries with
-        # results in the CURRENT round, and the consecutive-round count of
-        # rounds without any
+        # results / fresh page reads in the CURRENT round, and the
+        # consecutive-round count of rounds without any
         self.round_new_hits = 0
         self.stalled_rounds = 0
 
@@ -566,6 +655,9 @@ class _Searches:  # pylint: disable=too-few-public-methods
         for pos, item in enumerate(items[: FEED_DEEP + FEED_SHALLOW]):
             n = self.next_n
             self.next_n += 1
+            url = str(item.get("url") or "")
+            if url:
+                self.url_n[browserless.normalize_url(url)] = n
             entries.append(
                 {
                     "n": n,
@@ -573,7 +665,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
                     "id": idx,
                     "idx": pos,
                     "title": str(item.get("title_text") or "")[:200],
-                    "url": str(item.get("url") or ""),
+                    "url": url,
                     "netloc": str(item.get("netloc") or ""),
                     "favicon": str(item.get("favicon") or ""),
                     "pretty_url": str(item.get("pretty_url") or ""),
@@ -592,19 +684,101 @@ class _Searches:  # pylint: disable=too-few-public-methods
         if entries:
             yield ("sources", {"items": entries})
 
+    def _read_one(self, url: str) -> tuple[str, str]:
+        """One ``web_crawler`` read -- Browserless render + extraction over
+        the instance's default network; needs no request context."""
+        return browserless.read_page(url)
+
+    def _finish_page(
+        self,
+        rnd: int,
+        idx: int,
+        url: str,
+        fut: "concurrent.futures.Future[tuple[str, str]]",
+        started: float,
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        ms = int((time.monotonic() - started) * 1000)
+        try:
+            title, text = fut.result()
+        except Exception as exc:  # pylint: disable=broad-except
+            # PageReadError or a worker-level surprise -- one dead-end line
+            # for the model, an error row for the client
+            logger.warning("zjsearch_ai_search: page %d/%d failed (%s): %r", rnd, idx, url[:120], exc)
+            feeds[idx - 1] = f"error: {str(exc)[:300] or type(exc).__name__}"
+            yield ("page", {"round": rnd, "id": idx, "status": "error", "url": url, "ms": ms})
+            return
+        norm = browserless.normalize_url(url)
+        known_n = self.url_n.get(norm)
+        if known_n is not None:
+            n, new_source = known_n, False
+            cite = f"source [{n}] (already among your sources -- cite it as [{n}])"
+        else:
+            n, new_source = self.next_n, True
+            self.next_n += 1
+            self.url_n[norm] = n
+            cite = f"NEW source [{n}] -- cite it as [{n}]"
+        netloc = urlsplit(url).netloc
+        feeds[idx - 1] = f'Opened {url} (title: "{title}"; {cite}):\n\n{text}'
+        self.round_new_hits += 1
+        yield (
+            "page",
+            {"round": rnd, "id": idx, "status": "ok", "url": url, "title": title, "chars": len(text), "ms": ms},
+        )
+        if new_source:
+            yield (
+                "sources",
+                {
+                    "items": [
+                        {
+                            "n": n,
+                            "round": rnd,
+                            "id": idx,
+                            "idx": 0,
+                            "title": title,
+                            "url": url,
+                            "netloc": netloc,
+                            "favicon": "",
+                            "pretty_url": url,
+                            "published_date": "",
+                        }
+                    ]
+                },
+            )
+
     def execute(self, calls: list[dict[str, t.Any]]) -> t.Iterator[tuple[str, t.Any]]:
-        """Run one round of calls in parallel; feature events flow to the
-        client while the searches complete.  Wire ids are the 1-based
-        position of the call within this round.  Exact-duplicate queries
-        (normalized) settle instantly as ``duplicate`` -- they never hit
-        the engines again; their feed tells the model to move on."""
+        """Run one round of calls in parallel -- ``web_search`` and
+        ``web_crawler`` calls share the worker pool; feature events flow to
+        the client while they complete.  Wire ids are the 1-based position
+        of the call within this round.  Exact-duplicate queries and
+        already-read pages settle instantly as ``duplicate`` -- they never
+        hit the engines or the browser again; their feed tells the model
+        to move on."""
         self.round_no += 1
         rnd = self.round_no
         self.round_new_hits = 0
-        prepared = [_parse_call(call) for call in calls]
         feeds: list[str | None] = [None] * len(calls)
-        submittable: list[tuple[int, str, str, str]] = []
-        for wire_id, (query, category, time_range) in enumerate(prepared, 1):
+        search_jobs: list[tuple[int, str, str, str]] = []
+        page_jobs: list[tuple[int, str]] = []
+        for wire_id, call in enumerate(calls, 1):
+            if str(call.get("name") or "") == PAGE_TOOL:
+                raw_url = _parse_page_call(call)
+                url = browserless.normalize_url(raw_url)
+                if not raw_url:
+                    feeds[wire_id - 1] = "error: empty url"
+                    yield ("page", {"round": rnd, "id": wire_id, "status": "error", "url": "", "ms": 0})
+                elif url in self.read_urls:
+                    feeds[wire_id - 1] = (
+                        "duplicate: this exact page was already opened in an"
+                        " earlier round and its content is already in the"
+                        " conversation -- do not re-read it."
+                    )
+                    yield ("page", {"round": rnd, "id": wire_id, "status": "duplicate", "url": url, "ms": 0})
+                else:
+                    self.read_urls.add(url)
+                    page_jobs.append((wire_id, url))
+                continue
+            query, category, time_range = _parse_call(call)
             if not query:
                 feeds[wire_id - 1] = "error: empty query"
                 yield ("search", {"round": rnd, "id": wire_id, "status": "error", "n": 0, "ms": 0})
@@ -618,49 +792,68 @@ class _Searches:  # pylint: disable=too-few-public-methods
                 yield ("search", {"round": rnd, "id": wire_id, "status": "duplicate", "n": 0, "ms": 0})
             else:
                 self.ran[_norm_query(query)] = [query, 0]
-                submittable.append((wire_id, query, category, time_range))
+                search_jobs.append((wire_id, query, category, time_range))
         # the pool is deliberately NOT in a with-block: when the consumer
         # disappears (client disconnect / stop) the generator closes right
-        # here -- a with-exit would wait for the still-running searches and
+        # here -- a with-exit would wait for the still-running work and
         # stall the shutdown
-        pool = concurrent.futures.ThreadPoolExecutor(max_workers=min(max(1, len(submittable)), MAX_PARALLEL))
+        total = len(search_jobs) + len(page_jobs)
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=min(max(1, total), MAX_PARALLEL))
         try:
-            yield from self._dispatch(pool, rnd, submittable, feeds)
+            yield from self._dispatch(pool, rnd, search_jobs, page_jobs, feeds)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
         yield (
             "tool_results",
-            [(calls[idx], str(feed or "error: the search failed")) for idx, feed in enumerate(feeds)],
+            [(calls[idx], str(feed or "error: the call failed")) for idx, feed in enumerate(feeds)],
         )
 
     def _dispatch(  # pylint: disable=too-many-locals
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
-        submittable: list[tuple[int, str, str, str]],
+        search_jobs: list[tuple[int, str, str, str]],
+        page_jobs: list[tuple[int, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
-        futures: dict[concurrent.futures.Future, tuple[int, str, str, float]] = {}
-        for wire_id, query, category, time_range in submittable:
+        futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
+        for wire_id, query, category, time_range in search_jobs:
             # the worker needs a request context of its own: SearchWithPlugins
             # stores the request proxy and search() copies the context again
             # for each of its engine threads (mirrors the webapp view thread)
             worker = flask.copy_current_request_context(self._search_one)
-            futures[pool.submit(worker, query, category, time_range)] = (wire_id, query, category, time.monotonic())
+            futures[pool.submit(worker, query, category, time_range)] = (
+                "search",
+                wire_id,
+                (query, category, time.monotonic()),
+            )
+        for wire_id, url in page_jobs:
+            futures[pool.submit(self._read_one, url)] = ("page", wire_id, (url, time.monotonic()))
         pending = dict(futures)
-        # no batch wall clock: every queued search gets to run and every
-        # engine request carries its own per-request timeout, which is what
-        # bounds a batch -- the user's stop button is the only control
+        # no batch wall clock: every queued call gets to run and every
+        # engine request / page read carries its own per-request timeout,
+        # which is what bounds a batch -- the user's stop button is the
+        # only control
         while pending:
             done, _not_done = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
             for fut in done:
-                wire_id, query, category, started = pending.pop(fut)
-                yield from self._finish(rnd, wire_id, query, category, fut, started, feeds)
+                kind, wire_id, args = pending.pop(fut)
+                if kind == "search":
+                    query, category, started = args
+                    yield from self._finish(rnd, wire_id, query, category, fut, started, feeds)
+                else:
+                    url, started = args
+                    yield from self._finish_page(rnd, wire_id, url, fut, started, feeds)
 
 
 def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
+    """One ``calls`` wire item: the client's timeline row.  ``tool``
+    discriminates the row kind -- a search renders its query, a page read
+    its url."""
+    if str(call.get("name") or "") == PAGE_TOOL:
+        return {"id": idx, "tool": PAGE_TOOL, "url": _parse_page_call(call)}
     query, category, time_range = _parse_call(call)
-    return {"id": idx, "q": query, "category": category, "time_range": time_range or None}
+    return {"id": idx, "tool": TOOL_NAME, "q": query, "category": category, "time_range": time_range or None}
 
 
 def _small_completion(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]], budget: float) -> str:
@@ -978,6 +1171,9 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     state = _Searches(
         sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
     )
+    # the page reader rides only when the browserless block is fully
+    # configured: an unconfigured reader simply leaves the tool unregistered
+    pages_on = browserless.configured()
     # the mid-run ask_user escape hatch rides ONLY a first run of the gated
     # modes whose gate passed on asking: if the gate already asked
     # (state=answered) or the user skipped, the direction is settled
@@ -994,8 +1190,11 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             clarifications=clarifications if clarify_state == "answered" else "",
             clarify_skipped=clarify_state == "skipped",
             register_ask=register_ask,
+            page_tool=pages_on,
         ),
-        tools=[_tool_spec()] + ([_ask_user_spec()] if register_ask else []),
+        tools=[_tool_spec(pages_on)]
+        + ([_page_spec()] if pages_on else [])
+        + ([_ask_user_spec()] if register_ask else []),
         executor=state.execute,
         max_rounds=max_rounds,
         wrapup_message=_WRAPUP_MESSAGE,

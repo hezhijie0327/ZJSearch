@@ -2,6 +2,7 @@
 
 import {
   BookMarked,
+  BookOpen,
   Brain,
   Check,
   ChevronDown,
@@ -80,12 +81,29 @@ function CallResults({ results }: { results: AiSearchSource[] }) {
   );
 }
 
-/** One tool-call row: status + query + result count, EXPANDABLE when the
-    search returned anything -- toggling reveals its result cards. */
+/** Compact label for an web_crawler row: host + trimmed path -- the url is
+    what identifies the read (two pages on one site must look different);
+    a malformed url shows as-is. */
+function pageLabel(url: string | undefined): string {
+  if (!url) {
+    return "?";
+  }
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname === "/" ? "" : parsed.pathname + parsed.search;
+    return parsed.hostname + path;
+  } catch {
+    return url;
+  }
+}
+
+/** One tool-call row: status + query/url + result/char count, EXPANDABLE
+    when the call produced sources -- toggling reveals its result cards. */
 function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const ok = call.status === "ok";
+  const isPage = call.tool === "web_crawler";
   const expandable = results.length > 0;
   return (
     <div>
@@ -110,15 +128,23 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
         ) : (
           <X aria-hidden="true" className="size-3 shrink-0 text-danger" />
         )}
-        <Search aria-hidden="true" className="size-3 shrink-0" />
+        {isPage ? (
+          <BookOpen aria-hidden="true" className="size-3 shrink-0" />
+        ) : (
+          <Search aria-hidden="true" className="size-3 shrink-0" />
+        )}
         <span className="truncate" dir="auto">
-          {call.q}
+          {isPage ? pageLabel(call.url) : call.q}
         </span>
         <span className="ms-auto shrink-0 ps-2 tabular-nums">
           {call.status === "pending"
-            ? t("ai_search_running")
+            ? isPage
+              ? t("ai_page_reading")
+              : t("ai_search_running")
             : ok
-              ? `(${call.n ?? 0})`
+              ? isPage
+                ? t("ai_page_chars", { n: String(call.chars ?? 0) })
+                : `(${call.n ?? 0})`
               : call.status === "timeout"
                 ? t("ai_search_row_timeout")
                 : call.status === "interrupted"

@@ -39,10 +39,18 @@ export interface AiAskQuestion {
 export interface AiSearchCall {
   /** 1-based position of the call within its round */
   id: number;
+  /** which tool produced the row: a keyword search or a full page read */
+  tool: "web_search" | "web_crawler";
+  /** web_search: the keyword query; web_crawler rows leave it empty */
   q: string;
+  /** web_crawler: the page url (the row's label) */
+  url?: string;
   category: string;
   status: "pending" | "ok" | "error" | "timeout" | "interrupted" | "duplicate";
+  /** web_search: result count */
   n?: number;
+  /** web_crawler: characters of readable content returned */
+  chars?: number;
 }
 
 /** One chronological segment of a run's research timeline. */
@@ -234,7 +242,8 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       return { ...core, runs, answerFrom, pending: core.pending + text };
     }
     case "calls": {
-      const items = (event.items as Array<{ id: number; q: string; category: string }>) ?? [];
+      const items =
+        (event.items as Array<{ id?: number; tool?: string; q?: string; url?: string; category?: string }>) ?? [];
       const steps = [...run.steps];
       const earlier = hasCalls(run);
       let answer = run.answer;
@@ -251,7 +260,14 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       steps.push({
         kind: "calls",
         round: Number(event.round) || run.steps.filter((step) => step.kind === "calls").length + 1,
-        calls: items.map((item) => ({ ...item, status: "pending" as const })),
+        calls: items.map((item) => ({
+          id: Number(item.id) || 0,
+          tool: item.tool === "web_crawler" ? ("web_crawler" as const) : ("web_search" as const),
+          q: String(item.q ?? ""),
+          url: item.url ? String(item.url) : undefined,
+          category: String(item.category ?? ""),
+          status: "pending" as const,
+        })),
       });
       runs[lastIdx] = { ...run, steps, answer };
       return {
@@ -277,6 +293,31 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
                   ...call,
                   status: (event.status as AiSearchCall["status"]) ?? "error",
                   n: Number(event.n) || 0,
+                }
+              : call,
+          ),
+        };
+      });
+      runs[lastIdx] = { ...run, steps };
+      return { ...core, runs };
+    }
+    case "page": {
+      // an web_crawler read settled: flip its row's status (the readable
+      // character count replaces a search's result count)
+      const roundNo = Number(event.round);
+      const callId = Number(event.id);
+      const steps = run.steps.map((step) => {
+        if (step.kind !== "calls" || step.round !== roundNo) {
+          return step;
+        }
+        return {
+          ...step,
+          calls: step.calls.map((call) =>
+            call.id === callId
+              ? {
+                  ...call,
+                  status: (event.status as AiSearchCall["status"]) ?? "error",
+                  chars: Number(event.chars) || 0,
                 }
               : call,
           ),

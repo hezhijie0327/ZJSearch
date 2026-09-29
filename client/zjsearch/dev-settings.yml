@@ -182,3 +182,12 @@ zjsearch:
     #   sdk: gemini
     #   base_url: "https://generativelanguage.googleapis.com"
     #   model: "gemini-..."
+    # AI Search's open_page tool: the Browserless v2 page reader (a real
+    # Chrome for JS/SPA pages).  endpoint = the self-hosted v2 root; the
+    # key may travel via the ZJSEARCH_BROWSERLESS_KEY env instead (kept
+    # out of the repo, like ZJSEARCH_AI_KEY).  Unconfigured = the tool
+    # simply never registers.
+    browserless:
+      endpoint: "https://browser.zhijie.online"
+      # key: ""
+      # max_chars: 12000   # readable chars per page fed to the model
