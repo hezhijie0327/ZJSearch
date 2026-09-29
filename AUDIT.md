@@ -38,7 +38,9 @@ LM Studio (or any OpenAI-compatible endpoint) must be up for AI tests;
 ```sh
 make themes.zjsearch                        # full build (also publishes static root)
 cd client/zjsearch && pnpm run lint         # biome + tsc --noEmit
-pnpm run audit                              # Lighthouse gate — needs Chrome installed
+pnpm run audit                              # Lighthouse gate — home + every result
+                                            # presentation + the AI surfaces (deterministic
+                                            # mock LLM transport; Edge fallback built in)
 ```
 
 The zjsearch client is a pnpm workspace (`pnpm-lock.yaml` + `packageManager`);
@@ -113,7 +115,10 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | About/Stats | header icon buttons | drawer panels, internal links browse in-panel |
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
-| AI failure UX | point `zjsearch.ai.base_url` at a dead port | 502 body reason readable under the card's failed label |
+| AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
+| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows), cited synthesis, related, own source rail; follow-ups continue the [n] numbering |
+| AI failure UX (overview) | point `zjsearch.ai.base_url` at a dead port | 502 body reason readable under the card's failed label |
+| AI failure UX (search) | a settled run with NO answer (writer empty/dead stream) | the failed box with reason + retry + classic fallback — a researched-then-empty run must NEVER settle as silent nothing (stop-button cuts are exempt: `stopped` runs stay quiet) |
 
 Plugin answers (server-side; test via curl §6, not the browser):
 
@@ -202,6 +207,36 @@ prefers the LAST parseable one). Contract sync checks: walk
 `data/macros.html` vs `lib/types.ts` field-by-field per result template and
 answer kind; check every serialized key has a consumer.
 
+AI wire regression (no browser needed — the fastest full-stack check of
+both AI endpoints). Extract the HMAC token from page-data globals, then
+replay the NDJSON and CHECK THE EVENT ORDER:
+
+```sh
+TOKEN=$(curl -s 'http://127.0.0.1:8888/search?q=audit' | python3 -c "
+import sys, re, json
+html = sys.stdin.read()
+m = re.search(r'<script id=\"page-data\" type=\"application/json\">(.*?)</script>', html, re.DOTALL)
+print(json.loads(m.group(1))['globals']['ai']['tk'])")
+curl -s -X POST 'http://127.0.0.1:8888/ai/search' -H 'Content-Type: application/json' \
+  -d "{\"q\":\"<question>\",\"tk\":\"$TOKEN\",\"mode\":\"balanced\",\"lang\":\"zh-CN\"}"
+```
+
+- research run order: `think?` → (`delta` intent) → `calls` →
+  `search`/`sources` per round → … → `wrapup` → `delta`×N (the
+  writer) → `related` (before `end`) → `end`; a greeting run: `direct` →
+  `delta` → `end`.  `delta` before the first `calls` is round narration
+  (the client re-homes it into the timeline's intent step).
+- Reconstruct the intents the way the CLIENT does (prose between `calls`
+  events; the wire's `intent` field is advisory) to verify narration
+  integrity — the run's narration is ONE flowing text across rounds even
+  when a model calls tools mid-sentence.
+- `/ai/answer` streams `<think>…</think>` wrapped reasoning then the cited
+  markdown — a dead-before-first-token upstream answers plain-text 502.
+- The audit instance variant (:8907 + `zjaudit` queries + the mock
+  transport on :8909) replays the SAME checks with zero model variance and
+  milliseconds of latency — use it when the failure is in the SERVER
+  plumbing rather than the model.
+
 ## 7. Code audit dimensions (the sweep)
 
 Dispatch parallel read-only Explore agents (client / server) with the layer
@@ -228,7 +263,16 @@ rules and the shared-token inventory from AGENTS.md, covering:
    carry no pager.
 8. **AI feature** — LM Studio live test (stream, citations, thinking,
    regenerate, copy) + backend review (timeouts, silence contracts, token
-   gate, image SSRF path).
+   gate, image SSRF path).  The resilience contracts each get an explicit
+   check: the writer's empty-stream retry (one silent second attempt — a
+   200-with-zero-events gateway must not end a researched run answerless),
+   the fence-last prompt rule (a writer that emits ONLY the ```related
+   fence used to settle the run with suggestions but no answer), the
+   settled-run-without-answer failed box (see the §4 matrix), the merged
+   narration intent (one intent step per run — per-round fragments shredded
+   a mid-sentence continuation into broken half-lines), and the audit
+   mock's event sequence (§6 recipe against :8907 exercises all of it
+   without a live model).
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,
    `alt` on images, keyboard reachability.
 10. **Prompts (agentic)** — both AI system prompts must COMPOSE the shared
@@ -252,12 +296,11 @@ rules and the shared-token inventory from AGENTS.md, covering:
 
 ## 8. Known environment traps
 
-- `pnpm run audit` needs Chrome (`ChromeNotInstalledError`) —
-  not a theme regression; any Chromium works via `CHROME_PATH`, e.g. on
-  macOS with only Edge installed:
-  `CHROME_PATH="/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge" pnpm run audit`.
-  Headless Edge/Chrome sometimes DIES mid-run ("Failed to fetch browser
-  webSocket URL"); the audit script relaunches it and carries on.
+- `pnpm run audit` needs a Chromium browser (`ChromeNotInstalledError`) —
+  the script now FALLS BACK to the Microsoft Edge app bundles on its own
+  (macOS/Windows paths built in); `CHROME_PATH` still wins for anything
+  exotic.  Headless Edge/Chrome sometimes DIES mid-run ("Failed to fetch
+  browser webSocket URL"); the audit script relaunches it and carries on.
 - `manage`-anything re-runs pip; a mirror serving 0-byte wheels fails the
   hash check → start granian directly (§1) and/or pin `-i` to a working
   index.

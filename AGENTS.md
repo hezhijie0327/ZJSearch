@@ -167,6 +167,19 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   better than the patch -- morphic and Vane both ship quality through ONE
   reader-facing system prompt instead; `prompts.reader_voice()` is the
   anti-parroting rule that keeps the audit vocabulary out of the answer.
+  Writer-phase resilience: a writer stream that closes with ZERO events
+  (a 200-empty gateway body) gets ONE silent retry; the failure surface
+  is the CLIENT's contract -- a settled run without an answer text shows
+  the failed box (reason + retry + classic fallback), never silent
+  nothing (the user's stop button marks the run `stopped`, which stays
+  exempt -- an intentional cut is not a failure).  The narration contract:
+  a model may call tools MID-SENTENCE and continue the sentence next
+  round, so the client merges ALL research narration into ONE intent step
+  per run (a `plan`-tool step is kind `plan`, never a merge target), and
+  the researcher prompt tells the model to finish its sentence before the
+  calls; the writer prompt pins the ```related fence AFTER the complete
+  prose (a fence-only writer once settled a run with suggestions but no
+  answer).
   The clarify gate (quality/goal, first run
   only) may open a run with structured questions (`ask` wire event, run
   settles `awaiting`); the answers travel back as `clarifications` and
@@ -219,7 +232,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   serialized through the `_result_data` macro — import it via the
   public `result_data` wrapper macro (Jinja refuses underscore imports)
   and keep array separators as block-ifs — and stream as page-data-shaped
-  `results` events; researcher and writer both consume a globally
+  `sources` events; researcher and writer both consume a globally
   numbered `[n]` feed (5 deep + 5 shallow per search; image-bearing
   results append `img=` URLs to the deep feed lines and register them in
   `state.gallery_pool`; the executor accumulates every block in
@@ -265,7 +278,17 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   questions fly as a `related` event BEFORE `end`; a writer that skips
   the fence falls back to the post-`end` small completion (which is why
   that completion still exists — on reasoning models it can think for
-  the better part of a minute, so the fence is the fast path).  Gallery
+  the better part of a minute, so the fence is the fast path).  The
+  splitter holds text in BOTH states: the opener search holds 20 chars,
+  the in-fence state holds 2 — a closer split across deltas (`` + `)
+  must re-assemble or the body swallows prose up to the NEXT fence's
+  opener (this once shipped a whole answer tail into a gallery body).
+  The narration side has its own discipline: the splitter FLUSHES at
+  each `calls` event (a held tail landing after the calls line would
+  end up in the client's answer slice instead of the round's intent)
+  and the wrapup clears the accumulated think/answer parts (the
+  researcher's narration must not defeat the reasoning-promotion guard
+  nor pollute the related fallback).  Gallery
   fences carry a JSON array of URLs copied verbatim from the feed's
   `img=` entries and are VALIDATED against `state.gallery_pool`
   server-side (invented URLs are dropped, an all-invalid group renders
@@ -282,7 +305,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   composed from the tools THIS run registers — an example demonstrating
   an unregistered tool teaches a broken call) plus per-tool capability
   blocks.  Wire protocol: NDJSON lines
-  (`think`/`delta`/`calls`/`search`/`results`/`sources`/`page`/`plan`/
+  (`think`/`delta`/`calls`/`search`/`sources`/`page`/`plan`/
   `direct`/`gallery`/`wrapup`/`ask`/`related`/`error`/`end`); a stream
   that dies before its first
   line answers 502 like the Overview.  `end` settles
@@ -1231,14 +1254,29 @@ LOADED/NOT LOADED).
   If you rename the chunk, update `results.html` in the same change.
   OpenLayers is dynamically imported only when a map result expands. Keep
   heavy features out of the eager graph. `pnpm run audit` Lighthouse-gates
-  every result presentation **fully offline** — audit-settings.yml reduces
-  the engine list (keep_only) to `zjaudit`
+  every result presentation AND the AI surfaces **fully offline** —
+  audit-settings.yml reduces the engine list (keep_only) to `zjaudit`
   (searx/engines/zjsearch_fixtures.py), a deterministic offline engine
-  whose fixture sets are keyed by the query token; raw LHRs + scores.json
-  archive under `.lighthouse-archive/<run>/` (git-ignored) and
+  whose fixture sets are keyed by the query token, and points
+  `zjsearch.ai` at the MOCK transport (`scripts/ai-mock.mjs`, spawned by
+  the gate on :8909) — the AI counterpart of the fixture engine, routing
+  fixed completions by request shape (gates via
+  `response_format.json_schema.name`, the researcher via `tools` presence,
+  the writer via the `<follow_ups>` system marker, everything else the
+  overview).  The audited AI pages: `?q=zjaudit+general&ai=1` (the full
+  takeover: agent timeline + cited synthesis) and
+  `?q=zjaudit+general&ai_overview=1` (the classic page whose answer card
+  auto-opens via the client's `ai_overview=1` deep link — Lighthouse
+  cannot click).  The AI pages carry their own performance floor
+  (80 desktop / 70 mobile): the NDJSON stream holds the network busy
+  through the trace, so the streamed rendering phase is INSIDE the
+  measurement window.  Raw LHRs + scores.json archive under
+  `.lighthouse-archive/<run>/` (git-ignored) and
   `pnpm run audit:diff -- <runA> <runB>` compares two runs.  Desktop is the
   default profile, `LH_FORM_FACTOR=mobile` for mobile floors; search-page
-  SEO is exempt — upstream robots.txt disallows `?q=`.
+  SEO is exempt — upstream robots.txt disallows `?q=`.  chrome-launcher
+  falls back to the Microsoft Edge app bundles when no Chrome is
+  installed.
 - No webfonts (system font stack) and no third-party scripts; icons come
   from `lucide-react` (tree-shaken, imported directly per usage site with
   `aria-hidden`); the brand is typeset text — instance_name + accent dot —
