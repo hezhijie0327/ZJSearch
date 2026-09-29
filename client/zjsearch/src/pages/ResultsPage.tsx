@@ -640,13 +640,18 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         <div className="flex flex-col gap-6 lg:flex-row lg:gap-8">
           {/* @container: grid density keys off the actual column width, so
               widescreen adds a column and centered mode drops one */}
-          {/* AI takeover: ONE always-centered reading column (48rem) — the
-              Perplexity/morphic shape.  center_alignment deliberately has no
-              say here: it widens/narrows the classic results FRAME, while an
-              AI answer page is a prose column in both modes (all reference
+          {/* AI takeover: a centered reading column that grows into the
+              answer+sources TWO-COLUMN composition from lg (prose keeps
+              the 48rem measure, the source cards take the right rail);
+              below lg it stays the 48rem Perplexity/morphic column.
+              center_alignment deliberately has no say here: it widens/
+              narrows the classic results FRAME, while an AI answer page
+              is a prose column in both modes (all reference
               implementations lock it too). */}
           <div
-            className={`@container min-w-0 flex-1 pt-4 ${columnCap} ${aiMode ? "mx-auto w-full max-w-3xl" : ""}`}
+            className={`@container min-w-0 flex-1 pt-4 ${columnCap} ${
+              aiMode ? "mx-auto w-full max-w-3xl lg:max-w-[68rem] xl:max-w-[72rem]" : ""
+            }`}
             ref={listRef}
           >
             {/* Kagi layout: the tabs and filters live in the results column so

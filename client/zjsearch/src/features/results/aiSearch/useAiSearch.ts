@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { useEffect, useRef, useState } from "react";
+import type { AiSearchGallery } from "@/features/results/aiAnswer.ts";
 import { fetchEventStream } from "@/lib/http.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
@@ -84,6 +85,12 @@ export interface AiSearchRun {
   answer: string;
   /** the [n] sources THIS run found (numbering continues across runs) */
   sources: AiSearchSource[];
+  /** inline image groups the writer embedded, in fence order -- the
+      answer's `{{zjs-gallery:i}}` placeholders index into this array */
+  galleries: AiSearchGallery[][];
+  /** the pre-flight gate judged this a no-research task: the writer
+      answered directly (the research box stays hidden) */
+  direct?: boolean;
   /** follow-up question suggestions generated for this answer */
   related: string[];
   /** the clarify gate's questions while the run waits for the user's
@@ -390,6 +397,31 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       runs[lastIdx] = { ...run, sources: merge(run.sources) };
       return { ...core, runs, sources: merge(core.sources) };
     }
+    case "direct":
+      // the pre-flight gate skipped research: the writer answers without
+      // one -- the run section hides its research box
+      runs[lastIdx] = { ...run, direct: true };
+      return { ...core, runs };
+    case "gallery": {
+      // a validated inline image group (the URLs were checked against the
+      // run's image registry server-side): resolve the source titles for
+      // the tiles' alt/aria text from the [n] registry
+      const items = (event.items as Array<Record<string, unknown>>) ?? [];
+      const fresh: AiSearchGallery[] = [];
+      for (const item of items) {
+        const url = String(item.u ?? "");
+        if (!url) {
+          continue;
+        }
+        const n = Number(item.n) || 0;
+        fresh.push({ url, n, title: run.sources.find((source) => source.n === n)?.title ?? "" });
+      }
+      if (!fresh.length) {
+        return core;
+      }
+      runs[lastIdx] = { ...run, galleries: [...run.galleries, fresh] };
+      return { ...core, runs };
+    }
     case "ask": {
       // the clarify gate wants the user's direction BEFORE researching:
       // hold the questions on the run; the following `end` settles it as
@@ -511,6 +543,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           steps: [],
           answer: "",
           sources: [],
+          galleries: [],
           related: [],
           ask: null,
           clarify: undefined,
@@ -558,6 +591,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           steps: [] as AiSearchStep[],
           answer: "",
           sources: [] as AiSearchSource[],
+          galleries: [] as AiSearchGallery[][],
           related: [] as string[],
           ask: null,
           clarify: undefined,

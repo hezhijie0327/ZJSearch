@@ -14,7 +14,13 @@ import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
-import { type AiSourceMeta, citeToLinks, splitAnswerStream } from "@/features/results/aiAnswer.ts";
+import {
+  type AiSearchGallery,
+  type AiSourceMeta,
+  citeToLinks,
+  splitAnswerStream,
+} from "@/features/results/aiAnswer.ts";
+import { AnswerGallery, renderWithGalleries } from "@/features/results/aiSearch/AnswerGallery.tsx";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -606,11 +612,15 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
   meta,
   onCite,
   settled,
+  galleries,
 }: {
   markdown: string;
   meta: AiSourceMeta[];
   onCite?: (index: number) => void;
   settled: boolean;
+  /** the run's validated inline image groups -- the answer's
+      {{zjs-gallery:i}} placeholders render these in place */
+  galleries?: AiSearchGallery[][];
 }) {
   const needsMath = MATH_FENCE.test(markdown);
   const [mathPlugins, setMathPlugins] = useState<[PluggableList, PluggableList] | null>(null);
@@ -629,16 +639,22 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
     };
   }, [needsMath, mathPlugins]);
   const withMath = needsMath && mathPlugins;
-  return (
+  const body = (text: string, key: string) => (
     <Markdown
       components={markdownComponents(meta, onCite, settled)}
+      key={key}
       rehypePlugins={withMath ? mathPlugins[1] : undefined}
       remarkPlugins={withMath ? [...BASE_REMARK, ...mathPlugins[0]] : BASE_REMARK}
     >
-      {markdown}
+      {text}
     </Markdown>
   );
+  return renderWithGalleries(markdown, galleries, body, (index, key) => (
+    <AnswerGallery gallery={galleries?.[index] ?? EMPTY_GALLERY} key={key} onCite={onCite} />
+  ));
 });
+
+const EMPTY_GALLERY: AiSearchGallery[] = [];
 
 /** The capped reasoning scroll area: while the stream runs it keeps the
     newest line in view (no-op once settled or folded). */

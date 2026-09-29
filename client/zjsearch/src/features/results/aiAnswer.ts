@@ -37,6 +37,44 @@ export function aiSourceMeta(results: ResultItem[], max = 20): AiSourceMeta[] {
   return out;
 }
 
+/** One inline image group the writer embedded (the server-validated
+    ``zjs-images`` fence): every URL was checked against the run's image
+    registry before the event flew, so the client renders blindly.  The
+    answer text carries a ``{{zjs-gallery:i}}`` placeholder at the group's
+    position; the tile click reuses the citation jump (its source card). */
+export interface AiSearchGallery {
+  url: string;
+  /** the global [n] of the source the image came from */
+  n: number;
+  title: string;
+}
+
+/** The answer-text placeholder the server injects where a gallery fence
+    stood (the fence itself never reaches the client). */
+export const GALLERY_MARK = /\{\{zjs-gallery:(\d+)\}\}/g;
+
+export type GallerySegment = { kind: "md"; text: string } | { kind: "gallery"; index: number };
+
+/** Split an answer into markdown and gallery-marker segments, in order --
+    the markers arrive as whole deltas (the server emits them atomically),
+    so a half marker never renders. */
+export function splitGallerySegments(markdown: string): GallerySegment[] {
+  const out: GallerySegment[] = [];
+  let last = 0;
+  for (const match of markdown.matchAll(GALLERY_MARK)) {
+    const index = match.index ?? 0;
+    if (index > last) {
+      out.push({ kind: "md", text: markdown.slice(last, index) });
+    }
+    out.push({ kind: "gallery", index: Number.parseInt(match[1] ?? "", 10) });
+    last = index + match[0].length;
+  }
+  if (last < markdown.length) {
+    out.push({ kind: "md", text: markdown.slice(last) });
+  }
+  return out;
+}
+
 const DEEP_SOURCES = 5;
 const SHALLOW_SOURCES = 15;
 const DEEP_SNIPPET_CHARS = 800;

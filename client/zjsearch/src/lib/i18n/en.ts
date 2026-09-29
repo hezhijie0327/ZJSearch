@@ -207,6 +207,8 @@ export const EN = {
   ai_clarify_summary: "Confirmed direction",
   ai_clarify_skipped: "Researching without a clarified direction",
   ai_wrapup: "Synthesizing the sources — writing the final answer",
+  ai_answer_writing: "Writing the answer…",
+  ai_gallery_label: "Images from the sources",
   stop: "Stop",
   mode_classic: "Classic",
   mode_ai: "AI",

@@ -37,6 +37,13 @@ silently):
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
   ``[n]`` registry entries (citation chips jump to ``round``/``id``/``idx``);
+- ``{"e": "direct"}`` -- the pre-flight gate judged the request a
+  no-research task (greeting, writing task): the writer answers directly,
+  no research follows;
+- ``{"e": "gallery", "items": [{u, n}]}`` -- the writer embedded an inline
+  image group (the ``zjs-images`` fence, URLs validated against the run's
+  image registry); the answer text carries a ``{{zjs-gallery:i}}``
+  placeholder at the position;
 - ``{"e": "wrapup"}`` -- the research phase ended: the WRITER completion
   takes over (the client drops any streamed research prose and shows the
   synthesizing state; the writer's deltas are the answer);
@@ -44,6 +51,12 @@ silently):
   clarify gate wants the user's direction BEFORE researching; the run
   settles as ``awaiting`` (``{"e": "end"}`` follows; the answers travel
   on the next request as ``clarifications``);
+- ``{"e": "related", "items": [...]}`` -- follow-up suggestions.  The
+  writer emits them IN-STREAM as a `` ```related `` fence at the end of
+  the answer (Morphic's in-stream related: zero extra completions) -- the
+  fence is intercepted server-side and never reaches the client's answer
+  text; when the fence is missing, the post-``end`` small completion
+  generates them as before;
 - ``{"e": "error", "reason"}`` mid-stream, ``{"e": "end"}`` closes.
 
 A stream that dies before its first line answers 502 with a truncated
@@ -55,6 +68,7 @@ Overview mirrors that under ``zjsearch.ai.overview.enabled``).
 
 import concurrent.futures
 import importlib.util
+import itertools
 import json
 import logging
 import re
@@ -100,16 +114,16 @@ head) + 5 shallow (title only), numbered with the global [n] registry."""
 SEARCH_MODES = ("speed", "balanced", "quality", "goal")
 
 _MODE_BUDGETS: dict[str, dict[str, int]] = {
-    # speed: one focused round; balanced: main facets, optional gap-filler;
-    # quality: multi-round deep research with cross-verification;
-    # goal: the question is a target -- iterate in self-checked rounds until
-    # the goal is demonstrably met.
+    # speed: ONE focused round (Morphic's quick discipline); balanced: main
+    # facets, optional gap-filler; quality: multi-round deep research with
+    # cross-verification; goal: the question is a target -- iterate in
+    # self-checked rounds until the goal is demonstrably met.
     # max_rounds is a SAFETY ceiling, not the plan; the plan is PROGRESS:
     # a round that adds no new information (only repeats or empty results)
     # is stalled, and stall_rounds consecutive stalled rounds end the
     # research.  Per-round call counts are the MODEL's call (uncapped);
     # every engine request carries its own per-request timeout.
-    "speed": {"max_rounds": 2, "stall_rounds": 1},
+    "speed": {"max_rounds": 1, "stall_rounds": 1},
     "balanced": {"max_rounds": 4, "stall_rounds": 2},
     "quality": {"max_rounds": 8, "stall_rounds": 2},
     "goal": {"max_rounds": 16, "stall_rounds": 3},
@@ -126,7 +140,21 @@ _STALL_NOTE = (
 
 _WRITER_CONTEXT_MAX = 40_000
 """Hard cap on the source feed the writer receives (deep research with
-page reads lands around 15-25k; the cap only guards abuse)."""
+page reads lands around 15-25k; the cap only guards abuse).  Over the cap
+whole OLDEST feed blocks are evicted first -- a silently cut tail block
+(the old hard slice) could drop a source the model was about to cite."""
+
+_FEED_SOFT_LIMIT = 24_000
+"""Accumulated feed size at which the executor tells the model to start
+converging -- the context-pressure signal reaches the MODEL (with the
+round's tool results) instead of only shaping the writer's input."""
+
+_GALLERY_POOL_MAX = 40
+"""Image URLs the writer may embed (the validated whitelist of the
+``zjs-images`` fence): image-bearing results enter the pool as they are
+fed, first come first kept."""
+
+_URL_RE = re.compile(r"https?://[^\s<>\"']+")
 
 _CLARIFY_SCHEMA: dict[str, t.Any] = {
     "type": "object",
@@ -162,6 +190,13 @@ _STANDALONE_SCHEMA: dict[str, t.Any] = {
     "type": "object",
     "properties": {"question": {"type": "string"}},
     "required": ["question"],
+    "additionalProperties": False,
+}
+
+_RESEARCH_SCHEMA: dict[str, t.Any] = {
+    "type": "object",
+    "properties": {"research": {"type": "boolean"}},
+    "required": ["research"],
     "additionalProperties": False,
 }
 
@@ -318,7 +353,12 @@ def _int(key: str, default: int) -> int:
 def _tool_spec(with_pages: bool) -> dict[str, t.Any]:
     """The ``web_search`` tool in the dialect-neutral llm shape; with the
     page reader configured, the description cross-references it (a model
-    that never sees ``web_crawler`` must not be told about it)."""
+    that never sees ``web_crawler`` must not be told about it).  The
+    ``included_sites``/``excluded_sites`` parameters carry the user's
+    source preference (Morphic's domain filters): they are appended to the
+    query as ``site:``/``-site:`` operators, which the engine's
+    advanced_search_syntax plugin enforces AUTHORITATIVELY on every result
+    regardless of engine support."""
     return {
         "name": TOOL_NAME,
         "description": (
@@ -365,6 +405,30 @@ def _tool_spec(with_pages: bool) -> dict[str, t.Any]:
                         " omit otherwise."
                     ),
                 },
+                "included_sites": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Bare domains to RESTRICT the search to (at most 3),"
+                        " only when the user signals a source preference:"
+                        ' "search reddit", "在 GitHub 上找" -> ["github.com"];'
+                        ' "official sources" -> the relevant authoritative'
+                        " domains.  Prefer this over stuffing the site name"
+                        " into the keywords -- the filter is enforced exactly,"
+                        " the keyword is not.  Do not invent restrictions for"
+                        " ordinary queries.  If the filtered search comes"
+                        " back thin, run one more without it."
+                    ),
+                },
+                "excluded_sites": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Bare domains to EXCLUDE (at most 3), only when the"
+                        ' user signals an aversion: "not pinterest" ->'
+                        ' ["pinterest.com"].'
+                    ),
+                },
             },
             "required": ["query"],
         },
@@ -407,16 +471,18 @@ _DEPTH_RESEARCH: dict[str, str] = {
     # _DEPTH_SHAPE and belongs to the WRITER (the researcher never writes
     # the answer, so the two halves are prompted separately).
     "speed": "Depth: SPEED -- the user mostly wants to know WHAT this is."
-    "  One focused round: cover the core facet with 2-3 targeted searches"
-    " and stop.",
+    "  You get ONE round: cover the core facet with 2-3 targeted searches,"
+    " make them count, and stop after it.",
     "balanced": "Depth: BALANCED -- round out the main facets: what it is,"
     " how it works or why it matters, and whatever context the reader needs"
     " not to be misled.  One search round covers it; run a second only for a"
     " real gap.",
-    "quality": "Depth: QUALITY -- thorough multi-round research: definitions,"
-    " mechanics, comparisons, recent developments.  Cross-verify load-bearing"
-    " claims against independent sources, but run only as many searches as"
-    " the question actually needs.",
+    "quality": "Depth: QUALITY -- thorough multi-round research across the"
+    " angles the question actually needs: definition, mechanics, comparisons,"
+    " recent developments, use cases, limitations or critiques, expert and"
+    " community reception.  Cross-verify load-bearing claims against"
+    " independent sources, but run only as many searches as the question"
+    " needs.",
     "goal": "Depth: GOAL -- treat the question as a TARGET the user wants"
     " reached, not a casual question.  Work toward it iteratively: first"
     " state what evidence would demonstrate the goal is met, then search for"
@@ -447,19 +513,38 @@ _DEPTH_SHAPE: dict[str, str] = {
     " that would.",
 }
 
-_EXAMPLES = """<examples>
-User: "What is Kimi K2?"
-You: "The user wants to know what Kimi K2 is -- definition, key specs, release status."
-Action: web_search(query="Kimi K2 AI model"), web_search(query="Kimi K2 specs release date")
 
-User: "DeepSeek-V3 的上下文长度是多少？"
-You: "I need an exact number; snippets rarely carry it, the model card does."
-Action: web_search(query="DeepSeek-V3 context length site:huggingface.co"), then web_crawler(url="<the model card url>")
-
-User: "A 和 B 该选哪个？"
-You: "A comparison needs both sides covered before any verdict."
-Action: web_search(query="A 优点 缺点"), web_search(query="B 优点 缺点"), plan(plan="对比表：定位/性能/价格/生态，结论按使用场景给出")
-</examples>"""
+def _examples(page_tool: bool, plan_tool: bool) -> str:
+    """The few-shot block, composed from the tools THIS run registered: an
+    example demonstrating an unregistered tool teaches a call that lands
+    as an ``error: empty query`` row (the plan tool rides quality/goal
+    only, the page reader only when browserless is configured).  The last
+    example shows the LATER-round intent shape: reflection on the results
+    so far, not a restatement of the question."""
+    plan_suffix = ', plan(plan="对比表：定位/性能/价格/生态，结论按使用场景给出")' if plan_tool else ""
+    deepseek = 'Action: web_search(query="DeepSeek-V3 context length site:huggingface.co")'
+    if page_tool:
+        deepseek += ', then web_crawler(url="<the model card url>")'
+    lines = [
+        "<examples>",
+        'User: "What is Kimi K2?"',
+        'You: "The user wants to know what Kimi K2 is -- definition, key specs, release status."',
+        'Action: web_search(query="Kimi K2 AI model"), web_search(query="Kimi K2 specs release date")',
+        "",
+        'User: "DeepSeek-V3 的上下文长度是多少？"',
+        'You: "I need an exact number; snippets rarely carry it, the model card does."',
+        deepseek,
+        "",
+        'User: "A 和 B 该选哪个？"',
+        'You: "A comparison needs both sides covered before any verdict."',
+        f'Action: web_search(query="A 优点 缺点"), web_search(query="B 优点 缺点"){plan_suffix}',
+        "",
+        "User (second round, after the first round's results):",
+        'You: "[4] covers the official specs, but pricing is missing everywhere'
+        ' -- this round targets reseller and review pages for current prices."',
+        "</examples>",
+    ]
+    return "\n".join(lines)
 
 
 def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
@@ -507,10 +592,13 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
     how_to_search = "\n".join(
         [
             "<how_to_search>",
-            "- First write ONE short sentence stating how you read the"
-            " question's intent (the UI shows it as the lead of your search"
-            f" plan). Then call {TOOL_NAME} -- several calls in the same"
-            " turn are encouraged: they run in parallel.",
+            "- First write ONE short sentence.  On the FIRST round state how"
+            " you read the question's intent (the UI shows it as the lead of"
+            " your search plan); on LATER rounds reflect on the results so"
+            " far -- name the gap they leave and the facet this round"
+            " covers.  Then call"
+            f" {TOOL_NAME} -- several calls in the same turn are encouraged:"
+            " they run in parallel.",
             "- ALWAYS run at least one search per question facet -- even for"
             " topics you already know: the user expects live, cited sources,"
             " not your memory.",
@@ -538,7 +626,11 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
             " real browser and returns it as markdown: reach for it when a"
             " source's snippet promises exactly the missing detail (specs,"
             " prices, tables, documentation, exact numbers) or when a"
-            " load-bearing claim deserves a first-hand check.  Open"
+            " load-bearing claim deserves a first-hand check.  If the"
+            " question contains an explicit URL and asks about that page"
+            " (summarize it, read it, extract from it), open the page with"
+            f" {PAGE_TOOL} FIRST -- do not search for what the page itself"
+            " contains.  Open"
             " sparingly: only pages whose snippet already promises what you"
             " need -- never to \"see what is there\", never in place of a"
             " search round.  A failed or empty page is a dead end: search a"
@@ -581,7 +673,7 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
         prompts.today_line(),
         f"<step_notes>\nWrite your step notes (the narration before tool" f" calls) in {lang}.\n</step_notes>",
         how_to_search,
-        _EXAMPLES,
+        _examples(page_tool, plan_tool),
     ]
     if page_reader:
         lines.append(page_reader)
@@ -596,7 +688,9 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
             " rule is progress: every round must add NEW information."
             "  Repeating a query or finding nothing new wastes the run -- if"
             " your latest round produced no new leads, stop researching; the"
-            " writer answers from what you have.\n</research_policy>"
+            " writer answers from what you have.  Stop early, too, when the"
+            " rounds converge: fresh angles returning the same facts mean"
+            " the picture is complete.\n</research_policy>"
         )
     if ambiguity_escape:
         lines.append(ambiguity_escape)
@@ -639,12 +733,31 @@ def _norm_query(query: str) -> str:
     return " ".join(query.lower().split())
 
 
-def _parse_call(call: dict[str, t.Any]) -> tuple[str, str, str]:
-    """(query, category, time_range) of one tool call -- sanitized: a
-    LEADING group of engine bangs (e.g. "!baidu") survives because the
-    model may only use one when the user explicitly names the engine;
-    every other "!" is noise, whitespace collapses, the category and the
-    freshness window are whitelist-checked."""
+def _clean_sites(raw: t.Any) -> list[str]:
+    """Bare domains out of the model's ``included_sites``/``excluded_sites``
+    arguments: scheme/path/port stripped, lowercased, deduped, capped --
+    anything that is not host-shaped is dropped (the operators travel in
+    the query and the engine's plugin enforces them; a malformed token
+    would just match nothing)."""
+    out: list[str] = []
+    for value in (raw if isinstance(raw, list) else [])[:6]:
+        host = str(value or "").strip().lower()
+        host = re.sub(r"^[a-z][a-z0-9+.-]*://", "", host)
+        host = host.split("/", 1)[0].split(":", 1)[0]
+        if host and "." in host and len(host) <= 100 and host not in out:
+            out.append(host)
+        if len(out) >= 3:
+            break
+    return out
+
+
+def _parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[str]]:
+    """(query, category, time_range, included_sites, excluded_sites) of one
+    tool call -- sanitized: a LEADING group of engine bangs (e.g. "!baidu")
+    survives because the model may only use one when the user explicitly
+    names the engine; every other "!" is noise, whitespace collapses, the
+    category and the freshness window are whitelist-checked and the site
+    filters are host-shaped bare domains."""
     try:
         args = json.loads(str(call.get("arguments") or "") or "{}")
     except ValueError:
@@ -665,7 +778,13 @@ def _parse_call(call: dict[str, t.Any]) -> tuple[str, str, str]:
     time_range = str(args.get("time_range") or "").strip().lower()
     if time_range not in _TIME_RANGES:
         time_range = ""
-    return query, category, time_range
+    return (
+        query,
+        category,
+        time_range,
+        _clean_sites(args.get("included_sites")),
+        _clean_sites(args.get("excluded_sites")),
+    )
 
 
 def _parse_page_call(call: dict[str, t.Any]) -> str:
@@ -720,10 +839,18 @@ class _Searches:  # pylint: disable=too-few-public-methods
     pool.  Yields the feature events for the wire protocol and ends with
     the agent framework's ``("tool_results", ...)`` alignment."""
 
-    def __init__(self, prefs: t.Any, user_plugins: list[str], sources_base: int = 0, search_language: str = ""):
+    def __init__(
+        self,
+        prefs: t.Any,
+        user_plugins: list[str],
+        sources_base: int = 0,
+        search_language: str = "",
+        max_rounds: int = 0,
+    ):
         self.prefs = prefs
         self.user_plugins = user_plugins
         self.search_language = search_language
+        self.max_rounds = max_rounds
         self.round_no = 0
         # follow-up runs continue the global [n] numbering after the base
         self.next_n = sources_base + 1
@@ -734,26 +861,45 @@ class _Searches:  # pylint: disable=too-few-public-methods
         # every page this run already opened (normalized) -- a re-read
         # settles as ``duplicate`` without rendering again
         self.read_urls: set[str] = set()
-        # every source url of this run -> its global [n]: an open_page of a
-        # known url reuses the number instead of minting a duplicate source
+        # every source url of this run -> its global [n]: a re-read or a
+        # repeat of a known url reuses the number instead of minting a
+        # duplicate source (the FEED dedup rides the same registry)
         self.url_n: dict[str, int] = {}
+        # image urls fed to the model (img=... lines) -> their global [n]:
+        # the validated whitelist of the writer's ``zjs-images`` fence
+        self.gallery_pool: dict[str, int] = {}
         # the accumulated source feed for the WRITER: one block per search
         # (its [n] lines) and per page read -- the writer's whole context
         self.feed: list[str] = []
+        # the run's inline image galleries (validated zjs-images fences):
+        # index -> items -- the answer's {{zjs-gallery:i}} placeholders
+        # reference these
+        self.galleries: list[list[dict[str, t.Any]]] = []
+        # total feed characters (the context-pressure signal for the model)
+        self.feed_chars = 0
+        self.size_noted = False
         # progress bookkeeping for the stall detector: fresh queries with
         # results / fresh page reads in the CURRENT round, and the
         # consecutive-round count of rounds without any
         self.round_new_hits = 0
         self.stalled_rounds = 0
 
-    def _search_one(self, query: str, category: str, time_range: str) -> list[t.Any]:
+    def _search_one(
+        self, query: str, category: str, time_range: str, include: list[str], exclude: list[str]
+    ) -> list[t.Any]:
         """One real instance search -- the webapp path with a synthesized
         form (user preferences apply: safesearch, engines; the page's
-        result language filter applies via ``search_language``).  Runs in a
-        worker thread inside a COPIED request context (the executor
-        submits it wrapped in ``copy_current_request_context``):
-        SearchWithPlugins stores the request proxy and ``search()`` copies
-        the context again for each of its engine threads."""
+        result language filter applies via ``search_language``).  The site
+        filters travel as ``site:``/``-site:`` operators in the query: the
+        advanced_search_syntax plugin strips them from the engine query and
+        enforces them authoritatively on every result.  Runs in a worker
+        thread inside a COPIED request context (the executor submits it
+        wrapped in ``copy_current_request_context``): SearchWithPlugins
+        stores the request proxy and ``search()`` copies the context again
+        for each of its engine threads."""
+        parts = [f"site:{host}" for host in include] + [f"-site:{host}" for host in exclude]
+        if parts:
+            query = f"{query} {' '.join(parts)}"
         form = {"q": query, "categories": category}
         if time_range:
             form["time_range"] = time_range
@@ -763,7 +909,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
         return search_obj.search().get_ordered_results()
 
-    def _finish(
+    def _finish(  # pylint: disable=too-many-locals
         self,
         rnd: int,
         idx: int,
@@ -782,26 +928,43 @@ class _Searches:  # pylint: disable=too-few-public-methods
             yield ("search", {"round": rnd, "id": idx, "status": "error", "n": 0, "ms": ms})
             return
         items = _serialize(raw, query)
-        self.ran[_norm_query(query)][1] = len(items)
         if items:
             self.round_new_hits += 1
         entries: list[dict[str, t.Any]] = []
         feed_lines = [f'Search "{query}" (category: {category}) returned {len(items)} results:']
         for pos, item in enumerate(items[: FEED_DEEP + FEED_SHALLOW]):
+            url = str(item.get("url") or "")
+            norm = browserless.normalize_url(url) if url else ""
+            known_n = self.url_n.get(norm) if norm else None
+            title = str(item.get("title_text") or "")
+            netloc = str(item.get("netloc") or "")
+            if known_n is not None:
+                # cross-search dedup: this url already holds a global [n]
+                # from an earlier search -- point at it instead of minting
+                # a duplicate source (the numbering stays contiguous and
+                # the sources grid shows the page once)
+                if pos < FEED_DEEP:
+                    head = str(item.get("content_text") or "")[:FEED_SNIPPET_CHARS]
+                    feed_lines.append(f"[{known_n}] {netloc}: {title} - {head} (same source as an earlier result)")
+                else:
+                    feed_lines.append(f"[{known_n}] {netloc}: {title} (same source as an earlier result)")
+                continue
             n = self.next_n
             self.next_n += 1
-            url = str(item.get("url") or "")
-            if url:
-                self.url_n[browserless.normalize_url(url)] = n
+            if norm:
+                self.url_n[norm] = n
+            img = str(item.get("img_src") or item.get("thumbnail") or item.get("thumbnail_src") or "")
+            if img and len(self.gallery_pool) < _GALLERY_POOL_MAX:
+                self.gallery_pool[img] = n
             entries.append(
                 {
                     "n": n,
                     "round": rnd,
                     "id": idx,
                     "idx": pos,
-                    "title": str(item.get("title_text") or "")[:200],
+                    "title": title[:200],
                     "url": url,
-                    "netloc": str(item.get("netloc") or ""),
+                    "netloc": netloc,
                     "favicon": str(item.get("favicon") or ""),
                     "pretty_url": str(item.get("pretty_url") or ""),
                     "published_date": str(item.get("published_date") or ""),
@@ -809,11 +972,13 @@ class _Searches:  # pylint: disable=too-few-public-methods
             )
             if pos < FEED_DEEP:
                 head = str(item.get("content_text") or "")[:FEED_SNIPPET_CHARS]
-                feed_lines.append(f"[{n}] {item.get('netloc', '')}: {item.get('title_text', '')} - {head}")
+                img_part = f" img={img}" if img else ""
+                feed_lines.append(f"[{n}] {netloc}: {title} - {head}{img_part}")
             else:
-                feed_lines.append(f"[{n}] {item.get('netloc', '')}: {item.get('title_text', '')}")
+                feed_lines.append(f"[{n}] {netloc}: {title}")
         feeds[idx - 1] = "\n".join(feed_lines)
         self.feed.append(feeds[idx - 1])
+        self.feed_chars += len(feeds[idx - 1])
         yield ("search", {"round": rnd, "id": idx, "status": "ok", "n": len(items), "ms": ms})
         if items:
             yield ("results", {"round": rnd, "id": idx, "results": items})
@@ -857,6 +1022,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
         netloc = urlsplit(url).netloc
         feeds[idx - 1] = f'Opened {url} (title: "{title}"; {cite}):\n\n{text}'
         self.feed.append(feeds[idx - 1])
+        self.feed_chars += len(feeds[idx - 1])
         self.round_new_hits += 1
         yield (
             "page",
@@ -894,12 +1060,14 @@ class _Searches:  # pylint: disable=too-few-public-methods
         of the call within this round.  Exact-duplicate queries and
         already-read pages settle instantly as ``duplicate`` -- they never
         hit the engines or the browser again; their feed tells the model
-        to move on."""
+        to move on.  The round's tool results also carry the budget /
+        context-pressure notes: that is how the MODEL learns it is nearing
+        the ceiling (the static system prompt only states it once)."""
         self.round_no += 1
         rnd = self.round_no
         self.round_new_hits = 0
         feeds: list[str | None] = [None] * len(calls)
-        search_jobs: list[tuple[int, str, str, str]] = []
+        search_jobs: list[tuple[int, str, str, str, list[str], list[str]]] = []
         page_jobs: list[tuple[int, str]] = []
         for wire_id, call in enumerate(calls, 1):
             if str(call.get("name") or "") == PAGE_TOOL:
@@ -919,21 +1087,23 @@ class _Searches:  # pylint: disable=too-few-public-methods
                     self.read_urls.add(url)
                     page_jobs.append((wire_id, url))
                 continue
-            query, category, time_range = _parse_call(call)
+            query, category, time_range, include, exclude = _parse_call(call)
             if not query:
                 feeds[wire_id - 1] = "error: empty query"
                 yield ("search", {"round": rnd, "id": wire_id, "status": "error", "n": 0, "ms": 0})
-            elif _norm_query(query) in self.ran:
-                feeds[wire_id - 1] = (
-                    "duplicate: this exact query already ran in an earlier"
-                    " round and its results are already in the conversation"
-                    " -- do not repeat it; search a DIFFERENT facet or write"
-                    " the answer from the sources you have."
-                )
-                yield ("search", {"round": rnd, "id": wire_id, "status": "duplicate", "n": 0, "ms": 0})
             else:
-                self.ran[_norm_query(query)] = [query, 0]
-                search_jobs.append((wire_id, query, category, time_range))
+                dedup_key = " ".join((query + " " + " ".join(f"site:{h}" for h in include + exclude)).lower().split())
+                if dedup_key in self.ran:
+                    feeds[wire_id - 1] = (
+                        "duplicate: this exact query already ran in an earlier"
+                        " round and its results are already in the conversation"
+                        " -- do not repeat it; search a DIFFERENT facet or write"
+                        " the answer from the sources you have."
+                    )
+                    yield ("search", {"round": rnd, "id": wire_id, "status": "duplicate", "n": 0, "ms": 0})
+                else:
+                    self.ran[dedup_key] = [query, 0]
+                    search_jobs.append((wire_id, query, category, time_range, include, exclude))
         # the pool is deliberately NOT in a with-block: when the consumer
         # disappears (client disconnect / stop) the generator closes right
         # here -- a with-exit would wait for the still-running work and
@@ -944,26 +1114,54 @@ class _Searches:  # pylint: disable=too-few-public-methods
             yield from self._dispatch(pool, rnd, search_jobs, page_jobs, feeds)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
+        # the model-facing budget note rides the round's tool results: the
+        # next turn reads it with the results it describes (Vane injects
+        # the iteration counter into the system prompt every turn -- this
+        # is the cheap canonical-messages equivalent)
+        if self.max_rounds and rnd == self.max_rounds - 1:
+            self._append_note(
+                feeds,
+                "(budget note: ONE research round remains -- make it cover the most important remaining gaps.)",
+            )
+        elif self.feed_chars > _FEED_SOFT_LIMIT and not self.size_noted:
+            self.size_noted = True
+            self._append_note(
+                feeds,
+                "(note: the source context is getting large -- start converging:"
+                " prefer answering from what you have over opening more pages.)",
+            )
         yield (
             "tool_results",
             [(calls[idx], str(feed or "error: the call failed")) for idx, feed in enumerate(feeds)],
         )
 
+    @staticmethod
+    def _append_note(feeds: list[str | None], note: str) -> None:
+        """Append a model-facing note to the LAST non-empty feed of the
+        round -- one copy is enough (the model reads every tool result of
+        the batch).  The rebind deliberately leaves the writer's ``feed``
+        blocks untouched: notes steer the conversation, they are not
+        source content."""
+        for i in range(len(feeds) - 1, -1, -1):
+            if feeds[i]:
+                feeds[i] = f"{feeds[i]}\n\n{note}"
+                return
+
     def _dispatch(  # pylint: disable=too-many-locals
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
-        search_jobs: list[tuple[int, str, str, str]],
+        search_jobs: list[tuple[int, str, str, str, list[str], list[str]]],
         page_jobs: list[tuple[int, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
-        for wire_id, query, category, time_range in search_jobs:
+        for wire_id, query, category, time_range, include, exclude in search_jobs:
             # the worker needs a request context of its own: SearchWithPlugins
             # stores the request proxy and search() copies the context again
             # for each of its engine threads (mirrors the webapp view thread)
             worker = flask.copy_current_request_context(self._search_one)
-            futures[pool.submit(worker, query, category, time_range)] = (
+            futures[pool.submit(worker, query, category, time_range, include, exclude)] = (
                 "search",
                 wire_id,
                 (query, category, time.monotonic()),
@@ -990,10 +1188,14 @@ class _Searches:  # pylint: disable=too-few-public-methods
 def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
     """One ``calls`` wire item: the client's timeline row.  ``tool``
     discriminates the row kind -- a search renders its query, a page read
-    its url."""
+    its url.  Site filters display folded into the query so the row shows
+    the operators the engine will enforce."""
     if str(call.get("name") or "") == PAGE_TOOL:
         return {"id": idx, "tool": PAGE_TOOL, "url": _parse_page_call(call)}
-    query, category, time_range = _parse_call(call)
+    query, category, time_range, include, exclude = _parse_call(call)
+    operators = " ".join([f"site:{host}" for host in include] + [f"-site:{host}" for host in exclude])
+    if operators:
+        query = f"{query} {operators}"
     return {"id": idx, "tool": TOOL_NAME, "q": query, "category": category, "time_range": time_range or None}
 
 
@@ -1009,6 +1211,149 @@ def _json_object_of(text: str) -> dict[str, t.Any] | None:
     except ValueError:
         return None
     return value if isinstance(value, dict) else None
+
+
+def _parse_fence_json(text: str) -> t.Any:
+    """The outermost JSON value in a fence body (the models keep the fence
+    exact per prompt, but a stray prose line or fence must not kill the
+    parse).  The delimiter is whichever bracket comes FIRST: an object
+    containing arrays must parse as the object, not as its inner array."""
+    start_obj = text.find("{")
+    start_arr = text.find("[")
+    if start_obj == -1 and start_arr == -1:
+        return None
+    if start_arr == -1 or (start_obj != -1 and start_obj < start_arr):
+        start, closer = start_obj, "}"
+    else:
+        start, closer = start_arr, "]"
+    end = text.rfind(closer)
+    if end <= start:
+        return None
+    try:
+        return json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+
+
+def _parse_related_questions(text: str) -> list[str]:
+    """The ```related fence body -> up to three clean question strings."""
+    value = _parse_fence_json(text)
+    items = value.get("questions") if isinstance(value, dict) else None
+    if not isinstance(items, list):
+        return []
+    out: list[str] = []
+    for item in items:
+        question = str(item or "").strip()
+        if question and question not in out:
+            out.append(question[:200])
+        if len(out) >= 3:
+            break
+    return out
+
+
+class _FenceSplitter:
+    """Splits the WRITER's delta stream: prose deltas pass through (with a
+    small holdback so a fence opener split across two deltas cannot flash
+    on screen), while the ``related`` and ``zjs-images`` fences are
+    intercepted -- held back from the client's answer text entirely and
+    handed to the caller when they close.  The writer's fence is therefore
+    invisible to the renderer by construction; nothing depends on the
+    client recognizing raw fence text."""
+
+    HOLD = 20
+    _OPENERS = ("zjs-images", "related")
+
+    def __init__(self) -> None:
+        self.tail = ""
+        self.fence_kind: str | None = None
+        self.fence_body = ""
+
+    def feed(self, delta: str) -> tuple[str, list[tuple[str, str]]]:
+        """Consume one delta -> (prose to emit, fences closed by it)."""
+        closed: list[tuple[str, str]] = []
+        out = ""
+        text = self.tail + delta
+        self.tail = ""
+        while text:
+            if self.fence_kind is not None:
+                end = text.find("```")
+                if end == -1:
+                    self.fence_body += text
+                    break
+                self.fence_body += text[:end]
+                closed.append((self.fence_kind, self.fence_body))
+                self.fence_kind = None
+                self.fence_body = ""
+                text = text[end + 3 :]
+                continue
+            match = None
+            for opener in self._OPENERS:
+                found = re.search(r"```\s*" + opener + r"\b", text)
+                if found and (match is None or found.start() < match.start()):
+                    match = found
+            if match is None:
+                # no opener in sight: emit everything except a holdback
+                # that could still be the prefix of one
+                if len(text) > self.HOLD:
+                    out += text[: -self.HOLD]
+                    self.tail = text[-self.HOLD :]
+                else:
+                    self.tail = text
+                break
+            line_end = text.find("\n", match.end())
+            if line_end == -1:
+                # the opener line is still streaming: re-hold ALL of it
+                self.tail = text
+                break
+            out += text[: match.start()]
+            self.fence_kind = "zjs-images" if "zjs-images" in match.group(0) else "related"
+            text = text[line_end + 1 :]
+        return out, closed
+
+    def finish(self) -> tuple[str, list[tuple[str, str]]]:
+        """Stream end: flush the holdback; an UNCLOSED fence still parses
+        (a model that forgets the closing fence must not lose its
+        suggestions)."""
+        tail, self.tail = self.tail, ""
+        closed: list[tuple[str, str]] = []
+        if self.fence_kind is not None:
+            closed.append((self.fence_kind, self.fence_body))
+            self.fence_kind = None
+            self.fence_body = ""
+        return tail, closed
+
+
+def _research_gate(cfg: dict[str, t.Any], question: str) -> bool:
+    """The pre-flight gate (Vane's skipSearch, narrowed to our contract):
+    False only for requests where NO answer detail can benefit from live
+    web sources -- greetings and small talk, creative writing (poems,
+    stories, emails), pure translation or arithmetic, rewriting of the
+    user's own text.  Every factual question researches, however well
+    known (the engine's contract is live, cited answers).  Fail-open: a
+    broken gate must never block research."""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the research gate of an AI search engine: decide"
+                " whether the request needs live web research.  Answer false"
+                " ONLY when nothing in a good answer could benefit from"
+                " current web sources: greetings and small talk, creative"
+                " writing (poems, stories, emails, essays), pure translation,"
+                " arithmetic, or reworking of the user's own text."
+                "  Everything else -- every factual question, however simple"
+                " or well known -- needs research: this engine always answers"
+                " with live, cited sources.  Output ONLY a JSON object, no"
+                ' prose, no code fences: {"research": true} or {"research":'
+                ' false}.'
+            ),
+        },
+        {"role": "user", "content": f"<q>{question}</q>"},
+    ]
+    value = llm.json_completion(cfg, messages, "research_gate", _RESEARCH_SCHEMA)
+    if not value or not isinstance(value.get("research"), bool):
+        return True
+    return value["research"]
 
 
 def _standalone_question(cfg: dict[str, t.Any], question: str, history: list[dict[str, str]], lang: str) -> str:
@@ -1038,6 +1383,72 @@ def _standalone_question(cfg: dict[str, t.Any], question: str, history: list[dic
     return str((value or {}).get("question") or "").strip()[:300]
 
 
+def _fit_context(feed: list[str], cap: int) -> list[str]:
+    """The writer's source feed under the hard cap: whole OLDEST blocks are
+    evicted first (the oldest searches are the broadest; page reads and
+    late refinements stay), never a mid-block slice -- a silently cut tail
+    could drop exactly the source the model was about to cite.  The
+    eviction notice names the drop so the writer does not cite evicted
+    numbers; the renderer still fails soft on any that slip through."""
+    blocks = [block for block in feed if block]
+    dropped = 0
+    while len(blocks) > 1 and sum(len(block) for block in blocks) > cap:
+        blocks.pop(0)
+        dropped += 1
+    if dropped:
+        blocks.insert(
+            0,
+            f"[... {dropped} earlier source block(s) were dropped to fit"
+            " the context -- cite only the sources below ...]",
+        )
+    return blocks or ["The research found no usable sources."]
+
+
+_FOLLOWUPS_BLOCK = (
+    "<follow_ups>\n"
+    "When the answer is substantive -- it compares, recommends, explains a"
+    " mechanism or lays out several points -- end it with EXACTLY ONE"
+    " fenced block carrying three follow-up questions:\n"
+    "```related\n"
+    '{"questions": ["...", "...", "..."]}\n'
+    "```\n"
+    "Each question is short (about a dozen words at most), self-contained,"
+    " in the answer language, and grounded in THIS answer: one deepens its"
+    " most interesting or surprising point, one is the practical next"
+    " step, one broadens with a comparison or related angle -- never three"
+    " near-duplicates.  Omit the block entirely for greetings, single"
+    " facts or values, refusals and clarifying questions.  The fence is"
+    " the LAST thing in the reply; never mention it in the prose.\n</follow_ups>"
+)
+
+
+def _answer_images_block() -> str:
+    """The inline-gallery contract: the writer may embed image groups
+    (Morphic's spec-image idea, our own tiny fence) -- URLs must be copied
+    VERBATIM from the feed's ``img=`` entries and are validated against
+    the run's registry server-side: anything else is dropped before it
+    reaches the client."""
+    return (
+        "<answer_images>\n"
+        "Some source lines below carry image URLs as img=... .  Visual"
+        " context communicates faster than prose: DEFAULT TO including one"
+        " image group whenever img= lines exist and images could help the"
+        " reader -- multi-part answers may use a second group right where"
+        " it illustrates the text.  Each group is a fenced block of a JSON"
+        " array of 1-4 URLs, placed on its own lines inside the markdown"
+        " body:\n"
+        "```zjs-images\n"
+        '["<url>", "<url>"]\n'
+        "```\n"
+        "A feed line looks like: \"[12] upload.wikimedia.org: Mount Fuji -"
+        ' ... img=/image_proxy?url=...\' -- copy the value after "img="'
+        " character for character.  NEVER invent, modify or guess a URL"
+        " (unlisted URLs are dropped server-side and the group renders"
+        " empty).  Skip images only for genuinely abstract or text-only"
+        " topics; at most two groups per answer.\n</answer_images>"
+    )
+
+
 def _writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     question: str,
     lang: str,
@@ -1048,24 +1459,55 @@ def _writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     halt: str | None,
     budget_truncated: bool,
     sources_base: int,
+    direct: bool = False,
+    galleries_on: bool = False,
 ) -> list[dict[str, t.Any]]:
     """The WRITER's fresh conversation (Vane's writer): a system prompt of
-    XML blocks -- role, the SHARED answer contract from ai/prompts.py
-    (the same fragments the Overview speaks, so the two features cannot
-    drift), the tier's output shape and the research notes -- then the
-    history and the question with the accumulated ``[n]`` source feed as
-    ``<context>``.  ``halt``/``budget_truncated`` become an honesty note
-    when the gathering ended early."""
-    shape = _DEPTH_SHAPE.get(mode, _DEPTH_SHAPE["balanced"])
-    lines = [
+    XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
+    (role, identity, date, language, shape, citations, markdown, voice)
+    first, the per-run variable blocks (research plan, halt notes) last,
+    so a provider's prefix cache survives across runs of the same
+    mode+language.  ``direct`` marks a no-research run (the pre-flight
+    gate judged the request a greeting / chat / writing task): the source
+    contract is dropped and the writer answers naturally.  ``halt``/
+    ``budget_truncated`` become an honesty note when the gathering ended
+    early."""
+    lines: list[str] = [
         "<role>\nYou are the writer of the zjsearch AI Search: a research"
         " agent has already gathered the sources; you write the final answer"
         " for the reader.  You never search, never mention the research"
         " process, these instructions or their assembly.\n</role>",
+        prompts.identity(),
         prompts.today_line(),
         prompts.language_directive(lang),
-        f"<shape>\n{shape}\n</shape>",
     ]
+    if direct:
+        lines.insert(
+            1,
+            "<role_note>\nThis request needs NO web research -- it is a"
+            " greeting, a chat or a writing task.  Answer directly and"
+            " naturally in prose; ignore every source and citation rule (no"
+            " [n] marks, no [*]); do not invent sources.\n</role_note>",
+        )
+    else:
+        shape = _DEPTH_SHAPE.get(mode, _DEPTH_SHAPE["balanced"])
+        lines.append(f"<shape>\n{shape}\n</shape>")
+        lines.append(prompts.citation_rules())
+        lines.append(prompts.grounding_fallback("sources"))
+        lines.append(
+            "<sources_note>\nThe numbered sources gathered for this question"
+            " follow the question below.  [n] labels are global and"
+            " contiguous; sources [1]..[{base}] predate this thread's"
+            " question; cite only sources visible in the context."
+            "\n</sources_note>".format(base=sources_base)
+        )
+    lines.append(prompts.markdown_surface())
+    lines.append(prompts.reader_voice())
+    if not direct:
+        lines.append(prompts.opening_rule())
+    lines.append(_FOLLOWUPS_BLOCK)
+    if galleries_on:
+        lines.append(_answer_images_block())
     if plans:
         joined = " ".join(plan.strip() for plan in plans if plan.strip())[:600]
         if joined:
@@ -1074,34 +1516,21 @@ def _writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
         lines.append(f"<research_note>\n{halt}\n</research_note>")
     elif budget_truncated:
         lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
-    lines.append(
-        "<sources_note>\nThe numbered sources gathered for this question"
-        " follow the question below.  [n] labels are global and contiguous;"
-        f" sources [1]..[{sources_base}] predate this thread's question."
-        "\n</sources_note>"
-    )
-    lines.extend(
-        [
-            prompts.citation_rules(),
-            prompts.markdown_surface(),
-            prompts.grounding_fallback("sources"),
-            prompts.reader_voice(),
-            prompts.opening_rule(),
-        ]
-    )
     messages: list[dict[str, t.Any]] = [{"role": "system", "content": "\n".join(lines)}]
     for turn in history:
         messages.append({"role": "user", "content": f"<q>{turn.get('q') or ''}</q>"})
         messages.append({"role": "assistant", "content": str(turn.get("a") or "")[:2000]})
-    context = "\n\n".join(feed).strip()
+    context = "\n\n".join(_fit_context(feed, _WRITER_CONTEXT_MAX))
     if len(context) > _WRITER_CONTEXT_MAX:
+        # a single oversized block: the last-resort slice the eviction
+        # cannot fix
         context = context[:_WRITER_CONTEXT_MAX] + "\n\n[... the feed was truncated ...]"
     messages.append(
         {
             "role": "user",
             "content": (
                 f"<question>{question}</question>\n<context>\n"
-                f"{context or 'The research found no usable sources.'}\n</context>"
+                f"{context if not direct else 'No sources: this answer does not need them.'}\n</context>"
             ),
         }
     )
@@ -1199,15 +1628,22 @@ def _related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: 
     return [str(item).strip()[:200] for item in items if isinstance(item, str) and item.strip()][:3]
 
 
-def _generate(
+def _generate(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     first: tuple[str, t.Any],
     events: t.Iterator[tuple[str, t.Any]],
     cfg: dict[str, t.Any],
     question: str,
     lang: str,
     plans: list[str],
+    state: "_Searches",
 ) -> t.Iterator[str]:
-    """Map agent/executor events to the NDJSON wire protocol."""
+    """Map agent/executor events to the NDJSON wire protocol.  The WRITER's
+    stream runs through a :class:`_FenceSplitter`: the ``related`` fence
+    becomes a pre-``end`` related event (Morphic's in-stream follow-ups --
+    no extra completion), each ``zjs-images`` fence becomes a validated
+    gallery event plus a placeholder delta at its position; neither fence
+    ever reaches the client's answer text.  When the writer skips the
+    fence, the post-``end`` small completion still suggests follow-ups."""
 
     def emit(kind: str, payload: t.Any) -> str:  # pylint: disable=too-many-return-statements
         if kind == "think":
@@ -1231,6 +1667,12 @@ def _generate(
             # payload-less state marker: the client flips its run state
             # (the wrap-up hint) on it
             return json.dumps({"e": kind}, ensure_ascii=False) + "\n"
+        if kind == "direct":
+            # the pre-flight gate skipped research: the writer answers
+            # without one (the client hides the research box for the run)
+            return json.dumps({"e": "direct"}, ensure_ascii=False) + "\n"
+        if kind == "gallery":
+            return json.dumps({"e": "gallery", "items": payload}, ensure_ascii=False) + "\n"
         if kind == "ask_user":
             # the mid-research escape hatch: the model stopped to ask for
             # direction -- shape its tool arguments into the same ask event
@@ -1260,6 +1702,19 @@ def _generate(
             return json.dumps({"e": "error", "reason": llm.reason_of(payload)}, ensure_ascii=False) + "\n"
         return json.dumps({"e": kind, **payload}, ensure_ascii=False) + "\n"
 
+    def gallery_items(body: str) -> list[dict[str, t.Any]]:
+        """The zjs-images fence body -> validated gallery items: every URL
+        must be verbatim from the run's image registry (the writer's
+        prompt says never invent one; this is the enforcement)."""
+        value = _parse_fence_json(body)
+        urls = value if isinstance(value, list) else []
+        items: list[dict[str, t.Any]] = []
+        for url in urls[:4]:
+            n = state.gallery_pool.get(str(url or ""))
+            if n is not None:
+                items.append({"u": str(url), "n": n})
+        return items
+
     # reasoning-channel guard: some models (LM Studio + qwen3.6) route the
     # whole answer into the think stream and leave the content channel empty
     # -- promote the final turn's reasoning so the user always gets a
@@ -1269,18 +1724,48 @@ def _generate(
 
     last_kind = first[0]
     saw_ask = False
-    yield emit(*first)
+    splitter = _FenceSplitter()
+    fence_related: list[str] = []
+
+    def drain(pieces: list[tuple[str, str]]) -> t.Iterator[str]:
+        """Handle closed fences: related queues the questions, each
+        zjs-images emits its gallery event plus the placeholder delta the
+        renderer expands (neither fence ever touches the answer text)."""
+        nonlocal fence_related
+        for kind, body in pieces:
+            if kind == "related":
+                fence_related = _parse_related_questions(body)
+            else:
+                items = gallery_items(body)
+                if items:
+                    mark = f"\n{{{{zjs-gallery:{len(state.galleries)}}}}}\n"
+                    state.galleries.append(items)
+                    answer_parts.append(mark.strip())
+                    yield emit("gallery", items)
+
+    def through(delta: str) -> t.Iterator[str]:
+        prose, closed = splitter.feed(delta)
+        if prose:
+            answer_parts.append(prose)
+            yield emit("delta", prose)
+        yield from drain(closed)
+
+    if first[0] == "delta":
+        yield from through(str(first[1] or ""))
+    else:
+        yield emit(*first)
     for event in events:
         kind, payload = event
         last_kind = kind
         if kind == "think":
             think_parts.append(str(payload or ""))
         elif kind == "delta":
-            answer_parts.append(str(payload or ""))
+            yield from through(str(payload or ""))
         elif kind == "calls":
             # a new turn begins: its answer is judged on its own
             think_parts.clear()
             answer_parts.clear()
+            yield emit(*event)
         elif kind == "plan":
             # the plan turn's prose is answer-shape deliberation, not
             # answer material -- never promote it on a late stream error;
@@ -1293,7 +1778,18 @@ def _generate(
             # intent prose is not an answer -- related questions on it
             # would be noise
             saw_ask = True
-        yield emit(*event)
+        elif kind == "wrapup":
+            # the writer's stream follows: a fresh splitter -- the
+            # researcher's holdback residue must not bleed into the answer
+            splitter = _FenceSplitter()
+            yield emit(*event)
+        else:
+            yield emit(*event)
+    prose, closed = splitter.finish()
+    if prose:
+        answer_parts.append(prose)
+        yield emit("delta", prose)
+    yield from drain(closed)
     answer_text = "".join(answer_parts).strip()
     if last_kind != "error" and not answer_text and think_parts:
         # the model routed the whole answer into the reasoning channel:
@@ -1302,13 +1798,19 @@ def _generate(
         yield emit("delta", promoted)
         answer_parts.append(promoted)
         answer_text = promoted
+    # the writer's in-stream related fence wins: emit BEFORE end so the
+    # follow-up box opens already holding its suggestions (the small
+    # completion behind the fallback cannot match that -- it can think
+    # for the better part of a minute on reasoning models)
+    emitted_related = False
+    if fence_related:
+        yield emit("related", {"items": fence_related})
+        emitted_related = True
     # `end` settles the run FIRST so the client's follow-up box opens
-    # immediately; the related questions trail as a post-end event (the
-    # small completion behind them can think for the better part of a
-    # minute on reasoning models -- the client accepts `related` after
-    # phase=done by design)
+    # immediately; the fallback related questions trail as a post-end
+    # event (the client accepts `related` after phase=done by design)
     yield json.dumps({"e": "end"}, ensure_ascii=False) + "\n"
-    if answer_text and not saw_ask:
+    if answer_text and not saw_ask and not emitted_related:
         try:
             related = _related_questions(cfg, question, answer_text, lang)
         except Exception as exc:  # pylint: disable=broad-except
@@ -1368,75 +1870,95 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         clarify_state = "ask"
     clarifications = str(payload.get("clarifications") or "").strip()[:2000]
     max_rounds = _budget("max_rounds", mode, 2)
+    # the pre-flight gate (Vane's skipSearch, narrowed to our contract): a
+    # question carrying a URL always researches (the page read IS the
+    # research); everything else passes one small completion that skips
+    # research only for greetings, chat and writing tasks
+    research_needed = bool(_URL_RE.search(q)) or _research_gate(cfg, q)
     # the clarify gate fires on the FIRST run of a gated mode only: a
     # follow-up's history already disambiguates the direction
-    if mode in _CLARIFY_MODES and clarify_state == "ask" and not history:
+    if research_needed and mode in _CLARIFY_MODES and clarify_state == "ask" and not history:
         gate = _clarify_gate(cfg, q, lang, mode)
         if gate:
             resp = flask.Response(flask.stream_with_context(_clarify_stream(gate)), mimetype="application/x-ndjson")
             resp.headers["X-Accel-Buffering"] = "no"
             resp.headers["Cache-Control"] = "no-cache"
             return resp
-    state = _Searches(
-        sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
-    )
-    # the page reader rides only when the browserless block is fully
-    # configured: an unconfigured reader simply leaves the tool unregistered
-    pages_on = browserless.configured()
-    # the mid-run ask_user escape hatch rides ONLY a first run of the gated
-    # modes whose gate passed on asking: if the gate already asked
-    # (state=answered) or the user skipped, the direction is settled
-    register_ask = mode in _CLARIFY_MODES and clarify_state == "ask"
-    # the answer-planning tool rides every run of the structured tiers
-    register_plan = mode in _PLAN_MODES
-    # the follow-up rewrite (Vane's standalone follow-up): a thread-relative
-    # question becomes self-contained before it drives research and writer
-    # (the thread still shows the user's own wording; fail-open to the
-    # original on any gate failure)
-    research_q = (_standalone_question(cfg, q, history, lang) if history else "") or q
-    state = _Searches(
-        sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
-    )
     # the page reader rides only when the browserless block is fully
     # configured: an unconfigured reader simply leaves the tool unregistered
     pages_on = browserless.configured()
     plans: list[str] = []
-    events = agent.run_agent(
-        cfg,
-        _initial_messages(
-            research_q,
-            lang,
-            history,
+    if not research_needed:
+        # the no-research run: the writer alone -- the zero-tool case of the
+        # shared loop (one streamed turn whose prose IS the answer, no
+        # executor, no rounds).  The `direct` marker event tells the client
+        # to hide the research box for this run.
+        state = _Searches(
+            sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
+        )
+        events: t.Iterator[tuple[str, t.Any]] = itertools.chain(
+            (("direct", None),),
+            agent.run_agent(
+                cfg,
+                _writer_messages(q, lang, history, [], [], mode, None, False, sources_base, direct=True),
+            ),
+        )
+    else:
+        # the mid-run ask_user escape hatch rides ONLY a first run of the
+        # gated modes whose gate passed on asking: if the gate already asked
+        # (state=answered) or the user skipped, the direction is settled
+        register_ask = mode in _CLARIFY_MODES and clarify_state == "ask"
+        # the answer-planning tool rides every run of the structured tiers
+        register_plan = mode in _PLAN_MODES
+        # the follow-up rewrite (Vane's standalone follow-up): a
+        # thread-relative question becomes self-contained before it drives
+        # research and writer (the thread still shows the user's own
+        # wording; fail-open to the original on any gate failure)
+        research_q = (_standalone_question(cfg, q, history, lang) if history else "") or q
+        state = _Searches(
+            sxng_request.preferences,
+            list(sxng_request.user_plugins),
             sources_base,
-            mode,
+            search_language=raw_search_language,
             max_rounds=max_rounds,
-            clarifications=clarifications if clarify_state == "answered" else "",
-            clarify_skipped=clarify_state == "skipped",
-            register_ask=register_ask,
-            page_tool=pages_on,
-            plan_tool=register_plan,
-        ),
-        tools=[_tool_spec(pages_on)]
-        + ([_page_spec()] if pages_on else [])
-        + ([_ask_user_spec()] if register_ask else [])
-        + ([_plan_spec()] if register_plan else []),
-        executor=state.execute,
-        max_rounds=max_rounds,
-        round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
-        ask_tool=ASK_TOOL if register_ask else None,
-        plan_tool=PLAN_TOOL if register_plan else None,
-        writer=lambda halt: _writer_messages(
-            research_q,
-            lang,
-            history,
-            state.feed,
-            plans,
-            mode,
-            halt,
-            state.round_no >= max_rounds,
-            sources_base,
-        ),
-    )
+        )
+        events = agent.run_agent(
+            cfg,
+            _initial_messages(
+                research_q,
+                lang,
+                history,
+                sources_base,
+                mode,
+                max_rounds=max_rounds,
+                clarifications=clarifications if clarify_state == "answered" else "",
+                clarify_skipped=clarify_state == "skipped",
+                register_ask=register_ask,
+                page_tool=pages_on,
+                plan_tool=register_plan,
+            ),
+            tools=[_tool_spec(pages_on)]
+            + ([_page_spec()] if pages_on else [])
+            + ([_ask_user_spec()] if register_ask else [])
+            + ([_plan_spec()] if register_plan else []),
+            executor=state.execute,
+            max_rounds=max_rounds,
+            round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
+            ask_tool=ASK_TOOL if register_ask else None,
+            plan_tool=PLAN_TOOL if register_plan else None,
+            writer=lambda halt: _writer_messages(
+                research_q,
+                lang,
+                history,
+                state.feed,
+                plans,
+                mode,
+                halt,
+                state.round_no >= max_rounds,
+                sources_base,
+                galleries_on=bool(state.gallery_pool),
+            ),
+        )
     try:
         first = next(events)
     except StopIteration:
@@ -1450,7 +1972,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # the executor serializes results through Jinja -- keep the request
     # context alive while the response streams
     resp = flask.Response(
-        flask.stream_with_context(_generate(first, events, cfg, q, lang, plans)), mimetype="application/x-ndjson"
+        flask.stream_with_context(_generate(first, events, cfg, q, lang, plans, state)), mimetype="application/x-ndjson"
     )
     resp.headers["X-Accel-Buffering"] = "no"
     resp.headers["Cache-Control"] = "no-cache"

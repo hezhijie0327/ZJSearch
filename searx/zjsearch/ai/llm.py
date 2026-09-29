@@ -500,6 +500,19 @@ def _gemini_messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.An
     return system or None, contents
 
 
+def _cache_body(cfg: dict[str, t.Any], base: str) -> dict[str, t.Any] | None:
+    """The extra_body with OpenAI's prompt-cache routing key folded in --
+    but ONLY for the real OpenAI API: a stable grouping key helps its
+    automatic prefix cache (the prompts here are byte-stable per
+    mode+language by design), while OpenAI-compatible servers (LM Studio,
+    vLLM, aggregators) can be strict about unknown body fields.  Rides
+    extra_body so no SDK signature is assumed."""
+    body = dict(_extra_body(cfg) or {})
+    if "api.openai.com" in (base or ""):
+        body.setdefault("prompt_cache_key", "zjsearch-ai")
+    return body or None
+
+
 async def _pump_openai_chat(
     cfg: dict[str, t.Any],
     base: str,
@@ -521,7 +534,7 @@ async def _pump_openai_chat(
         stream=True,
         timeout=_sdk_timeout(),
         extra_headers=_extra_headers(cfg),
-        extra_body=_extra_body(cfg),
+        extra_body=_cache_body(cfg, base),
         **_model_kwargs(_params(cfg), "openai_chat_completions"),
         **extra,
     )
@@ -575,7 +588,7 @@ async def _pump_openai_responses(
         stream=True,
         timeout=_sdk_timeout(),
         extra_headers=_extra_headers(cfg),
-        extra_body=_extra_body(cfg),
+        extra_body=_cache_body(cfg, base),
         **_model_kwargs(_params(cfg), "openai_responses"),
         **extra,
     )

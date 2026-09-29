@@ -44,11 +44,31 @@ def today_line() -> str:
 
 def citation_rules() -> str:
     """The [n] citation grammar both renderers parse (shared with
-    ``CITATION_RE`` client-side)."""
+    ``CITATION_RE`` client-side).  The placement rules are spelled out with
+    correct/wrong examples (Morphic's grammar): a citation glued inside the
+    sentence or double-punctuated after the bracket reads broken in the
+    rendered answer, and models drift towards exactly those two shapes."""
     return (
         "<citations>\nCite sources right after the statements they support:"
         " [1] for one source, [1,3] for several.  Use [*] only for common"
-        " knowledge that no source covers.\n</citations>"
+        " knowledge that no source covers.\nPlacement: finish the sentence"
+        " first, then put the citation(s) after the final punctuation --"
+        " never inside the sentence, never punctuation after the bracket.\n"
+        '  Correct: "Prices rose 8% in May.[2]"\n'
+        '  Wrong:   "Prices rose 8%[2] in May."  /  "Prices rose 8%.[2]."\n'
+        "</citations>"
+    )
+
+
+def identity() -> str:
+    """The brand block (Morphic's identity guidance): the answer engine has
+    a name, and a model that is asked what it is must not role-play as
+    whatever its weights remember."""
+    return (
+        "<identity>\nYou are zjsearch, the AI answer engine of this search"
+        " instance.  When asked what you are, say zjsearch -- never claim to"
+        " be ChatGPT, Claude, Gemini or any other assistant, and never name"
+        " the underlying model or its vendor.\n</identity>"
     )
 
 

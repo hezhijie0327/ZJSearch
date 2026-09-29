@@ -186,7 +186,15 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   browser launch per read on a server that has its own concurrency
   ceiling, typically 3).
 - AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`):
-  the RESEARCHER/WRITER split (Vane's shape).  A research agent
+  the RESEARCHER/WRITER split (Vane's shape).  A PRE-FLIGHT GATE
+  (`_research_gate`, Vane's skipSearch narrowed) runs one small JSON
+  completion first: greetings, chat and writing tasks skip research
+  entirely — the run emits a `direct` wire event and the writer answers
+  alone (the zero-tool case of the shared loop; the client hides the
+  research box); a question carrying a URL always researches (and the
+  `<page_reader>` prompt rule tells the model to open that page with
+  `web_crawler` FIRST instead of searching for it — Morphic's fetch-first
+  rule, prompt-level like the original).  A research agent
   analyses the question, states a one-line intent, then calls the
   `web_search` tool — several calls per turn run as REAL instance
   searches (the `SearchWithPlugins` path, plugins included) in a worker
@@ -197,8 +205,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   public `result_data` wrapper macro (Jinja refuses underscore imports)
   and keep array separators as block-ifs — and stream as page-data-shaped
   `results` events; researcher and writer both consume a globally
-  numbered `[n]` feed (5 deep + 5 shallow per search; the executor
-  accumulates every block in `state.feed`).  When the research ends —
+  numbered `[n]` feed (5 deep + 5 shallow per search; image-bearing
+  results append `img=` URLs to the deep feed lines and register them in
+  `state.gallery_pool`; the executor accumulates every block in
+  `state.feed`).  A url already numbered in the run is DEDUPED in the
+  feed (its existing [n] is reused — the numbering stays contiguous and
+  the sources grid shows the page once).  When the research ends —
   the model stops calling tools, the ceiling/stall verdict halts it, or
   a research turn's transport dies — agent.py flies a `wrapup` event and
   a FRESH WRITER completion (`_writer_messages`) writes the cited answer
@@ -207,11 +219,20 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (citations/markdown/grounding/voice — the prompts.py fragments) lives
   exactly where the answer is written.  The tier split is therefore
   two-sided: `_DEPTH_RESEARCH` (round policy) prompts the researcher,
-  `_DEPTH_SHAPE` (output shape) prompts the writer.  Follow-ups are
+  `_DEPTH_SHAPE` (output shape) prompts the writer.  Over the 40k writer
+  cap whole OLDEST feed blocks are evicted (`_fit_context`), never a
+  mid-block slice (a silently cut tail could drop the source the model
+  was about to cite).  The writer's system prompt is ordered
+  CACHE-FRIENDLY — byte-stable blocks first (role/identity/date/language/
+  shape/citations/markdown/voice), per-run variable blocks (research
+  plan, halt notes) last — and `<identity>` names the engine zjsearch
+  (Morphic's brand guidance: never claim to be ChatGPT/Claude/…).
+  Follow-ups are
   rewritten into self-contained questions first (Vane's standalone
   follow-up: `_standalone_question`, one small JSON completion, fail-open
   to the original wording — the thread still shows the user's own
-  question).  All three gates (clarify, related, standalone rewrite)
+  question).  All four gates (research, clarify, related fallback,
+  standalone rewrite)
   ride `llm.json_completion` — NATIVE structured output per dialect
   (openai chat `response_format` / responses `text.format` / anthropic
   `output_config.format` / gemini `response_json_schema`, verified
@@ -220,13 +241,35 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   constraints), a `json_object` second tier for openai-family
   endpoints that reject the full schema (DeepSeek does), the plain
   streaming completion as the last tier, and a per-endpoint 400
-  memory so a rejected tier is skipped on later gate calls.  Prompt
+  memory so a rejected tier is skipped on later gate calls.  The
+  writer emits its follow-up suggestions IN-STREAM: a ```related fence
+  at the very end of the answer (Morphic's in-stream related, with the
+  Deepen/Act/Broaden intent rule and skip criteria) — `_generate`'s
+  `_FenceSplitter` intercepts it (and the ```zjs-images gallery fences,
+  same mechanism) so no raw fence text ever reaches the client, and the
+  questions fly as a `related` event BEFORE `end`; a writer that skips
+  the fence falls back to the post-`end` small completion (which is why
+  that completion still exists — on reasoning models it can think for
+  the better part of a minute, so the fence is the fast path).  Gallery
+  fences carry a JSON array of URLs copied verbatim from the feed's
+  `img=` entries and are VALIDATED against `state.gallery_pool`
+  server-side (invented URLs are dropped, an all-invalid group renders
+  nothing); a valid group flies as a `gallery` event plus a
+  `{{zjs-gallery:i}}` placeholder delta at its position, which
+  `renderWithGalleries` (AnswerGallery.tsx) expands into an inline image
+  grid whose tiles re-use the citation jump ([n] badge, click = scroll
+  to the source card).  Local models may skip the images fence
+  (qwen3.6 at low effort does; the related fence it writes) — the
+  degradation is silent by design.  Prompt
   organization is XML blocks end to end: prompts.py
   fragments emit `<tag>` blocks, the researcher prompt composes
-  `<role>/<today>/<step_notes>/<how_to_search>/<examples>` (few-shot)
-  plus per-tool capability blocks.  Wire protocol: NDJSON lines
+  `<role>/<today>/<step_notes>/<how_to_search>/<examples>` (few-shot,
+  composed from the tools THIS run registers — an example demonstrating
+  an unregistered tool teaches a broken call) plus per-tool capability
+  blocks.  Wire protocol: NDJSON lines
   (`think`/`delta`/`calls`/`search`/`results`/`sources`/`page`/`plan`/
-  `wrapup`/`ask`/`error`/`end`); a stream that dies before its first
+  `direct`/`gallery`/`wrapup`/`ask`/`related`/`error`/`end`); a stream
+  that dies before its first
   line answers 502 like the Overview.  `end` settles
   the run FIRST and `related` trails as a post-end event: the small
   completion behind the follow-up suggestions can think for the better
@@ -267,6 +310,18 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `tool` field (`web_search` renders the query, `web_crawler` a
   host+path label and a char count) and a successful read's source
   card becomes the row's swipe strip, same as a search's.
+  The `web_search` tool also takes `included_sites`/`excluded_sites`
+  (Morphic's domain filters, enforced on OUR side): bare domains the
+  model passes only on a user source preference ("在 GitHub 上找" ->
+  ["github.com"]); the executor appends them to the query as
+  `site:`/`-site:` operators, which the advanced_search_syntax plugin
+  enforces AUTHORITATIVELY on every result — the timeline row displays
+  the operators folded into its query label.
+  The executor's round-end tool results carry the model-facing budget
+  notes (Vane rebuilds the system prompt with an iteration counter every
+  turn; this is the canonical-messages equivalent): one round before the
+  ceiling the last feed gets "ONE research round remains", and past a
+  24k feed a one-shot "context is getting large — converge" note fires.
   The `plan` tool (quality/goal tiers, agent-level like `ask_user`)
   is the answer-planning escape valve adapted from Vane's reasoning
   preamble: the model's deliberation about the SHAPE of its final
@@ -303,7 +358,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   URL on navigation, and `buildParams` re-emits it whenever the ai flag
   is set).  The depths are speed / balanced / quality / goal --
   speed/balanced/quality raise the research budget AND change the output
-  shape (speed = one dense "what is this" paragraph with no sections;
+  shape (speed = ONE search round ceiling, Morphic's quick discipline,
+  and one dense "what is this" paragraph with no sections;
   quality = structured "## " sections, tables, heavy citation); goal is
   the iterate-until-met tier: the model plans the evidence the target
   needs, self-checks the gap after each round and keeps searching until
@@ -318,10 +374,19 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the initial one and each follow-up (`followup()`, prior Q&A travels
   as history, `sources_base` continues the global [n] numbering) —
   appends an `AiSearchRunSection` behind a `border-t` divider
-  (auto-scrolled into view), in the production order: the question
-  heading, the collapsible Research box, the cited synthesis, the run's
-  OWN source cards (skeleton until its searches settle), and the run's
-  Related questions (each spawns another run); the thread's follow-up
+  (auto-scrolled into view).  Each run is TWO-COLUMN from lg
+  (Perplexity's shape): the question heading, the collapsible Research
+  box and the answer body keep the reading measure on the LEFT (the
+  answer carries NO header row — the prose is the anchor; while the
+  writer has not started, one compact "正在撰写回答…" line covers the
+  silence), the cited synthesis with its inline image groups and the
+  run's Related questions follow it, and the run's OWN source cards
+  (skeleton until its searches settle) ride a STICKY RIGHT RAIL
+  (`lg:w-72 xl:w-80`, internal scroll — ONE responsive markup that is a
+  2-column grid below lg and a vertical card list from lg, so the
+  `[data-ai-n]` citation-jump target exists exactly once in the DOM);
+  below lg everything stacks: answer, related, actions, sources.  The
+  thread's follow-up
   pill floats `sticky bottom-6` above a palette fog fade (Perplexica's
   pinned input).  `useAiSearch` rebuilds a CHRONOLOGICAL step
   timeline per run (`AiSearchStep`: collapsible think segment →

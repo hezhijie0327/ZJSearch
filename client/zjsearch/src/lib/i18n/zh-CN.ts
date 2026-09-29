@@ -209,6 +209,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_clarify_summary: "已确认方向",
   ai_clarify_skipped: "未澄清方向，直接研究",
   ai_wrapup: "整理来源，撰写最终回答",
+  ai_answer_writing: "正在撰写回答…",
+  ai_gallery_label: "来源图片",
   stop: "停止",
   mode_classic: "经典",
   mode_ai: "AI",

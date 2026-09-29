@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import {
-  BookMarked,
   BookOpen,
   Brain,
   Check,
@@ -10,7 +9,6 @@ import {
   Compass,
   Copy,
   CornerDownRight,
-  Disc3,
   Globe,
   Lightbulb,
   LoaderCircle,
@@ -39,15 +37,17 @@ import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /**
- * One threaded Q&A section of the AI Search page, in the production
- * order: the question as a heading, the collapsible Research box (the
- * CHRONOLOGICAL step timeline -- collapsible think segment,
- * lightbulb-marked conclusion line, and EXPANDABLE tool-call rows: a
- * settled row with results opens a swipe strip of that search's result
- * cards), the flowing cited synthesis, the run's own source-card grid
- * behind it, and the run's Related questions.  The FIRST section of the
- * thread carries the large page title; follow-up sections lead with a
- * smaller heading behind a thread divider.
+ * One threaded Q&A section of the AI Search page: the question as a
+ * heading, the collapsible Research box (the CHRONOLOGICAL step timeline
+ * -- collapsible think segment, lightbulb-marked conclusion line, and
+ * EXPANDABLE tool-call rows: a settled row with results opens a swipe
+ * strip of that search's result cards), then the ANSWER+TWO-COLUMN body:
+ * the flowing cited synthesis (with inline image groups) and the run's
+ * Related questions keep the reading measure on the left while the run's
+ * own source cards ride a sticky right rail from lg (stacked below on
+ * narrow screens).  The FIRST section of the thread carries the large
+ * page title; follow-up sections lead with a smaller heading behind a
+ * thread divider.
  */
 
 /** One settled search's result cards (DeltaV's expandable tool row): a
@@ -554,27 +554,37 @@ function AiSearchRunSectionImpl({
             </p>
           ) : null}
 
-          {/* synthesis */}
-          {run.answer ? (
-            <section aria-label={t("ai_search_answer")}>
-              <div className="flex items-center gap-2">
-                {streaming ? (
-                  <Disc3 aria-hidden="true" className="size-5 shrink-0 animate-spin text-ink-3" />
-                ) : (
-                  <BookMarked aria-hidden="true" className="size-5 text-ink-3" />
-                )}
-                <h3 className="text-xl font-medium text-ink">{t("ai_search_answer")}</h3>
-              </div>
-              <div className="mt-3 text-sm leading-relaxed text-ink">
-                <MarkdownAnswer
-                  markdown={citeToLinks(run.answer)}
-                  meta={sourceMeta}
-                  onCite={onCite}
-                  settled={!streaming}
-                />
-              </div>
-              {!streaming && isLast ? (
-                <div className="mt-3 flex items-center gap-1">
+          {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
+              the prose keeps its reading measure on the left, the run's
+              source cards become a sticky rail on the right; below lg
+              everything stacks: answer, related, actions, sources.  The
+              answer carries no header row -- the prose is the anchor; one
+              compact line covers the writer's silent start. */}
+          <div className="lg:flex lg:items-start lg:justify-between lg:gap-8">
+            <div className="min-w-0 flex-1 space-y-5 lg:max-w-3xl">
+              {streaming &&
+              !run.answer &&
+              (run.wrappingUp || run.direct || run.steps.some((step) => step.kind === "calls")) ? (
+                <p className="flex items-center gap-1.5 text-xs text-ink-3">
+                  <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
+                  {t("ai_answer_writing")}
+                </p>
+              ) : null}
+
+              {/* synthesis */}
+              {run.answer ? (
+                <div className="text-sm leading-relaxed text-ink">
+                  <MarkdownAnswer
+                    galleries={run.galleries}
+                    markdown={citeToLinks(run.answer)}
+                    meta={sourceMeta}
+                    onCite={onCite}
+                    settled={!streaming}
+                  />
+                </div>
+              ) : null}
+              {!streaming && isLast && run.answer ? (
+                <div className="flex items-center gap-1">
                   {/* [retry | copy] -- twin ghost circles: the fill is HOVER
                   feedback only (a persistent disc reads as a selected state) */}
                   <button
@@ -599,75 +609,76 @@ function AiSearchRunSectionImpl({
                   </button>
                 </div>
               ) : null}
-            </section>
-          ) : null}
 
-          {/* this run's own source cards -- the evidence behind the answer,
-          shown after it (the production order: research -> answer ->
-          sources -> related) */}
-          {run.sources.length > 0 ? (
-            <AiSearchSources sources={run.sources} />
-          ) : streaming ? (
-            <AiSearchSourcesSkeleton />
-          ) : null}
+              {/* this run's follow-up suggestions */}
+              {run.related.length > 0 ? (
+                <section aria-label={t("related")}>
+                  <div className="flex items-center gap-2">
+                    <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
+                    <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
+                  </div>
+                  <div className="mt-1">
+                    {run.related.map((question, i) => (
+                      <div key={i}>
+                        <div className="h-px bg-line" />
+                        <button
+                          className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
+                          onClick={() => {
+                            onRelated?.(question);
+                          }}
+                          type="button"
+                        >
+                          <span className="flex min-w-0 items-center gap-3">
+                            <CornerDownRight
+                              aria-hidden="true"
+                              className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                            />
+                            <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
+                              {question}
+                            </span>
+                          </span>
+                          <Plus
+                            aria-hidden="true"
+                            className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                          />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
 
-          {/* this run's follow-up suggestions */}
-          {run.related.length > 0 ? (
-            <section aria-label={t("related")}>
-              <div className="flex items-center gap-2">
-                <Repeat2 aria-hidden="true" className="size-5 text-ink-3" />
-                <h3 className="text-xl font-medium text-ink">{t("related")}</h3>
-              </div>
-              <div className="mt-1">
-                {run.related.map((question, i) => (
-                  <div key={i}>
-                    <div className="h-px bg-line" />
+              {failed ? (
+                <div className="rounded-lg border border-line p-3 text-xs text-danger">
+                  <p>{t("ai_search_failed")}</p>
+                  {run.error ? (
+                    <p className="mt-1 break-words text-danger/80" dir="auto">
+                      {run.error}
+                    </p>
+                  ) : null}
+                  {onFallback ? (
                     <button
-                      className="group flex w-full items-center justify-between gap-3 py-3 text-left"
-                      onClick={() => {
-                        onRelated?.(question);
-                      }}
+                      className="mt-2 inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+                      onClick={onFallback}
                       type="button"
                     >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <CornerDownRight
-                          aria-hidden="true"
-                          className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                        />
-                        <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
-                          {question}
-                        </span>
-                      </span>
-                      <Plus
-                        aria-hidden="true"
-                        className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                      />
+                      {t("ai_search_try_classic")}
                     </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {failed ? (
-            <div className="rounded-lg border border-line p-3 text-xs text-danger">
-              <p>{t("ai_search_failed")}</p>
-              {run.error ? (
-                <p className="mt-1 break-words text-danger/80" dir="auto">
-                  {run.error}
-                </p>
-              ) : null}
-              {onFallback ? (
-                <button
-                  className="mt-2 inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
-                  onClick={onFallback}
-                  type="button"
-                >
-                  {t("ai_search_try_classic")}
-                </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
-          ) : null}
+
+            {/* this run's own source cards -- the evidence behind the
+            answer; the sticky right rail from lg, stacked below it on
+            narrow screens (the run hides the slot entirely when it can
+            never get content: a settled no-source run) */}
+            {run.sources.length > 0 || streaming ? (
+              <aside className="mt-5 w-full lg:sticky lg:top-4 lg:mt-0 lg:w-72 lg:shrink-0 xl:w-80">
+                {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
+              </aside>
+            ) : null}
+          </div>
         </>
       )}
     </section>
