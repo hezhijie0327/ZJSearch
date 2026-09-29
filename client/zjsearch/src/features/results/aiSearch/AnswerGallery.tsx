@@ -47,7 +47,11 @@ export function AnswerGallery({ gallery, onCite }: { gallery: AiSearchGallery[];
     return null;
   }
   return (
-    <div className={`my-3 grid gap-2 ${gallery.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+    // ALWAYS two columns: a lone tile takes the LEFT HALF of the reading
+    // measure (Perplexity's group shape) -- a full-column 4:3 insert in
+    // flowing text both reads oversized and shifts everything below it
+    // across half a viewport
+    <div className="my-3 grid grid-cols-2 gap-2">
       {gallery.map((item) => (
         <GalleryTile item={item} key={`${item.n}-${item.url}`} onCite={onCite} />
       ))}

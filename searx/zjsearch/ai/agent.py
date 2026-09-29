@@ -310,21 +310,30 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
         return
     yield ("wrapup", None)
     writer_messages = writer(halt_message)
-    stream = llm.LlmStream(cfg, writer_messages, relay_reasoning=True)
-    first = True
-    try:
-        while True:
-            wait = _event_wait(None, first, first_event_timeout, idle_timeout)
-            kind, payload = stream.next_event(wait)
-            first = False
-            if kind in ("think", "delta"):
-                yield (kind, payload)
-            elif kind == "error":
-                logger.warning("zjsearch agent: writer stream failed: %s", payload)
-                yield ("error", payload)
-                return
-            else:
-                break  # "end" closes the writer
-    finally:
-        stream.cancel()
-    return
+    # a writer stream that closes without ANY event (gateways answer 200
+    # with an empty body; a degenerate completion produces nothing) gets
+    # ONE silent retry -- the run's only chance to show an answer must
+    # not ride on a single empty completion
+    for attempt in (1, 2):
+        stream = llm.LlmStream(cfg, writer_messages, relay_reasoning=True)
+        first = True
+        content = False
+        try:
+            while True:
+                wait = _event_wait(None, first, first_event_timeout, idle_timeout)
+                kind, payload = stream.next_event(wait)
+                first = False
+                if kind in ("think", "delta"):
+                    content = True
+                    yield (kind, payload)
+                elif kind == "error":
+                    logger.warning("zjsearch agent: writer stream failed: %s", payload)
+                    yield ("error", payload)
+                    return
+                else:
+                    break  # "end" closes the writer
+        finally:
+            stream.cancel()
+        if content:
+            return
+        logger.warning("zjsearch agent: the writer produced no content (attempt %d/2)", attempt)

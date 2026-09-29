@@ -17,7 +17,7 @@ import typing as t
 
 from searx.zjsearch.ai import llm
 from searx.zjsearch.ai.search.gates import related_questions, sanitize_questions
-from searx.zjsearch.ai.search.tools import _display_item
+from searx.zjsearch.ai.search.tools import display_item
 
 if t.TYPE_CHECKING:
     from searx.zjsearch.ai.search.executor import Searches
@@ -90,7 +90,14 @@ class _FenceSplitter:
             if self.fence_kind is not None:
                 end = text.find("```")
                 if end == -1:
-                    self.fence_body += text
+                    # hold the last 2 chars: a closer SPLIT across deltas
+                    # ("``" + "`") must re-assemble in the next feed, or
+                    # the body swallows prose up to the NEXT fence's opener
+                    if len(text) > 2:
+                        self.fence_body += text[:-2]
+                        self.tail = text[-2:]
+                    else:
+                        self.tail = text
                     break
                 self.fence_body += text[:end]
                 closed.append((self.fence_kind, self.fence_body))
@@ -129,9 +136,11 @@ class _FenceSplitter:
         tail, self.tail = self.tail, ""
         closed: list[tuple[str, str]] = []
         if self.fence_kind is not None:
-            closed.append((self.fence_kind, self.fence_body))
+            # a held-back partial closer belongs to the body, not the prose
+            closed.append((self.fence_kind, self.fence_body + tail))
             self.fence_kind = None
             self.fence_body = ""
+            return "", closed
         return tail, closed
 
 
@@ -172,7 +181,7 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
                         "e": "calls",
                         "round": payload["round"],
                         "intent": payload["intent"],
-                        "items": [_display_item(idx, call) for idx, call in enumerate(payload["calls"], 1)],
+                        "items": [display_item(idx, call) for idx, call in enumerate(payload["calls"], 1)],
                     },
                     ensure_ascii=False,
                 )
@@ -256,6 +265,11 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
                     mark = f"\n{{{{zjs-gallery:{len(state.galleries)}}}}}\n"
                     state.galleries.append(items)
                     answer_parts.append(mark.strip())
+                    # the placeholder RIDES the answer text: the client's
+                    # renderer expands `{{zjs-gallery:i}}` positions against
+                    # the galleries array -- a gallery event alone would
+                    # leave the group stored but never rendered
+                    yield emit("delta", mark.strip())
                     yield emit("gallery", items)
 
     def through(delta: str) -> t.Iterator[str]:
@@ -277,6 +291,15 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
         elif kind == "delta":
             yield from through(str(payload or ""))
         elif kind == "calls":
+            # flush the holdback FIRST: the splitter keeps up to HOLD chars
+            # in reserve, and a tail emitted after the calls line would land
+            # in the client's answer slice instead of the round's intent --
+            # the narration must be complete before the client freezes it
+            prose, closed = splitter.finish()
+            if prose:
+                answer_parts.append(prose)
+                yield emit("delta", prose)
+            yield from drain(closed)
             # a new turn begins: its answer is judged on its own
             think_parts.clear()
             answer_parts.clear()
@@ -294,9 +317,14 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
             # would be noise
             saw_ask = True
         elif kind == "wrapup":
-            # the writer's stream follows: a fresh splitter -- the
-            # researcher's holdback residue must not bleed into the answer
+            # the writer's stream follows: a fresh splitter AND a clean
+            # slate -- the researcher's streamed narration and reasoning
+            # must neither leak into the answer, nor defeat the reasoning-
+            # promotion guard below (a think-only writer must promote), nor
+            # pollute the related-questions fallback with non-answer text
             splitter = _FenceSplitter()
+            think_parts.clear()
+            answer_parts.clear()
             yield emit(*event)
         else:
             yield emit(*event)

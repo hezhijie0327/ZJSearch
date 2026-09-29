@@ -21,8 +21,7 @@ _BUDGET_NOTE = "The research budget ended the gathering early -- the sources abo
 STALL_NOTE = (
     "The research went STALE and ended early: the latest rounds only repeated"
     " earlier queries or returned nothing new.  Where the sources are silent,"
-    " answer from common knowledge marked with [*] -- never present a gap as"
-    " a sourced fact."
+    " apply the grounding rule above."
 )
 
 _WRITER_CONTEXT_MAX = 40_000
@@ -161,7 +160,8 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
             " you read the question's intent (the UI shows it as the lead of"
             " your search plan); on LATER rounds reflect on the results so"
             " far -- name the gap they leave and the facet this round"
-            " covers.  Then call"
+            " covers.  FINISH that sentence BEFORE the tool calls -- a call"
+            " inserted mid-sentence shreds your step notes.  Then call"
             f" {TOOL_NAME} -- several calls in the same turn are encouraged:"
             " they run in parallel.",
             "- ALWAYS run at least one search per question facet -- even for"
@@ -310,8 +310,9 @@ _FOLLOWUPS_BLOCK = (
     " most interesting or surprising point, one is the practical next"
     " step, one broadens with a comparison or related angle -- never three"
     " near-duplicates.  Omit the block entirely for greetings, single"
-    " facts or values, refusals and clarifying questions.  The fence is"
-    " the LAST thing in the reply; never mention it in the prose.\n</follow_ups>"
+    " facts or values, refusals and clarifying questions.  Write the"
+    " COMPLETE answer prose FIRST -- the fence follows the last prose"
+    " line and is never its substitute; never mention it in the prose.\n</follow_ups>"
 )
 
 

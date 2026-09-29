@@ -47,7 +47,7 @@ export interface AiSearchCall {
   /** web_crawler: the page url (the row's label) */
   url?: string;
   category: string;
-  status: "pending" | "ok" | "error" | "timeout" | "interrupted" | "duplicate";
+  status: "pending" | "ok" | "error" | "interrupted" | "duplicate";
   /** web_search: result count */
   n?: number;
   /** web_crawler: characters of readable content returned */
@@ -57,10 +57,14 @@ export interface AiSearchCall {
   text?: string;
 }
 
-/** One chronological segment of a run's research timeline. */
+/** One chronological segment of a run's research timeline.  "plan" is the
+    plan-tool turn's answer-shape deliberation -- it renders like an intent
+    step but must never RECEIVE a narration merge (the deliberation is not
+    round narration). */
 export type AiSearchStep =
   | { kind: "think"; text: string }
   | { kind: "intent"; text: string }
+  | { kind: "plan"; text: string }
   | { kind: "calls"; round: number; calls: AiSearchCall[] };
 
 export interface AiSearchSource {
@@ -111,9 +115,12 @@ export interface AiSearchRun {
   /** the depth this run RAN with -- the pill displays it (the truthful
       last-run value), picking a new depth affects the next run */
   mode: AiSearchMode;
+  /** the user pressed stop: a settled run without an answer is then
+      intentional, not a failure (the failed box must not fire) */
+  stopped?: boolean;
 }
 
-export interface AiSearchState {
+interface AiSearchState {
   phase: AiSearchPhase;
   runs: AiSearchRun[];
   sources: AiSearchSource[];
@@ -267,7 +274,24 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
         answer = answer.slice(0, core.answerFrom);
       }
       if (intent) {
-        steps.push({ kind: "intent", text: intent });
+        // the narration is ONE flowing text across rounds -- a model that
+        // calls tools mid-sentence continues the sentence next round, and
+        // a per-round fragment would shred it into broken half-lines
+        // (「…桥接项目（MCP」|「、Perplexica 等）…」).  Every fragment
+        // therefore joins the run's single intent step.
+        let merged = false;
+        for (let i = steps.length - 1; i >= 0; i--) {
+          const step = steps[i];
+          if (step === undefined || step.kind !== "intent") {
+            continue;
+          }
+          steps[i] = { kind: "intent", text: step.text + intent };
+          merged = true;
+          break;
+        }
+        if (!merged) {
+          steps.push({ kind: "intent", text: intent });
+        }
       }
       steps.push({
         kind: "calls",
@@ -293,16 +317,19 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
     case "plan": {
       // the model planned its answer via the plan tool: this turn's prose
       // (which streamed into the answer live, or sat in pending) is
-      // re-homed as the plan's intent step -- the answer stays clean
+      // re-homed as the plan's own step -- the answer stays clean, and the
+      // step is kind "plan" so later narration never merges into it.  A
+      // model that skipped the prose carries the plan in the wire
+      // payload's `t` instead -- that is the fallback text.
       const earlier = hasCalls(run);
       let answer = run.answer;
-      const intent = (earlier ? answer.slice(core.answerFrom) : core.pending).trim();
+      const text = (earlier ? answer.slice(core.answerFrom) : core.pending).trim() || String(event.t ?? "").trim();
       if (earlier) {
         answer = answer.slice(0, core.answerFrom);
       }
       const steps = [...run.steps];
-      if (intent) {
-        steps.push({ kind: "intent", text: intent });
+      if (text) {
+        steps.push({ kind: "plan", text });
       }
       runs[lastIdx] = { ...run, steps, answer };
       return { ...core, runs, pending: "", answerFrom: answer.length, thinkOpen: false };
@@ -658,8 +685,21 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   const stop = () => {
     abortRef.current?.abort();
     // settle() folds the streamed narration the same way a natural end
-    // would -- stopping must not throw away prose the user watched stream
-    setCore((prev) => (prev.phase === "streaming" ? settle(prev, null) : prev));
+    // would -- stopping must not throw away prose the user watched stream.
+    // The run is marked stopped: a settle without an answer is then the
+    // user's own cut, not a failure the failed box should report.
+    setCore((prev) => {
+      if (prev.phase !== "streaming") {
+        return prev;
+      }
+      const settled = settle(prev, null);
+      const runs = [...settled.runs];
+      const lastIdx = runs.length - 1;
+      if (runs[lastIdx]) {
+        runs[lastIdx] = { ...runs[lastIdx], stopped: true };
+      }
+      return { ...settled, runs };
+    });
   };
 
   const reset = () => {

@@ -157,7 +157,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
       <button
         aria-expanded={expandable ? open : undefined}
         className={`flex min-h-6 w-full items-center gap-1.5 px-1 text-xs ${
-          call.status === "error" || call.status === "timeout" ? "text-danger" : "text-ink-3"
+          call.status === "error" ? "text-danger" : "text-ink-3"
         } ${expandable ? "transition-colors hover:text-ink" : ""}`}
         onClick={() => {
           if (expandable) {
@@ -191,14 +191,12 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
             : ok
               ? isPage
                 ? t("ai_page_chars", { n: String(call.chars ?? 0) })
-                : `(${call.n ?? 0})`
-              : call.status === "timeout"
-                ? t("ai_search_row_timeout")
-                : call.status === "interrupted"
-                  ? t("ai_search_row_interrupted")
-                  : call.status === "duplicate"
-                    ? t("ai_search_row_duplicate")
-                    : t("ai_search_row_failed")}
+                : t("ai_search_results", { n: String(call.n ?? 0) })
+              : call.status === "interrupted"
+                ? t("ai_search_row_interrupted")
+                : call.status === "duplicate"
+                  ? t("ai_search_row_duplicate")
+                  : t("ai_search_row_failed")}
         </span>
         {expandable ? (
           <ChevronDown
@@ -272,10 +270,14 @@ function StepSegment({
       </div>
     );
   }
-  if (step.kind === "intent") {
+  if (step.kind === "intent" || step.kind === "plan") {
     return (
       <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
-        <Lightbulb aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
+        {step.kind === "plan" ? (
+          <Compass aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
+        ) : (
+          <Lightbulb aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
+        )}
         <p className="py-0.5 text-[13px] leading-relaxed text-ink-2" dir="auto">
           {step.text}
         </p>
@@ -349,9 +351,19 @@ function AskCard({
     });
   };
   const submit = () => {
-    const lines = ask.questions.map((q, i) => `${i + 1}. ${q.q}：${(picked[i] ?? []).join("、") || "—"}`);
+    // the transcript travels to the model AND is replayed in the
+    // ClarifySegment -- the punctuation comes from the catalog so an
+    // English session reads as English (full-width marks in zh-CN)
+    const join = t("ai_clarify_options_join");
+    const lines = ask.questions.map((q, i) =>
+      t("ai_clarify_answer_line", {
+        n: String(i + 1),
+        q: q.q,
+        a: (picked[i] ?? []).join(join) || t("ai_clarify_none"),
+      }),
+    );
     if (note.trim()) {
-      lines.push(`${t("ai_clarify_more")}：${note.trim()}`);
+      lines.push(t("ai_clarify_more_line", { label: t("ai_clarify_more"), text: note.trim() }));
     }
     // confirmed with NOTHING picked and nothing typed: the "answers" would
     // reach the model as a string of "—" placeholders -- degrade to the
@@ -506,8 +518,11 @@ function AiSearchRunSectionImpl({
   const streaming = run.status === "streaming" && live;
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
   const researchOpen = researchForced ?? streaming;
-  const hasThink = run.steps.some((step) => step.kind === "think" && step.text.trim());
-  const failed = run.status === "error" || (run.status === "done" && !run.answer && !hasThink && totalCalls === 0);
+  // a settled run without an answer is a FAILURE the user must see (the
+  // writer can degrade to an empty/fence-only stream after a full
+  // research phase -- silent nothing reads as a hung page), EXCEPT when
+  // the user's own stop button cut the run
+  const failed = run.status === "error" || (run.status === "done" && !run.stopped && !run.answer.trim());
   const awaiting = run.status === "awaiting" && run.ask !== null;
 
   return (

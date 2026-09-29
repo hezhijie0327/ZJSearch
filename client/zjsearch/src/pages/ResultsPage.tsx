@@ -50,6 +50,10 @@ import { useExitPresence } from "@/lib/useExitPresence.ts";
     when the marks are invalidated (a fresh identity per render would) */
 const EMPTY_AI_CITED: ReadonlySet<number> = new Set();
 
+/** stable empty citation meta: the `?? []` fallback of the per-run meta
+    must keep its identity or the section memo would defeat itself */
+const EMPTY_META: AiSourceMeta[] = [];
+
 export function ResultsPage({ data }: { data: SearchPageData }) {
   const t = useT();
   const copyToast = useCopyToast();
@@ -110,6 +114,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     aiAnswer.reset();
     aiSearch.reset();
     aiSearchRan.current = false;
+    aiOverviewRan.current = false;
     setAiMarks(null);
   }, [href]);
 
@@ -307,6 +312,26 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     aiSearchRan.current = true;
     aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language);
   });
+  // AI Overview auto-open (audit/QA deep link): `&ai_overview=1` opens the
+  // answer card WITHOUT a click once the results settled -- the Lighthouse
+  // gate audits the overview UI on a page load alone (it cannot interact),
+  // and a QA session can deep-link straight into the card.
+  const aiOverviewRan = useRef(false);
+  // no dependency array on purpose: the guard ref makes it run once per search
+  useEffect(() => {
+    const auto =
+      !showSkeletons &&
+      !error &&
+      !aiOverviewRan.current &&
+      Boolean(globals.ai) &&
+      new URLSearchParams(window.location.search).get("ai_overview") === "1" &&
+      allResults.length > 0;
+    if (!auto) {
+      return;
+    }
+    aiOverviewRan.current = true;
+    aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
+  });
   // a hand-crafted ?ai=1 (or the feature switched off mid-session) without
   // the capability: the server ran no classic search either — fall back to
   // the classic page so the user is never stuck on an empty takeover
@@ -373,18 +398,23 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     // locate.  Only a truly missing card (should not happen) opens the
     // page instead.
     let card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
+    // the poll must not outlive its page: a new search mid-wait unmounts
+    // this list -- bail instead of window.open'ing from a dead view
+    const startHref = hrefRef.current;
     if (!card) {
       const more = document.getElementById(`ai-run-${run.runNo}`)?.querySelector<HTMLElement>("[data-view-more]");
       if (more) {
         more.click();
-        for (let i = 0; i < 10 && !card; i++) {
+        for (let i = 0; i < 10 && !card && hrefRef.current === startHref; i++) {
           await new Promise((resolve) => setTimeout(resolve, 30));
           card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
         }
       }
     }
-    if (!card) {
-      window.open(source.url, "_blank", "noopener,noreferrer");
+    if (!card || hrefRef.current !== startHref) {
+      if (hrefRef.current === startHref) {
+        window.open(source.url, "_blank", "noopener,noreferrer");
+      }
       return;
     }
     scrollIntoViewAnimated(card, "center");
@@ -688,7 +718,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onStop={onRunStop}
                       onSubmitClarify={onRunClarify}
                       run={run}
-                      sourceMeta={runSourceMetas[index] ?? []}
+                      sourceMeta={runSourceMetas[index] ?? EMPTY_META}
                     />
                   ))}
                   {aiSearch.phase === "done" ? (

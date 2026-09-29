@@ -50,8 +50,9 @@ export interface AiSearchGallery {
 }
 
 /** The answer-text placeholder the server injects where a gallery fence
-    stood (the fence itself never reaches the client). */
-export const GALLERY_MARK = /\{\{zjs-gallery:(\d+)\}\}/g;
+    stood (the fence itself never reaches the client).  Module-internal:
+    only the segment splitter and the renderer here consume it. */
+const GALLERY_MARK = /\{\{zjs-gallery:(\d+)\}\}/g;
 
 export type GallerySegment = { kind: "md"; text: string } | { kind: "gallery"; index: number };
 
@@ -150,7 +151,7 @@ export function splitAnswerStream(text: string): { think: string; answer: string
 /** The citation grammar the renderer rewrites: [n], [n,m] (also full-width
     commas) and the common-knowledge [*].  Shared by the citation-link
     rewriting (AiSummary) and the cited-sources extraction below. */
-export const CITATION_RE = /\[(\d+(?:\s*[,，]\s*\d+)*)\]|\[\*\]/g;
+const CITATION_RE = /\[(\d+(?:\s*[,，]\s*\d+)*)\]|\[\*\]/g;
 
 /** The source numbers actually cited in a settled answer — the same [n] /
     [n,m] grammar the renderer rewrites, with the same skips: fenced code

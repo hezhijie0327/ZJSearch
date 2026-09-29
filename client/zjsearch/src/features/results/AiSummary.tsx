@@ -288,10 +288,12 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
     <>
       <button
         className="mx-0.5 inline-flex items-center rounded align-middle text-xs text-accent transition-colors hover:text-accent-hover hover:underline underline-offset-2"
+        onBlur={closeSoon}
         onClick={() => {
           onCite?.(n);
           setPanel(null);
         }}
+        onFocus={openPanel}
         onMouseEnter={openPanel}
         onMouseLeave={closeSoon}
         ref={chipRef}
