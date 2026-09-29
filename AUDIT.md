@@ -116,7 +116,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
 | AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
-| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows), cited synthesis, related, own source rail; follow-ups continue the [n] numbering |
+| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering |
 | AI failure UX (overview) | point `zjsearch.ai.base_url` at a dead port | 502 body reason readable under the card's failed label |
 | AI failure UX (search) | a settled run with NO answer (writer empty/dead stream) | the failed box with reason + retry + classic fallback — a researched-then-empty run must NEVER settle as silent nothing (stop-button cuts are exempt: `stopped` runs stay quiet) |
 
@@ -221,10 +221,13 @@ curl -s -X POST 'http://127.0.0.1:8888/ai/search' -H 'Content-Type: application/
   -d "{\"q\":\"<question>\",\"tk\":\"$TOKEN\",\"mode\":\"balanced\",\"lang\":\"zh-CN\"}"
 ```
 
-- research run order: `think?` → (`delta` intent) → `calls` →
-  `search`/`sources` per round → … → `wrapup` → `delta`×N (the
-  writer) → `related` (before `end`) → `end`; a greeting run: `direct` →
-  `delta` → `end`.  `delta` before the first `calls` is round narration
+- research run order: `think`×N (EVERY reasoning delta relays — a relay
+  that only accumulates once left the client's think segment holding the
+  first delta alone) → (`delta` intent) → `calls` →
+  `search`/`page`/`sources` per round → … → `wrapup` → `delta`×N (the
+  writer) → `gallery`? (with the `{{zjs-gallery:i}}` placeholder INSIDE
+  the answer text) → `related` (before `end`) → `end`; a greeting run:
+  `direct` → `delta` → `end`.  `delta` before the first `calls` is round narration
   (the client re-homes it into the timeline's intent step).
 - Reconstruct the intents the way the CLIENT does (prose between `calls`
   events; the wire's `intent` field is advisory) to verify narration

@@ -294,9 +294,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   server-side (invented URLs are dropped, an all-invalid group renders
   nothing); a valid group flies as a `gallery` event plus a
   `{{zjs-gallery:i}}` placeholder delta at its position, which
-  `renderWithGalleries` (AnswerGallery.tsx) expands into an inline image
-  grid whose tiles re-use the citation jump ([n] badge, click = scroll
-  to the source card).  Local models may skip the images fence
+  `renderWithGalleries` (AnswerGallery.tsx) expands into a MODEST inline
+  strip (small fixed-height thumbs in a wrapping row -- the sources rail
+  owns the page's visual weight; a full-measure hero insert reads
+  oversized) whose tiles re-use the citation jump ([n] badge, click =
+  scroll to the source card).  Local models may skip the images fence
   (qwen3.6 at low effort does; the related fence it writes) — the
   degradation is silent by design.  Prompt
   organization is XML blocks end to end: prompts.py
@@ -308,7 +310,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (`think`/`delta`/`calls`/`search`/`sources`/`page`/`plan`/
   `direct`/`gallery`/`wrapup`/`ask`/`related`/`error`/`end`); a stream
   that dies before its first
-  line answers 502 like the Overview.  `end` settles
+  line answers 502 like the Overview.  THINK RELAY: every reasoning delta
+  is BOTH relayed to the client AND accumulated for the promotion guard --
+  a relay that only accumulates once shipped a think segment holding the
+  first delta alone (「The」); the mock's researcher streams multi-piece
+  reasoning so the gate covers the path.  `end` settles
   the run FIRST and `related` trails as a post-end event: the small
   completion behind the follow-up suggestions can think for the better
   part of a minute on reasoning models, and the follow-up box must not
@@ -328,8 +334,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   compiled core (requirements.txt, theme section); without it the reader
   logs a warning and degrades to the built-in walker (markdown-ish, no
   inline semantics — the pre-converter fallback lives in the same file).
-  The HTTP call rides `get_network()` so `outgoing.proxies`
-  apply.  Config = `zjsearch.ai.browserless` (`endpoint` + `key`,
+  The HTTP call rides a DEDICATED network
+  (`get_network("zjsearch-reader")`, falling back to the default) — the
+  app-initialized DEFAULT network is HTTPS-ONLY (searx hard-codes
+  `enable_http: false` into its `default_params`), so a plain-http
+  Browserless — a self-hosted LAN deployment, the audit gate's mock —
+  needs an `outgoing.networks.zjsearch-reader: {enable_http: true}`
+  entry; https endpoints are unaffected.  `outgoing.proxies` still apply
+  through the network definition.  Config = `zjsearch.ai.browserless` (`endpoint` + `key`,
   the key via the `ZJSEARCH_BROWSERLESS_KEY` env like `ZJSEARCH_AI_KEY`;
   optional `max_chars`, 12 000 default): UNCONFIGURED = the tool never
   registers (the web_search description's cross-reference is
@@ -1264,7 +1276,11 @@ LOADED/NOT LOADED).
   `response_format.json_schema.name`, the researcher via `tools` presence,
   the writer via the `<follow_ups>` system marker, everything else the
   overview).  The audited AI pages: `?q=zjaudit+general&ai=1` (the full
-  takeover: agent timeline + cited synthesis) and
+  takeover: reasoning timeline + intent + a web_search AND a web_crawler
+  round -- the same mock server answers the reader's `POST /content` with
+  a fixture document, exercising the reading-pane path, the char count
+  and the read-in-full badge offline -- plus the cited synthesis with an
+  inline gallery strip) and
   `?q=zjaudit+general&ai_overview=1` (the classic page whose answer card
   auto-opens via the client's `ai_overview=1` deep link — Lighthouse
   cannot click).  The AI pages carry their own performance floor
