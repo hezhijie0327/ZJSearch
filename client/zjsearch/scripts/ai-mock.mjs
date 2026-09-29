@@ -16,11 +16,15 @@
  *   rewrite echoes the question, related_questions returns three canned
  *   questions.
  * - `tools` present is the researcher: the opener streams a one-line intent
- *   plus ONE web_search call carrying the page's own `zjaudit <kind>`
- *   fixture query (the executor runs it as a REAL instance search, so the
- *   sources grid comes from the fixture engine); the follow-up turn (its
- *   request carries tool results) streams closing prose and NO calls, which
- *   ends the research and hands over to the writer.
+ *   plus TWO calls — a web_search carrying the page's own `zjaudit <kind>`
+ *   fixture query AND a web_crawler reading the fixture result the search
+ *   just numbered (the executor renders it through the MOCK BROWSERLESS
+ *   endpoint below — the same server answers `POST .../content` with a
+ *   fixed fixture page, so the reading-pane path runs offline; re-reading
+ *   an already-numbered url exercises the read-in-full badge); the
+ *   follow-up turn (its request carries tool results) streams closing
+ *   prose and NO calls, which ends the research and hands over to the
+ *   writer.
  * - the writer's system prompt is the only one carrying `<follow_ups>` --
  *   it streams the fixed cited markdown answer, one inline gallery group
  *   (the fixture feed's own image URL, exercising the zjs-images fence
@@ -68,6 +72,32 @@ const GALLERY_FENCE = '```zjs-images\n["/static/themes/zjsearch/img/512.png"]\n`
 const OVERVIEW_ANSWER = `**Audit overview** -- the quick answer card renders the fixture context with citations [1, 2] and a short closing line [3].`;
 
 const CLOSING_PROSE = "The fixture search answered the question; the writer can cite these sources as they are.";
+
+/** The mock Browserless page (POST .../content): a small fixture document
+    whose headings/list/table survive the reader's markdown extraction --
+    the model receives real condensed markdown, the client's call row
+    shows a real character count. */
+const PAGE_HTML = `<!doctype html>
+<html>
+<head><title>Audit fixture result #1</title></head>
+<body>
+<article>
+<h1>Audit fixture result #1</h1>
+<p>The page reader renders this fixture document in the mock browser and
+condenses it to markdown for the model -- the reading pane under the
+call row shows exactly this text.</p>
+<ul>
+<li>headings, lists and emphasis survive extraction</li>
+<li>tables condense to GFM</li>
+</ul>
+<table>
+<tr><th>Field</th><th>Value</th></tr>
+<tr><td>Kind</td><td>offline fixture</td></tr>
+<tr><td>Transport</td><td>mock browserless</td></tr>
+</table>
+</article>
+</body>
+</html>`;
 
 /** Split text into token-ish deltas so the client's streaming render path
     (per-chunk state updates, the fence holdback) is really exercised. */
@@ -173,10 +203,18 @@ function researcher(answered, messages, res) {
   }
   const args = JSON.stringify({ query: questionOf(messages) || "zjaudit general" });
   const half = Math.ceil(args.length / 2);
+  const pageArgs = JSON.stringify({ url: "https://example.com/zjaudit/general/1" });
+  const pageHalf = Math.ceil(pageArgs.length / 2);
   streamChunks(
     res,
     [
-      ...textPieces("Reading the request and aiming one fixture search at it. "),
+      // reasoning deltas FIRST (multiple pieces -- the think relay must
+      // deliver every one of them; a swallowed relay once left the client's
+      // think segment holding only the first delta)
+      ...textPieces("The request carries a fixture token, so one search and one page read cover it. ", 12).map(
+        ({ content }) => ({ reasoning_content: content }),
+      ),
+      ...textPieces("Reading the request, then opening the fixture page the search will number. "),
       {
         tool_calls: [
           { index: 0, id: "call-zjaudit-1", type: "function", function: { name: "web_search", arguments: "" } },
@@ -184,6 +222,13 @@ function researcher(answered, messages, res) {
       },
       { tool_calls: [{ index: 0, function: { arguments: args.slice(0, half) } }] },
       { tool_calls: [{ index: 0, function: { arguments: args.slice(half) } }] },
+      {
+        tool_calls: [
+          { index: 1, id: "call-zjaudit-2", type: "function", function: { name: "web_crawler", arguments: "" } },
+        ],
+      },
+      { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(0, pageHalf) } }] },
+      { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(pageHalf) } }] },
     ],
     "tool_calls",
   );
@@ -236,7 +281,17 @@ function route(body, res) {
 export function startAiMock(port = PORT) {
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
-      if (req.method !== "POST" || !(req.url ?? "").endsWith("/chat/completions")) {
+      // the reader's request carries ?token=... — route on the PATH only
+      const path = (req.url ?? "").split("?")[0];
+      if (req.method === "POST" && path.endsWith("/content")) {
+        // the mock Browserless (audit-settings.yml points
+        // zjsearch.ai.browserless here): the page reader POSTs and reads
+        // the body as the rendered HTML
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(PAGE_HTML);
+        return;
+      }
+      if (req.method !== "POST" || !path.endsWith("/chat/completions")) {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("not found");
         return;

@@ -672,44 +672,6 @@ function AiSearchRunSectionImpl({
                 </div>
               ) : null}
 
-              {/* this run's follow-up suggestions */}
-              {run.related.length > 0 ? (
-                <section aria-label={t("related")}>
-                  <div className="flex items-center gap-2">
-                    <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
-                    <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
-                  </div>
-                  <div className="mt-1">
-                    {run.related.map((question, i) => (
-                      <div key={i}>
-                        <div className="h-px bg-line" />
-                        <button
-                          className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
-                          onClick={() => {
-                            onRelated?.(question);
-                          }}
-                          type="button"
-                        >
-                          <span className="flex min-w-0 items-center gap-3">
-                            <CornerDownRight
-                              aria-hidden="true"
-                              className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                            />
-                            <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
-                              {question}
-                            </span>
-                          </span>
-                          <Plus
-                            aria-hidden="true"
-                            className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                          />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              ) : null}
-
               {failed ? (
                 <div className="rounded-lg border border-line p-3 text-xs text-danger">
                   <p>{t("ai_search_failed")}</p>
@@ -741,6 +703,47 @@ function AiSearchRunSectionImpl({
               </aside>
             ) : null}
           </div>
+
+          {/* this run's follow-up suggestions: AFTER the two-column wrapper
+              so the stacked (mobile) order reads answer → actions → sources
+              → related; on desktop the block keeps the answer's reading
+              measure, exactly where it sat inside the left column */}
+          {run.related.length > 0 ? (
+            <section aria-label={t("related")} className="lg:max-w-3xl">
+              <div className="flex items-center gap-2">
+                <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
+                <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
+              </div>
+              <div className="mt-1">
+                {run.related.map((question, i) => (
+                  <div key={i}>
+                    <div className="h-px bg-line" />
+                    <button
+                      className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
+                      onClick={() => {
+                        onRelated?.(question);
+                      }}
+                      type="button"
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <CornerDownRight
+                          aria-hidden="true"
+                          className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                        />
+                        <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
+                          {question}
+                        </span>
+                      </span>
+                      <Plus
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                      />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
         </>
       )}
     </section>

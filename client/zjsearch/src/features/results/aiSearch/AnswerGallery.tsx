@@ -6,10 +6,13 @@ import { type AiSearchGallery, splitGallerySegments } from "@/features/results/a
 /**
  * One inline image group of the AI answer (the server-validated
  * ``zjs-images`` fence, rendered where the answer text carries its
- * ``{{zjs-gallery:i}}`` placeholder).  Fixed 4:3 tiles in the shared
- * grid language; the corner badge carries the source's [n] and the tile
- * click reuses the citation jump (scroll to the source card + tint).
- * Images fade in on load (the house lazy-content rule).
+ * ``{{zjs-gallery:i}}`` placeholder).  A MODEST inline strip — small
+ * fixed-height thumbs in a wrapping row, not a hero block: the sources
+ * rail already owns the page's visual weight, and a full-measure image
+ * insert in flowing prose reads oversized (Vane keeps media thumbnails
+ * small for the same reason).  The corner badge carries the source's
+ * [n] and the tile click reuses the citation jump (scroll to the source
+ * card + tint).  Images fade in on load (the house lazy-content rule).
  */
 
 function GalleryTile({ item, onCite }: { item: AiSearchGallery; onCite?: (index: number) => void }) {
@@ -17,7 +20,7 @@ function GalleryTile({ item, onCite }: { item: AiSearchGallery; onCite?: (index:
   return (
     <button
       aria-label={item.title || `[${item.n}]`}
-      className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-line bg-surface-2"
+      className="group relative h-24 w-40 shrink-0 overflow-hidden rounded-lg border border-line bg-surface-2"
       onClick={() => {
         onCite?.(item.n);
       }}
@@ -47,11 +50,7 @@ export function AnswerGallery({ gallery, onCite }: { gallery: AiSearchGallery[];
     return null;
   }
   return (
-    // ALWAYS two columns: a lone tile takes the LEFT HALF of the reading
-    // measure (Perplexity's group shape) -- a full-column 4:3 insert in
-    // flowing text both reads oversized and shifts everything below it
-    // across half a viewport
-    <div className="my-3 grid grid-cols-2 gap-2">
+    <div className="my-3 flex flex-wrap gap-2">
       {gallery.map((item) => (
         <GalleryTile item={item} key={`${item.n}-${item.url}`} onCite={onCite} />
       ))}

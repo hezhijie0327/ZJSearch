@@ -28,6 +28,14 @@ search:
   # no remote autocompleter calls during audits
   autocomplete: ""
 
+# the audit browserless mock speaks plain http on loopback: the reader's
+# dedicated network opts into http (the app-initialized default network is
+# https-only -- see searx/zjsearch/ai/capabilities/reader/fetch.py)
+outgoing:
+  networks:
+    zjsearch-reader:
+      enable_http: true
+
 ui:
   default_theme: zjsearch
 
@@ -75,6 +83,12 @@ zjsearch:
     base_url: "http://127.0.0.1:8909/v1"
     api_key: "zjaudit"
     model: "zjaudit-mock"
+    # the same mock server answers the page reader's POST /content with a
+    # fixture document, so the web_crawler call row, the reading pane and
+    # the read-in-full badge are audited offline too
+    browserless:
+      endpoint: "http://127.0.0.1:8909/browserless"
+      key: "zjaudit"
     overview:
       enabled: true
     search:
