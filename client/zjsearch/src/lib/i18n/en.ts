@@ -206,7 +206,7 @@ export const EN = {
   ai_clarify_skip: "Search without clarifying",
   ai_clarify_summary: "Confirmed direction",
   ai_clarify_skipped: "Researching without a clarified direction",
-  ai_wrapup: "Research has gone stale — writing the final summary",
+  ai_wrapup: "Synthesizing the sources — writing the final answer",
   stop: "Stop",
   mode_classic: "Classic",
   mode_ai: "AI",

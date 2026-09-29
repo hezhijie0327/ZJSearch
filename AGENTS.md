@@ -185,21 +185,39 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   and, with `web_crawler` configured, real Browserless renders (a
   browser launch per read on a server that has its own concurrency
   ceiling, typically 3).
-- AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`): the model analyses the question, states a one-line
-  intent, then calls the `web_search` tool — several calls per turn run
-  as REAL instance searches (the `SearchWithPlugins` path, plugins
-  included) in a worker pool whose callables are wrapped in
-  `copy_current_request_context` (the search machinery needs a live
-  request context; construct the search objects inside the wrapper).
-  Each search's results are serialized through the `_result_data` macro
-  — import it via the public `result_data` wrapper macro (Jinja refuses
-  underscore imports) and keep array separators as block-ifs — and
-  stream as page-data-shaped `results` events; the model consumes a
-  globally numbered `[n]` feed (5 deep + 5 shallow per search) and
-  answers with citations over the same renderer contract as the
-  Overview.  Wire protocol: NDJSON lines (`think`/`delta`/`calls`/
-  `search`/`results`/`sources`/`page`/`error`/`end`); a stream that dies
-  before its first line answers 502 like the Overview.  `end` settles
+- AI Search (`searx/zjsearch/ai/search.py`, route `POST /ai/search`):
+  the RESEARCHER/WRITER split (Vane's shape).  A research agent
+  analyses the question, states a one-line intent, then calls the
+  `web_search` tool — several calls per turn run as REAL instance
+  searches (the `SearchWithPlugins` path, plugins included) in a worker
+  pool whose callables are wrapped in `copy_current_request_context`
+  (the search machinery needs a live request context; construct the
+  search objects inside the wrapper).  Each search's results are
+  serialized through the `_result_data` macro — import it via the
+  public `result_data` wrapper macro (Jinja refuses underscore imports)
+  and keep array separators as block-ifs — and stream as page-data-shaped
+  `results` events; researcher and writer both consume a globally
+  numbered `[n]` feed (5 deep + 5 shallow per search; the executor
+  accumulates every block in `state.feed`).  When the research ends —
+  the model stops calling tools, the ceiling/stall verdict halts it, or
+  a research turn's transport dies — agent.py flies a `wrapup` event and
+  a FRESH WRITER completion (`_writer_messages`) writes the cited answer
+  from the accumulated feed: the researcher's prose is STRUCTURALLY
+  unable to leak into the answer, and the shared answer contract
+  (citations/markdown/grounding/voice — the prompts.py fragments) lives
+  exactly where the answer is written.  The tier split is therefore
+  two-sided: `_DEPTH_RESEARCH` (round policy) prompts the researcher,
+  `_DEPTH_SHAPE` (output shape) prompts the writer.  Follow-ups are
+  rewritten into self-contained questions first (Vane's standalone
+  follow-up: `_standalone_question`, one small JSON completion, fail-open
+  to the original wording — the thread still shows the user's own
+  question).  Prompt organization is XML blocks end to end: prompts.py
+  fragments emit `<tag>` blocks, the researcher prompt composes
+  `<role>/<today>/<step_notes>/<how_to_search>/<examples>` (few-shot)
+  plus per-tool capability blocks.  Wire protocol: NDJSON lines
+  (`think`/`delta`/`calls`/`search`/`results`/`sources`/`page`/`plan`/
+  `wrapup`/`ask`/`error`/`end`); a stream that dies before its first
+  line answers 502 like the Overview.  `end` settles
   the run FIRST and `related` trails as a post-end event: the small
   completion behind the follow-up suggestions can think for the better
   part of a minute on reasoning models, and the follow-up box must not
@@ -242,12 +260,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   The `plan` tool (quality/goal tiers, agent-level like `ask_user`)
   is the answer-planning escape valve adapted from Vane's reasoning
   preamble: the model's deliberation about the SHAPE of its final
-  answer goes into the tool (alone in its turn) instead of leaking
-  into the answer text — agent.py answers the turn WITHOUT executing
-  anything (a FREE turn: no round consumed, the progress verdict
-  never sees it) and yields a `plan` wire event; the client re-homes
-  that prose as an intent step and the acknowledgement tells the model
-  its next message must be the finished, reader-facing answer alone.
+  answer goes into the tool (alone in its turn) — agent.py answers the
+  turn WITHOUT executing anything (a FREE turn: no round consumed, the
+  progress verdict never sees it) and yields a `plan` wire event; the
+  client re-homes that prose as an intent step, and the plan text rides
+  to the writer as `<research_plan>` guidance (the writer, not the
+  researcher, writes the answer).
   Config: transport =
   `zjsearch.ai`; feature flags = `zjsearch.ai.search.enabled` and
   `zjsearch.ai.overview.enabled`, BOTH DEFAULTING TO TRUE — setting one

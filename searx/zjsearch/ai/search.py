@@ -2,26 +2,30 @@
 """zjsearch theme: AI Search -- the model drives the keyword searches.
 
 The tool-calling feature on the shared agent framework
-(:py:mod:`searx.zjsearch.ai.agent`): the model analyses the question,
-writes a one-line intent, then issues ``web_search`` calls that run as
-REAL instance searches -- the same ``SearchWithPlugins`` path the results
-page uses, plugins included -- in parallel worker threads.  A second
-tool, ``web_crawler``, reads one result's page in full through the
-self-hosted Browserless browser (:py:mod:`searx.zjsearch.ai.browserless`)
-when a snippet promises exactly the missing detail; opened pages join the
-same global ``[n]`` source registry.  Each search's
+(:py:mod:`searx.zjsearch.ai.agent`), in Vane's RESEARCHER/WRITER shape:
+a research agent analyses the question, writes a one-line intent, then
+issues ``web_search`` calls that run as REAL instance searches -- the
+same ``SearchWithPlugins`` path the results page uses, plugins included
+-- in parallel worker threads.  A second tool, ``web_crawler``, reads
+one result's page in full through the self-hosted Browserless browser
+(:py:mod:`searx.zjsearch.ai.browserless`) when a snippet promises
+exactly the missing detail.  When the research ends, a FRESH WRITER
+completion -- never the researcher -- writes the cited answer from the
+accumulated source feed, so the answer's shape and voice are the same
+no matter how the research went (the researcher's prose is structurally
+unable to leak into the answer).  Each search's
 results are serialized through the very ``_result_data`` macro the
 page-data uses, so the client renders sub-results with its standard
-components; the model consumes a compacted, globally numbered ``[n]``
-feed of the same sources and finally writes the cited answer (the AI
+components; both sides consume a compacted, globally numbered ``[n]``
+feed of the same sources; the writer emits the cited answer (the AI
 Overview renderer contract: ``[n]`` chips, GFM, think block).
 
 Wire protocol (NDJSON, one JSON object per line; the stream never ends
 silently):
 
 - ``{"e": "think", "t"}`` / ``{"e": "delta", "t"}`` -- reasoning and prose
-  deltas of the current turn (a turn's prose becomes the next event's
-  intent);
+  deltas of the current phase (research turns' prose becomes the next
+  event's intent; the writer's deltas are the answer);
 - ``{"e": "calls", "round", "intent", "items": [{id, tool, q/url, ...}]}``
   -- a parallel batch announced (the model decides the batch size;
   ``tool`` discriminates ``web_search`` rows from ``web_crawler`` rows);
@@ -33,9 +37,9 @@ silently):
   result list of that search;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
   ``[n]`` registry entries (citation chips jump to ``round``/``id``/``idx``);
-- ``{"e": "wrapup"}`` -- the budget took the tools away: the model was
-  TOLD to summarize now (the client drops any partial prose and shows
-  the wrap-up state);
+- ``{"e": "wrapup"}`` -- the research phase ended: the WRITER completion
+  takes over (the client drops any streamed research prose and shows the
+  synthesizing state; the writer's deltas are the answer);
 - ``{"e": "ask", "intro", "questions": [{q, type, options}]}`` -- the
   clarify gate wants the user's direction BEFORE researching; the run
   settles as ``awaiting`` (``{"e": "end"}`` follows; the answers travel
@@ -111,23 +115,18 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
     "goal": {"max_rounds": 16, "stall_rounds": 3},
 }
 
-_WRAPUP_MESSAGE = (
-    "Your research budget is exhausted: you cannot run any more tool calls"
-    " (web_search, web_crawler).  Write the final answer NOW, based only on"
-    " the sources already gathered (their [n] numbers are in the"
-    " conversation).  Do not announce"
-    " or attempt further searches or page reads, and do not mention the"
-    " budget -- deliver the best possible cited answer for the question."
+_BUDGET_NOTE = "The research budget ended the gathering early -- the sources above are everything that was found."
+
+_STALL_NOTE = (
+    "The research went STALE and ended early: the latest rounds only repeated"
+    " earlier queries or returned nothing new.  Where the sources are silent,"
+    " answer from common knowledge marked with [*] -- never present a gap as"
+    " a sourced fact."
 )
 
-_STALL_MESSAGE = (
-    "Your recent rounds produced NO new information -- only repeated queries"
-    " or empty result sets.  The research has gone stale: further searching"
-    " cannot improve the answer.  Write the final answer NOW, based only on"
-    " the sources already gathered (their [n] numbers are in the"
-    " conversation); where they are silent, answer from common knowledge"
-    " marked with [*].  Do not announce or attempt further searches."
-)
+_WRITER_CONTEXT_MAX = 40_000
+"""Hard cap on the source feed the writer receives (deep research with
+page reads lands around 15-25k; the cap only guards abuse)."""
 
 _CLARIFY_MODES = ("quality", "goal")
 
@@ -366,37 +365,64 @@ def _page_spec() -> dict[str, t.Any]:
     }
 
 
-_DEPTH_PROMPTS: dict[str, str] = {
-    # Round policy AND output shape live here and only here: the base
-    # prompt must never contradict the chosen depth.
+_DEPTH_RESEARCH: dict[str, str] = {
+    # The RESEARCHER's round policy per tier -- output shape lives in
+    # _DEPTH_SHAPE and belongs to the WRITER (the researcher never writes
+    # the answer, so the two halves are prompted separately).
     "speed": "Depth: SPEED -- the user mostly wants to know WHAT this is."
-    " One focused round, then answer in ONE short dense paragraph: name the"
-    " subject (bold on first mention), define it in a sentence or two, add"
-    " at most two or three key facts -- each cited.  NO headings, lists,"
-    " tables or diagrams; if the subject is ambiguous, say which sense you"
-    " picked in one clause.",
+    "  One focused round: cover the core facet with 2-3 targeted searches"
+    " and stop.",
     "balanced": "Depth: BALANCED -- round out the main facets: what it is,"
     " how it works or why it matters, and whatever context the reader needs"
     " not to be misled.  One search round covers it; run a second only for a"
-    " real gap.  Short paragraphs with the key terms in **bold**; a bullet"
-    " list or definition list when enumerating; a table only for a genuine"
-    " 2-3 way comparison.  Keep it moderate.",
-    "quality": "Depth: QUALITY -- a thorough, structured answer in \"##\""
-    " sections: definitions, mechanics, comparisons, recent developments."
-    "  Cross-verify load-bearing claims against independent sources (several"
-    " rounds are fine, but run only as many searches as the question actually"
-    " needs) and cite every major claim.",
+    " real gap.",
+    "quality": "Depth: QUALITY -- thorough multi-round research: definitions,"
+    " mechanics, comparisons, recent developments.  Cross-verify load-bearing"
+    " claims against independent sources, but run only as many searches as"
+    " the question actually needs.",
     "goal": "Depth: GOAL -- treat the question as a TARGET the user wants"
     " reached, not a casual question.  Work toward it iteratively: first"
     " state what evidence would demonstrate the goal is met, then search for"
     " it; after each round, explicitly check what is still missing and run"
     " further rounds until the goal is demonstrably achieved (verify"
-    " load-bearing claims against independent sources).  Structure the final"
-    " answer around the goal with \"##\" sections, and close with a GFM task"
-    " list (- [x] met / - [ ] open) as the evidence ledger -- every checked"
-    " item cited.  If the research budget runs out first, leave the missing"
-    " items unchecked and name the evidence that would close them.",
+    " load-bearing claims against independent sources).",
 }
+
+_DEPTH_SHAPE: dict[str, str] = {
+    # The WRITER's output shape per tier -- the half of the old depth
+    # prompt that describes the ANSWER, now prompted where the answer is
+    # actually written.
+    "speed": "Shape: ONE short dense paragraph -- name the subject (bold on"
+    " first mention), define it in a sentence or two, add at most two or"
+    " three key facts -- each cited.  NO headings, lists, tables or"
+    " diagrams; if the subject is ambiguous, say which sense you picked in"
+    " one clause.",
+    "balanced": "Shape: short paragraphs with the key terms in **bold**; a"
+    " bullet list or definition list when enumerating; a table only for a"
+    " genuine 2-3 way comparison.  Keep it moderate.",
+    "quality": "Shape: a thorough, structured answer in \"##\" sections --"
+    " definitions, mechanics, comparisons, recent developments -- citing"
+    " every major claim.",
+    "goal": "Shape: structure the answer around the goal with \"##\""
+    " sections, and close with a GFM task list (- [x] met / - [ ] open) as"
+    " the evidence ledger -- every checked item cited.  If the research"
+    " could not close an item, leave it unchecked and name the evidence"
+    " that would.",
+}
+
+_EXAMPLES = """<examples>
+User: "What is Kimi K2?"
+You: "The user wants to know what Kimi K2 is -- definition, key specs, release status."
+Action: web_search(query="Kimi K2 AI model"), web_search(query="Kimi K2 specs release date")
+
+User: "DeepSeek-V3 的上下文长度是多少？"
+You: "I need an exact number; snippets rarely carry it, the model card does."
+Action: web_search(query="DeepSeek-V3 context length site:huggingface.co"), then web_crawler(url="<the model card url>")
+
+User: "A 和 B 该选哪个？"
+You: "A comparison needs both sides covered before any verdict."
+Action: web_search(query="A 优点 缺点"), web_search(query="B 优点 缺点"), plan(plan="对比表：定位/性能/价格/生态，结论按使用场景给出")
+</examples>"""
 
 
 def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
@@ -412,125 +438,142 @@ def _initial_messages(  # pylint: disable=too-many-arguments, too-many-locals
     page_tool: bool = False,
     plan_tool: bool = False,
 ) -> list[dict[str, t.Any]]:
-    """The conversation opener: the role + search policy, the depth branch
-    (round policy AND output shape), then the SHARED answer contract from
-    ai/prompts.py (language, citations, markdown, grounding, hygiene) --
-    fragments composed, never hand-copied, so the two AI features cannot
-    drift.  The model is TOLD its round budget (it paces itself) and, on
-    a clarify round-trip, the direction the user confirmed (or the fact
-    that they declined to)."""
+    """The RESEARCHER's conversation opener, in the XML block organisation
+    (Vane's): ``<role>`` (research only -- a separate writer writes the
+    answer), ``<today>``, ``<step_notes>`` language, ``<how_to_search>``,
+    ``<examples>`` (few-shot), the tool-capability blocks
+    (``<page_reader>``/``<answer_planning>``/``<ambiguity_escape>``),
+    ``<depth>`` (the round policy half -- output shape belongs to the
+    writer), ``<research_policy>`` and the clarify round-trip blocks.
+    The SHARED answer contract (citations, markdown, grounding, voice)
+    is the WRITER's -- the researcher never writes the answer, so the
+    fragments are not repeated here."""
     role = (
-        "You are the \"AI Search\" mode of the zjsearch metasearch engine:"
-        " the user asks a question, YOU decide which keyword searches answer"
-        " it, run them with the {tool} tool, then answer from their numbered"
-        " sources.".format(tool=TOOL_NAME)
+        "<role>\nYou are the research agent of the zjsearch AI Search"
+        " mode: the user asks a question, YOU decide which keyword searches"
+        f" answer it and run them with the {TOOL_NAME} tool.  You NEVER"
+        " write the final answer yourself: when the research is complete,"
+        " simply stop calling tools -- a separate writer writes the answer"
+        " from the sources you gathered (their [n] numbers travel with"
+        " them).\n</role>"
     )
     follow_up = ""
     if sources_base:
         follow_up = (
-            "\n- This is a follow-up in an ongoing research session: sources"
-            f" [1]..[{sources_base}] were already found in earlier turns. Your"
-            " new searches continue the numbering from"
-            f" [{sources_base + 1}].  Cite earlier sources by their numbers"
-            " when they support the answer -- but unless they already answer"
-            " THIS follow-up completely, run at least one fresh web_search"
-            " for its specifics: never answer from the conversation history"
-            " alone."
+            "<follow_up>\nThis is a follow-up in an ongoing research session:"
+            f" sources [1]..[{sources_base}] were already found in earlier"
+            " turns. Your new searches continue the numbering from"
+            f" [{sources_base + 1}].  Unless the earlier sources already"
+            " answer THIS follow-up completely, run at least one fresh"
+            f" {TOOL_NAME} for its specifics.\n</follow_up>"
         )
-    how_to_search = [
-        "How to search:",
-        "- First write ONE short sentence stating how you read the question's"
-        " intent (the UI shows it as the lead of your search plan). Then call"
-        f" {TOOL_NAME} -- several calls in the same turn are encouraged: they"
-        " run in parallel.",
-        "- ALWAYS run at least one {tool} call before writing the final"
-        " answer -- even for topics you already know: the user expects live,"
-        " cited sources, not your memory.  No search results, no answer.".format(tool=TOOL_NAME),
-        "- Optional filters (time_range) are not supported by every engine:"
-        " when a filtered search comes back EMPTY, retry the same intent once"
-        " without the filter before concluding there is nothing to find.",
-        "- Never repeat a query you already ran; never use !bangs unless the"
-        " user explicitly names an engine (then prefix the query with its"
-        " engine bang, e.g. !baidu) -- without one, the category parameter"
-        " already fans out across every engine in that vertical.",
-    ]
-    how_to_open: list[str] = []
+    how_to_search = "\n".join(
+        [
+            "<how_to_search>",
+            "- First write ONE short sentence stating how you read the"
+            " question's intent (the UI shows it as the lead of your search"
+            f" plan). Then call {TOOL_NAME} -- several calls in the same"
+            " turn are encouraged: they run in parallel.",
+            "- ALWAYS run at least one search per question facet -- even for"
+            " topics you already know: the user expects live, cited sources,"
+            " not your memory.",
+            "- Optional filters (time_range) are not supported by every"
+            " engine: when a filtered search comes back EMPTY, retry the"
+            " same intent once without the filter before concluding there is"
+            " nothing to find.",
+            "- Never repeat a query you already ran; never use !bangs unless"
+            " the user explicitly names an engine (then prefix the query"
+            " with its engine bang, e.g. !baidu) -- without one, the"
+            " category parameter already fans out across every engine in"
+            " that vertical.",
+            "- When the research is done, STOP: just end your turn without"
+            " tool calls.  Do not draft the answer, do not summarize your"
+            " findings in prose -- the writer has your sources and your"
+            " plan.",
+            "</how_to_search>",
+        ]
+    )
+    page_reader = ""
     if page_tool:
-        how_to_open = [
-            "How to open pages:",
-            f"- The {PAGE_TOOL} tool reads ONE url's current full content in"
-            " a real browser and returns it as markdown: reach for it when a"
+        page_reader = (
+            "<page_reader>\n"
+            f"The {PAGE_TOOL} tool reads ONE url's current full content in a"
+            " real browser and returns it as markdown: reach for it when a"
             " source's snippet promises exactly the missing detail (specs,"
             " prices, tables, documentation, exact numbers) or when a"
-            " load-bearing claim deserves a first-hand check.",
-            "- Open sparingly: only pages whose snippet already promises what"
-            " you need -- never to \"see what is there\", never in place of a"
+            " load-bearing claim deserves a first-hand check.  Open"
+            " sparingly: only pages whose snippet already promises what you"
+            " need -- never to \"see what is there\", never in place of a"
             " search round.  A failed or empty page is a dead end: search a"
-            " different source instead of retrying it.",
-            "- Opened content carries the source's [n] label -- the number it"
-            " already had among your sources, or a fresh one appended for a"
-            " url that was not among the results -- and is cited like any"
-            " other source.  Very long pages arrive truncated: for long"
-            " documents prefer one targeted site:-search over opening page"
-            " after page.",
-        ]
-    how_to_plan: list[str] = []
+            " different source instead of retrying it.  Opened content"
+            " carries the source's [n] label -- the number it already had"
+            " among your sources, or a fresh one appended for a url that was"
+            " not among the results.  Very long pages arrive truncated: for"
+            " long documents prefer one targeted site:-search over opening"
+            " page after page.\n</page_reader>"
+        )
+    answer_planning = ""
     if plan_tool:
-        how_to_plan = [
-            "Planning the answer:",
-            "- When you catch yourself deliberating about the SHAPE of the"
+        answer_planning = (
+            "<answer_planning>\n"
+            "When you catch yourself deliberating about the SHAPE of the"
             f" final answer -- triaging sources, weighing what belongs"
             f" where, drafting an outline -- call the {PLAN_TOOL} tool with"
-            " that thinking (ALONE in its turn) instead of writing it into"
-            " your reply: the user sees the plan as a research step, and"
-            " your next message is the finished answer alone -- opening"
-            " with the point, never with process talk.  A reply that"
-            " narrates its own planning (\"Let me structure the"
-            " answer...\") is a broken answer.",
-        ]
-    depth_line = _DEPTH_PROMPTS.get(depth, _DEPTH_PROMPTS["balanced"])
-    answer_rules = [
-        "Answer rules:",
-        prompts.language_directive(lang),
-        prompts.citation_rules() + " Source numbers are the global [n] labels your search results" " carry.",
-        prompts.markdown_surface(),
-        prompts.grounding_fallback("searches"),
-        prompts.reader_voice(),
-        prompts.opening_rule(),
+            " that thinking (ALONE in its turn): the user sees the plan as a"
+            " research step, and the writer builds the answer on it.  A"
+            " reply that narrates its own planning is a broken research"
+            " turn.\n</answer_planning>"
+        )
+    ambiguity_escape = ""
+    if register_ask:
+        ambiguity_escape = (
+            "<ambiguity_escape>\n"
+            f"The {ASK_TOOL} tool is your ambiguity escape hatch: the moment"
+            " you realize -- in your first intent sentence or from the first"
+            " round's results -- that the request is genuinely ambiguous (an"
+            " acronym, code or short name matching several UNRELATED"
+            " products/domains, where guessing wrong wastes the whole run),"
+            " call it ONCE as the only call of that turn and stop.  Do not"
+            " burn rounds researching a guess first; do not use it for broad"
+            " informational topics; do not mix it with"
+            f" {TOOL_NAME} calls.\n</ambiguity_escape>"
+        )
+    depth = _DEPTH_RESEARCH.get(depth, _DEPTH_RESEARCH["balanced"])
+    lines = [
+        role,
+        prompts.today_line(),
+        f"<step_notes>\nWrite your step notes (the narration before tool" f" calls) in {lang}.\n</step_notes>",
+        how_to_search,
+        _EXAMPLES,
     ]
-    lines = [role, prompts.today_line(), *how_to_search, *how_to_open, *how_to_plan, depth_line, *answer_rules]
+    if page_reader:
+        lines.append(page_reader)
+    if answer_planning:
+        lines.append(answer_planning)
+    lines.append(f"<depth>\n{depth}\n</depth>")
     if max_rounds:
         lines.append(
-            "Research policy: there is NO time limit, and no cap on how many"
-            f" searches you may run -- only a safety ceiling of {max_rounds}"
-            " rounds (a round = one parallel batch).  The REAL rule is"
-            " progress: every round must add NEW information.  Repeating a"
-            " query or finding nothing new wastes the run -- if your latest"
-            " round produced no new leads, write the answer from what you"
-            " have instead of searching again."
+            "<research_policy>\nThere is NO time limit and no cap on how"
+            f" many searches you may run -- only a safety ceiling of"
+            f" {max_rounds} rounds (a round = one parallel batch).  The REAL"
+            " rule is progress: every round must add NEW information."
+            "  Repeating a query or finding nothing new wastes the run -- if"
+            " your latest round produced no new leads, stop researching; the"
+            " writer answers from what you have.\n</research_policy>"
         )
-    if register_ask:
-        lines.append(
-            f"- The {ASK_TOOL} tool is your ambiguity escape hatch: the"
-            " moment you realize -- in your first intent sentence or from"
-            " the first round's results -- that the request is genuinely"
-            " ambiguous (an acronym, code or short name matching several"
-            " UNRELATED products/domains, where guessing wrong wastes the"
-            " whole run), call it ONCE as the only call of that turn and"
-            " stop.  Do not burn rounds researching a guess first; do not"
-            " use it for broad informational topics; do not mix it with"
-            f" {TOOL_NAME} calls."
-        )
+    if ambiguity_escape:
+        lines.append(ambiguity_escape)
     if clarifications:
         lines.append(
-            "The user already confirmed the research direction before this"
-            " run (honor it; do not re-ask):\n<clarified>\n"
+            "<clarified>\nThe user already confirmed the research direction"
+            " before this run (honor it; do not re-ask):\n"
             f"{clarifications}\n</clarified>"
         )
     elif clarify_skipped:
         lines.append(
-            "The user declined to clarify the direction: proceed with your"
-            " best interpretation and cover the plausible facets."
+            "<clarified>\nThe user declined to clarify the direction:"
+            " proceed with your best interpretation and cover the plausible"
+            " facets.\n</clarified>"
         )
     if follow_up:
         lines.append(follow_up)
@@ -654,9 +697,12 @@ class _Searches:  # pylint: disable=too-few-public-methods
         # every page this run already opened (normalized) -- a re-read
         # settles as ``duplicate`` without rendering again
         self.read_urls: set[str] = set()
-        # every source url of this run -> its global [n]: an web_crawler of a
+        # every source url of this run -> its global [n]: an open_page of a
         # known url reuses the number instead of minting a duplicate source
         self.url_n: dict[str, int] = {}
+        # the accumulated source feed for the WRITER: one block per search
+        # (its [n] lines) and per page read -- the writer's whole context
+        self.feed: list[str] = []
         # progress bookkeeping for the stall detector: fresh queries with
         # results / fresh page reads in the CURRENT round, and the
         # consecutive-round count of rounds without any
@@ -730,6 +776,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
             else:
                 feed_lines.append(f"[{n}] {item.get('netloc', '')}: {item.get('title_text', '')}")
         feeds[idx - 1] = "\n".join(feed_lines)
+        self.feed.append(feeds[idx - 1])
         yield ("search", {"round": rnd, "id": idx, "status": "ok", "n": len(items), "ms": ms})
         if items:
             yield ("results", {"round": rnd, "id": idx, "results": items})
@@ -772,6 +819,7 @@ class _Searches:  # pylint: disable=too-few-public-methods
             cite = f"NEW source [{n}] -- cite it as [{n}]"
         netloc = urlsplit(url).netloc
         feeds[idx - 1] = f'Opened {url} (title: "{title}"; {cite}):\n\n{text}'
+        self.feed.append(feeds[idx - 1])
         self.round_new_hits += 1
         yield (
             "page",
@@ -946,6 +994,103 @@ def _json_object_of(text: str) -> dict[str, t.Any] | None:
     return value if isinstance(value, dict) else None
 
 
+def _standalone_question(cfg: dict[str, t.Any], question: str, history: list[dict[str, str]], lang: str) -> str:
+    """The follow-up rewrite (Vane's standalone follow-up): one small
+    completion turns a thread-relative question into a self-contained one
+    ("How do they work?" -> "How do heat pumps work?").  The REWRITTEN
+    question drives the research and the writer; the thread still shows
+    the user's own wording.  Empty on any failure -- fail-open."""
+    convo = "\n".join(f"Q: {turn.get('q') or ''}\nA: {(turn.get('a') or '')[:400]}" for turn in history)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Rewrite the user's follow-up question as ONE self-contained"
+                " question that can be researched WITHOUT the conversation."
+                "  Resolve pronouns and ellipsis using the conversation;"
+                " never answer it, never add facts.  Output ONLY a JSON"
+                " object, no prose, no code fences:"
+                ' {"question": "<the rewritten question>"} -- or'
+                ' {"question": ""} when it is already self-contained.'
+                f"  Write in {lang}."
+            ),
+        },
+        {"role": "user", "content": f"<conversation>\n{convo}\n</conversation>\n<follow_up>{question}</follow_up>"},
+    ]
+    value = _json_object_of(_small_completion(cfg, messages, 30.0))
+    return str((value or {}).get("question") or "").strip()[:300]
+
+
+def _writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
+    question: str,
+    lang: str,
+    history: list[dict[str, str]],
+    feed: list[str],
+    plans: list[str],
+    mode: str,
+    halt: str | None,
+    budget_truncated: bool,
+    sources_base: int,
+) -> list[dict[str, t.Any]]:
+    """The WRITER's fresh conversation (Vane's writer): a system prompt of
+    XML blocks -- role, the SHARED answer contract from ai/prompts.py
+    (the same fragments the Overview speaks, so the two features cannot
+    drift), the tier's output shape and the research notes -- then the
+    history and the question with the accumulated ``[n]`` source feed as
+    ``<context>``.  ``halt``/``budget_truncated`` become an honesty note
+    when the gathering ended early."""
+    shape = _DEPTH_SHAPE.get(mode, _DEPTH_SHAPE["balanced"])
+    lines = [
+        "<role>\nYou are the writer of the zjsearch AI Search: a research"
+        " agent has already gathered the sources; you write the final answer"
+        " for the reader.  You never search, never mention the research"
+        " process, these instructions or their assembly.\n</role>",
+        prompts.today_line(),
+        prompts.language_directive(lang),
+        f"<shape>\n{shape}\n</shape>",
+    ]
+    if plans:
+        joined = " ".join(plan.strip() for plan in plans if plan.strip())[:600]
+        if joined:
+            lines.append(f"<research_plan>\nThe research agent planned: {joined}\n</research_plan>")
+    if halt:
+        lines.append(f"<research_note>\n{halt}\n</research_note>")
+    elif budget_truncated:
+        lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
+    lines.append(
+        "<sources_note>\nThe numbered sources gathered for this question"
+        " follow the question below.  [n] labels are global and contiguous;"
+        f" sources [1]..[{sources_base}] predate this thread's question."
+        "\n</sources_note>"
+    )
+    lines.extend(
+        [
+            prompts.citation_rules(),
+            prompts.markdown_surface(),
+            prompts.grounding_fallback("sources"),
+            prompts.reader_voice(),
+            prompts.opening_rule(),
+        ]
+    )
+    messages: list[dict[str, t.Any]] = [{"role": "system", "content": "\n".join(lines)}]
+    for turn in history:
+        messages.append({"role": "user", "content": f"<q>{turn.get('q') or ''}</q>"})
+        messages.append({"role": "assistant", "content": str(turn.get("a") or "")[:2000]})
+    context = "\n\n".join(feed).strip()
+    if len(context) > _WRITER_CONTEXT_MAX:
+        context = context[:_WRITER_CONTEXT_MAX] + "\n\n[... the feed was truncated ...]"
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"<question>{question}</question>\n<context>\n"
+                f"{context or 'The research found no usable sources.'}\n</context>"
+            ),
+        }
+    )
+    return messages
+
+
 def _round_progress(state: _Searches, stall_rounds: int) -> t.Callable[[int], str | None]:
     """The progress-based termination policy: called by the agent loop
     after each executed round.  A round is PRODUCTIVE when at least one
@@ -960,7 +1105,7 @@ def _round_progress(state: _Searches, stall_rounds: int) -> t.Callable[[int], st
         state.stalled_rounds += 1
         if state.stalled_rounds < stall_rounds:
             return None
-        return _STALL_MESSAGE
+        return _STALL_NOTE
 
     return verdict
 
@@ -1060,6 +1205,7 @@ def _generate(
     cfg: dict[str, t.Any],
     question: str,
     lang: str,
+    plans: list[str],
 ) -> t.Iterator[str]:
     """Map agent/executor events to the NDJSON wire protocol."""
 
@@ -1137,7 +1283,9 @@ def _generate(
             answer_parts.clear()
         elif kind == "plan":
             # the plan turn's prose is answer-shape deliberation, not
-            # answer material -- never promote it on a late stream error
+            # answer material -- never promote it on a late stream error;
+            # it travels to the writer as guidance instead
+            plans.append(str((payload or {}).get("t") or ""))
             think_parts.clear()
             answer_parts.clear()
         elif kind == "ask_user":
@@ -1181,7 +1329,7 @@ def _clarify_stream(gate: dict[str, t.Any]) -> t.Iterator[str]:
 
 
 def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
-    """AI Search: the agent loop with the ``web_search`` tool."""
+    """AI Search: the researcher/writer split on the shared agent loop."""
     cfg = llm.ai_cfg()
     if not (_enabled() and llm.configured(cfg)):
         flask.abort(404)
@@ -1241,10 +1389,22 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     register_ask = mode in _CLARIFY_MODES and clarify_state == "ask"
     # the answer-planning tool rides every run of the structured tiers
     register_plan = mode in _PLAN_MODES
+    # the follow-up rewrite (Vane's standalone follow-up): a thread-relative
+    # question becomes self-contained before it drives research and writer
+    # (the thread still shows the user's own wording; fail-open to the
+    # original on any gate failure)
+    research_q = (_standalone_question(cfg, q, history, lang) if history else "") or q
+    state = _Searches(
+        sxng_request.preferences, list(sxng_request.user_plugins), sources_base, search_language=raw_search_language
+    )
+    # the page reader rides only when the browserless block is fully
+    # configured: an unconfigured reader simply leaves the tool unregistered
+    pages_on = browserless.configured()
+    plans: list[str] = []
     events = agent.run_agent(
         cfg,
         _initial_messages(
-            q,
+            research_q,
             lang,
             history,
             sources_base,
@@ -1262,10 +1422,20 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         + ([_plan_spec()] if register_plan else []),
         executor=state.execute,
         max_rounds=max_rounds,
-        wrapup_message=_WRAPUP_MESSAGE,
         round_progress=_round_progress(state, _budget("stall_rounds", mode, 2)),
         ask_tool=ASK_TOOL if register_ask else None,
         plan_tool=PLAN_TOOL if register_plan else None,
+        writer=lambda halt: _writer_messages(
+            research_q,
+            lang,
+            history,
+            state.feed,
+            plans,
+            mode,
+            halt,
+            state.round_no >= max_rounds,
+            sources_base,
+        ),
     )
     try:
         first = next(events)
@@ -1280,7 +1450,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # the executor serializes results through Jinja -- keep the request
     # context alive while the response streams
     resp = flask.Response(
-        flask.stream_with_context(_generate(first, events, cfg, q, lang)), mimetype="application/x-ndjson"
+        flask.stream_with_context(_generate(first, events, cfg, q, lang, plans)), mimetype="application/x-ndjson"
     )
     resp.headers["X-Accel-Buffering"] = "no"
     resp.headers["Cache-Control"] = "no-cache"

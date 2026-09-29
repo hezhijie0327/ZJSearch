@@ -230,16 +230,15 @@ def _attached_images(payload: dict[str, t.Any], cfg: dict[str, t.Any]) -> list[d
 
 
 def _answer_system(lang: str) -> str:
-    """The AI Overview system prompt: composed from the SHARED fragments in
-    ai/prompts.py (citation grammar, markdown surface, language directive)
-    so the two AI features cannot drift apart."""
+    """The AI Overview system prompt: composed from the SHARED XML fragments
+    in ai/prompts.py (citation grammar, markdown surface, language
+    directive) so the two AI features cannot drift apart."""
     return "\n".join(
         [
-            "You are the \"AI Overview\" feature of a search engine: answer"
-            " the user's question directly, grounded in the numbered sources"
-            " provided.",
+            "<role>\nYou are the \"AI Overview\" feature of a search engine:"
+            " answer the user's question directly, grounded in the numbered"
+            " sources provided.\n</role>",
             prompts.today_line(),
-            "Rules:",
             prompts.language_directive(lang),
             prompts.citation_rules(),
             prompts.markdown_surface(),
@@ -259,8 +258,9 @@ def _build_answer_messages(
     system = _answer_system(lang)
     if image_parts:
         system += (
-            "\n- Images are attached after this text; they come from the numbered "
-            "sources and may carry relevant visual information."
+            "\n<images>\nImages are attached after this text; they come from"
+            " the numbered sources and may carry relevant visual"
+            " information.\n</images>"
         )
     user_text = _ANSWER_USER_PROMPT.format(q=query, context=context)
     user: dict[str, t.Any] = (
