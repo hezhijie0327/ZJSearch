@@ -128,6 +128,43 @@ _WRITER_CONTEXT_MAX = 40_000
 """Hard cap on the source feed the writer receives (deep research with
 page reads lands around 15-25k; the cap only guards abuse)."""
 
+_CLARIFY_SCHEMA: dict[str, t.Any] = {
+    "type": "object",
+    "properties": {
+        "ask": {"type": "boolean"},
+        "intro": {"type": "string"},
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "q": {"type": "string"},
+                    "type": {"type": "string", "enum": ["single", "multi"]},
+                    "options": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["q", "type", "options"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["ask", "intro", "questions"],
+    "additionalProperties": False,
+}
+
+_RELATED_SCHEMA: dict[str, t.Any] = {
+    "type": "object",
+    "properties": {"questions": {"type": "array", "items": {"type": "string"}}},
+    "required": ["questions"],
+    "additionalProperties": False,
+}
+
+_STANDALONE_SCHEMA: dict[str, t.Any] = {
+    "type": "object",
+    "properties": {"question": {"type": "string"}},
+    "required": ["question"],
+    "additionalProperties": False,
+}
+
 _CLARIFY_MODES = ("quality", "goal")
 
 ASK_TOOL = "ask_user"
@@ -960,26 +997,6 @@ def _display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
     return {"id": idx, "tool": TOOL_NAME, "q": query, "category": category, "time_range": time_range or None}
 
 
-def _small_completion(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]], budget: float) -> str:
-    """One small non-tool completion collected to text (the clarify gate
-    and the related questions both ride this): reasoning stays relayed so
-    a thinking model's silent think phase cannot stall the queue; any
-    failure answers ``""`` (callers fail open)."""
-    stream = llm.LlmStream(cfg, messages, relay_reasoning=True)
-    text = ""
-    deadline = time.monotonic() + budget
-    while time.monotonic() < deadline:
-        # a REASONING model can think well past 30s before its first
-        # content token -- the per-event wait must outlast the think phase
-        kind, payload = stream.next_event(60.0)
-        if kind == "delta":
-            text += str(payload or "")
-        elif kind in ("error", "end"):
-            break
-    stream.cancel()
-    return text
-
-
 def _json_object_of(text: str) -> dict[str, t.Any] | None:
     """The first JSON object in a completion's text (models love wrapping
     their JSON in prose or fences despite being told not to)."""
@@ -1017,7 +1034,7 @@ def _standalone_question(cfg: dict[str, t.Any], question: str, history: list[dic
         },
         {"role": "user", "content": f"<conversation>\n{convo}\n</conversation>\n<follow_up>{question}</follow_up>"},
     ]
-    value = _json_object_of(_small_completion(cfg, messages, 30.0))
+    value = llm.json_completion(cfg, messages, "standalone_question", _STANDALONE_SCHEMA)
     return str((value or {}).get("question") or "").strip()[:300]
 
 
@@ -1145,7 +1162,7 @@ def _clarify_gate(cfg: dict[str, t.Any], question: str, lang: str, mode: str) ->
         },
         {"role": "user", "content": f"<q>{question}</q>"},
     ]
-    value = _json_object_of(_small_completion(cfg, messages, 45.0))
+    value = llm.json_completion(cfg, messages, "clarify_gate", _CLARIFY_SCHEMA)
     if not value or not value.get("ask"):
         return None
     questions = _sanitize_questions(value.get("questions"))
@@ -1156,14 +1173,16 @@ def _clarify_gate(cfg: dict[str, t.Any], question: str, lang: str, mode: str) ->
 
 def _related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: str) -> list[str]:
     """Three follow-up questions for the Related section -- one small
-    non-tool completion after the answer settles; empty on any failure."""
+    structured completion after the answer settles; empty on any
+    failure."""
     messages = [
         {
             "role": "system",
             "content": (
                 "Suggest follow-up questions for a search session. Output ONLY a"
-                " JSON array of exactly 3 short question strings -- no prose, no"
-                " markdown, no code fences."
+                " JSON object, no prose, no markdown, no code fences:"
+                ' {"questions": ["<question 1>", "<question 2>",'
+                ' "<question 3>"]} -- exactly 3 short question strings.'
             ),
         },
         {
@@ -1173,30 +1192,11 @@ def _related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: 
             ),
         },
     ]
-    # relay_reasoning stays ON even though the think text is not parsed:
-    # a reasoning model (gemma-4 in LM Studio) streams a long think phase
-    # first -- with the channel dropped the queue stays silent and the idle
-    # timeout kills the completion before any content arrives
-    stream = llm.LlmStream(cfg, messages, relay_reasoning=True)
-    text = ""
-    deadline = time.monotonic() + 45.0
-    while time.monotonic() < deadline:
-        kind, payload = stream.next_event(20.0)
-        if kind == "delta":
-            text += str(payload or "")
-        elif kind in ("error", "end"):
-            break
-    stream.cancel()
-    start, end = text.find("["), text.rfind("]")
-    if start == -1 or end <= start:
+    value = llm.json_completion(cfg, messages, "related_questions", _RELATED_SCHEMA)
+    items = (value or {}).get("questions")
+    if not isinstance(items, list):
         return []
-    try:
-        parsed = json.loads(text[start : end + 1])
-    except ValueError:
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [str(item).strip()[:200] for item in parsed if isinstance(item, str) and item.strip()][:3]
+    return [str(item).strip()[:200] for item in items if isinstance(item, str) and item.strip()][:3]
 
 
 def _generate(

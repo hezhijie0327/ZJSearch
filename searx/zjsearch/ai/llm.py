@@ -807,3 +807,206 @@ def reason_of(payload: str | None) -> str:
     text = re.sub(r"<[^>]+>", " ", str(payload or ""))
     text = " ".join(text.split())
     return text[:240] or "upstream returned an empty stream"
+
+
+# ------------------------------------------------- structured-object gates
+
+
+_JSON_COMPLETION_TIMEOUT = 90.0
+"""Wall clock for one native structured-object call (the gates): a
+reasoning model may think for a while before emitting its single JSON
+payload."""
+
+
+def _lenient_object(text: str) -> dict[str, t.Any] | None:
+    """The first JSON object in a completion's text -- the repair pass of
+    the belt-and-braces: OpenAI-compatible gateways (LM Studio, vLLM,
+    proxies) silently ignore ``response_format``/``output_config``, so the
+    payload may arrive fenced or prose-wrapped even under native mode."""
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        value = json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+async def _openai_chat_json(
+    cfg: dict[str, t.Any],
+    base: str,
+    messages: list[dict[str, t.Any]],
+    name: str,
+    schema: dict[str, t.Any],
+    strict: bool,
+) -> str:
+    client = _openai_client(cfg, base)
+    # strict json_schema when the endpoint speaks it; the weaker
+    # json_object mode is the second native tier (DeepSeek and friends
+    # support it where the full schema is unavailable)
+    response_format = (
+        {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}}
+        if strict
+        else {"type": "json_object"}
+    )
+    response = await client.chat.completions.create(
+        model=str(cfg.get("model")),
+        messages=messages,
+        response_format=response_format,
+        timeout=_sdk_timeout(),
+        extra_headers=_extra_headers(cfg),
+        extra_body=_extra_body(cfg),
+        **_model_kwargs(_params(cfg), "openai_chat_completions"),
+    )
+    if response.choices and response.choices[0].message and response.choices[0].message.content:
+        return str(response.choices[0].message.content)
+    return ""
+
+
+async def _openai_responses_json(
+    cfg: dict[str, t.Any],
+    base: str,
+    messages: list[dict[str, t.Any]],
+    name: str,
+    schema: dict[str, t.Any],
+    strict: bool,
+) -> str:
+    client = _openai_client(cfg, base)
+    text_format = (
+        {"type": "json_schema", "name": name, "strict": True, "schema": schema} if strict else {"type": "json_object"}
+    )
+    response = await client.responses.create(
+        model=str(cfg.get("model")),
+        input=_responses_input(messages),
+        instructions=_system_of(messages) or None,
+        text={"format": text_format},
+        timeout=_sdk_timeout(),
+        extra_headers=_extra_headers(cfg),
+        extra_body=_extra_body(cfg),
+        **_model_kwargs(_params(cfg), "openai_responses"),
+    )
+    return str(getattr(response, "output_text", "") or "")
+
+
+async def _anthropic_json(
+    cfg: dict[str, t.Any], base: str, messages: list[dict[str, t.Any]], schema: dict[str, t.Any]
+) -> str:
+    client = _anthropic_client(cfg, base)
+    response = await client.messages.create(
+        model=str(cfg.get("model")),
+        system=_system_of(messages) or None,
+        messages=_anthropic_messages(messages),
+        output_config={"format": {"type": "json_schema", "schema": schema}},
+        timeout=_sdk_timeout(),
+        extra_headers=_extra_headers(cfg),
+        extra_body=_extra_body(cfg),
+        **_model_kwargs(_params(cfg), "anthropic"),
+    )
+    return "".join(str(block.text) for block in response.content or [] if getattr(block, "type", "") == "text")
+
+
+async def _gemini_json(
+    cfg: dict[str, t.Any], base: str, messages: list[dict[str, t.Any]], schema: dict[str, t.Any]
+) -> str:
+    from google.genai import types  # pylint: disable=import-outside-toplevel
+
+    client = _gemini_client(cfg, base)
+    system, contents = _gemini_messages(messages)
+    # response_json_schema takes a RAW JSON Schema dict (response_schema
+    # wants genai's OpenAPI dialect -- the SDK docs redirect standard
+    # JSON Schema there); response_mime_type is required alongside
+    config = types.GenerateContentConfig(
+        system_instruction=system,
+        response_mime_type="application/json",
+        response_json_schema=schema,
+        **_model_kwargs(_params(cfg), "gemini"),
+    )
+    response = await client.aio.models.generate_content(model=str(cfg.get("model")), contents=contents, config=config)
+    return str(getattr(response, "text", "") or "")
+
+
+def _stream_plain_text(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> str:
+    """The plain streaming fallback every dialect already speaks (the
+    reasoning-aware shape: the relay keeps the queue alive through a
+    think phase; only content deltas are collected)."""
+    stream = LlmStream(cfg, messages, relay_reasoning=True)
+    text = ""
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        kind, payload = stream.next_event(45.0)
+        if kind == "delta":
+            text += str(payload or "")
+        elif kind in ("error", "end"):
+            break
+    stream.cancel()
+    return text
+
+
+_json_tier_cache: dict[tuple[str, str], int] = {}
+"""``(kind, base)`` -> the native tier a gate should START from (0 =
+strict schema, ... , len(attempts) = none of them worked): endpoints
+answer capability questions the same way every time, so a rejected
+constraint is remembered per endpoint instead of re-paid with a 400 on
+every gate call."""
+
+
+def json_completion(
+    cfg: dict[str, t.Any],
+    messages: list[dict[str, t.Any]],
+    name: str,
+    schema: dict[str, t.Any],
+) -> dict[str, t.Any] | None:
+    """One small structured-object completion (the gates -- clarify, related
+    questions, follow-up rewrite): NATIVE structured output per dialect
+    with a tiered fallback.  openai chat / responses speak strict
+    ``json_schema`` first and the weaker ``json_object`` mode second
+    (DeepSeek and friends support the latter where the full schema is
+    unavailable); anthropic speaks ``output_config.format``; gemini
+    ``response_json_schema``.  Vane's belt-and-braces on top: the payload
+    still goes through a lenient brace-scan repair (gateways ignore
+    output constraints), and any native failure falls back to the plain
+    streaming completion every dialect speaks.  Returns the parsed
+    object, or ``None`` (callers fail open)."""
+    kind, base = endpoint(cfg)
+    if kind == "openai_chat_completions":
+        attempts: list[t.Callable[[], t.Any]] = [
+            lambda: _openai_chat_json(cfg, base, messages, name, schema, True),
+            lambda: _openai_chat_json(cfg, base, messages, name, schema, False),
+        ]
+    elif kind == "openai_responses":
+        attempts = [
+            lambda: _openai_responses_json(cfg, base, messages, name, schema, True),
+            lambda: _openai_responses_json(cfg, base, messages, name, schema, False),
+        ]
+    elif kind == "anthropic":
+        attempts = [lambda: _anthropic_json(cfg, base, messages, schema)]
+    elif kind == "gemini":
+        attempts = [lambda: _gemini_json(cfg, base, messages, schema)]
+    else:
+        attempts = []
+    cache_key = (kind, base)
+    start = _json_tier_cache.get(cache_key, 0)
+    for offset, make in enumerate(attempts[start:], start):
+        try:
+            text = asyncio.run_coroutine_threadsafe(make(), get_loop()).result(_JSON_COMPLETION_TIMEOUT)
+        except Exception as exc:  # pylint: disable=broad-except
+            # an endpoint that rejects this constraint (or lacks it) lands
+            # here -- the next tier, then the plain fallback, still answer.
+            # A 400-class rejection is remembered: capabilities do not
+            # flip between calls, so later gates skip straight to the
+            # tier that works (transient errors are NOT remembered)
+            if getattr(exc, "status_code", None) == 400:
+                _json_tier_cache[cache_key] = offset + 1
+            logger.warning(
+                "zjsearch_ai: native structured output failed (%s: %.140s) -- next tier",
+                type(exc).__name__,
+                str(exc),
+            )
+            continue
+        value = _lenient_object(text) if text else None
+        if value is not None:
+            _json_tier_cache[cache_key] = offset
+            return value
+    text = _stream_plain_text(cfg, messages)
+    return _lenient_object(text) if text else None

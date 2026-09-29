@@ -211,7 +211,17 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   rewritten into self-contained questions first (Vane's standalone
   follow-up: `_standalone_question`, one small JSON completion, fail-open
   to the original wording — the thread still shows the user's own
-  question).  Prompt organization is XML blocks end to end: prompts.py
+  question).  All three gates (clarify, related, standalone rewrite)
+  ride `llm.json_completion` — NATIVE structured output per dialect
+  (openai chat `response_format` / responses `text.format` / anthropic
+  `output_config.format` / gemini `response_json_schema`, verified
+  against the installed SDKs) with Vane's belt-and-braces: a lenient
+  brace-scan repair on every payload (gateways ignore output
+  constraints), a `json_object` second tier for openai-family
+  endpoints that reject the full schema (DeepSeek does), the plain
+  streaming completion as the last tier, and a per-endpoint 400
+  memory so a rejected tier is skipped on later gate calls.  Prompt
+  organization is XML blocks end to end: prompts.py
   fragments emit `<tag>` blocks, the researcher prompt composes
   `<role>/<today>/<step_notes>/<how_to_search>/<examples>` (few-shot)
   plus per-tool capability blocks.  Wire protocol: NDJSON lines
