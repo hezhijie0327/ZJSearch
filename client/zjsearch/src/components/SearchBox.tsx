@@ -81,6 +81,7 @@ export function SearchBox({
   variant = "compact",
   onSubmitQuery,
   placeholder,
+  disableAutocomplete = false,
 }: {
   initialQuery: string;
   /** Optional controlled mode (used on the index page). */
@@ -92,6 +93,9 @@ export function SearchBox({
   onSubmitQuery: (q: string) => void;
   /** override the input's placeholder (the AI hero asks instead of searches) */
   placeholder?: string;
+  /** disable the suggestion dropdown entirely (the AI hero asks questions,
+      not keyword queries -- suggestions do not apply there) */
+  disableAutocomplete?: boolean;
 }) {
   const t = useT();
   const { loading } = useRouter();
@@ -122,7 +126,11 @@ export function SearchBox({
   // debounced autocompleter — keyed on the TYPED text: arrow-key navigation
   // rewrites the input with suggestion texts and must not re-fetch
   useEffect(() => {
-    if (!settings.autocomplete) {
+    if (!settings.autocomplete || disableAutocomplete) {
+      // the gate flipping mid-typing (the hero's [classic|AI] switch) must
+      // not leave a stale dropdown hanging under the input
+      setSuggestions([]);
+      setOpen(false);
       return;
     }
     const trimmed = typed.trim();
@@ -145,7 +153,7 @@ export function SearchBox({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [typed, settings.autocomplete, settings.autocomplete_min]);
+  }, [typed, settings.autocomplete, settings.autocomplete_min, disableAutocomplete]);
 
   // close the dropdown on outside clicks
   useEffect(() => {

@@ -113,6 +113,7 @@ export function IndexPage({ data }: { data: IndexData }) {
           onFocusCapture={preloadResultsPage}
         >
           <SearchBox
+            disableAutocomplete={aiMode}
             initialQuery=""
             onQueryChange={setQuery}
             onSubmitQuery={(q) => {

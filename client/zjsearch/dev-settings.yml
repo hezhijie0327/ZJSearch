@@ -72,10 +72,9 @@ server:
 # (LAN-specific: uncomment and set your own proxy when needed)
 outgoing:
   request_timeout: 5.0
-  # proxies:
-  #   all://:
-  #     - http://10.192.7.1:7890
-  #     - http://192.168.20.23:7890
+  proxies:
+    all://:
+      - http://10.192.7.1:7890
   networks:
     # the page reader's dedicated network: the LAN browserless below is
     # plain http, and the app-initialized DEFAULT network is https-only
