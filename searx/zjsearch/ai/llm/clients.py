@@ -104,7 +104,16 @@ def gemini_client(cfg: dict[str, t.Any], base: str) -> t.Any:
     client = _sdk_clients.get(key)
     if client is None:
         api_key = config.chat_key(cfg)
-        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        # google-genai has no per-call headers -- the client's HttpOptions
+        # are its designed place, and the SDK MERGES these over its own
+        # defaults (Content-Type / x-goog-api-key) with these winning: the
+        # same extra_headers-overrides-defaults semantics as the openai /
+        # anthropic per-request kwargs (a gateway that wants Authorization
+        # over the x-goog-api-key just sets it here)
+        headers: dict[str, str] = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        headers.update(config.extra_headers(cfg) or {})
         out = settings.get("outgoing", {})
         remote = not config.endpoint_is_local(base or "https://generativelanguage.googleapis.com")
         proxies = dict(out.get("proxies") or {}) if remote and out.get("proxies") else None
@@ -112,7 +121,7 @@ def gemini_client(cfg: dict[str, t.Any], base: str) -> t.Any:
             api_key=api_key or None,
             http_options=types.HttpOptions(
                 base_url=base or None,
-                headers=headers,
+                headers=headers or None,
                 extra_body=config.extra_body(cfg),
                 async_client_args={"verify": out.get("verify", True), "mounts": proxies},
             ),

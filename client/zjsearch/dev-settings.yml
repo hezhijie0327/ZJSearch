@@ -141,78 +141,111 @@ engines:
 zjsearch:
   ai:
     enabled: true
+
+    # ── transport (pick ONE dialect; complete examples per SDK below) ─
     sdk: openai_chat_completions
     base_url: "http://localhost:1234/v1"
+    # api_key: "" = the ZJSEARCH_AI_KEY env.  LM Studio VALIDATES the
+    # bearer token -- a local auth-free deployment still needs a real
+    # key set there.
     api_key: ""
     model: "qwen/qwen3.6-35b-a3b"
-    # ── params: the chosen SDK's create() kwargs ──────────────────────
-    # max_tokens translates to each API's own key; temperature stays
-    # opt-in.  The THINKING knobs are the SDK's own names — fill in the
-    # one matching the chosen sdk, and the chain-of-thought SURFACES in
-    # the UI's collapsible thinking block on every dialect:
-    #   openai_chat_completions -> reasoning_effort: low | medium | high
-    #   openai_responses        -> reasoning: {effort: low, summary: auto}
-    #   anthropic               -> OMIT for the native default (extended
-    #                              thinking on, budget 2048), or
-    #                              thinking: {type: enabled, budget_tokens: N}
-    #   gemini                  -> thinking_config: {thinking_budget: N}
-    #                              (includeThoughts folds in natively)
+
+    # ── params: the chosen SDK's create() kwargs, VERBATIM ────────────
+    # every entry passes through under its SDK name -- no translation
+    # (output cap: max_tokens on anthropic, max_output_tokens on
+    # openai_responses / gemini; anthropic fills a 4096 default when
+    # unset).  The THINKING knob is the SDK's own name and surfaces the
+    # chain-of-thought in the UI's collapsible thinking block.
     params:
-      reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
-    # ── the reasoning ECHO (interleaved thinking) ─────────────────────
-    # each research round's reasoning replays on the next request's
-    # history -- several model families REJECT tool-call loops without it.
-    # A simple switch, since the transport configures ONE model:
-    #   reasoning_passback: true   # 回传每轮思考（kimi/minimax/mimo 等）
-    # absent/false keeps the history clean (endpoints that forbid echoed
-    # reasoning would error on it).
-    # ── prompt caching ────────────────────────────────────────────────
-    # the prompts are byte-stable per mode+language by design, which is
-    # what makes prefix caching apply:
-    #   openai dialects -> prompt_cache_key rides every request
-    #     (supported endpoints group the cache; the rest ignore it)
-    #   anthropic -> cache_control breakpoints default ON on every
-    #     anthropic-dialect endpoint (system + last tool + last message);
-    #     cache_control: false opts out for a gateway that rejects them
-    #   gemini -> implicit prefix caching, no wire field needed
-    # NOTE cache_control is an ai-LEVEL toggle (not a params entry).
-    # extra_body:  # LM Studio / vLLM only -- drop it for online providers.
+      reasoning_effort: "low"      # openai chat: low | medium | high
+
+    # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
+    # extra_headers ride EVERY LLM call -- e.g. a discount / attribution
+    # header a provider or gateway asks for:
+    # extra_headers:
+    #   APP-Code: "some_content"
+    # extra_body carries raw JSON body fields the SDK has no typed kwarg
+    # for (LM Studio / vLLM only -- drop it for online providers):
+    # extra_body:
     #   chat_template_kwargs:
-    #     enable_thinking: false
-    #   NOTE: reasoning_effort and this LM Studio hard-off are mutually
-    #   exclusive -- sending an effort implies a reasoning request and
-    #   re-enables thinking despite the template kwarg.
-    # ── feature switches ──────────────────────────────────────────────
-    # both default to true; setting one to false makes the endpoint answer
-    # 404 AND the client hide its entry point (the AI Overview trigger /
-    # the [classic|AI] switch).
+    #     enable_thinking: false     # mutually exclusive with
+    #                                # reasoning_effort above
+    # reasoning echo-back (interleaved thinking; kimi/minimax/mimo 等
+    # 家族拒绝没有回传思考的工具循环):
+    # reasoning_passback: true
+    # prompt caching needs no config: prompt_cache_key rides every
+    # openai-dialect request; anthropic marks cache_control breakpoints
+    # by default (cache_control: false opts out -- an ai-LEVEL toggle,
+    # NOT a params entry); gemini caches implicitly.
+
+    # ── feature switches (default true; false = endpoint 404 AND the
+    #    client hides the entry point) ─────────────────────────────────
     overview:
       enabled: true
-    # AI Search rides the same transport; the model must support native
-    # tool calls (endpoints without tool support answer 400/404 -- the
-    # AI Overview keeps working either way).
     search:
-      # enabled: true            # default true -- opt out with false
-      # max_rounds: 4            # rounds SAFETY ceiling (not the plan)
-      # stall_rounds: 2          # consecutive no-new-info rounds that end
-      #   the research -- rounds are terminated by PROGRESS, not time:
-      #   no time limits at all, the stop button is the control
-    # online examples -- swap sdk/base_url/model and the ZJSEARCH_AI_KEY:
-    #   sdk: openai_chat_completions
-    #   base_url: "https://api.openai.com/v1"
-    #   model: "gpt-..."
-    #   sdk: anthropic
-    #   base_url: "https://api.anthropic.com"
-    #   model: "claude-..."
-    #   sdk: gemini
-    #   base_url: "https://generativelanguage.googleapis.com"
-    #   model: "gemini-..."
-    # ── AI Search's open_page tool: the Browserless v2 page reader (a real
-    # Chrome for JS/SPA pages).  endpoint = the self-hosted v2 root; the
-    # key may travel via the ZJSEARCH_BROWSERLESS_KEY env instead (kept
-    # out of the repo, like ZJSEARCH_AI_KEY).  Unconfigured = the tool
-    # simply never registers.
+      enabled: true
+      # max_rounds: 4              # rounds SAFETY ceiling, not the plan
+      # stall_rounds: 2            # consecutive no-new-info rounds that
+      #                            # end the research (PROGRESS, not time)
+    # ── AI Search's open_page tool: the Browserless v2 page reader (a
+    #    real Chrome for JS/SPA pages); unconfigured = never registers ─
     browserless:
       endpoint: "https://browser.zhijie.online"
-      # key: ""
-      # max_chars: 12000   # readable chars per page fed to the model
+      # key: ""                    # or the ZJSEARCH_BROWSERLESS_KEY env
+      # max_chars: 12000           # readable chars per page fed to the model
+
+    # ═══ per-SDK examples: uncomment ONE block and swap it over the ═══
+    # ═══ active sdk/base_url/api_key/model AND params above          ═══
+
+    # openai_chat_completions -- the official API AND every OpenAI-
+    # compatible server (LM Studio, vLLM; the aggregators openrouter /
+    # aihubmix / inferera speak this route for every model):
+    # sdk: openai_chat_completions
+    # base_url: "https://api.openai.com/v1"
+    # api_key: "sk-..."
+    # model: "gpt-..."
+    # params:
+    #   temperature: 0.7
+    #   max_tokens: 8192
+    #   reasoning_effort: "medium"
+    # extra_headers:                 # openrouter attribution, or a
+    #   HTTP-Referer: "https://search.example.com"   # discount gateway's
+    #   X-Title: "zjsearch"                          # APP-Code header
+
+    # openai_responses -- the official Responses API (summary streams
+    # into the UI think block; only reasoning models accept it):
+    # sdk: openai_responses
+    # base_url: "https://api.openai.com/v1"
+    # api_key: "sk-..."
+    # model: "gpt-..."
+    # params:
+    #   max_output_tokens: 8192
+    #   reasoning: {effort: "medium", summary: "auto"}
+
+    # anthropic -- the Messages API (no /v1 in the base_url).  Extended
+    # thinking is ON by default (budget 2048): OMIT thinking for the
+    # native default or set it; a user-set temperature suppresses the
+    # default (the API rejects the pairing; a gateway that rejects the
+    # parameter gets one automatic thinking-free retry):
+    # sdk: anthropic
+    # base_url: "https://api.anthropic.com"
+    # api_key: "sk-ant-..."
+    # model: "claude-..."
+    # params:
+    #   max_tokens: 16384
+    #   thinking: {type: "enabled", budget_tokens: 4096}
+    # cache_control: false           # only for a gateway that rejects
+    #                                # the default cache breakpoints
+
+    # gemini -- the google-genai SDK (a gateway prefix that already
+    # includes the API name works as base_url too).  Thought parts
+    # surface natively on 2.5+ models -- includeThoughts folds in
+    # automatically, thinking_config only sizes the budget:
+    # sdk: gemini
+    # base_url: "https://generativelanguage.googleapis.com"
+    # api_key: "AIza..."
+    # model: "gemini-2.5-flash"
+    # params:
+    #   max_output_tokens: 8192
+    #   thinking_config: {thinking_budget: 1024}

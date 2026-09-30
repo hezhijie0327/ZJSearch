@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """Per-dialect request shaping: SDK create kwargs and prompt-cache strategy.
 
-The ``params`` block translates to each API's own kwarg names, and the
-prompt-cache design rides here -- OpenAI's ``prompt_cache_key`` routing
-bucket and the Anthropic ``cache_control`` breakpoints.  The dialect
-modules apply these before issuing their requests.
+The ``params`` block passes through under its SDK names (no translation),
+and the prompt-cache design rides here -- OpenAI's ``prompt_cache_key``
+routing bucket and the Anthropic ``cache_control`` breakpoints.  The
+dialect modules apply these before issuing their requests.
 """
 
 import typing as t
@@ -12,9 +12,9 @@ import typing as t
 from . import config
 
 _ANTHROPIC_DEFAULT_MAX_TOKENS = 4096
-"""The Messages API has no default for ``max_tokens`` -- fills in when
-``params.max_tokens`` is unset (reasoning models can burn it on thinking;
-raise it there or override via extra_body)."""
+"""The Messages API has no default for ``max_tokens`` -- filled in when
+``params`` does not carry one (reasoning models can burn it on thinking;
+raise ``max_tokens`` there)."""
 
 _ANTHROPIC_THINKING_BUDGET = 2048
 """The native progressive-thinking default for the Anthropic dialect:
@@ -23,27 +23,23 @@ when set (an explicit ``false`` opts out entirely)."""
 
 
 def model_kwargs(params: dict[str, t.Any], kind: str, with_native_thinking: bool = True) -> dict[str, t.Any]:
-    """The ``params`` entries as SDK create kwargs: ``max_tokens`` translates
-    to each API's own key (and fills the Anthropic mandatory default), the
-    rest pass through under their SDK names -- including the thinking knobs
-    (``reasoning_effort`` / ``reasoning`` / ``thinking`` /
-    ``thinking_config``, whichever the chosen SDK speaks).
-    ``with_native_thinking`` lets callers that do not benefit from a
-    reasoning phase (the JSON gates) opt out of the native default."""
-    max_tokens = params.get("max_tokens")
-    kwargs = {name: value for name, value in params.items() if name != "max_tokens" and value is not None}
+    """The ``params`` entries as SDK create kwargs, VERBATIM under their SDK
+    names -- the block mirrors the chosen SDK's own ``create()`` signature
+    and nothing is translated (name the output cap ``max_tokens`` on the
+    anthropic dialect, ``max_output_tokens`` on openai_responses / gemini).
+    Two transport-level necessities remain: the Anthropic Messages API has
+    NO default for ``max_tokens`` (filled when ``params`` omits it), and
+    the native progressive-thinking default -- ``with_native_thinking``
+    lets callers that do not benefit from a reasoning phase (the JSON
+    gates) opt out of it."""
+    kwargs = {name: value for name, value in params.items() if value is not None}
     if kind == "anthropic":
         thinking = params.get("thinking")
         if thinking is None and with_native_thinking and "temperature" not in params:
             thinking = {"type": "enabled", "budget_tokens": _ANTHROPIC_THINKING_BUDGET}
         if thinking is not None:
             kwargs["thinking"] = thinking
-        kwargs["max_tokens"] = int(max_tokens) if max_tokens else _ANTHROPIC_DEFAULT_MAX_TOKENS
-    elif kind in ("openai_responses", "gemini"):
-        if max_tokens:
-            kwargs["max_output_tokens"] = int(max_tokens)
-    elif max_tokens:
-        kwargs["max_tokens"] = int(max_tokens)
+        kwargs.setdefault("max_tokens", _ANTHROPIC_DEFAULT_MAX_TOKENS)
     return kwargs
 
 

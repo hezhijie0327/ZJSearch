@@ -46,15 +46,28 @@ def chat_key(cfg: dict[str, t.Any]) -> str:
 
 
 def extra_headers(cfg: dict[str, t.Any]) -> dict[str, str] | None:
+    """The ``zjsearch.ai.extra_headers`` block -- HTTP headers merged onto
+    EVERY LLM request (per-request ``extra_headers=`` on the openai /
+    anthropic SDKs, the client's ``HttpOptions.headers`` on gemini where
+    the SDK merges them over its defaults with these winning).  The
+    provider-specific header escape hatch (discount / attribution
+    headers, a gateway's ``Authorization``)."""
     extra = cfg.get("extra_headers")
     return {str(name): str(value) for name, value in extra.items()} if isinstance(extra, dict) else None
 
 
 def extra_body(cfg: dict[str, t.Any]) -> dict[str, t.Any] | None:
+    """The ``zjsearch.ai.extra_body`` block -- raw JSON body fields the
+    chosen SDK has no typed kwarg for (server extensions such as LM
+    Studio's ``chat_template_kwargs``), merged into the request body 1:1
+    on every dialect."""
     return cfg.get("extra_body") if isinstance(cfg.get("extra_body"), dict) else None
 
 
 def params(cfg: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The ``zjsearch.ai.params`` block -- the chosen SDK's ``create()``
+    kwargs VERBATIM under their SDK names (no translation; see
+    ``caching.model_kwargs`` for the two transport-level additions)."""
     raw = cfg.get("params")
     return raw if isinstance(raw, dict) else {}
 

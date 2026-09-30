@@ -230,10 +230,16 @@ the SDK's own convention:
        api_key: ""   # or the ZJSEARCH_AI_KEY environment variable
        model: "gpt-..."
 
-``params`` carries the chosen SDK's ``create()`` kwargs (``max_tokens``
-translates to each API's own key; ``temperature`` stays opt-in) and
-``extra_body`` / ``extra_headers`` pass through 1:1 as the
-provider-specific escape hatches.
+``params`` carries the chosen SDK's ``create()`` kwargs VERBATIM under
+their SDK names — nothing is translated: name the output cap
+``max_tokens`` on the anthropic dialect and ``max_output_tokens`` on
+``openai_responses`` / ``gemini`` (the Messages API fills its mandatory
+``max_tokens`` with 4096 when ``params`` omits one).
+``extra_body`` / ``extra_headers`` pass through 1:1 on EVERY dialect as
+the provider-specific escape hatches — ``extra_headers`` rides the
+per-request kwarg on the openai / anthropic SDKs and the client's
+``HttpOptions.headers`` on gemini (the SDK merges those over its own
+defaults with the configured ones winning).
 
 Thinking — the chain-of-thought that surfaces in the UI's collapsible
 thinking block — is native on every dialect:

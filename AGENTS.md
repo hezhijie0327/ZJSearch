@@ -16,6 +16,14 @@ special-query answers carry for the theme — see
 `searx/result_types/answer.py` and the hash/self-info/time-zone plugins plus
 the random/statistics answerers).
 
+**`searx/settings.yml` is upstream-frozen — NEVER edit it on this branch**
+(no zjsearch defaults block, no engine tweaks, not even comments): the
+theme ships zero settings defaults — configuration lives in the
+deployment's own settings file (`client/zjsearch/dev-settings.yml` for the
+dev instance) and code-side fallbacks. After a merge/rebase or a stray
+edit, force-restore it:
+`git checkout origin/master -- searx/settings.yml`.
+
 Licensing: every theme-authored file — client sources and tools,
 `searx/templates/zjsearch/`, and our python additions
 (`searx/plugins/stock_quote.py`, the `searx/zjsearch/` package, including all
