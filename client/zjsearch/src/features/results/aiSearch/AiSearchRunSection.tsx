@@ -2,6 +2,8 @@
 
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
   ArrowUpRight,
   BookOpen,
   Brain,
@@ -11,6 +13,8 @@ import {
   Compass,
   Copy,
   CornerDownRight,
+  Database,
+  DatabaseZap,
   Globe,
   Lightbulb,
   LoaderCircle,
@@ -19,6 +23,7 @@ import {
   Repeat2,
   RotateCw,
   Search,
+  Sparkles,
   Waypoints,
   X,
 } from "lucide-react";
@@ -359,13 +364,16 @@ function ElapsedTimer({ startedAt, endedAt }: { startedAt: number; endedAt: numb
   return <span className="ms-auto shrink-0 tabular-nums text-xs text-ink-3">{label}</span>;
 }
 
-/** The run's transport outcome, rendered once settled: EVERY finish reason
-    gets a visible state (truncation "length" and friends are warnings the
-    user must see, never silently swallowed) plus the token usage summed
-    across the run's turns. */
-function RunOutcome({ finish, usage }: { finish: string | null; usage: AiSearchRun["usage"] }) {
+/** The run's quiet meta line at the END of the answer (lobehub's message
+    footer): the model the API response reported on the left, the token
+    cluster next to it (labels ride the tooltips -- numbers only inline),
+    the transport outcome on the right.  EVERY finish reason gets a
+    visible state (truncation "length" and friends are warnings the user
+    must see, never silently swallowed).  Rendered once settled. */
+function RunFooter({ run }: { run: AiSearchRun }) {
   const t = useT();
-  if (!finish && !usage) {
+  const { finish, model, usage } = run;
+  if (!finish && !usage && !model) {
     return null;
   }
   let note: { text: string; warn: boolean } | null = null;
@@ -382,22 +390,52 @@ function RunOutcome({ finish, usage }: { finish: string | null; usage: AiSearchR
   } else if (finish === "stop") {
     note = { text: t("ai_finish_stop"), warn: false };
   }
-  const usageLabel = usage
-    ? t("ai_usage_tokens", { input: formatTokens(usage.input), output: formatTokens(usage.output) }) +
-      (usage.thoughts ? t("ai_usage_thinking", { n: formatTokens(usage.thoughts) }) : "") +
-      (usage.cached ? t("ai_usage_cached", { n: formatTokens(usage.cached) }) : "") +
-      (usage.cache_write ? t("ai_usage_cache_write", { n: formatTokens(usage.cache_write) }) : "")
-    : null;
+  const segments: { icon: typeof ArrowUp; title: string; value: string }[] = usage
+    ? [
+        { icon: ArrowUp, title: t("ai_usage_input_title"), value: formatTokens(usage.input) },
+        { icon: ArrowDown, title: t("ai_usage_output_title"), value: formatTokens(usage.output) },
+        ...(usage.thoughts
+          ? [{ icon: Brain, title: t("ai_usage_thinking_title"), value: formatTokens(usage.thoughts) }]
+          : []),
+        ...(usage.cached
+          ? [{ icon: Database, title: t("ai_usage_cached_title"), value: formatTokens(usage.cached) }]
+          : []),
+        ...(usage.cache_write
+          ? [{ icon: DatabaseZap, title: t("ai_usage_cache_write_title"), value: formatTokens(usage.cache_write) }]
+          : []),
+      ]
+    : [];
   return (
-    <>
-      {note ? (
-        <span className={`inline-flex min-h-6 items-center gap-1 text-xs ${note.warn ? "text-accent" : "text-ink-3"}`}>
-          {note.warn ? <AlertTriangle aria-hidden="true" className="size-3 shrink-0" /> : null}
-          {note.text}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+      {model ? (
+        <span
+          className="inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-full bg-surface-2 px-2.5"
+          title={t("ai_run_model_title")}
+        >
+          <Sparkles aria-hidden="true" className="size-3 shrink-0" />
+          <span className="truncate">{model}</span>
         </span>
       ) : null}
-      {usageLabel ? <span className="shrink-0 tabular-nums text-xs text-ink-3">{usageLabel}</span> : null}
-    </>
+      {segments.length ? (
+        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
+          {segments.map(({ icon: Icon, title, value }) => (
+            <span className="inline-flex min-h-6 items-center gap-1" key={title} title={title}>
+              <Icon aria-hidden="true" className="size-3 shrink-0" />
+              {value}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {note ? (
+        <span
+          className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.warn ? "text-accent" : ""}`}
+          title={note.text}
+        >
+          {note.warn ? <AlertTriangle aria-hidden="true" className="size-3 shrink-0" /> : null}
+          <span className="truncate">{note.text}</span>
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -654,7 +692,6 @@ function AiSearchRunSectionImpl({
                   {t("ai_search_calls_count", { n: String(totalCalls) })}
                 </span>
               ) : null}
-              {!streaming ? <RunOutcome finish={run.finish ?? null} usage={run.usage ?? null} /> : null}
               <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
               {streaming ? (
                 <button
@@ -750,6 +787,10 @@ function AiSearchRunSectionImpl({
                   </button>
                 </div>
               ) : null}
+
+              {/* the run's meta line at the END of the output (lobehub's
+              message footer): model + tokens + transport outcome */}
+              {!streaming && !failed ? <RunFooter run={run} /> : null}
 
               {failed ? (
                 <div className="rounded-lg border border-line p-3 text-xs text-danger">

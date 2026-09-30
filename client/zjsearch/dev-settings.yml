@@ -149,24 +149,31 @@ zjsearch:
     enabled: true
 
     # ── transport (pick ONE dialect; complete examples per SDK below) ─
-    sdk: openai_chat_completions
-    base_url: "http://localhost:1234/v1"
-    # api_key: "" = the ZJSEARCH_AI_KEY env.  LM Studio VALIDATES the
-    # bearer token -- a local auth-free deployment still needs a real
-    # key set there.
+    # DEV: the inferera gateway speaks the native Gemini protocol under
+    # the /gemini prefix (the SDK appends /v1beta/... itself).
+    sdk: gemini
+    base_url: "https://api.inferera.com/gemini"
+    # api_key: "" = the ZJSEARCH_AI_KEY env (the key stays out of the
+    # repository).
     api_key: ""
-    model: "qwen/qwen3.6-35b-a3b"
+    model: "gemini-3.8-flash"
 
     # ── params: the chosen SDK's create() kwargs, VERBATIM ────────────
     # every entry passes through under its SDK name -- no translation
     # (output cap: max_tokens on anthropic, max_output_tokens on
     # openai_responses / gemini; anthropic fills a 4096 default when
     # unset).  The THINKING knob is the SDK's own name and surfaces the
-    # chain-of-thought in the UI's collapsible thinking block.
-    params:
-      reasoning_effort: "low"      # openai chat: low | medium | high
+    # chain-of-thought in the UI's collapsible thinking block:
+    #   gemini -> thinking_config: {thinking_budget: N}
+    #     (includeThoughts folds in natively on 2.5+ models)
+    # params:
+    #   thinking_config:
+    #     thinking_budget: 4096
 
     # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
+    # inferera's attribution header (discount eligibility rides on it):
+    extra_headers:
+      APP-Code: "LobeHub"
     # extra_headers ride EVERY LLM call -- e.g. a discount / attribution
     # header a provider or gateway asks for:
     # extra_headers:
@@ -188,13 +195,13 @@ zjsearch:
     # ═══ per-SDK examples: uncomment ONE block and swap it over the ═══
     # ═══ active sdk/base_url/api_key/model AND params above          ═══
 
-    # openai_chat_completions -- the official API AND every OpenAI-
-    # compatible server (LM Studio, vLLM; the aggregators openrouter /
-    # aihubmix / inferera speak this route for every model):
+    # openai_chat_completions -- the official API (https://api.openai.com/v1)
+    # AND every OpenAI-compatible server (LM Studio, vLLM; the aggregators
+    # openrouter / aihubmix / inferera speak this route for every model):
     # sdk: openai_chat_completions
-    # base_url: "https://api.openai.com/v1"
+    # base_url: "https://api.inferera.com/v1"
     # api_key: "sk-..."
-    # model: "gpt-..."
+    # model: "deepseek-flash"
     # params:
     #   temperature: 0.7
     #   max_tokens: 8192
@@ -203,25 +210,27 @@ zjsearch:
     #   HTTP-Referer: "https://search.example.com"   # discount gateway's
     #   X-Title: "zjsearch"                          # APP-Code header
 
-    # openai_responses -- the official Responses API (summary streams
-    # into the UI think block; only reasoning models accept it):
+    # openai_responses -- the Responses API (official: https://api.openai.com/v1;
+    # some aggregators expose the protocol too; summary streams into the UI
+    # think block -- only reasoning models accept the parameter):
     # sdk: openai_responses
-    # base_url: "https://api.openai.com/v1"
+    # base_url: "https://api.inferera.com/v1"
     # api_key: "sk-..."
-    # model: "gpt-..."
+    # model: "deepseek-flash"
     # params:
     #   max_output_tokens: 8192
     #   reasoning: {effort: "medium", summary: "auto"}
 
-    # anthropic -- the Messages API (no /v1 in the base_url).  Extended
-    # thinking is ON by default (budget 2048): OMIT thinking for the
-    # native default or set it; a user-set temperature suppresses the
+    # anthropic -- the Messages API (official: https://api.anthropic.com,
+    # no /v1; aggregators expose the protocol off the bare origin too).
+    # Extended thinking is ON by default (budget 2048): OMIT thinking for
+    # the native default or set it; a user-set temperature suppresses the
     # default (the API rejects the pairing; a gateway that rejects the
     # parameter gets one automatic thinking-free retry):
     # sdk: anthropic
-    # base_url: "https://api.anthropic.com"
-    # api_key: "sk-ant-..."
-    # model: "claude-..."
+    # base_url: "https://api.inferera.com"
+    # api_key: "sk-..."
+    # model: "deepseek-flash"
     # params:
     #   max_tokens: 16384
     #   thinking: {type: "enabled", budget_tokens: 4096}

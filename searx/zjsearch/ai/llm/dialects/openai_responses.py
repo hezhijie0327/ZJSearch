@@ -103,6 +103,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
     order: list[str] = []
     finish: str | None = None
     usage_meta: dict[str, t.Any] | None = None
+    model: str | None = None
     reasoning_items: list[dict[str, t.Any]] = []
     try:
         async for event in stream:
@@ -119,6 +120,8 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
             elif event_type in ("response.completed", "response.incomplete"):
                 response = getattr(event, "response", None)
                 if response is not None:
+                    # the API-REPORTED model id (what the endpoint actually ran)
+                    model = str(getattr(response, "model", "") or "") or None
                     if getattr(response, "usage", None) is not None:
                         usage_meta = usage.openai_usage(response.usage)
                     # the REASONING output items ride the terminal response --
@@ -150,7 +153,12 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
                     slot["arguments"] += str(event.delta)
         if calls:
             events.put(("tool_calls", [calls[item_id] for item_id in order]))
-        events.put(("finish", {"finish": finish, "usage": usage_meta, "reasoning_items": reasoning_items or None}))
+        events.put(
+            (
+                "finish",
+                {"finish": finish, "usage": usage_meta, "reasoning_items": reasoning_items or None, "model": model},
+            )
+        )
     finally:
         await stream.close()
 

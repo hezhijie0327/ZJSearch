@@ -184,6 +184,10 @@ def _absorb_finish(state: dict[str, t.Any], payload: t.Any) -> None:
     meta = payload if isinstance(payload, dict) else {}
     if meta.get("finish"):
         state["finish"] = str(meta["finish"])
+    if meta.get("model"):
+        # the API-REPORTED model id of the last turn that reported one
+        # (a dialect whose stream carries no model leaves the state clean)
+        state["model"] = str(meta["model"])
     usage = meta.get("usage")
     if isinstance(usage, dict):
         total = state["usage"]
@@ -206,6 +210,7 @@ def _finish_event(state: dict[str, t.Any]) -> tuple[str, dict[str, t.Any]] | Non
         "finish",
         {
             "finish": state["finish"],
+            "model": state.get("model"),
             "usage": {
                 "input": usage["input"],
                 "output": usage["output"],
@@ -280,6 +285,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     researching = bool(tools and executor is not None)
     finish_state: dict[str, t.Any] = {
         "finish": None,
+        "model": None,
         "usage": {"input": 0, "output": 0, "thoughts": 0, "cached": 0, "cache_write": 0},
     }
     while True:

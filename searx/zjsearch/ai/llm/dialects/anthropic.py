@@ -168,12 +168,15 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
     output_tokens = 0
     cached_tokens = 0
     cache_write_tokens = 0
+    model: str | None = None
     thinking_blocks: list[dict[str, str]] = []
     current_thinking: dict[str, str] | None = None
     try:
         async for event in stream:
             if event.type == "message_start":
                 usage_meta = getattr(event.message, "usage", None)
+                # the API-REPORTED model id (what the endpoint actually ran)
+                model = str(getattr(event.message, "model", "") or "") or None
                 if usage_meta is not None:
                     input_tokens = int(getattr(usage_meta, "input_tokens", 0) or 0)
                     # the cache counters ride message_start (reads at 0.1x,
@@ -242,7 +245,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
             if (input_tokens or output_tokens)
             else None
         )
-        events.put(("finish", {"finish": finish, "usage": usage_meta}))
+        events.put(("finish", {"finish": finish, "usage": usage_meta, "model": model}))
     finally:
         await stream.close()
 

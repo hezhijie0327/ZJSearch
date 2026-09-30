@@ -199,11 +199,17 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
             return json.dumps({"e": "gallery", "items": payload}, ensure_ascii=False) + "\n"
         if kind == "finish":
             # the agent loop's consolidated transport meta (the last turn's
-            # finish reason + usage summed across turns) -- relayed as-is
+            # finish reason + usage summed across turns + the API-REPORTED
+            # model id, when a dialect's stream carries one) -- relayed as-is
             meta = payload if isinstance(payload, dict) else {}
             return (
                 json.dumps(
-                    {"e": "finish", "finish": meta.get("finish"), "usage": meta.get("usage")},
+                    {
+                        "e": "finish",
+                        "finish": meta.get("finish"),
+                        "usage": meta.get("usage"),
+                        "model": meta.get("model"),
+                    },
                     ensure_ascii=False,
                 )
                 + "\n"

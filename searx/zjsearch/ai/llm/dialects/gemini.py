@@ -165,8 +165,12 @@ async def pump(  # pylint: disable=too-many-locals, too-many-branches
     calls: list[dict[str, str]] = []
     finish: str | None = None
     usage_meta: dict[str, t.Any] | None = None
+    model: str | None = None
     try:
         async for chunk in stream:
+            if model is None:
+                # the API-REPORTED model version (riders on every chunk)
+                model = str(getattr(chunk, "model_version", "") or "") or None
             meta = getattr(chunk, "usage_metadata", None)
             if meta is not None:
                 thoughts = getattr(meta, "thoughts_token_count", None)
@@ -215,7 +219,7 @@ async def pump(  # pylint: disable=too-many-locals, too-many-branches
         await stream.close()
     if calls:
         events.put(("tool_calls", calls))
-    events.put(("finish", {"finish": finish, "usage": usage_meta}))
+    events.put(("finish", {"finish": finish, "usage": usage_meta, "model": model}))
 
 
 async def json_completion(  # pylint: disable=unused-argument

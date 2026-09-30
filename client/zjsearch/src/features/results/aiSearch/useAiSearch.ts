@@ -133,6 +133,9 @@ export interface AiSearchRun {
       "length" | "content_filter" | ... -- the writer's, when a writer
       phase ran); null while unknown */
   finish?: string | null;
+  /** the model id the API RESPONSE reported (what the endpoint actually
+      ran, not what we asked for); null when the stream carries none */
+  model?: string | null;
   /** token usage summed across the run's turns (null = the endpoint
       reported nothing); cached/cache_write are the prompt-cache hit and
       write counts (0 when the endpoint does not break them out) */
@@ -531,6 +534,7 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       runs[lastIdx] = {
         ...run,
         finish: event.finish ? String(event.finish) : (run.finish ?? null),
+        model: typeof event.model === "string" && event.model ? event.model : (run.model ?? null),
         usage: usage
           ? {
               input: Number(usage.input) || 0,

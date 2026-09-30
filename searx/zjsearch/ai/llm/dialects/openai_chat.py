@@ -80,9 +80,15 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
     calls: dict[int, dict[str, str]] = {}
     finish: str | None = None
     usage_meta: dict[str, t.Any] | None = None
+    model: str | None = None
     encrypted = ""
     try:
         async for chunk in stream:
+            if model is None:
+                # the API-REPORTED model id (riders on every chunk, the
+                # usage chunk included) -- what the endpoint actually ran,
+                # not what we asked for
+                model = str(getattr(chunk, "model", "") or "") or None
             if getattr(chunk, "usage", None) is not None:
                 usage_meta = usage.openai_usage(chunk.usage)
             if not chunk.choices:
@@ -116,7 +122,9 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
                     slot["arguments"] += tc.function.arguments
         if calls:
             events.put(("tool_calls", [calls[index] for index in sorted(calls)]))
-        events.put(("finish", {"finish": finish, "usage": usage_meta, "encrypted_content": encrypted or None}))
+        events.put(
+            ("finish", {"finish": finish, "usage": usage_meta, "encrypted_content": encrypted or None, "model": model})
+        )
     finally:
         await stream.close()
 
