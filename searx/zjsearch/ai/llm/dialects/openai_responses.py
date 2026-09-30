@@ -33,7 +33,9 @@ def _message(message: dict[str, t.Any]) -> dict[str, t.Any]:
 def _input(messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
     """The whole conversation as Responses-API input items: canonical
     assistant tool calls become ``function_call`` items, ``tool`` results
-    become ``function_call_output`` items."""
+    become ``function_call_output`` items.  A reasoning turn's captured
+    reasoning items (encrypted content included) are echoed back VERBATIM
+    ahead of the function calls -- the API enforces the pairing."""
     items: list[dict[str, t.Any]] = []
     for message in messages:
         role = message.get("role")
@@ -41,6 +43,9 @@ def _input(messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
             continue
         calls = message.get("tool_calls")
         if calls:
+            for reasoning_item in message.get("reasoning_items") or []:
+                if isinstance(reasoning_item, dict) and reasoning_item.get("type") == "reasoning":
+                    items.append(reasoning_item)
             text = message.get("content")
             if text:
                 items.append({"role": "assistant", "content": [{"type": "output_text", "text": str(text)}]})
@@ -98,6 +103,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
     order: list[str] = []
     finish: str | None = None
     usage_meta: dict[str, t.Any] | None = None
+    reasoning_items: list[dict[str, t.Any]] = []
     try:
         async for event in stream:
             event_type = getattr(event, "type", "")
@@ -115,6 +121,16 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
                 if response is not None:
                     if getattr(response, "usage", None) is not None:
                         usage_meta = usage.openai_usage(response.usage)
+                    # the REASONING output items ride the terminal response --
+                    # function-calling turns must ECHO them back on the next
+                    # request (the API enforces the pairing), so capture them
+                    # verbatim for the canonical history
+                    for output in getattr(response, "output", None) or []:
+                        if str(getattr(output, "type", "") or "") == "reasoning":
+                            try:
+                                reasoning_items.append(output.model_dump(exclude_none=True))
+                            except Exception:  # pylint: disable=broad-except
+                                pass
                     incomplete = getattr(response, "incomplete_details", None)
                     reason = str(getattr(incomplete, "reason", "") or "") if incomplete else ""
                     finish = "length" if reason == "max_output_tokens" else (reason or "stop")
@@ -134,7 +150,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
                     slot["arguments"] += str(event.delta)
         if calls:
             events.put(("tool_calls", [calls[item_id] for item_id in order]))
-        events.put(("finish", {"finish": finish, "usage": usage_meta}))
+        events.put(("finish", {"finish": finish, "usage": usage_meta, "reasoning_items": reasoning_items or None}))
     finally:
         await stream.close()
 

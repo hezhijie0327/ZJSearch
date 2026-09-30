@@ -27,13 +27,26 @@ def _image(part: dict[str, t.Any]) -> dict[str, t.Any]:
     return {"type": "image", "source": {"type": "url", "url": url}}
 
 
-def _message(message: dict[str, t.Any]) -> dict[str, t.Any]:
+def _message(message: dict[str, t.Any], thinking_on: bool) -> dict[str, t.Any]:
     """One chat message in Anthropic shape: text parts already match, image
     parts convert, and a canonical assistant tool-call message becomes
     ``tool_use`` content blocks."""
     calls = message.get("tool_calls")
     if calls:
         content: list[dict[str, t.Any]] = []
+        if thinking_on:
+            # a tool-use turn that reasoned REPLAYS its thinking blocks
+            # (text + signature) ahead of everything else -- the API
+            # validates the echo and rejects the request without it
+            for block in message.get("reasoning_blocks") or []:
+                if block.get("text") and block.get("signature"):
+                    content.append(
+                        {
+                            "type": "thinking",
+                            "thinking": str(block["text"]),
+                            "signature": str(block["signature"]),
+                        }
+                    )
         text = message.get("content")
         if text:
             content.append({"type": "text", "text": str(text)})
@@ -55,7 +68,7 @@ def _message(message: dict[str, t.Any]) -> dict[str, t.Any]:
     return {**message, "content": parts}
 
 
-def _messages(messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
+def _messages(messages: list[dict[str, t.Any]], thinking_on: bool) -> list[dict[str, t.Any]]:
     """The whole conversation in Messages-API shape.  Consecutive canonical
     ``tool`` results fold into ONE user message of ``tool_result`` blocks
     (the API wants every ``tool_use`` answered from the user side)."""
@@ -79,7 +92,7 @@ def _messages(messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
             continue
         flush()
         if message.get("role") != "system":
-            out.append(_message(message))
+            out.append(_message(message, thinking_on))
     flush()
     return out
 
@@ -108,7 +121,11 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
     )
     system_text = system_of(messages)
     system: t.Any = system_text or None
-    msgs = _messages(messages)
+    wire_kwargs = caching.model_kwargs(config.params(cfg), KIND)
+    thinking_on = (
+        isinstance(wire_kwargs.get("thinking"), dict) and str(wire_kwargs["thinking"].get("type")) == "enabled"
+    )
+    msgs = _messages(messages, thinking_on)
     if caching.anthropic_cache_on(cfg):
         # explicit prompt caching, LobeChat's THREE anchors (system, last
         # tool, last message -- 3 of Anthropic's 4 breakpoints, no
@@ -130,7 +147,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
         "timeout": clients.sdk_timeout(),
         "extra_headers": config.extra_headers(cfg),
         "extra_body": config.extra_body(cfg),
-        **caching.model_kwargs(config.params(cfg), KIND),
+        **wire_kwargs,
         **extra,
     }
     try:
@@ -138,10 +155,12 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
     except (BadRequestError, UnprocessableEntityError):
         # an endpoint that rejects the NATIVE thinking default (gateways to
         # non-Anthropic backends mostly) still streams -- retry once without
-        # it, the run degrades to a no-visible-reasoning turn instead of
-        # failing.  A user-SET thinking param that errors lands here too:
-        # their configuration is simply not supported by the endpoint.
+        # it AND without the reasoning echo (the echo is only valid when the
+        # request enables thinking).  A user-SET thinking param that errors
+        # lands here too: their configuration is simply not supported by
+        # the endpoint.
         kwargs.pop("thinking", None)
+        kwargs["messages"] = _messages(messages, False)
         stream = await client.messages.create(**kwargs)
     calls: dict[int, dict[str, str]] = {}
     finish: str | None = None
@@ -149,6 +168,8 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
     output_tokens = 0
     cached_tokens = 0
     cache_write_tokens = 0
+    thinking_blocks: list[dict[str, str]] = []
+    current_thinking: dict[str, str] | None = None
     try:
         async for event in stream:
             if event.type == "message_start":
@@ -173,6 +194,16 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
                 block = event.content_block
                 if getattr(block, "type", "") == "tool_use":
                     calls[event.index] = {"id": str(block.id or ""), "name": str(block.name or ""), "arguments": ""}
+                elif getattr(block, "type", "") == "thinking":
+                    # capture the thinking BLOCK (text + signature): the
+                    # Messages API validates that a tool-use turn replays its
+                    # thinking blocks on the next request
+                    current_thinking = {"text": "", "signature": ""}
+                continue
+            if event.type == "content_block_stop":
+                if current_thinking is not None:
+                    thinking_blocks.append(current_thinking)
+                    current_thinking = None
                 continue
             if event.type != "content_block_delta":
                 continue
@@ -182,8 +213,13 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
             # the first two carry prose; bare attribute access on the others
             # killed the whole stream (SignatureDelta has no .text)
             if delta.type == "thinking_delta":
+                if current_thinking is not None:
+                    current_thinking["text"] += str(delta.thinking or "")
                 if relay_reasoning and delta.thinking:
                     events.put(("think", str(delta.thinking)))
+            elif delta.type == "signature_delta":
+                if current_thinking is not None and delta.signature:
+                    current_thinking["signature"] += str(delta.signature)
             elif delta.type == "text_delta" and delta.text:
                 events.put(("delta", str(delta.text)))
             elif delta.type == "input_json_delta":
@@ -199,6 +235,9 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
                 "thoughts": None,
                 "cached": cached_tokens,
                 "cache_write": cache_write_tokens,
+                # the thinking blocks ride the finish meta so the agent loop
+                # can echo them back on the next request (signature included)
+                "thinking_blocks": thinking_blocks,
             }
             if (input_tokens or output_tokens)
             else None
@@ -220,7 +259,7 @@ async def json_completion(  # pylint: disable=unused-argument
     response = await client.messages.create(
         model=str(cfg.get("model")),
         system=system_of(messages) or None,
-        messages=_messages(messages),
+        messages=_messages(messages, False),
         output_config={"format": {"type": "json_schema", "schema": schema}},
         timeout=clients.sdk_timeout(),
         extra_headers=config.extra_headers(cfg),

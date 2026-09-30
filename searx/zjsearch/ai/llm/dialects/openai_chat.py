@@ -8,10 +8,45 @@ from .. import caching, clients, config, usage
 
 KIND = "openai_chat_completions"
 
+_PASSBACK_MODEL_KEYWORDS = ("deepseek", "glm", "kimi", "minimax", "mimo", "doubao")
+"""Model families whose thinking mode requires the historical
+``reasoning_content`` echoed back when the assistant turn also carries
+``tool_calls`` -- upstream rejects the request outright otherwise
+(Moonshot: "If thinking mode and tool_calls, reasoning_content must be
+passed back to the API").  Matched on the MODEL id, not the provider:
+these families mostly arrive through aggregators and user-configured
+proxies where the provider key says nothing about the family (LobeHub's
+passback list, plus minimax/mimo).
+"""
+
 JSON_TIERS = 2
 """strict ``json_schema`` first, the weaker ``json_object`` mode second
 (DeepSeek and friends support the latter where the full schema is
 unavailable)."""
+
+
+def wire_messages(model: str, params: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
+    """The canonical conversation in chat-completions wire shape: the dicts
+    go over the wire verbatim EXCEPT the internal ``reasoning_blocks`` key
+    is stripped, and an assistant turn that reasoned echoes its
+    ``reasoning_content`` back for the passback families
+    (``params.reasoning_echo`` forces on/off; otherwise the model-id
+    keyword list decides)."""
+    echo_flag = params.get("reasoning_echo")
+    echo = echo_flag is True or (echo_flag is None and any(k in model.lower() for k in _PASSBACK_MODEL_KEYWORDS))
+    out: list[dict[str, t.Any]] = []
+    for message in messages:
+        wire = {k: v for k, v in message.items() if k != "reasoning_blocks"}
+        if wire.get("role") == "assistant" and message.get("encrypted_content"):
+            # doubao's encrypted 思考原文: tool loops MUST echo it back
+            # verbatim, and it takes priority over the summary text
+            wire["encrypted_content"] = message["encrypted_content"]
+        if echo and wire.get("role") == "assistant" and wire.get("tool_calls") and message.get("reasoning_blocks"):
+            wire["reasoning_content"] = "\n\n".join(
+                str(b.get("text") or "") for b in message["reasoning_blocks"] if b.get("text")
+            )
+        out.append(wire)
+    return out
 
 
 async def pump(  # pylint: disable=too-many-branches, too-many-locals
@@ -38,7 +73,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
     extra = {"tools": [{"type": "function", "function": tool} for tool in tools]} if tools else {}
     kwargs: dict[str, t.Any] = {
         "model": str(cfg.get("model")),
-        "messages": messages,
+        "messages": wire_messages(str(cfg.get("model") or ""), config.params(cfg), messages),
         "stream": True,
         "timeout": clients.sdk_timeout(),
         "extra_headers": config.extra_headers(cfg),
@@ -55,6 +90,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
     calls: dict[int, dict[str, str]] = {}
     finish: str | None = None
     usage_meta: dict[str, t.Any] | None = None
+    encrypted = ""
     try:
         async for chunk in stream:
             if getattr(chunk, "usage", None) is not None:
@@ -67,6 +103,11 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
             delta = choice.delta
             if delta is None:
                 continue
+            # doubao's 思考内容加密原文 (the encrypted reasoning that tool
+            # loops MUST echo back verbatim) rides the reasoning deltas
+            enc = getattr(delta, "encrypted_content", None)
+            if enc:
+                encrypted += str(enc)
             if relay_reasoning:
                 reasoning = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
                 if reasoning:
@@ -85,7 +126,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
                     slot["arguments"] += tc.function.arguments
         if calls:
             events.put(("tool_calls", [calls[index] for index in sorted(calls)]))
-        events.put(("finish", {"finish": finish, "usage": usage_meta}))
+        events.put(("finish", {"finish": finish, "usage": usage_meta, "encrypted_content": encrypted or None}))
     finally:
         await stream.close()
 
@@ -109,7 +150,7 @@ async def json_completion(
     )
     response = await client.chat.completions.create(
         model=str(cfg.get("model")),
-        messages=messages,
+        messages=wire_messages(str(cfg.get("model") or ""), config.params(cfg), messages),
         response_format=response_format,
         timeout=clients.sdk_timeout(),
         extra_headers=config.extra_headers(cfg),

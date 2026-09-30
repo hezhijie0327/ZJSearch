@@ -100,11 +100,40 @@ class ThinkGate:
         self.closed = True
 
 
-def _assistant_tool_calls_message(text: str, calls: list[dict[str, t.Any]]) -> dict[str, t.Any]:
+def _echo_blocks(thinking_blocks: list[dict[str, t.Any]], turn_reasoning: str) -> list[dict[str, t.Any]]:
+    """The reasoning echo payload of one assistant turn: the dialect's
+    thinking blocks when the pump captured them (anthropic: text +
+    signature), else the plain reasoning text when the turn reasoned at
+    all.  Empty = nothing to echo."""
+    blocks = [
+        {"text": str(b.get("text") or ""), "signature": str(b.get("signature") or "")}
+        for b in thinking_blocks
+        if isinstance(b, dict) and (b.get("text") or b.get("signature"))
+    ]
+    if not blocks and turn_reasoning:
+        blocks = [{"text": turn_reasoning, "signature": ""}]
+    return blocks
+
+
+def _assistant_tool_calls_message(
+    text: str,
+    calls: list[dict[str, t.Any]],
+    reasoning_blocks: list[dict[str, t.Any]] | None = None,
+    encrypted_content: str = "",
+    reasoning_items: list[dict[str, t.Any]] | None = None,
+) -> dict[str, t.Any]:
     """Canonical assistant message carrying the turn's prose + tool calls
     (the pumps emit flat ``{"id", "name", "arguments"}`` calls; the
-    canonical message nests them under ``"function"``)."""
-    return {
+    canonical message nests them under ``"function"``).  Interleaved-
+    thinking models require their prior-turn reasoning REPLAYED on the
+    history -- anthropic validates the thinking blocks + signatures on
+    tool-use turns, and the kimi/glm/deepseek chat families want
+    ``reasoning_content`` -- so the turn's reasoning blocks ride along
+    (``reasoning_blocks``) and every dialect converts them to its own
+    echo shape.  The openai family's extra echo payloads ride too:
+    doubao's ``encrypted_content`` (思考内容加密原文) and the Responses
+    API's ``reasoning_items``."""
+    msg: dict[str, t.Any] = {
         "role": "assistant",
         "content": text,
         "tool_calls": [
@@ -116,6 +145,13 @@ def _assistant_tool_calls_message(text: str, calls: list[dict[str, t.Any]]) -> d
             for call in calls
         ],
     }
+    if reasoning_blocks:
+        msg["reasoning_blocks"] = reasoning_blocks
+    if encrypted_content:
+        msg["encrypted_content"] = encrypted_content
+    if reasoning_items:
+        msg["reasoning_items"] = reasoning_items
+    return msg
 
 
 def _tool_result_message(call: dict[str, t.Any], text: str) -> dict[str, t.Any]:
@@ -251,6 +287,10 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
         budget_left = researching
         stream = llm.LlmStream(cfg, messages, relay_reasoning=True, tools=tools if budget_left else None)
         turn_text = ""
+        turn_reasoning = ""
+        turn_thinking_blocks: list[dict[str, t.Any]] = []
+        turn_encrypted = ""
+        turn_reasoning_items: list[dict[str, t.Any]] = []
         saw_reasoning = False
         calls: list[dict[str, t.Any]] = []
         kind, payload = "end", None
@@ -270,6 +310,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 if kind in ("think", "delta"):
                     if kind == "think":
                         saw_reasoning = True
+                        turn_reasoning += str(payload or "")
                     else:
                         turn_text += str(payload or "")
                     yield (kind, payload)
@@ -280,6 +321,12 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                         # the pump's terminal meta -- absorbed into the run's
                         # tally, yielded once as a consolidated event at the end
                         _absorb_finish(finish_state, payload)
+                        turn_thinking_blocks = ((payload or {}).get("usage") or {}).get("thinking_blocks") or []
+                        # the openai family's thinking echo payloads: doubao's
+                        # encrypted reasoning original, the Responses API's
+                        # reasoning input items (encrypted content included)
+                        turn_encrypted = str((payload or {}).get("encrypted_content") or "")
+                        turn_reasoning_items = (payload or {}).get("reasoning_items") or []
                     break  # "end" / "finish" / "error" closes the turn
         finally:
             # an abandoned consumer (client disconnect) closes this
@@ -323,7 +370,15 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             # tool must be the only call of its turn: anything that rode
             # along is refused (the model re-issues it).
             yield ("plan", {"t": _plan_text(turn_text, calls, plan_tool)})
-            messages.append(_assistant_tool_calls_message(turn_text, calls))
+            messages.append(
+                _assistant_tool_calls_message(
+                    turn_text,
+                    calls,
+                    _echo_blocks(turn_thinking_blocks, turn_reasoning),
+                    encrypted_content=turn_encrypted,
+                    reasoning_items=turn_reasoning_items,
+                )
+            )
             for call in calls:
                 ack = (
                     _PLAN_ACK
@@ -356,7 +411,15 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                     yield event
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch agent: tool executor failed: %s: %s", type(exc).__name__, str(exc)[:300])
-        messages.append(_assistant_tool_calls_message(turn_text, calls))
+        messages.append(
+            _assistant_tool_calls_message(
+                turn_text,
+                calls,
+                _echo_blocks(turn_thinking_blocks, turn_reasoning),
+                encrypted_content=turn_encrypted,
+                reasoning_items=turn_reasoning_items,
+            )
+        )
         for index, call in enumerate(executable):
             pair = filled[index]
             messages.append(

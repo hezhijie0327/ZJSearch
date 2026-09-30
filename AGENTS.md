@@ -494,7 +494,18 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   LobeChat's ``skip_thought_signature_validator`` magic
   ``thoughtSignature`` (replayed history without echoed signatures is
   rejected by 2.5+/3 function calling).  The JSON gates opt out of the
-  native default (a raw JSON payload needs no reasoning phase).
+  native default (a raw JSON payload needs no reasoning phase).  The
+  agent loop ECHOES each turn's reasoning back on the replayed history
+  (canonical ``reasoning_blocks`` / ``encrypted_content`` /
+  ``reasoning_items``): anthropic requires the thinking blocks + their
+  signatures on tool-use turns (the pump captures them from
+  ``thinking_delta`` / ``signature_delta``), and the openai chat
+  dialect echoes ``reasoning_content`` (doubao's
+  ``encrypted_content`` too, which takes priority) for the passback
+  model families -- deepseek/glm/kimi/minimax/mimo/doubao matched on
+  the MODEL id, forced on/off via ``params.reasoning_echo`` -- while
+  the responses dialect echoes its captured reasoning input items
+  verbatim.  LobeHub is the reference for all of it.
   The sources section keeps the ORIGINAL collapse shape -- the first
   four cards inline with the card-shaped 查看全部 toggle (favicon
   preview of what's hidden) right below them -- and the revealed list
