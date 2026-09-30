@@ -61,6 +61,18 @@ export function formatScore(score: number): string {
   return round1(score).toFixed(1);
 }
 
+/** Compact token-count tier for the AI run stats (980 → "980",
+    12_300 → "12.3k", 1_250_000 → "1.3M"). */
+export function formatTokens(count: number): string {
+  if (count >= 1_000_000) {
+    return `${round1(count / 1_000_000)}M`;
+  }
+  if (count >= 1000) {
+    return `${round1(count / 1000)}k`;
+  }
+  return String(count);
+}
+
 /** Round to one decimal — the display tier for response times and per-result
     scores across the meta line, stats page and engine tables. */
 export function round1(value: number): number {

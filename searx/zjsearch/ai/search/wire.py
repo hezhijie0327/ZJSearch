@@ -197,6 +197,17 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
             return json.dumps({"e": "direct"}, ensure_ascii=False) + "\n"
         if kind == "gallery":
             return json.dumps({"e": "gallery", "items": payload}, ensure_ascii=False) + "\n"
+        if kind == "finish":
+            # the agent loop's consolidated transport meta (the last turn's
+            # finish reason + usage summed across turns) -- relayed as-is
+            meta = payload if isinstance(payload, dict) else {}
+            return (
+                json.dumps(
+                    {"e": "finish", "finish": meta.get("finish"), "usage": meta.get("usage")},
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
         if kind == "ask_user":
             # the mid-research escape hatch: the model stopped to ask for
             # direction -- shape its tool arguments into the same ask event
@@ -239,17 +250,14 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
                 items.append({"u": str(url), "n": n})
         return items
 
-    # reasoning-channel guard: some models (LM Studio + qwen3.6) route the
-    # whole answer into the think stream and leave the content channel empty
-    # -- promote the final turn's reasoning so the user always gets a
-    # readable answer
-    think_parts: list[str] = []
     answer_parts: list[str] = []
 
-    last_kind = first[0]
     saw_ask = False
     splitter = _FenceSplitter()
     fence_related: list[str] = []
+    # the agent loop's consolidated transport meta (finish reason + usage),
+    # captured here and relayed once right before end
+    finish_event: tuple[str, t.Any] | None = None
 
     def drain(pieces: list[tuple[str, str]]) -> t.Iterator[str]:
         """Handle closed fences: related queues the questions, each
@@ -285,13 +293,10 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
         yield emit(*first)
     for event in events:
         kind, payload = event
-        last_kind = kind
         if kind == "think":
-            # BOTH consumers matter: the client renders the reasoning
-            # timeline (a round's think deltas must ALL reach it), and the
-            # promotion guard below needs the accumulated text -- relay the
-            # event AND keep the local copy
-            think_parts.append(str(payload or ""))
+            # the reasoning timeline: relayed as-is, NEVER accumulated as
+            # answer material (the channel doctrine -- reasoning is not
+            # the answer, there is no promotion fallback)
             yield emit(*event)
         elif kind == "delta":
             yield from through(str(payload or ""))
@@ -306,15 +311,13 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
                 yield emit("delta", prose)
             yield from drain(closed)
             # a new turn begins: its answer is judged on its own
-            think_parts.clear()
             answer_parts.clear()
             yield emit(*event)
         elif kind == "plan":
             # the plan turn's prose is answer-shape deliberation, not
-            # answer material -- never promote it on a late stream error;
-            # it travels to the writer as guidance instead
+            # answer material -- it travels to the writer as guidance
+            # instead
             plans.append(str((payload or {}).get("t") or ""))
-            think_parts.clear()
             answer_parts.clear()
         elif kind == "ask_user":
             # the run ends awaiting the user's direction: the streamed
@@ -323,14 +326,14 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
             saw_ask = True
         elif kind == "wrapup":
             # the writer's stream follows: a fresh splitter AND a clean
-            # slate -- the researcher's streamed narration and reasoning
-            # must neither leak into the answer, nor defeat the reasoning-
-            # promotion guard below (a think-only writer must promote), nor
-            # pollute the related-questions fallback with non-answer text
+            # slate -- the researcher's streamed narration must neither
+            # leak into the answer nor pollute the related-questions
+            # fallback with non-answer text
             splitter = _FenceSplitter()
-            think_parts.clear()
             answer_parts.clear()
             yield emit(*event)
+        elif kind == "finish":
+            finish_event = event
         else:
             yield emit(*event)
     prose, closed = splitter.finish()
@@ -339,13 +342,8 @@ def generate(  # pylint: disable=too-many-branches, too-many-statements, too-man
         yield emit("delta", prose)
     yield from drain(closed)
     answer_text = "".join(answer_parts).strip()
-    if last_kind != "error" and not answer_text and think_parts:
-        # the model routed the whole answer into the reasoning channel:
-        # promote it so the user always gets a readable answer
-        promoted = "".join(think_parts).strip()
-        yield emit("delta", promoted)
-        answer_parts.append(promoted)
-        answer_text = promoted
+    if finish_event is not None:
+        yield emit(*finish_event)
     # the writer's in-stream related fence wins: emit BEFORE end so the
     # follow-up box opens already holding its suggestions (the small
     # completion behind the fallback cannot match that -- it can think

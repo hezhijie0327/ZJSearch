@@ -168,7 +168,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   reader-facing system prompt instead; `prompts.reader_voice()` is the
   anti-parroting rule that keeps the audit vocabulary out of the answer.
   Writer-phase resilience: a writer stream that closes with ZERO events
-  (a 200-empty gateway body) gets ONE silent retry; the failure surface
+  (a 200-empty gateway body) gets ONE silent retry; a writer that
+  answered in its reasoning channel only is NOT retried (the identical
+  request would repeat the misroute) -- it fails the run with an
+  explained error.  The failure surface
   is the CLIENT's contract -- a settled run without an answer text shows
   the failed box (reason + retry + classic fallback), never silent
   nothing (the user's stop button marks the run `stopped`, which stays
@@ -286,9 +289,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   The narration side has its own discipline: the splitter FLUSHES at
   each `calls` event (a held tail landing after the calls line would
   end up in the client's answer slice instead of the round's intent)
-  and the wrapup clears the accumulated think/answer parts (the
-  researcher's narration must not defeat the reasoning-promotion guard
-  nor pollute the related fallback).  Gallery
+  and the wrapup clears the accumulated answer parts (the researcher's
+  narration must not pollute the related fallback).  Gallery
   fences carry a JSON array of URLs copied verbatim from the feed's
   `img=` entries and are VALIDATED against `state.gallery_pool`
   server-side (invented URLs are dropped, an all-invalid group renders
@@ -308,13 +310,35 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   an unregistered tool teaches a broken call) plus per-tool capability
   blocks.  Wire protocol: NDJSON lines
   (`think`/`delta`/`calls`/`search`/`sources`/`page`/`plan`/
-  `direct`/`gallery`/`wrapup`/`ask`/`related`/`error`/`end`); a stream
-  that dies before its first
-  line answers 502 like the Overview.  THINK RELAY: every reasoning delta
-  is BOTH relayed to the client AND accumulated for the promotion guard --
-  a relay that only accumulates once shipped a think segment holding the
-  first delta alone (「The」); the mock's researcher streams multi-piece
-  reasoning so the gate covers the path.  `end` settles
+  `direct`/`gallery`/`wrapup`/`ask`/`related`/`error`/`finish`/`end`); a
+  stream that dies before its first
+  line answers 502 like the Overview.  CHANNEL DOCTRINE (strict): the
+  reasoning channel (`reasoning_content` and friends) is ALWAYS think --
+  timeline material, never the answer -- and the content channel is
+  ALWAYS the answer; there is NO promotion fallback (the old guard that
+  promoted think as the answer once shipped the writer's chain-of-thought
+  as the "report").  Every turn's pump carries the wire's `finish_reason`
+  and usage (`finish` per dialect: openai chat asks `stream_options`
+  include_usage with a 400/422 retry without it; responses maps
+  `max_output_tokens` to `length`; anthropic maps `stop_reason`; gemini
+  maps `finishReason`) -- agent.py consolidates them (LAST turn's finish
+  reason = the answer's state, usage summed across turns) and yields ONE
+  `finish` event before `end`; the client renders EVERY reason in the
+  research header (`RunOutcome`: "length" = truncation warning, stop =
+  quiet 正常完成) plus the token totals, so a truncation can never end
+  silently again.  Usage is RENDER-WHAT-YOU-GET: the pumps surface
+  whatever the endpoint reports -- input/output, `thoughts` (openai
+  reasoning_tokens, gemini thoughts), `cached` (openai
+  prompt_tokens_details.cached_tokens / DeepSeek prompt_cache_hit_tokens
+  / anthropic cache_read_input_tokens / gemini
+  cached_content_token_count) and `cache_write` (anthropic
+  cache_creation_input_tokens) -- zero when an endpoint does not break a
+  field out.  A turn that answers in its reasoning channel ONLY
+  fails the run loudly (`error`: answered-in-reasoning-only) -- the
+  model's thinking configuration is the user's setting and is never
+  overridden to work around a misrouting template (qwen3.6 + LM Studio
+  does this when enable_thinking is on; the fix is the deployment's
+  extra_body, not ours).  `end` settles
   the run FIRST and `related` trails as a post-end event: the small
   completion behind the follow-up suggestions can think for the better
   part of a minute on reasoning models, and the follow-up box must not
@@ -1300,15 +1324,17 @@ LOADED/NOT LOADED).
 - Prompt caching is designed PER DIALECT in `llm.py`, enabled by one fact:
   the system prompts are byte-stable per mode+language (stable contract
   blocks first, per-run notes last — see `_writer_messages`).  OpenAI
-  dialects ride `prompt_cache_key` in extra_body on EVERY endpoint
-  (official API groups the cache; OpenAI-compatible servers ignore the
-  unknown field); Anthropic marks explicit `cache_control` breakpoints —
-  system block + last message, the incremental agent-loop pattern (each
-  turn prefix-hits at 0.1x and writes only the tail, ≤2 of the 4 allowed
-  breakpoints) — on api.anthropic.com, forceable for gateways via
-  `zjsearch.ai.cache_control: true/false`; Gemini runs on implicit prefix
-  caching (no wire field; explicit `cachedContent` resources are a managed
-  TTL/billing surface deliberately not adopted).
+  dialects ride `prompt_cache_key` in extra_body on EVERY endpoint,
+  bucketed per model (`zjsearch-ai/<model>`; official API groups the
+  cache, OpenAI-compatible servers ignore the unknown field); Anthropic
+  marks explicit `cache_control` breakpoints — LobeChat's THREE anchors:
+  system block + LAST TOOL + last message (the tools spec is the run's
+  biggest byte-stable prefix; 3 of the 4 allowed breakpoints, each turn
+  prefix-hits at 0.1x and writes only the tail) — ON BY DEFAULT for every
+  Anthropic-dialect endpoint, `zjsearch.ai.cache_control: false` is the
+  opt-out for a gateway that validates strictly; Gemini runs on implicit
+  prefix caching (no wire field; explicit `cachedContent` resources are a
+  managed TTL/billing surface deliberately not adopted).
 - Drawer/lightbox overlays render conditionally (zero cost when closed).
 
 ## Windows (Git Bash) development notes

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import {
+  AlertTriangle,
   ArrowUpRight,
   BookOpen,
   Brain,
@@ -34,6 +35,7 @@ import type {
   AiSearchStep,
 } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
+import { formatTokens } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 
@@ -323,6 +325,48 @@ function ElapsedTimer({ startedAt, endedAt }: { startedAt: number; endedAt: numb
   return <span className="ms-auto shrink-0 tabular-nums text-xs text-ink-3">{label}</span>;
 }
 
+/** The run's transport outcome, rendered once settled: EVERY finish reason
+    gets a visible state (truncation "length" and friends are warnings the
+    user must see, never silently swallowed) plus the token usage summed
+    across the run's turns. */
+function RunOutcome({ finish, usage }: { finish: string | null; usage: AiSearchRun["usage"] }) {
+  const t = useT();
+  if (!finish && !usage) {
+    return null;
+  }
+  let note: { text: string; warn: boolean } | null = null;
+  if (finish === "length") {
+    note = { text: t("ai_finish_length"), warn: true };
+  } else if (finish === "content_filter") {
+    note = { text: t("ai_finish_content_filter"), warn: true };
+  } else if (finish === "refusal") {
+    note = { text: t("ai_finish_refusal"), warn: true };
+  } else if (finish === "tool_calls") {
+    note = { text: t("ai_finish_tool_calls"), warn: false };
+  } else if (finish && finish !== "stop") {
+    note = { text: t("ai_finish_other", { reason: finish }), warn: true };
+  } else if (finish === "stop") {
+    note = { text: t("ai_finish_stop"), warn: false };
+  }
+  const usageLabel = usage
+    ? t("ai_usage_tokens", { input: formatTokens(usage.input), output: formatTokens(usage.output) }) +
+      (usage.thoughts ? t("ai_usage_thinking", { n: formatTokens(usage.thoughts) }) : "") +
+      (usage.cached ? t("ai_usage_cached", { n: formatTokens(usage.cached) }) : "") +
+      (usage.cache_write ? t("ai_usage_cache_write", { n: formatTokens(usage.cache_write) }) : "")
+    : null;
+  return (
+    <>
+      {note ? (
+        <span className={`inline-flex min-h-6 items-center gap-1 text-xs ${note.warn ? "text-accent" : "text-ink-3"}`}>
+          {note.warn ? <AlertTriangle aria-hidden="true" className="size-3 shrink-0" /> : null}
+          {note.text}
+        </span>
+      ) : null}
+      {usageLabel ? <span className="shrink-0 tabular-nums text-xs text-ink-3">{usageLabel}</span> : null}
+    </>
+  );
+}
+
 /** The clarify gate's question card: the run waits for the user's
     direction -- chips pick the options, one free-text line adds nuance,
     and the skip link researches without answers. */
@@ -550,7 +594,7 @@ function AiSearchRunSectionImpl({
 
           {/* research: think stream + intent + parallel tool calls */}
           <section aria-busy={streaming} aria-label={t("ai_search_process")}>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Waypoints
                 aria-hidden="true"
                 className={`size-5 shrink-0 ${streaming ? "animate-pulse text-ink-2" : "text-ink-3"}`}
@@ -576,6 +620,7 @@ function AiSearchRunSectionImpl({
                   {t("ai_search_calls_count", { n: String(totalCalls) })}
                 </span>
               ) : null}
+              {!streaming ? <RunOutcome finish={run.finish ?? null} usage={run.usage ?? null} /> : null}
               <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
               {streaming ? (
                 <button

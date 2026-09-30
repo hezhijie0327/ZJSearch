@@ -340,6 +340,28 @@ def _system_of(messages: list[dict[str, t.Any]]) -> str:
     return "".join(str(m.get("content")) for m in messages if m.get("role") == "system")
 
 
+def _openai_usage(usage: t.Any) -> dict[str, t.Any]:
+    """One openai-family usage object in the canonical shape: the reasoning
+    token count rides ``completion_tokens_details`` / ``output_tokens_details``,
+    the prompt-cache hit rides ``prompt_tokens_details.cached_tokens`` /
+    ``input_tokens_details.cached_tokens`` (DeepSeek's flat
+    ``prompt_cache_hit_tokens`` covered too) -- fields an endpoint does not
+    break out simply stay 0."""
+    details = getattr(usage, "completion_tokens_details", None) or getattr(usage, "output_tokens_details", None)
+    thoughts = getattr(details, "reasoning_tokens", None) if details else None
+    prompt_details = getattr(usage, "prompt_tokens_details", None) or getattr(usage, "input_tokens_details", None)
+    cached = getattr(prompt_details, "cached_tokens", None) if prompt_details else None
+    if cached is None:
+        cached = getattr(usage, "prompt_cache_hit_tokens", None)
+    return {
+        "input": int(getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0) or 0),
+        "output": int(getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0) or 0),
+        "thoughts": int(thoughts) if thoughts else None,
+        "cached": int(cached) if cached else 0,
+        "cache_write": 0,
+    }
+
+
 def _json_object(raw: t.Any) -> dict[str, t.Any]:
     """A tool-call ``arguments`` JSON string as a dict -- malformed or empty
     arguments degrade to ``{}`` (the endpoint re-validates required fields
@@ -540,25 +562,28 @@ def _cache_body(cfg: dict[str, t.Any]) -> dict[str, t.Any]:
     cache on the real API and is silently ignored by OpenAI-compatible
     servers that do not know it (LM Studio, vLLM, aggregators) -- the
     prompts here are byte-stable per mode+language by design, which is
-    what makes prefix caching applicable anywhere.  Rides extra_body so
-    no SDK signature is assumed."""
+    what makes prefix caching applicable anywhere.  The key buckets per
+    model (LobeChat's user+model shape, minus the user dimension this
+    server does not have).  Rides extra_body so no SDK signature is
+    assumed."""
     body = dict(_extra_body(cfg) or {})
-    body.setdefault("prompt_cache_key", "zjsearch-ai")
+    body.setdefault("prompt_cache_key", f"zjsearch-ai/{cfg.get('model')}")
     return body
 
 
-def _anthropic_cache_on(cfg: dict[str, t.Any], base: str) -> bool:
-    """Whether to mark Anthropic prompt-cache breakpoints: ON for the real
-    Anthropic API (``cache_control`` is part of the official block shape;
-    the incremental breakpoints are what make the researcher loop cheap --
-    each turn re-reads the cached prefix at 0.1x), forced ON/OFF for ANY
-    endpoint via the ``zjsearch.ai.cache_control`` setting (an
-    Anthropic-format gateway that forwards blocks verbatim usually just
-    works; one that validates strictly needs the off switch)."""
+def _anthropic_cache_on(cfg: dict[str, t.Any]) -> bool:
+    """Whether to mark Anthropic prompt-cache breakpoints: ON for every
+    Anthropic-dialect endpoint by DEFAULT (LobeChat's stance -- the
+    markers are part of the official block shape and gateways that forward
+    blocks verbatim usually just work; the incremental breakpoints are
+    what make the researcher loop cheap -- each turn re-reads the cached
+    prefix at 0.1x), forced ON/OFF for any endpoint via the
+    ``zjsearch.ai.cache_control`` setting (a gateway that validates
+    strictly needs the off switch)."""
     flag = cfg.get("cache_control")
     if isinstance(flag, bool):
         return flag
-    return "api.anthropic.com" in (base or "")
+    return True
 
 
 def _anthropic_cache_system(system_text: str) -> list[dict[str, t.Any]]:
@@ -583,7 +608,7 @@ def _anthropic_cache_tail(messages: list[dict[str, t.Any]]) -> None:
         content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
 
 
-async def _pump_openai_chat(
+async def _pump_openai_chat(  # pylint: disable=too-many-branches, too-many-locals
     cfg: dict[str, t.Any],
     base: str,
     messages: list[dict[str, t.Any]],
@@ -595,25 +620,45 @@ async def _pump_openai_chat(
     deepseek-style ``reasoning_content`` / openrouter-style ``reasoning``
     extras as think events when ``relay_reasoning`` is set.  With tool
     specs, ``delta.tool_calls`` fragments (keyed by index) accumulate into
-    one ``("tool_calls", calls)`` event that closes a clean turn."""
+    one ``("tool_calls", calls)`` event that closes a clean turn.  The
+    stream's ``finish_reason`` and the usage chunk land in one terminal
+    ``("finish", meta)`` event.  The usage chunk rides ``stream_options``
+    include_usage per the OpenAI contract -- whatever the endpoint reports
+    (cache hits included) is rendered; one that rejects the parameter
+    outright still streams -- one retry without it, stats simply absent."""
+    from openai import BadRequestError, UnprocessableEntityError  # pylint: disable=import-outside-toplevel
+
     client = _openai_client(cfg, base)
     extra = {"tools": [{"type": "function", "function": tool} for tool in tools]} if tools else {}
-    stream = await client.chat.completions.create(
-        model=str(cfg.get("model")),
-        messages=messages,
-        stream=True,
-        timeout=_sdk_timeout(),
-        extra_headers=_extra_headers(cfg),
-        extra_body=_cache_body(cfg),
+    kwargs: dict[str, t.Any] = {
+        "model": str(cfg.get("model")),
+        "messages": messages,
+        "stream": True,
+        "timeout": _sdk_timeout(),
+        "extra_headers": _extra_headers(cfg),
+        "extra_body": _cache_body(cfg),
         **_model_kwargs(_params(cfg), "openai_chat_completions"),
         **extra,
-    )
+        "stream_options": {"include_usage": True},
+    }
+    try:
+        stream = await client.chat.completions.create(**kwargs)
+    except (BadRequestError, UnprocessableEntityError):
+        kwargs.pop("stream_options", None)
+        stream = await client.chat.completions.create(**kwargs)
     calls: dict[int, dict[str, str]] = {}
+    finish: str | None = None
+    usage: dict[str, t.Any] | None = None
     try:
         async for chunk in stream:
+            if getattr(chunk, "usage", None) is not None:
+                usage = _openai_usage(chunk.usage)
             if not chunk.choices:
                 continue
-            delta = chunk.choices[0].delta
+            choice = chunk.choices[0]
+            if choice.finish_reason:
+                finish = str(choice.finish_reason)
+            delta = choice.delta
             if delta is None:
                 continue
             if relay_reasoning:
@@ -634,11 +679,12 @@ async def _pump_openai_chat(
                     slot["arguments"] += tc.function.arguments
         if calls:
             events.put(("tool_calls", [calls[index] for index in sorted(calls)]))
+        events.put(("finish", {"finish": finish, "usage": usage}))
     finally:
         await stream.close()
 
 
-async def _pump_openai_responses(
+async def _pump_openai_responses(  # pylint: disable=too-many-branches, too-many-locals
     cfg: dict[str, t.Any],
     base: str,
     messages: list[dict[str, t.Any]],
@@ -648,7 +694,9 @@ async def _pump_openai_responses(
 ) -> None:
     """The Responses-API dialect: relay the output text deltas, the reasoning
     text / summary deltas as think events.  Function-call items stream as
-    ``output_item.added`` + ``function_call_arguments.delta`` fragments."""
+    ``output_item.added`` + ``function_call_arguments.delta`` fragments.
+    The terminal response event's status and usage land in one
+    ``("finish", meta)`` event (``max_output_tokens`` maps to ``length``)."""
     client = _openai_client(cfg, base)
     extra: dict[str, t.Any] = {"tools": [dict(tool, type="function") for tool in tools]} if tools else {}
     stream = await client.responses.create(
@@ -664,6 +712,8 @@ async def _pump_openai_responses(
     )
     calls: dict[str, dict[str, str]] = {}
     order: list[str] = []
+    finish: str | None = None
+    usage: dict[str, t.Any] | None = None
     try:
         async for event in stream:
             event_type = getattr(event, "type", "")
@@ -676,6 +726,14 @@ async def _pump_openai_responses(
             ):
                 if event.delta:
                     events.put(("think", str(event.delta)))
+            elif event_type in ("response.completed", "response.incomplete"):
+                response = getattr(event, "response", None)
+                if response is not None:
+                    if getattr(response, "usage", None) is not None:
+                        usage = _openai_usage(response.usage)
+                    incomplete = getattr(response, "incomplete_details", None)
+                    reason = str(getattr(incomplete, "reason", "") or "") if incomplete else ""
+                    finish = "length" if reason == "max_output_tokens" else (reason or "stop")
             elif event_type == "response.output_item.added":
                 item = getattr(event, "item", None)
                 if item is not None and getattr(item, "type", "") == "function_call":
@@ -692,11 +750,22 @@ async def _pump_openai_responses(
                     slot["arguments"] += str(event.delta)
         if calls:
             events.put(("tool_calls", [calls[item_id] for item_id in order]))
+        events.put(("finish", {"finish": finish, "usage": usage}))
     finally:
         await stream.close()
 
 
-async def _pump_anthropic(
+_ANTHROPIC_STOP_REASONS = {
+    "end_turn": "stop",
+    "stop_sequence": "stop",
+    "max_tokens": "length",
+    "tool_use": "tool_calls",
+    "refusal": "refusal",
+}
+"""Messages-API ``stop_reason`` -> the canonical finish vocabulary."""
+
+
+async def _pump_anthropic(  # pylint: disable=too-many-branches, too-many-locals, too-many-statements
     cfg: dict[str, t.Any],
     base: str,
     messages: list[dict[str, t.Any]],
@@ -707,29 +776,33 @@ async def _pump_anthropic(
     """The Messages-API dialect: relay ``text_delta`` and -- when
     ``relay_reasoning`` is set -- ``thinking_delta`` events.  ``tool_use``
     blocks stream as ``content_block_start`` + ``input_json_delta``
-    fragments, collected per block index."""
+    fragments, collected per block index.  The message's ``stop_reason``
+    and usage land in one terminal ``("finish", meta)`` event."""
     client = _anthropic_client(cfg, base)
-    extra: dict[str, t.Any] = (
-        {
-            "tools": [
-                {"name": tool["name"], "description": tool["description"], "input_schema": tool["parameters"]}
-                for tool in tools
-            ]
-        }
+    tool_specs: list[dict[str, t.Any]] = (
+        [
+            {"name": tool["name"], "description": tool["description"], "input_schema": tool["parameters"]}
+            for tool in tools
+        ]
         if tools
-        else {}
+        else []
     )
     system_text = _system_of(messages)
     system: t.Any = system_text or None
     msgs = _anthropic_messages(messages)
-    if _anthropic_cache_on(cfg, base):
-        # explicit prompt caching: a breakpoint on the system block pins the
-        # byte-stable contract + tools as the cached prefix, one on the last
-        # message makes every researcher turn a prefix-hit plus a small tail
-        # write (Anthropic's incremental agent-loop pattern; reads 0.1x)
+    if _anthropic_cache_on(cfg):
+        # explicit prompt caching, LobeChat's THREE anchors (system, last
+        # tool, last message -- 3 of Anthropic's 4 breakpoints, no
+        # bookkeeping): the tools spec is the run's biggest byte-stable
+        # prefix and the last-tool marker anchors it ahead of the system
+        # block; the tail breakpoint makes every researcher turn a
+        # prefix-hit plus a small tail write
         if system_text:
             system = _anthropic_cache_system(system_text)
+        if tool_specs:
+            tool_specs[-1] = {**tool_specs[-1], "cache_control": {"type": "ephemeral"}}
         _anthropic_cache_tail(msgs)
+    extra: dict[str, t.Any] = {"tools": tool_specs} if tool_specs else {}
     stream = await client.messages.create(
         model=str(cfg.get("model")),
         system=system,
@@ -742,8 +815,31 @@ async def _pump_anthropic(
         **extra,
     )
     calls: dict[int, dict[str, str]] = {}
+    finish: str | None = None
+    input_tokens = 0
+    output_tokens = 0
+    cached_tokens = 0
+    cache_write_tokens = 0
     try:
         async for event in stream:
+            if event.type == "message_start":
+                usage = getattr(event.message, "usage", None)
+                if usage is not None:
+                    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                    # the cache counters ride message_start (reads at 0.1x,
+                    # writes at 1.25x -- the incremental agent-loop pattern's
+                    # whole point is a fat read number here)
+                    cached_tokens = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+                    cache_write_tokens = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+                continue
+            if event.type == "message_delta":
+                usage = getattr(event, "usage", None)
+                if usage is not None and getattr(usage, "output_tokens", None):
+                    output_tokens = int(usage.output_tokens or 0)
+                stop_reason = getattr(event.delta, "stop_reason", None)
+                if stop_reason:
+                    finish = _ANTHROPIC_STOP_REASONS.get(str(stop_reason), str(stop_reason))
+                continue
             if event.type == "content_block_start":
                 block = event.content_block
                 if getattr(block, "type", "") == "tool_use":
@@ -767,11 +863,34 @@ async def _pump_anthropic(
                     slot["arguments"] += str(delta.partial_json)
         if calls:
             events.put(("tool_calls", [calls[index] for index in sorted(calls)]))
+        usage = (
+            {
+                "input": input_tokens,
+                "output": output_tokens,
+                "thoughts": None,
+                "cached": cached_tokens,
+                "cache_write": cache_write_tokens,
+            }
+            if (input_tokens or output_tokens)
+            else None
+        )
+        events.put(("finish", {"finish": finish, "usage": usage}))
     finally:
         await stream.close()
 
 
-async def _pump_gemini(
+_GEMINI_FINISH_REASONS = {
+    "STOP": "stop",
+    "MAX_TOKENS": "length",
+    "SAFETY": "content_filter",
+    "PROHIBITED_CONTENT": "content_filter",
+    "BLOCKLIST": "content_filter",
+    "SPII": "content_filter",
+}
+"""Gemini ``finishReason`` enum names -> the canonical finish vocabulary."""
+
+
+async def _pump_gemini(  # pylint: disable=too-many-locals
     cfg: dict[str, t.Any],
     base: str,
     messages: list[dict[str, t.Any]],
@@ -782,7 +901,9 @@ async def _pump_gemini(
     """The Gemini dialect: relay chunk text; thought parts (Gemini 2.5
     thinking) become think events.  ``functionCall`` parts arrive fully
     formed (no fragment assembly) and collect into one tool_calls event;
-    the API has no call ids, so stable synthetic ones are assigned."""
+    the API has no call ids, so stable synthetic ones are assigned.  The
+    candidates' ``finishReason`` and ``usageMetadata`` land in one
+    terminal ``("finish", meta)`` event."""
     from google.genai import types  # pylint: disable=import-outside-toplevel
 
     client = _gemini_client(cfg, base)
@@ -796,9 +917,27 @@ async def _pump_gemini(
         model=str(cfg.get("model")), contents=contents, config=config
     )
     calls: list[dict[str, str]] = []
+    finish: str | None = None
+    usage: dict[str, t.Any] | None = None
     try:
         async for chunk in stream:
+            meta = getattr(chunk, "usage_metadata", None)
+            if meta is not None:
+                thoughts = getattr(meta, "thoughts_token_count", None)
+                cached = getattr(meta, "cached_content_token_count", None)
+                usage = {
+                    "input": int(getattr(meta, "prompt_token_count", 0) or 0),
+                    "output": int(getattr(meta, "candidates_token_count", 0) or 0),
+                    "thoughts": int(thoughts) if thoughts else None,
+                    "cached": int(cached) if cached else 0,
+                    "cache_write": 0,
+                }
             candidates = chunk.candidates or []
+            if candidates:
+                reason = getattr(candidates[0], "finish_reason", None)
+                if reason:
+                    name = getattr(reason, "name", None) or str(reason)
+                    finish = _GEMINI_FINISH_REASONS.get(name, name.lower())
             parts = candidates[0].content.parts if candidates and candidates[0].content else []
             for part in parts or []:
                 fc = getattr(part, "function_call", None)
@@ -821,6 +960,7 @@ async def _pump_gemini(
         await stream.close()
     if calls:
         events.put(("tool_calls", calls))
+    events.put(("finish", {"finish": finish, "usage": usage}))
 
 
 async def _llm_pump(
@@ -835,7 +975,8 @@ async def _llm_pump(
     """Drive the dialect's SDK stream and relay it into ``events``; runs on
     the shared network event loop (see :py:class:`LlmStream`).  SDK client
     construction and request errors land as ("error", ...) events; the pump
-    always ends with ("end", None)."""
+    always ends with ("end", None).  A clean stream carries one
+    ("finish", {"finish", "usage"}) meta event right before the end."""
     try:
         if kind == "anthropic":
             await _pump_anthropic(cfg, base, messages, events, relay_reasoning, tools)

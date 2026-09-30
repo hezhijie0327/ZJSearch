@@ -124,6 +124,20 @@ export interface AiSearchRun {
   /** the user pressed stop: a settled run without an answer is then
       intentional, not a failure (the failed box must not fire) */
   stopped?: boolean;
+  /** the transports' finish reason of the run's LAST turn ("stop" |
+      "length" | "content_filter" | ... -- the writer's, when a writer
+      phase ran); null while unknown */
+  finish?: string | null;
+  /** token usage summed across the run's turns (null = the endpoint
+      reported nothing); cached/cache_write are the prompt-cache hit and
+      write counts (0 when the endpoint does not break them out) */
+  usage?: {
+    input: number;
+    output: number;
+    thoughts: number | null;
+    cached: number;
+    cache_write: number;
+  } | null;
 }
 
 interface AiSearchState {
@@ -490,6 +504,33 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       // wrap-up turn's output becomes the answer wholesale
       runs[lastIdx] = { ...run, answer: "", wrappingUp: true };
       return { ...core, runs, pending: "", answerFrom: 0, thinkOpen: false };
+    }
+    case "finish": {
+      // the run's consolidated transport meta (the last turn's finish
+      // reason + usage summed across turns): stored for the meta row --
+      // truncation ("length") and friends render as visible states, never
+      // silently swallowed
+      const usage = event.usage as {
+        input?: number;
+        output?: number;
+        thoughts?: number | null;
+        cached?: number;
+        cache_write?: number;
+      } | null;
+      runs[lastIdx] = {
+        ...run,
+        finish: event.finish ? String(event.finish) : (run.finish ?? null),
+        usage: usage
+          ? {
+              input: Number(usage.input) || 0,
+              output: Number(usage.output) || 0,
+              thoughts: typeof usage.thoughts === "number" ? usage.thoughts : null,
+              cached: Number(usage.cached) || 0,
+              cache_write: Number(usage.cache_write) || 0,
+            }
+          : (run.usage ?? null),
+      };
+      return { ...core, runs };
     }
     case "related":
       runs[lastIdx] = { ...run, related: ((event.items as string[]) ?? []).map(String).slice(0, 3) };

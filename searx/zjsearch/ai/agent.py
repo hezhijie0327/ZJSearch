@@ -27,10 +27,13 @@ Events yielded by :py:func:`run_agent` are ``(kind, payload)`` tuples:
 ``("think"|"delta", text)``, ``("calls", {"round", "intent", "calls"})``,
 ``("plan", {"t": text})`` -- the answer-plan turn's prose re-homed as a
 research step (see ``plan_tool``) --, ``("ask_user", arguments)``,
-``("error", reason)``, plus the executor's feature events passed
-through.  The executor contract: a generator over the executable calls
-that yields ``(kind, payload)`` feature events and MUST end with
-``("tool_results", [(call, text), ...])`` aligned with its input.
+``("error", reason)``, one terminal ``("finish", {"finish", "usage"})``
+(the transports' completion meta: the last turn's finish reason, usage
+summed across turns -- yielded once on a run that ends cleanly), plus
+the executor's feature events passed through.  The executor contract: a
+generator over the executable calls that yields ``(kind, payload)``
+feature events and MUST end with ``("tool_results", [(call, text), ...])``
+aligned with its input.
 """
 
 import json
@@ -135,6 +138,46 @@ def _event_wait(deadline: float | None, first: bool, first_event_timeout: float,
     return wait
 
 
+def _absorb_finish(state: dict[str, t.Any], payload: t.Any) -> None:
+    """Fold one turn's transport finish meta into the run's running tally:
+    the LAST turn's finish reason is the answer's completion state (the
+    writer's, when a writer phase ran) and the usage sums across turns."""
+    meta = payload if isinstance(payload, dict) else {}
+    if meta.get("finish"):
+        state["finish"] = str(meta["finish"])
+    usage = meta.get("usage")
+    if isinstance(usage, dict):
+        total = state["usage"]
+        total["input"] += int(usage.get("input") or 0)
+        total["output"] += int(usage.get("output") or 0)
+        thoughts = usage.get("thoughts")
+        if thoughts is not None:
+            total["thoughts"] += int(thoughts)
+        total["cached"] += int(usage.get("cached") or 0)
+        total["cache_write"] += int(usage.get("cache_write") or 0)
+
+
+def _finish_event(state: dict[str, t.Any]) -> tuple[str, dict[str, t.Any]] | None:
+    """The run's consolidated ``("finish", meta)`` event -- ``None`` when no
+    transport reported anything (every turn died before its finish)."""
+    usage = state["usage"]
+    if not state["finish"] and not (usage["input"] or usage["output"]):
+        return None
+    return (
+        "finish",
+        {
+            "finish": state["finish"],
+            "usage": {
+                "input": usage["input"],
+                "output": usage["output"],
+                "thoughts": usage["thoughts"] or None,
+                "cached": usage["cached"],
+                "cache_write": usage["cache_write"],
+            },
+        },
+    )
+
+
 def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-many-locals, too-many-statements
     cfg: dict[str, t.Any],
     messages: list[dict[str, t.Any]],
@@ -174,7 +217,11 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     messages at that moment; a ``("wrapup", None)`` event flies first (the
     client drops any streamed research prose) and the writer's stream is
     relayed as-is.  The researcher's own prose therefore never becomes
-    the answer -- consistency by construction, not by pleading.  Without
+    the answer -- consistency by construction, not by pleading.  The
+    channel doctrine is strict and the model's thinking configuration is
+    the user's setting: reasoning is relayed for the timeline but is
+    NEVER the answer -- a turn that answered in its reasoning channel
+    only fails the run loudly instead of being promoted.  Without
     ``writer`` the last turn's prose stays the answer (the zero-tool
     case, and the fail-open path).
 
@@ -192,6 +239,10 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
     rounds = 0
     halt_message: str | None = None
     researching = bool(tools and executor is not None)
+    finish_state: dict[str, t.Any] = {
+        "finish": None,
+        "usage": {"input": 0, "output": 0, "thoughts": 0, "cached": 0, "cache_write": 0},
+    }
     while True:
         if researching and (rounds >= max_rounds or halt_message is not None):
             # the ceiling or the stale-research verdict ended the gathering:
@@ -200,6 +251,7 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
         budget_left = researching
         stream = llm.LlmStream(cfg, messages, relay_reasoning=True, tools=tools if budget_left else None)
         turn_text = ""
+        saw_reasoning = False
         calls: list[dict[str, t.Any]] = []
         kind, payload = "end", None
         expired = False
@@ -216,13 +268,19 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 kind, payload = stream.next_event(wait)
                 first = False
                 if kind in ("think", "delta"):
-                    if kind == "delta":
+                    if kind == "think":
+                        saw_reasoning = True
+                    else:
                         turn_text += str(payload or "")
                     yield (kind, payload)
                 elif kind == "tool_calls":
                     calls = list(payload or [])
                 else:
-                    break  # "end" or "error" closes the turn
+                    if kind == "finish":
+                        # the pump's terminal meta -- absorbed into the run's
+                        # tally, yielded once as a consolidated event at the end
+                        _absorb_finish(finish_state, payload)
+                    break  # "end" / "finish" / "error" closes the turn
         finally:
             # an abandoned consumer (client disconnect) closes this
             # generator right here -- cancel the pump towards the loop
@@ -238,6 +296,14 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
             # throw away the whole run -- the writer still answers from the
             # sources gathered so far
             break
+        if not researching and not turn_text and saw_reasoning:
+            # the channel IS the verdict: reasoning relayed for the timeline
+            # is never the answer, so a zero-tool turn that produced ONLY
+            # reasoning fails loudly instead of settling silently blank
+            # (the model's thinking configuration is the user's setting --
+            # it is never overridden here)
+            yield ("error", "the model answered in its reasoning channel only -- no answer text")
+            return
         if ask_tool:
             # the human-in-the-loop escape hatch: the model realized
             # MID-research that the request is genuinely ambiguous and
@@ -307,33 +373,61 @@ def run_agent(  # pylint: disable=too-many-arguments, too-many-branches, too-man
                 halt_message = None
     # ------------------------- the writer phase -------------------------
     if writer is None:
+        finish_event = _finish_event(finish_state)
+        if finish_event:
+            yield finish_event
         return
     yield ("wrapup", None)
     writer_messages = writer(halt_message)
-    # a writer stream that closes without ANY event (gateways answer 200
-    # with an empty body; a degenerate completion produces nothing) gets
-    # ONE silent retry -- the run's only chance to show an answer must
-    # not ride on a single empty completion
+    # the channel doctrine is strict: ONLY content deltas are the answer.
+    # A writer stream that closes with zero relayed events (gateways answer
+    # 200 with an empty body) retries ONCE with the same request; a writer
+    # that answered in its reasoning channel only is NOT retried (the
+    # identical request would repeat the misroute) -- it fails the run
+    # loudly instead.  The model's thinking configuration is never touched.
+    answered = False
     for attempt in (1, 2):
         stream = llm.LlmStream(cfg, writer_messages, relay_reasoning=True)
         first = True
         content = False
+        reasoning = False
+        failed = False
         try:
             while True:
                 wait = _event_wait(None, first, first_event_timeout, idle_timeout)
                 kind, payload = stream.next_event(wait)
                 first = False
-                if kind in ("think", "delta"):
+                if kind == "delta":
                     content = True
                     yield (kind, payload)
+                elif kind == "think":
+                    reasoning = True
+                    yield (kind, payload)
+                elif kind == "finish":
+                    _absorb_finish(finish_state, payload)
                 elif kind == "error":
                     logger.warning("zjsearch agent: writer stream failed: %s", payload)
                     yield ("error", payload)
-                    return
+                    failed = True
                 else:
                     break  # "end" closes the writer
         finally:
             stream.cancel()
-        if content:
-            return
+        if content or failed or reasoning:
+            # content: done.  failed: the error already flew.  reasoning
+            # only: the answer channel stayed empty -- surfaced below.
+            answered = content
+            break
         logger.warning("zjsearch agent: the writer produced no content (attempt %d/2)", attempt)
+    if not answered and not failed:
+        yield (
+            "error",
+            (
+                "the model answered in its reasoning channel only -- no answer text"
+                if reasoning
+                else "the model returned no answer text"
+            ),
+        )
+    finish_event = _finish_event(finish_state)
+    if finish_event:
+        yield finish_event
