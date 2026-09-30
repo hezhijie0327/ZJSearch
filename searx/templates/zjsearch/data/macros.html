@@ -74,7 +74,13 @@ pipeline features without any Python changes. -#}
     URLs — same-origin static paths (offline fixtures, instance assets) would
     400 through it, so they pass through unchanged. -#}
 {% macro media_url(url) -%}
-{%- if url.startswith('/') %}{{ url }}{% else %}{{ image_proxify(url) }}{% endif -%}
+{#- |safe is REQUIRED here: image_proxify returns a plain str, and the
+    html autoescape would turn its `&h=` separator into `&amp;h=` -- inside
+    a JSON payload nothing decodes that back, so the server would read the
+    signature param as `amp;h` and refuse every proxied image with 400.
+    Escaping for the script-tag context is tojson's job (it \u0026-escapes
+    the ampersand, which JSON.parse decodes back). -#}
+{%- if url.startswith('/') %}{{ url | safe }}{% else %}{{ image_proxify(url) | safe }}{% endif -%}
 {%- endmacro %}
 
 {#- One search result.  Emits the union of all fields used by the 11 result

@@ -5,9 +5,10 @@ import type { GlobalData } from "@/lib/types.ts";
 
 /** The geometric gold period that closes the wordmark (DESIGN.md §2.2) —
     one definition for every surface that typesets the brand (header rows,
-    hero). `em`-sized so it scales with the wordmark it closes. */
+    hero). `em`-sized (gap included) so it scales with the wordmark it
+    closes -- a fixed 2px margin starved the dot at the hero's 7xl. */
 export function BrandDot() {
-  return <span aria-hidden="true" className="ms-0.5 inline-block size-[0.25em] rounded-full bg-accent-strong" />;
+  return <span aria-hidden="true" className="ms-[0.14em] inline-block size-[0.25em] rounded-full bg-accent-strong" />;
 }
 
 /** The header wordmark: instance name + BrandDot, linking home. The size

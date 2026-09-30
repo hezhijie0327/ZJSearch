@@ -17,10 +17,10 @@ import {
   ListOrdered,
   Network,
   Ruler,
-  ShieldCheck,
   Sigma,
 } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
+import { TorIcon } from "@/components/TorIcon.tsx";
 import { type StringKey, useT } from "@/lib/i18n.ts";
 import { CODE_CHIP } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
@@ -45,7 +45,7 @@ const PLUGIN_ICONS: Record<string, ReactNode> = {
   self_info: <Network className="size-4.5" />,
   stock_quote: <ChartCandlestick className="size-4.5" />,
   time_zone: <Clock className="size-4.5" />,
-  tor_check: <ShieldCheck className="size-4.5" />,
+  tor_check: <TorIcon className="size-4.5" />,
   tracker_url_remover: <Eraser className="size-4.5" />,
   unit_converter: <Ruler className="size-4.5" />,
 };

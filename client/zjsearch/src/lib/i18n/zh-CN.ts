@@ -242,6 +242,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_thinking: "思考过程",
   ai_figure: "图表",
   regenerate: "重新生成",
+  home: "首页",
   open_source: "打开来源",
 
   homepage: "项目主页",

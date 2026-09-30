@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
+import { ICON_BTN } from "@/lib/styles.ts";
 import { type AiThreadMeta, deleteThread, listThreads, threadUrl } from "@/lib/threadStore.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
@@ -61,72 +62,78 @@ export function AiHistoryDrawer({
   };
   return (
     <div aria-hidden={closing || undefined}>
-      <button
-        aria-label={t("close")}
-        className={`fixed inset-0 z-40 bg-ink/20 backdrop-blur-[2px] transition-opacity ${closing ? "opacity-0" : "animate-fade-in"}`}
-        onClick={onClose}
-        tabIndex={closing ? -1 : 0}
-        type="button"
-      />
       <div
-        aria-hidden={closing || undefined}
         aria-label={t("ai_history")}
-        className={`fixed inset-y-0 end-0 z-40 flex w-80 max-w-[85vw] flex-col border-s border-line bg-surface shadow-card ${closing ? "animate-fade-in" : "animate-fade-in"}`}
+        className={`fixed inset-0 z-50 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
         inert={closing}
         ref={ref}
         role="dialog"
       >
-        <div className="flex items-center gap-2 border-b border-line px-4 py-3.5">
-          <History aria-hidden="true" className="size-4.5 text-ink-3" />
-          <h2 className="text-base font-semibold text-ink">{t("ai_history")}</h2>
-          <button
-            aria-label={t("close")}
-            className="ms-auto grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-            data-dialog-close=""
-            onClick={onClose}
-            type="button"
-          >
-            <X aria-hidden="true" className="size-4.5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {threads.length === 0 ? (
-            <p className="px-3 py-6 text-center text-sm text-ink-3">{t("ai_history_empty")}</p>
-          ) : (
-            threads.map((thread) => (
-              <div
-                className={`group flex items-center gap-1 rounded-xl px-2 ${thread.id === currentId ? "bg-accent-soft" : "hover:bg-surface-2"}`}
-                key={thread.id}
-              >
-                <button
-                  className="min-w-0 flex-1 py-2.5 text-start"
-                  onClick={() => {
-                    navigate(thread.id);
-                  }}
-                  type="button"
+        <button
+          aria-label={t("close")}
+          className="absolute inset-0 cursor-default bg-black/60"
+          onClick={onClose}
+          tabIndex={closing ? -1 : 0}
+          type="button"
+        />
+        {/* the settings-panel shape: full-width sheet on mobile, a wide
+            end-anchored panel from sm up -- not the old floating 80-strip
+            that left the page half-visible and the list swimming */}
+        <div
+          className={`absolute inset-y-0 end-0 flex w-full max-w-3xl flex-col bg-bg shadow-pop ${
+            closing ? "animate-slide-out-right" : "animate-slide-in-right"
+          }`}
+        >
+          <div className="flex items-center justify-between border-b border-line px-5 py-3">
+            <div className="flex items-center gap-2">
+              <History aria-hidden="true" className="size-4.5 text-ink-3" />
+              <h2 className="text-lg font-semibold text-ink">{t("ai_history")}</h2>
+            </div>
+            <button aria-label={t("close")} className={ICON_BTN} data-dialog-close="" onClick={onClose} type="button">
+              <X aria-hidden="true" className="size-4.5" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {threads.length === 0 ? (
+              <p className="px-3 py-6 text-center text-sm text-ink-3">{t("ai_history_empty")}</p>
+            ) : (
+              threads.map((thread) => (
+                <div
+                  className={`group flex items-center gap-1 rounded-xl px-2 ${thread.id === currentId ? "bg-accent-soft" : "hover:bg-surface-2"}`}
+                  key={thread.id}
                 >
-                  <span
-                    className={`block truncate text-[13px] ${thread.id === currentId ? "font-medium text-accent" : "text-ink"}`}
-                    dir="auto"
+                  <button
+                    className="min-w-0 flex-1 py-2.5 text-start"
+                    onClick={() => {
+                      navigate(thread.id);
+                    }}
+                    type="button"
                   >
-                    {thread.title || t("ai_search")}
-                  </span>
-                  <span className="block text-xs text-ink-3">{formatDate(new Date(thread.updated).toISOString())}</span>
-                </button>
-                <button
-                  aria-label={t("delete")}
-                  className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 group-hover:hover:text-danger"
-                  onClick={() => {
-                    remove(thread.id);
-                  }}
-                  title={t("delete")}
-                  type="button"
-                >
-                  <Trash2 aria-hidden="true" className="size-4" />
-                </button>
-              </div>
-            ))
-          )}
+                    <span
+                      className={`block truncate text-[13px] ${thread.id === currentId ? "font-medium text-accent" : "text-ink"}`}
+                      dir="auto"
+                    >
+                      {thread.title || t("ai_search")}
+                    </span>
+                    <span className="block text-xs text-ink-3">
+                      {formatDate(new Date(thread.updated).toISOString())}
+                    </span>
+                  </button>
+                  <button
+                    aria-label={t("delete")}
+                    className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 group-hover:hover:text-danger"
+                    onClick={() => {
+                      remove(thread.id);
+                    }}
+                    title={t("delete")}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" className="size-4" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>

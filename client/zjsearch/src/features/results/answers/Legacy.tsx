@@ -2,7 +2,7 @@
 
 import { ShieldAlert } from "lucide-react";
 import { ClickToCopy } from "@/components/CopyButton.tsx";
-import { OnionIcon } from "@/components/OnionIcon.tsx";
+import { TorIcon } from "@/components/TorIcon.tsx";
 import { UnitConverterAnswer } from "@/features/results/answers/UnitConverter.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { hostnameOf, newTabLinkProps } from "@/lib/link.ts";
@@ -37,7 +37,7 @@ export function LegacyAnswer({ answer }: { answer: Extract<AnswerData, { templat
     return (
       <div>
         <p className={`flex items-center gap-2 text-sm font-medium ${usingTor ? "text-ok" : "text-ink"}`}>
-          <OnionIcon className="size-4 shrink-0" />
+          <TorIcon className="size-4 shrink-0" />
           {usingTor ? t("tor_using") : t("tor_not_using")}
         </p>
         {data.ip ? (

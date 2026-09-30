@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronDown, History } from "lucide-react";
+import { ChevronDown, History, Home } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
@@ -8,7 +8,7 @@ import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
 import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
-import { HeaderActions, Shell } from "@/components/Shell.tsx";
+import { HeaderActions, Link, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
@@ -680,6 +680,16 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               <div className="hidden min-[480px]:block">
                 <Brand className="text-xl" globals={globals} />
               </div>
+              {/* below 480px the wordmark hides -- a ghost home circle keeps
+                  the way back (>=480px the brand IS the home link) */}
+              <Link
+                ariaLabel={t("home")}
+                className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink min-[480px]:hidden"
+                href="/"
+                title={t("home")}
+              >
+                <Home aria-hidden="true" className="size-4.5" />
+              </Link>
               <div className="ms-auto flex items-center gap-3">
                 <HeaderActions globals={globals} />
               </div>
@@ -798,7 +808,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           placeholder={t("ai_search_followup")}
                           value={followupQuery}
                         />
-                        <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                           <Dropdown
                             ariaLabel={t("research_mode")}
                             onChange={(value) => {

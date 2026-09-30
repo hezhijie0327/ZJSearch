@@ -819,6 +819,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   emitted `class=&#34;centered&#34;` (a broken literal-quote class token that
   silently disabled centered alignment). Conditional HTML fragments in
   templates must use `{% if %}` blocks, never inline-`if` string literals.
+- Plain-str python functions interpolated inside the data macros are AUTOESCAPED (macros.html is a .html template) — `image_proxify(url)` emitted `&amp;h=` into the JSON page-data, nothing decodes that back, and EVERY proxied image 400'd (`amp;h` is not the signature param). Macro calls themselves are immune (their output is Markup) and `X|tojson` filters the raw value before any escaping — the dangerous shape is a bare `{{ plain_str_fn() }}` inside a macro. Anything URL-shaped or structured that enters the JSON payload from a plain-str function needs `|safe` (tojson handles the script-tag escaping; `noscript.html`/`rss.xsl` are genuine HTML/XML contexts where autoescaping stays correct).
 - Text result cards keep fixed height slots so every card in a list is the
   same height: pretty URL 1 line, title `line-clamp-1`, snippet capped at
   `line-clamp-2` (never reserve empty lines below short snippets — the gap

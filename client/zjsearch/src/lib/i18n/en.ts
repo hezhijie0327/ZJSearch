@@ -241,6 +241,7 @@ export const EN = {
   ai_thinking: "Thinking",
   ai_figure: "Diagram",
   regenerate: "Regenerate",
+  home: "Home",
   open_source: "Open source",
 
   homepage: "Project homepage",

@@ -123,8 +123,8 @@ export function IndexPage({ data }: { data: IndexData }) {
             query={query}
             variant="bare"
           />
-          <div className="mt-4 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {aiSearchCap ? <AiModeSwitch ai={aiMode} onChange={setAiMode} /> : null}
               {aiMode ? (
                 <Dropdown

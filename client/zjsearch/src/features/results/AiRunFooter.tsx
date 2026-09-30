@@ -1,8 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { AlertTriangle, ArrowDown, ArrowUp, Brain, BrainCircuit, Database, DatabaseZap } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Ban,
+  Brain,
+  BrainCircuit,
+  CircleCheck,
+  Database,
+  DatabaseZap,
+  ShieldAlert,
+  Wrench,
+} from "lucide-react";
 import { formatTokens } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
+import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /** The run's consolidated token usage -- the shape every dialect's usage
     capture produces (AI Search's finish wire event and the AI Overview's
@@ -34,19 +47,22 @@ export function AiRunFooter({
   if (!finish && !usage && !model) {
     return null;
   }
-  let note: { text: string; warn: boolean } | null = null;
+  // every finish state carries its own icon and tone: ok = green check,
+  // truncation = amber triangle, filter/refusal = red block, the rare
+  // tool_calls tail = a neutral wrench
+  let note: { text: string; icon: typeof CircleCheck; cls: string } | null = null;
   if (finish === "length") {
-    note = { text: t("ai_finish_length"), warn: true };
+    note = { text: t("ai_finish_length"), icon: AlertTriangle, cls: "text-accent" };
   } else if (finish === "content_filter") {
-    note = { text: t("ai_finish_content_filter"), warn: true };
+    note = { text: t("ai_finish_content_filter"), icon: ShieldAlert, cls: "text-danger" };
   } else if (finish === "refusal") {
-    note = { text: t("ai_finish_refusal"), warn: true };
+    note = { text: t("ai_finish_refusal"), icon: Ban, cls: "text-danger" };
   } else if (finish === "tool_calls") {
-    note = { text: t("ai_finish_tool_calls"), warn: false };
+    note = { text: t("ai_finish_tool_calls"), icon: Wrench, cls: "" };
   } else if (finish && finish !== "stop") {
-    note = { text: t("ai_finish_other", { reason: finish }), warn: true };
+    note = { text: t("ai_finish_other", { reason: finish }), icon: AlertTriangle, cls: "text-accent" };
   } else if (finish === "stop") {
-    note = { text: t("ai_finish_stop"), warn: false };
+    note = { text: t("ai_finish_stop"), icon: CircleCheck, cls: "text-ok" };
   }
   const segments: { icon: typeof ArrowUp; title: string; value: string }[] = usage
     ? [
@@ -64,10 +80,15 @@ export function AiRunFooter({
       ]
     : [];
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+    // one line that SWIPES horizontally on narrow screens (the meta-row
+    // language: overflow-x + hidden scrollbar + shrink-0 children) --
+    // wrapping a token cluster reads as broken layout
+    <div
+      className={`flex items-center gap-x-3 overflow-x-auto whitespace-nowrap text-xs text-ink-3 ${SCROLLBAR_NONE} [&>*]:shrink-0`}
+    >
       {model ? (
         <span
-          className="inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-full bg-surface-2 px-2.5"
+          className="inline-flex min-h-6 items-center gap-1.5 rounded-full bg-surface-2 px-2.5"
           title={t("ai_run_model_title")}
         >
           <BrainCircuit aria-hidden="true" className="size-3 shrink-0" />
@@ -75,7 +96,7 @@ export function AiRunFooter({
         </span>
       ) : null}
       {segments.length ? (
-        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
+        <span className="inline-flex items-center gap-x-3 tabular-nums">
           {segments.map(({ icon: Icon, title, value }) => (
             <span className="inline-flex min-h-6 items-center gap-1" key={title} title={title}>
               <Icon aria-hidden="true" className="size-3 shrink-0" />
@@ -85,12 +106,9 @@ export function AiRunFooter({
         </span>
       ) : null}
       {note ? (
-        <span
-          className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.warn ? "text-accent" : ""}`}
-          title={note.text}
-        >
-          {note.warn ? <AlertTriangle aria-hidden="true" className="size-3 shrink-0" /> : null}
-          <span className="truncate">{note.text}</span>
+        <span className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.cls}`} title={note.text}>
+          <note.icon aria-hidden="true" className="size-3 shrink-0" />
+          <span>{note.text}</span>
         </span>
       ) : null}
     </div>
