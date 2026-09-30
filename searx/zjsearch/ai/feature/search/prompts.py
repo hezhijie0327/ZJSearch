@@ -14,7 +14,7 @@ too: they are answers to "what do we tell the model".
 import typing as t
 
 from searx.zjsearch.ai import prompts as shared
-from searx.zjsearch.ai.search.tools import ASK_TOOL, PAGE_TOOL, PLAN_TOOL, TOOL_NAME
+from searx.zjsearch.ai.feature.search.tools import ASK_TOOL, PAGE_TOOL, PLAN_TOOL, TOOL_NAME
 
 _BUDGET_NOTE = "The research budget ended the gathering early -- the sources above are everything that was found."
 
@@ -82,13 +82,13 @@ def _examples(page_tool: bool, plan_tool: bool) -> str:
     """The few-shot block, composed from the tools THIS run registered: an
     example demonstrating an unregistered tool teaches a call that lands
     as an ``error: empty query`` row (the plan tool rides quality/goal
-    only, the page reader only when browserless is configured).  The last
+    only, the page reader only when a reader provider is configured).  The last
     example shows the LATER-round intent shape: reflection on the results
     so far, not a restatement of the question."""
     plan_suffix = ', plan(plan="对比表：定位/性能/价格/生态，结论按使用场景给出")' if plan_tool else ""
     deepseek = 'Action: web_search(query="DeepSeek-V3 context length site:huggingface.co")'
     if page_tool:
-        deepseek += ', then web_crawler(url="<the model card url>")'
+        deepseek += ', then web_reader(url="<the model card url>")'
     lines = [
         "<examples>",
         'User: "What is Kimi K2?"',

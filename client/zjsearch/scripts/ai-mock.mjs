@@ -17,7 +17,7 @@
  *   questions.
  * - `tools` present is the researcher: the opener streams a one-line intent
  *   plus TWO calls — a web_search carrying the page's own `zjaudit <kind>`
- *   fixture query AND a web_crawler reading the fixture result the search
+ *   fixture query AND a web_reader reading the fixture result the search
  *   just numbered (the executor renders it through the MOCK BROWSERLESS
  *   endpoint below — the same server answers `POST .../content` with a
  *   fixed fixture page, so the reading-pane path runs offline; re-reading
@@ -224,7 +224,7 @@ function researcher(answered, messages, res) {
       { tool_calls: [{ index: 0, function: { arguments: args.slice(half) } }] },
       {
         tool_calls: [
-          { index: 1, id: "call-zjaudit-2", type: "function", function: { name: "web_crawler", arguments: "" } },
+          { index: 1, id: "call-zjaudit-2", type: "function", function: { name: "web_reader", arguments: "" } },
         ],
       },
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(0, pageHalf) } }] },
@@ -285,7 +285,7 @@ export function startAiMock(port = PORT) {
       const path = (req.url ?? "").split("?")[0];
       if (req.method === "POST" && path.endsWith("/content")) {
         // the mock Browserless (audit-settings.yml points
-        // zjsearch.ai.browserless here): the page reader POSTs and reads
+        // zjsearch.reader here): the page reader POSTs and reads
         // the body as the rendered HTML
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(PAGE_HTML);

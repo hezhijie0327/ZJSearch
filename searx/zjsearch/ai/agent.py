@@ -2,8 +2,8 @@
 """zjsearch theme: the agent loop and think-block state machine.
 
 The one agent framework every theme AI feature runs on --
-:py:mod:`searx.zjsearch.ai.overview` as the zero-tool single-turn case,
-:py:mod:`searx.zjsearch.ai.search` as the tool-calling one:
+:py:mod:`searx.zjsearch.ai.feature.overview` as the zero-tool single-turn case,
+:py:mod:`searx.zjsearch.ai.feature.search` as the tool-calling one:
 
 - :py:func:`run_agent` drives turns over :py:mod:`searx.zjsearch.ai.llm`.
   A turn streams ``("think"|"delta", text)`` events; when it ends with

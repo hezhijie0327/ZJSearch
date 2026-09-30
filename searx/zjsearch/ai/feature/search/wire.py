@@ -16,11 +16,11 @@ import re
 import typing as t
 
 from searx.zjsearch.ai import llm
-from searx.zjsearch.ai.search.gates import related_questions, sanitize_questions
-from searx.zjsearch.ai.search.tools import display_item
+from searx.zjsearch.ai.feature.search.gates import related_questions, sanitize_questions
+from searx.zjsearch.ai.feature.search.tools import display_item
 
 if t.TYPE_CHECKING:
-    from searx.zjsearch.ai.search.executor import Searches
+    from searx.zjsearch.ai.feature.search.executor import Searches
 
 logger = logging.getLogger(__name__)
 

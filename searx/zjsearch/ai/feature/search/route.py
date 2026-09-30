@@ -17,11 +17,11 @@ import flask
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai import agent, http, llm
 from searx.zjsearch.ai.capabilities import reader
-from searx.zjsearch.ai.search.config import CLARIFY_MODES, PLAN_MODES, budget, enabled, SEARCH_MODES
-from searx.zjsearch.ai.search.executor import Searches, round_progress
-from searx.zjsearch.ai.search.gates import clarify_gate, research_gate, standalone_question
-from searx.zjsearch.ai.search.prompts import initial_messages, writer_messages
-from searx.zjsearch.ai.search.tools import (
+from searx.zjsearch.ai.feature.search.config import CLARIFY_MODES, PLAN_MODES, budget, enabled, SEARCH_MODES
+from searx.zjsearch.ai.feature.search.executor import Searches, round_progress
+from searx.zjsearch.ai.feature.search.gates import clarify_gate, research_gate, standalone_question
+from searx.zjsearch.ai.feature.search.prompts import initial_messages, writer_messages
+from searx.zjsearch.ai.feature.search.tools import (
     ASK_TOOL,
     PLAN_TOOL,
     ask_user_spec,
@@ -29,7 +29,7 @@ from searx.zjsearch.ai.search.tools import (
     plan_spec,
     tool_spec,
 )
-from searx.zjsearch.ai.search.wire import clarify_stream, generate
+from searx.zjsearch.ai.feature.search.wire import clarify_stream, generate
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         gate = clarify_gate(cfg, q, lang, mode)
         if gate:
             return http.streaming_response(clarify_stream(gate), "application/x-ndjson")
-    # the page reader rides only when the reader (zjsearch.ai.browserless) block is fully
+    # the page reader rides only when the reader (zjsearch.reader) block is fully
     # configured: an unconfigured reader simply leaves the tool unregistered
     pages_on = reader.configured()
     plans: list[str] = []
@@ -174,17 +174,17 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
 
 def install(app: flask.Flask) -> None:
     """Register the AI Search route; chained from the package install.
-    Stays off unless ``zjsearch.ai.search.enabled`` and the shared
+    Stays off unless ``zjsearch.feature.ai_search.enabled`` and the shared
     transport are fully configured."""
     if not enabled():
         return
     if not llm.configured(llm.ai_cfg()):
-        logger.warning("zjsearch.ai.search is enabled but the transport is missing -- AI search stays off")
+        logger.warning("zjsearch.feature.ai_search is enabled but the transport is missing -- AI search stays off")
         return
     package = llm.sdk_missing(llm.ai_cfg())
     if package is not None:
         logger.warning(
-            "zjsearch.ai.search: the %r transport needs the %r package -- AI search stays off",
+            "zjsearch.feature.ai_search: the %r transport needs the %r package -- AI search stays off",
             llm.endpoint(llm.ai_cfg())[0],
             package,
         )

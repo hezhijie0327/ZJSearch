@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """AI Search: the tool specs and their argument parsing.
 
-Each entry the model sees (``web_search``, ``web_crawler``,
+Each entry the model sees (``web_search``, ``web_reader``,
 ``ask_user``, ``plan``) is one spec function in the dialect-neutral
 llm shape plus the sanitizers that turn untrusted call arguments into
 executed / displayed values (Vane's researcher/actions split, Morphic's
@@ -14,7 +14,7 @@ import typing as t
 
 TOOL_NAME = "web_search"
 
-PAGE_TOOL = "web_crawler"
+PAGE_TOOL = "web_reader"
 
 ASK_TOOL = "ask_user"
 
@@ -30,7 +30,7 @@ _TIME_RANGES = ("day", "week", "month", "year")
 def tool_spec(with_pages: bool) -> dict[str, t.Any]:
     """The ``web_search`` tool in the dialect-neutral llm shape; with the
     page reader configured, the description cross-references it (a model
-    that never sees ``web_crawler`` must not be told about it).  The
+    that never sees ``web_reader`` must not be told about it).  The
     ``included_sites``/``excluded_sites`` parameters carry the user's
     source preference (Morphic's domain filters): they are appended to the
     query as ``site:``/``-site:`` operators, which the engine's
@@ -113,9 +113,9 @@ def tool_spec(with_pages: bool) -> dict[str, t.Any]:
 
 
 def page_spec() -> dict[str, t.Any]:
-    """The ``web_crawler`` tool: one URL's current full content through the
-    self-hosted Browserless browser.  Registered only when
-    ``zjsearch.ai.browserless`` is configured (else the model never sees
+    """The ``web_reader`` tool: one URL's current full content through the
+    page-reader provider (a real Chrome render).  Registered only when
+    ``zjsearch.reader`` is configured (else the model never sees
     it).  The description carries the economy policy: reads are for
     snippets that promise exactly the missing detail, never a substitute
     for a search round."""
@@ -277,7 +277,7 @@ def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[s
 
 
 def parse_page_call(call: dict[str, t.Any]) -> str:
-    """The url of one ``web_crawler`` tool call -- sanitized: trimmed and
+    """The url of one ``web_reader`` tool call -- sanitized: trimmed and
     capped; the public-url guard runs in
     :py:mod:`searx.zjsearch.ai.capabilities.reader.fetch`."""
     try:

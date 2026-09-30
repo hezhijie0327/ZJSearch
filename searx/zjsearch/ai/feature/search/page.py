@@ -17,7 +17,7 @@ import flask
 
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai import llm
-from searx.zjsearch.ai.search.config import enabled
+from searx.zjsearch.ai.feature.search.config import enabled
 
 logger = logging.getLogger(__name__)
 

@@ -1,25 +1,23 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """Page reader configuration: the settings block, the budgets and the
-shared error type.  The bottom of the browserless package -- fetch,
-extract and the package ``__init__`` read their knobs from here."""
+shared error type.  The bottom of the reader package -- fetch, extract
+and the package ``__init__`` read their knobs from here."""
 
 import os
 import typing as t
 
 from searx import settings
 
-DEFAULT_MAX_CHARS = 12_000
-"""Readable characters per page fed to the model; a long page truncates
-with an honest marker (the model prefers a site:-search then)."""
-
 GOTO_TIMEOUT_MS = 30_000
 SETTLE_MS = 1_200
 """Wait for ``load`` plus a short settle -- late hydration gets a moment
 without paying a fixed second per page."""
 
-REJECT_RESOURCE_TYPES = ("image", "media", "font")
-"""The reader only needs the DOM: media loads are the bulk of the wall
-time and are rejected at the request level."""
+REJECT_RESOURCE_TYPES = ("image", "media", "font", "stylesheet")
+"""The reader only needs the DOM text: media loads are the bulk of the
+wall time AND stylesheets gate the ``load`` event -- both are rejected
+at the request level (the markdown conversion is CSS-free; a site that
+misbehaves without its CSS re-enables it via ``params``)."""
 
 
 class PageReadError(Exception):
@@ -28,29 +26,46 @@ class PageReadError(Exception):
 
 
 def cfg() -> dict[str, t.Any]:
-    """The ``zjsearch.ai.browserless`` settings block (absent unless the
-    deployment defines it)."""
-    ai = settings.get("zjsearch", {}).get("ai", {})
-    block = ai.get("browserless") if isinstance(ai, dict) else None
+    """The ``zjsearch.reader`` settings block (absent unless the
+    deployment defines it) -- the page-reader config, a sibling of
+    ``zjsearch.ai`` (Browserless v2 today; a future second implementation
+    would reintroduce a discriminator key)."""
+    zjs = settings.get("zjsearch", {})
+    block = zjs.get("reader") if isinstance(zjs, dict) else None
     return block if isinstance(block, dict) else {}
 
 
 def api_key(block: dict[str, t.Any]) -> str:
-    """The effective API key: the ``key`` setting first, then the
-    ``ZJSEARCH_BROWSERLESS_KEY`` environment."""
-    return str(block.get("key") or "") or os.environ.get("ZJSEARCH_BROWSERLESS_KEY", "")
+    """The effective API key: the ``api_key`` setting first, then the
+    ``ZJSEARCH_READER_KEY`` environment."""
+    return str(block.get("api_key") or "") or os.environ.get("ZJSEARCH_READER_KEY", "")
 
 
-def endpoint() -> str:
-    """The Browserless v2 root (``zjsearch.ai.browserless.endpoint``), no
-    trailing slash."""
-    return str(cfg().get("endpoint") or "").strip().rstrip("/")
+def base_url() -> str:
+    """The provider root (``zjsearch.reader.base_url``), no trailing
+    slash."""
+    return str(cfg().get("base_url") or "").strip().rstrip("/")
+
+
+def enabled() -> bool:
+    """The reader feature flag: ``zjsearch.reader.enabled`` -- ``True``
+    unless explicitly switched off (``false`` = the ``web_reader`` tool
+    never registers, exactly like an unconfigured reader)."""
+    return cfg().get("enabled") is not False
 
 
 def configured() -> bool:
-    """True when ``endpoint`` and ``key`` are both present -- the gate for
-    registering the ``web_crawler`` tool at all."""
-    return bool(endpoint() and api_key(cfg()))
+    """True when the tool may register: ``enabled``, and ``base_url`` +
+    ``api_key`` both present."""
+    return enabled() and bool(base_url() and api_key(cfg()))
+
+
+def params() -> dict[str, t.Any]:
+    """The ``zjsearch.reader.params`` block -- the provider's OWN request
+    parameters (``blockAds``, ``launch``, ...), merged 1:1 over the
+    structural body fields (the openai-transport ``params`` pattern)."""
+    raw = cfg().get("params")
+    return raw if isinstance(raw, dict) else {}
 
 
 def normalize_url(url: str) -> str:
@@ -58,10 +73,15 @@ def normalize_url(url: str) -> str:
     return str(url or "").strip().split("#", 1)[0]
 
 
-def max_chars() -> int:
-    """``zjsearch.ai.browserless.max_chars``, clamped to sane bounds."""
+def max_chars() -> int | None:
+    """``zjsearch.reader.max_chars`` -- UNSET means NO cap (the whole
+    readable text goes to the model; contexts are long now); a set value
+    truncates, clamped to sane bounds."""
+    value = cfg().get("max_chars")
+    if value is None:
+        return None
     try:
-        value = int(cfg().get("max_chars"))  # type: ignore[arg-type]
+        limit = int(value)
     except (TypeError, ValueError):
-        return DEFAULT_MAX_CHARS
-    return max(2000, min(value, 100_000))
+        return None
+    return max(2000, min(limit, 100_000))

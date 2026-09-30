@@ -7,7 +7,7 @@ The tool-calling feature on the shared agent framework
 a research agent analyses the question, writes a one-line intent, then
 issues ``web_search`` calls that run as REAL instance searches -- the
 same ``SearchWithPlugins`` path the results page uses, plugins included
--- in parallel worker threads.  A second tool, ``web_crawler``, reads
+-- in parallel worker threads.  A second tool, ``web_reader``, reads
 one result's page in full through the self-hosted Browserless browser
 (:py:mod:`searx.zjsearch.ai.reader`) when a snippet promises
 exactly the missing detail.  When the research ends, a FRESH WRITER
@@ -25,22 +25,22 @@ The package is split by responsibility (Vane's api/actions/prompts
 layering, Morphic's tools/streaming split); the dependency direction is
 one-way -- config <- tools/prompts/gates <- executor/wire <- route:
 
-- :py:mod:`searx.zjsearch.ai.search.config` -- modes, budgets, the
-  ``zjsearch.ai.search`` settings block and the page-data capability;
-- :py:mod:`searx.zjsearch.ai.search.tools` -- the tool specs and their
+- :py:mod:`searx.zjsearch.ai.feature.search.config` -- modes, budgets, the
+  ``zjsearch.feature.ai_search`` settings block and the page-data capability;
+- :py:mod:`searx.zjsearch.ai.feature.search.tools` -- the tool specs and their
   argument sanitizers;
-- :py:mod:`searx.zjsearch.ai.search.prompts` -- the researcher's and
+- :py:mod:`searx.zjsearch.ai.feature.search.prompts` -- the researcher's and
   the writer's message builders (and the honesty notes);
-- :py:mod:`searx.zjsearch.ai.search.gates` -- the small fail-open
+- :py:mod:`searx.zjsearch.ai.feature.search.gates` -- the small fail-open
   structured completions (research gate, clarify, standalone rewrite,
   related fallback);
-- :py:mod:`searx.zjsearch.ai.search.executor` -- the worker pool, the
+- :py:mod:`searx.zjsearch.ai.feature.search.executor` -- the worker pool, the
   ``[n]`` registries, the feed and the stall detector;
-- :py:mod:`searx.zjsearch.ai.search.wire` -- the fence splitter and the
+- :py:mod:`searx.zjsearch.ai.feature.search.wire` -- the fence splitter and the
   events-to-NDJSON adapter;
-- :py:mod:`searx.zjsearch.ai.search.route` -- the ``POST /ai/search``
+- :py:mod:`searx.zjsearch.ai.feature.search.route` -- the ``POST /ai/search``
   view and the install hook;
-- :py:mod:`searx.zjsearch.ai.search.page` -- the standalone thread page
+- :py:mod:`searx.zjsearch.ai.feature.search.page` -- the standalone thread page
   (``GET /ai/thread/<uuid>``): a slim shell carrying the conversation
   identity + fresh capability tokens -- the thread itself lives in the
   browser's storage (LobeHub's conversation shape; the endpoint stays
@@ -54,11 +54,11 @@ silently):
   event's intent; the writer's deltas are the answer);
 - ``{"e": "calls", "round", "intent", "items": [{id, tool, q/url, ...}]}``
   -- a parallel batch announced (the model decides the batch size;
-  ``tool`` discriminates ``web_search`` rows from ``web_crawler`` rows);
+  ``tool`` discriminates ``web_search`` rows from ``web_reader`` rows);
 - ``{"e": "search", "round", "id", "status", "n", "ms"}`` -- one search
   finished (ok / error / duplicate);
 - ``{"e": "page", "round", "id", "status", "url", "title", "chars",
-  "ms", "text"}`` -- one ``web_crawler`` read finished (ok / error /
+  "ms", "text"}`` -- one ``web_reader`` read finished (ok / error /
   duplicate); a successful read carries the extracted content, and the
   client's row expands into a reading pane of it;
 - ``{"e": "sources", "items": [{n, round, id, idx, ...}]}`` -- the global
@@ -88,13 +88,13 @@ silently):
 A stream that dies before its first line answers 502 with a truncated
 upstream reason (same contract as the AI Overview).  Configuration: the
 transport is the shared ``zjsearch.ai`` block; this feature ships
-enabled and opts out via ``zjsearch.ai.search.enabled: false`` (the AI
-Overview mirrors that under ``zjsearch.ai.overview.enabled``).
+enabled and opts out via ``zjsearch.feature.ai_search.enabled: false`` (the AI
+Overview mirrors that under ``zjsearch.feature.ai_overview.enabled``).
 """
 
-from searx.zjsearch.ai.search.config import capability
-from searx.zjsearch.ai.search.page import install as page_install
-from searx.zjsearch.ai.search.route import install as route_install
+from searx.zjsearch.ai.feature.search.config import capability
+from searx.zjsearch.ai.feature.search.page import install as page_install
+from searx.zjsearch.ai.feature.search.route import install as route_install
 
 
 def install(app) -> None:  # pylint: disable=missing-function-docstring

@@ -84,7 +84,7 @@ function CallResults({ results }: { results: AiSearchSource[] }) {
   );
 }
 
-/** Compact label for an web_crawler row: host + trimmed path -- the url is
+/** Compact label for an web_reader row: host + trimmed path -- the url is
     what identifies the read (two pages on one site must look different);
     a malformed url shows as-is. */
 function pageLabel(url: string | undefined): string {
@@ -100,7 +100,7 @@ function pageLabel(url: string | undefined): string {
   }
 }
 
-/** The web_crawler row's expansion: the crawled page's markdown revealed
+/** The web_reader row's expansion: the crawled page's markdown revealed
     DIRECTLY under its row (the same inline language as a search row's
     result cards -- the row is the title, no second header).  Long pages
     cap into an internal scroll; the corner chips (hover, the CodeBlock
@@ -154,7 +154,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const copyToast = useCopyToast();
   const [open, setOpen] = useState(false);
   const ok = call.status === "ok";
-  const isPage = call.tool === "web_crawler";
+  const isPage = call.tool === "web_reader";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
   const expandable = (isPage ? Boolean(call.text) : results.length > 0) || Boolean(rawArgs);
   return (

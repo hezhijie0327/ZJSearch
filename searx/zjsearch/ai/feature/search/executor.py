@@ -3,7 +3,7 @@
 
 :class:`Searches` runs one round of model calls in a worker pool:
 ``web_search`` as the REAL ``SearchWithPlugins`` webapp path (plugins,
-preferences and the site operators included) and ``web_crawler``
+preferences and the site operators included) and ``web_reader``
 through the Browserless reader.  It owns the run's registries (the
 global ``[n]`` numbering, dedup, the gallery whitelist), compiles the
 compact ``[n]`` feed the writer reads, yields the feature events for
@@ -26,8 +26,8 @@ from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
 from searx.webutils import highlight_content
 from searx.zjsearch.ai.capabilities import reader
-from searx.zjsearch.ai.search.prompts import STALL_NOTE
-from searx.zjsearch.ai.search.tools import PAGE_TOOL, parse_call, parse_page_call
+from searx.zjsearch.ai.feature.search.prompts import STALL_NOTE
+from searx.zjsearch.ai.feature.search.tools import PAGE_TOOL, parse_call, parse_page_call
 
 logger = logging.getLogger(__name__)
 
@@ -277,7 +277,7 @@ class Searches:  # pylint: disable=too-few-public-methods
             yield ("sources", {"items": entries})
 
     def _read_one(self, url: str) -> tuple[str, str]:
-        """One ``web_crawler`` read -- Browserless render + extraction over
+        """One ``web_reader`` read -- Browserless render + extraction over
         the instance's default network; needs no request context."""
         return reader.read_page(url)
 
@@ -358,7 +358,7 @@ class Searches:  # pylint: disable=too-few-public-methods
 
     def execute(self, calls: list[dict[str, t.Any]]) -> t.Iterator[tuple[str, t.Any]]:
         """Run one round of calls in parallel -- ``web_search`` and
-        ``web_crawler`` calls share the worker pool; feature events flow to
+        ``web_reader`` calls share the worker pool; feature events flow to
         the client while they complete.  Wire ids are the 1-based position
         of the call within this round.  Exact-duplicate queries and
         already-read pages settle instantly as ``duplicate`` -- they never

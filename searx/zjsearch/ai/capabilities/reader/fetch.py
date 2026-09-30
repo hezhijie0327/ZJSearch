@@ -13,6 +13,7 @@ import concurrent.futures
 import ipaddress
 import logging
 import re
+import typing as t
 from urllib.parse import urlsplit
 
 from searx.network.client import get_loop
@@ -23,8 +24,9 @@ from searx.zjsearch.ai.capabilities.reader.config import (
     SETTLE_MS,
     PageReadError,
     api_key,
+    base_url,
     cfg,
-    endpoint,
+    params,
 )
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ rides the default network like every engine (https endpoints are
 unaffected)."""
 
 FETCH_TIMEOUT = (10.0, 65.0)
-"""The one browserless request's budget as a curl_cffi ``(connect, total)``
+"""The one page-read request's budget as a curl_cffi ``(connect, total)``
 tuple -- the searx network client is curl_cffi, whose timeout conversion
 does not understand httpx.Timeout objects (one would silently disable the
 per-request AND the session default).  The goto itself may take 30 s
@@ -87,25 +89,32 @@ def guard_url(url: str) -> str:
 
 
 def _error_snippet(text: str) -> str:
-    """One truncated, tag-stripped line of a browserless error body (the
+    """One truncated, tag-stripped line of a provider error body (the
     server answers with HTML pages on some failures)."""
     plain = " ".join(re.sub(r"<[^>]+>", " ", str(text or "")).split())
     return plain[:200] or "no reason given"
 
 
 def rendered_html(url: str) -> str:
-    """The rendered HTML of one URL through Browserless v2 ``POST
-    /content`` (the instance's default network: proxies apply)."""
-    body = {
+    """The rendered HTML of one URL through the provider's render
+    endpoint (Browserless v2 ``POST /content`` today; the instance's
+    default network: proxies apply)."""
+    # the structural DEFAULTS of the render request -- every key is
+    # overridable through ``zjsearch.reader.params`` (merged in LAST):
+    # gotoOptions / waitForTimeout / rejectResourceTypes included, a
+    # params key replaces the WHOLE value.  ``url`` is the one exception
+    # -- it is the tool call's argument, not a deployment setting.
+    body: dict[str, t.Any] = {
         "url": url,
         "gotoOptions": {"waitUntil": "load", "timeout": GOTO_TIMEOUT_MS},
         "waitForTimeout": SETTLE_MS,
         "rejectResourceTypes": list(REJECT_RESOURCE_TYPES),
     }
+    body.update(params())
     future = asyncio.run_coroutine_threadsafe(
         (get_network(READER_NETWORK) or get_network()).request(
             "POST",
-            f"{endpoint()}/content",
+            f"{base_url()}/content",
             params={"token": api_key(cfg())},
             json=body,
             headers={"Content-Type": "application/json"},
@@ -122,11 +131,11 @@ def rendered_html(url: str) -> str:
         # the wall-clock budget died waiting: cancel the coroutine so a
         # hung endpoint cannot leak its connection on the shared loop
         future.cancel()
-        raise PageReadError("browserless timed out") from exc
+        raise PageReadError("page reader timed out") from exc
     except Exception as exc:  # pylint: disable=broad-except
         # the network layer re-raises whatever its client dialect raised
         # (curl_cffi / httpx connection failures) -- one line for the model
-        raise PageReadError(f"browserless unreachable: {type(exc).__name__}: {exc}") from exc
+        raise PageReadError(f"page reader unreachable: {type(exc).__name__}: {exc}") from exc
     if response.status_code != 200:
-        raise PageReadError(f"browserless HTTP {response.status_code}: {_error_snippet(response.text)}")
+        raise PageReadError(f"page reader HTTP {response.status_code}: {_error_snippet(response.text)}")
     return response.text

@@ -1,25 +1,35 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The page-reader capability (render in a real browser + extract).
 
-``web_crawler`` turns one URL into reading material for the research model:
+``web_reader`` turns one URL into reading material for the research model:
 the page renders in the self-hosted Browserless browser (v2 ``POST
 /content`` -- a real Chrome, so JS/SPA pages come out complete) and the
 HTML condenses to real Markdown with a small lxml pipeline (title,
 main-content heuristic, noise/permalink-anchor stripping) plus the
 ``html-to-markdown`` converter -- ATX headings, GFM tables, code-block
 languages and inline semantics -- and a capped links appendix the model
-can follow with further ``web_crawler`` calls.  The dependency is
+can follow with further ``web_reader`` calls.  The dependency is
 deliberately gentle (MIT, zero runtime dependencies, a compiled core);
 without it the hand-rolled walker below still produces markdown-ish text
 (a logged, degraded fallback).  The HTTP call rides the instance's
 default network (``outgoing.proxies`` apply like for every engine).
 
-Configuration: the ``zjsearch.ai.browserless`` block -- ``endpoint`` (the
-v2 root, e.g. ``https://browser.example.com``) and ``key`` (falls back to
-the ``ZJSEARCH_BROWSERLESS_KEY`` environment, like ``ZJSEARCH_AI_KEY``).
-Unconfigured means the ``web_crawler`` tool never registers (no error, the
-model simply does not see it).  A small TTL cache keeps a re-read page
-(the model coming back to a source) from rendering twice.
+Configuration: the ``zjsearch.reader`` block, a sibling of
+``zjsearch.ai`` -- ``base_url`` (the v2 root, e.g.
+``https://browser.example.com``) and ``api_key`` (falls back to the
+``ZJSEARCH_READER_KEY`` environment, like ``ZJSEARCH_AI_KEY``); the
+``params`` block passes through 1:1 into the render request body
+(the provider's own parameters -- ``blockAds``, ``launch``, ...;
+dev carries ``blockAds: true`` + ``launch: {stealth: true}``: ad-block
+keeps promo noise out of the extraction, the stealth launch lowers
+bot-walls); ``max_chars`` caps a page's text -- UNSET = no cap (the
+whole readable text goes to the model; contexts are long now), a set
+value truncates at a line boundary with an honest marker; ``enabled``
+(default ON) switches the whole capability off.  Unconfigured or
+disabled means the ``web_reader`` tool
+never registers (no error, the model simply does not see it).  A small
+TTL cache keeps a re-read page (the model coming back to a source) from
+rendering twice.
 
 Modules: :py:mod:`searx.zjsearch.ai.capabilities.reader.config` -- the
 settings block and budgets (re-exported here: the package's only source
@@ -34,14 +44,15 @@ import logging
 import time
 
 from searx.zjsearch.ai.capabilities.reader.config import (
-    DEFAULT_MAX_CHARS,
     PageReadError,
     api_key,
+    base_url,
     cfg,
     configured,
-    endpoint,
+    enabled,
     max_chars,
     normalize_url,
+    params,
 )
 from searx.zjsearch.ai.capabilities.reader.extract import extract_page
 from searx.zjsearch.ai.capabilities.reader.fetch import guard_url, rendered_html
@@ -49,14 +60,15 @@ from searx.zjsearch.ai.capabilities.reader.fetch import guard_url, rendered_html
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    "DEFAULT_MAX_CHARS",
     "PageReadError",
     "api_key",
+    "base_url",
     "cfg",
     "configured",
-    "endpoint",
+    "enabled",
     "max_chars",
     "normalize_url",
+    "params",
     "read_page",
 ]
 
@@ -95,7 +107,7 @@ def _cache_put(key: str, title: str, text: str) -> None:
 
 
 def read_page(url: str) -> tuple[str, str]:
-    """(title, markdown text) of one URL -- the ``web_crawler`` tool's
+    """(title, markdown text) of one URL -- the ``web_reader`` tool's
     whole world.  Raises :py:class:`PageReadError` with a message meant
     for the model (the tool result)."""
     if not configured():

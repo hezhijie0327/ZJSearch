@@ -118,9 +118,13 @@ def capability() -> dict[str, str] | None:
 
 
 def feature_cfg(feature: str) -> dict[str, t.Any]:
-    """The ``zjsearch.ai.<feature>`` settings block (absent unless the
-    deployment defines it)."""
-    cfg = ai_cfg().get(feature)
+    """The ``zjsearch.feature.<feature>`` settings block (absent unless
+    the deployment defines it) -- the AI features live grouped under the
+    ``feature`` key, a sibling of ``ai`` (the transport) and ``reader``
+    (the page-reader provider)."""
+    zjs = settings.get("zjsearch", {})
+    features = zjs.get("feature") if isinstance(zjs, dict) else None
+    cfg = features.get(feature) if isinstance(features, dict) else None
     return cfg if isinstance(cfg, dict) else {}
 
 

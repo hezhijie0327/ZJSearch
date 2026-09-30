@@ -41,19 +41,20 @@ export interface AiAskQuestion {
 export interface AiSearchCall {
   /** 1-based position of the call within its round */
   id: number;
-  /** which tool produced the row: a keyword search or a full page read */
-  tool: "web_search" | "web_crawler";
-  /** web_search: the keyword query; web_crawler rows leave it empty */
+  /** which tool produced the row: a keyword search or a full page read
+      (legacy threads may still carry the old "web_crawler" name) */
+  tool: "web_search" | "web_reader";
+  /** web_search: the keyword query; web_reader rows leave it empty */
   q: string;
-  /** web_crawler: the page url (the row's label) */
+  /** web_reader: the page url (the row's label) */
   url?: string;
   category: string;
   status: "pending" | "ok" | "error" | "interrupted" | "duplicate";
   /** web_search: result count */
   n?: number;
-  /** web_crawler: characters of readable content returned */
+  /** web_reader: characters of readable content returned */
   chars?: number;
-  /** web_crawler: the extracted page content -- the row's expansion is a
+  /** web_reader: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
   /** the model's RAW tool-call arguments (q / category / ...) -- the
@@ -87,7 +88,7 @@ export interface AiSearchSource {
   /** the result's search category -- the hook for type-aware cards
       (video duration, torrent filesize, ... the classic presentations) */
   category?: string;
-  /** web_crawler read this page in full (the card's read-in-full badge) */
+  /** web_reader read this page in full (the card's read-in-full badge) */
   crawled?: boolean;
 }
 
@@ -322,7 +323,12 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
         round: Number(event.round) || run.steps.filter((step) => step.kind === "calls").length + 1,
         calls: items.map((item) => ({
           id: Number(item.id) || 0,
-          tool: item.tool === "web_crawler" ? ("web_crawler" as const) : ("web_search" as const),
+          // the tool name carries no versioning -- browser-stored legacy
+          // threads may still say "web_crawler": normalize it in
+          tool:
+            item.tool === "web_reader" || item.tool === "web_crawler"
+              ? ("web_reader" as const)
+              : ("web_search" as const),
           q: String(item.q ?? ""),
           url: item.url ? String(item.url) : undefined,
           category: String(item.category ?? ""),
@@ -383,7 +389,7 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       return { ...core, runs };
     }
     case "page": {
-      // an web_crawler read settled: flip its row's status (the readable
+      // an web_reader read settled: flip its row's status (the readable
       // character count replaces a search's result count); the extracted
       // content rides along for the row's reading pane
       const roundNo = Number(event.round);
@@ -414,7 +420,7 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
       // the global [n] registry of the cited feed -- the entries ride the
       // run that found them (the grid under its question) and the flat
       // registry powers the follow-up numbering base and chip jumps.
-      // Merged by [n]: new entries append; a web_crawler re-emission of an
+      // Merged by [n]: new entries append; a web_reader re-emission of an
       // already-numbered url upgrades the existing card in place (its
       // read-in-full badge) instead of duplicating it
       const items = (event.items as Array<Record<string, unknown>>) ?? [];

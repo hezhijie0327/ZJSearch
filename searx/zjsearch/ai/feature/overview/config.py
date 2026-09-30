@@ -13,11 +13,11 @@ from searx.zjsearch.ai import llm
 
 
 def _cfg() -> dict[str, t.Any]:
-    """The ``zjsearch.ai.overview`` settings block."""
-    return llm.feature_cfg("overview")
+    """The ``zjsearch.feature.ai_overview`` settings block."""
+    return llm.feature_cfg("ai_overview")
 
 
 def enabled() -> bool:
-    """The overview feature flag: ``zjsearch.ai.overview.enabled`` --
+    """The overview feature flag: ``zjsearch.feature.ai_overview.enabled`` --
     ``True`` unless explicitly switched off."""
-    return llm.feature_enabled("overview")
+    return llm.feature_enabled("ai_overview")

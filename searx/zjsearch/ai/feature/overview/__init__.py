@@ -28,11 +28,11 @@ Design contract:
 
 Modules (mirroring the ``search`` package's layering):
 :py:mod:`searx.zjsearch.ai.capabilities.images` -- the multimodal source
-attachments; :py:mod:`searx.zjsearch.ai.overview.prompts` -- the
+attachments; :py:mod:`searx.zjsearch.ai.feature.overview.prompts` -- the
 answer conversation built from the shared fragments;
-:py:mod:`searx.zjsearch.ai.overview.route` -- the endpoint.
+:py:mod:`searx.zjsearch.ai.feature.overview.route` -- the endpoint.
 """
 
-from searx.zjsearch.ai.overview.route import capability, install
+from searx.zjsearch.ai.feature.overview.route import capability, install
 
 __all__ = ["capability", "install"]

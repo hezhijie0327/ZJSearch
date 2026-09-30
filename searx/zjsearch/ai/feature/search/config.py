@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: modes, budgets and the ``zjsearch.ai.search`` settings block.
+"""AI Search: modes, budgets and the ``zjsearch.feature.ai_search`` settings block.
 
 The bottom layer of the package -- every other module reads its knobs
 from here, and nothing below it imports back (the dependency direction
@@ -37,18 +37,18 @@ and balanced's short prose never need it)."""
 
 
 def _cfg() -> dict[str, t.Any]:
-    """The ``zjsearch.ai.search`` settings block."""
-    return llm.feature_cfg("search")
+    """The ``zjsearch.feature.ai_search`` settings block."""
+    return llm.feature_cfg("ai_search")
 
 
 def enabled() -> bool:
-    """The search feature flag: ``zjsearch.ai.search.enabled`` -- ``True``
+    """The search feature flag: ``zjsearch.feature.ai_search.enabled`` -- ``True``
     unless explicitly switched off."""
-    return llm.feature_enabled("search")
+    return llm.feature_enabled("ai_search")
 
 
 def budget(key: str, mode: str, default: int) -> int:
-    """Budget for one run: an explicit ``zjsearch.ai.search.<key>`` setting
+    """Budget for one run: an explicit ``zjsearch.feature.ai_search.<key>`` setting
     wins, otherwise the mode's default, otherwise ``default``."""
     value = _cfg().get(key)
     if value is not None:

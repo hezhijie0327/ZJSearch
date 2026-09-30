@@ -76,6 +76,12 @@ outgoing:
   #   all://:
   #     - http://10.192.7.1:7890
   #     - http://192.168.20.23:7890
+  networks:
+    # the page reader's dedicated network: the LAN browserless below is
+    # plain http, and the app-initialized DEFAULT network is https-only
+    # (see searx/zjsearch/ai/capabilities/reader/fetch.py)
+    zjsearch-reader:
+      enable_http: true
 
 # tor_check plugin: fetches check.torproject.org through the outgoing proxy
 # above (reachable that way on this network).  NOTE: a `plugins:` override
@@ -177,23 +183,7 @@ zjsearch:
     # prompt caching needs no config: prompt_cache_key rides every
     # openai-dialect request; anthropic marks cache_control breakpoints
     # by default (cache_control: false opts out -- an ai-LEVEL toggle,
-    # NOT a params entry); gemini caches implicitly.
-
-    # ── feature switches (default true; false = endpoint 404 AND the
-    #    client hides the entry point) ─────────────────────────────────
-    overview:
-      enabled: true
-    search:
-      enabled: true
-      # max_rounds: 4              # rounds SAFETY ceiling, not the plan
-      # stall_rounds: 2            # consecutive no-new-info rounds that
-      #                            # end the research (PROGRESS, not time)
-    # ── AI Search's open_page tool: the Browserless v2 page reader (a
-    #    real Chrome for JS/SPA pages); unconfigured = never registers ─
-    browserless:
-      endpoint: "https://browser.zhijie.online"
-      # key: ""                    # or the ZJSEARCH_BROWSERLESS_KEY env
-      # max_chars: 12000           # readable chars per page fed to the model
+    # NOT a params entry).
 
     # ═══ per-SDK examples: uncomment ONE block and swap it over the ═══
     # ═══ active sdk/base_url/api_key/model AND params above          ═══
@@ -249,3 +239,43 @@ zjsearch:
     # params:
     #   max_output_tokens: 8192
     #   thinking_config: {thinking_budget: 1024}
+
+  # ── AI feature switches (default true; false = endpoint 404 AND the
+  #    client hides the entry point) ─────────────────────────────────
+  feature:
+    ai_overview:
+      enabled: true
+    ai_search:
+      enabled: true
+      # max_rounds: 4              # rounds SAFETY ceiling, not the plan
+      # stall_rounds: 2            # consecutive no-new-info rounds that
+      #                            # end the research (PROGRESS, not time)
+
+  # ── the page-reader provider (AI Search's web_reader tool) ─────────
+  # renders one URL in a real Chrome (JS/SPA pages come out complete).
+  # Unconfigured or disabled = the tool never registers.
+  reader:
+    # enabled: true              # default ON; false = web_reader never
+    #                            # registers
+    base_url: "http://10.172.226.199:8082"
+    # api_key: ""                # or the ZJSEARCH_READER_KEY env
+    # max_chars: 20000           # UNSET = NO cap -- the whole readable
+    #                            # text goes to the model; set to cap
+    # -- params: the provider's OWN request parameters, pass-through 1:1
+    # -- into the render body.  EVERY structural field is overridable
+    # -- here (gotoOptions / waitForTimeout / rejectResourceTypes too --
+    # -- a key replaces the WHOLE value); url stays the tool's argument.
+    # -- code defaults you can override (examples):
+    #   gotoOptions: {waitUntil: networkidle2, timeout: 60000}
+    #     waitUntil: load (default, fastest) | domcontentloaded |
+    #     networkidle0 (full network quiet, slowest) | networkidle2
+    #   waitForTimeout: 2000
+    #   rejectResourceTypes: [image, media, font]   # default also
+    #     rejects stylesheet (it gates the load event) -- drop entries
+    #     to re-enable a type on a site that misbehaves without it
+    params:
+      # ad-block render -- promo noise never reaches the extraction
+      blockAds: true
+      # stealth launch -- lower bot-walls on protected pages
+      launch:
+        stealth: true

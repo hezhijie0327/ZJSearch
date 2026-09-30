@@ -14,8 +14,8 @@ import flask
 
 from searx.zjsearch.ai import agent, http, llm
 from searx.zjsearch.ai.capabilities.images import attach_images
-from searx.zjsearch.ai.overview.config import enabled
-from searx.zjsearch.ai.overview.prompts import build_answer_messages
+from searx.zjsearch.ai.feature.overview.config import enabled
+from searx.zjsearch.ai.feature.overview.prompts import build_answer_messages
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def _answer() -> flask.Response:
     deltas are relayed wrapped in ``<think>...</think>`` so the client can
     fold them away."""
     payload, q, context = http.authorize(
-        gate=llm.feature_enabled("overview") and llm.configured(llm.ai_cfg()), context=True
+        gate=llm.feature_enabled("ai_overview") and llm.configured(llm.ai_cfg()), context=True
     )
     cfg = llm.ai_cfg()
     context = context[:_CONTEXT_MAX_CHARS]

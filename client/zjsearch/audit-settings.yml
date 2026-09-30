@@ -83,13 +83,15 @@ zjsearch:
     base_url: "http://127.0.0.1:8909/v1"
     api_key: "zjaudit"
     model: "zjaudit-mock"
-    # the same mock server answers the page reader's POST /content with a
-    # fixture document, so the web_crawler call row, the reading pane and
-    # the read-in-full badge are audited offline too
-    browserless:
-      endpoint: "http://127.0.0.1:8909/browserless"
-      key: "zjaudit"
-    overview:
+  # the AI features on (the audited pages exercise both surfaces)
+  feature:
+    ai_overview:
       enabled: true
-    search:
+    ai_search:
       enabled: true
+  # the same mock server answers the page reader's POST /content with a
+  # fixture document, so the web_reader call row, the reading pane and
+  # the read-in-full badge are audited offline too
+  reader:
+    base_url: "http://127.0.0.1:8909/browserless"
+    api_key: "zjaudit"

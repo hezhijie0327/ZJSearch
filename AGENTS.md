@@ -123,7 +123,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   errors fall through to the upstream view unchanged. `_render_context` in
   the module mirrors `webapp.render`'s context building — re-sync it if
   upstream changes `render`.
-- The AI Overview (`searx/zjsearch/ai/overview.py`, route `POST /ai/answer`; client
+- The AI Overview (`searx/zjsearch/ai/feature/overview/`, route `POST /ai/answer`; client
   `features/results/AiSummary.tsx` + `aiAnswer.ts`): the gate is an HMAC
   token in the page-data globals, the client assembles the numbered source
   context from the payload it already has, and the endpoint streams a cited
@@ -210,10 +210,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   it does not rate-limit.  A public deployment must front the AI routes
   with its own per-IP limit (reverse proxy or a custom limiter); each
   `/ai/search` drives real engine fan-outs plus a dozen LLM calls —
-  and, with `web_crawler` configured, real Browserless renders (a
+  and, with `web_reader` configured, real Browserless renders (a
   browser launch per read on a server that has its own concurrency
   ceiling, typically 3).
-- AI Search (the `searx/zjsearch/ai/search/` package, route
+- AI Search (the `searx/zjsearch/ai/feature/search/` package, route
   `POST /ai/search`).  NAMING: underscore = module-private only --
   every cross-module collaborator is a public name (search/route
   imports `gates.research_gate`, `tools.tool_spec`,
@@ -237,9 +237,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `answer_contract` spine), `http.py` (the route prologue: authorize /
   answer_lang / streaming / 502 helpers) -- `capabilities/` holds the
   cross-feature services (`images.py` the multimodal attachments any
-  feature can compose, `reader/` the page reader); each feature is a
-  subpackage with a thin `__init__` re-exporting `capability` +
-  `install` and its own config/tools/prompts/gates/executor/wire/route
+  feature can compose, `reader/` the page reader); the features live
+  grouped under `feature/` (mirroring the `zjsearch.feature.*` settings
+  keys) -- each feature is a subpackage with a thin `__init__`
+  re-exporting `capability` + `install` and its own
+  config/tools/prompts/gates/executor/wire/route
   modules (overview: route/prompts only) -- research gate and route:
   the RESEARCHER/WRITER split (Vane's shape).  A PRE-FLIGHT GATE
   (`_research_gate`, Vane's skipSearch narrowed) runs one small JSON
@@ -248,7 +250,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   alone (the zero-tool case of the shared loop; the client hides the
   research box); a question carrying a URL always researches (and the
   `<page_reader>` prompt rule tells the model to open that page with
-  `web_crawler` FIRST instead of searching for it — Morphic's fetch-first
+  `web_reader` FIRST instead of searching for it — Morphic's fetch-first
   rule, prompt-level like the original).  A research agent
   analyses the question, states a one-line intent, then calls the
   `web_search` tool — several calls per turn run as REAL instance
@@ -370,7 +372,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   related completion itself needs `relay_reasoning=True` — with the
   channel dropped the queue sits silent through the think phase and the
   idle timeout kills the completion before any content arrives).
-  The `web_crawler` tool
+  The `web_reader` tool
   (`searx/zjsearch/ai/capabilities/reader/`) reads ONE result's page in full
   through the self-hosted Browserless v2 browser (`POST /content` — a
   real Chrome, so JS/SPA pages come out complete) and feeds the model
@@ -389,9 +391,19 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   Browserless — a self-hosted LAN deployment, the audit gate's mock —
   needs an `outgoing.networks.zjsearch-reader: {enable_http: true}`
   entry; https endpoints are unaffected.  `outgoing.proxies` still apply
-  through the network definition.  Config = `zjsearch.ai.browserless` (`endpoint` + `key`,
-  the key via the `ZJSEARCH_BROWSERLESS_KEY` env like `ZJSEARCH_AI_KEY`;
-  optional `max_chars`, 12 000 default): UNCONFIGURED = the tool never
+  through the network definition.  Config = `zjsearch.reader`, a sibling
+  of `zjsearch.ai` (`base_url` + `api_key`, the key via the
+  `ZJSEARCH_READER_KEY` env like `ZJSEARCH_AI_KEY`; `enabled` default
+  ON, `false` = the tool never registers; `max_chars` UNSET = no cap —
+  the whole readable text goes to the model, a set value truncates at a
+  line boundary with an honest marker; a `params` block passes through
+  1:1 into the render body, merged LAST — every structural field is
+  overridable through it (`gotoOptions` / `waitForTimeout` /
+  `rejectResourceTypes` included, a key replaces the whole value; only
+  `url` stays the tool's argument).  Dev carries
+  `blockAds: true` + `launch: {stealth: true}`: ad-block keeps promo
+  noise out of the extraction, the stealth launch lowers bot-walls):
+  UNCONFIGURED = the tool never
   registers (the web_search description's cross-reference is
   conditional on the same check).  Its executor shares the search
   worker pool; a read of a url already in the run's `[n]` registry
@@ -410,7 +422,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   Browserless host's network and the model is untrusted input.
   Read events ride the `page` wire event (`status`/`url`/`title`/
   `chars`); the client's call row branches on the `calls` item's
-  `tool` field (`web_search` renders the query, `web_crawler` a
+  `tool` field (`web_search` renders the query, `web_reader` a
   host+path label and a char count) and a successful read's source
   card becomes the row's swipe strip, same as a search's.
   The `web_search` tool also takes `included_sites`/`excluded_sites`
@@ -435,8 +447,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   to the writer as `<research_plan>` guidance (the writer, not the
   researcher, writes the answer).
   Config: transport =
-  `zjsearch.ai`; feature flags = `zjsearch.ai.search.enabled` and
-  `zjsearch.ai.overview.enabled`, BOTH DEFAULTING TO TRUE — setting one
+  `zjsearch.ai`; feature flags = `zjsearch.feature.ai_search.enabled` and
+  `zjsearch.feature.ai_overview.enabled`, BOTH DEFAULTING TO TRUE — setting one
   false makes the endpoint answer 404 AND the page-data drop the
   capability (globals.ai / globals.ai_search absent), which hides the UI
   entry point (the AI Overview trigger / the [classic|AI] switch; the
@@ -568,7 +580,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
 - AI SESSIONS are LobeHub-style CONVERSATIONS: every run lives in a
   browser-stored THREAD identified by a uuid — the takeover (`?ai=1`)
   mints one on start and `history.replaceState`s its canonical address
-  `/ai/thread/<uuid>` (`ai/search/page.py` + `ai_thread.html`: a slim
+  `/ai/thread/<uuid>` (`ai/feature/search/page.py` + `ai_thread.html`: a slim
   server shell carrying fresh capability tokens and nothing else).  The
   thread (runs, sources, usage) persists in localStorage ONLY
   (`lib/threadStore.ts`: one key per thread + an index, LRU ~20,
@@ -1387,7 +1399,7 @@ LOADED/NOT LOADED).
   `response_format.json_schema.name`, the researcher via `tools` presence,
   the writer via the `<follow_ups>` system marker, everything else the
   overview).  The audited AI pages: `?q=zjaudit+general&ai=1` (the full
-  takeover: reasoning timeline + intent + a web_search AND a web_crawler
+  takeover: reasoning timeline + intent + a web_search AND a web_reader
   round -- the same mock server answers the reader's `POST /content` with
   a fixture document, exercising the reading-pane path, the char count
   and the read-in-full badge offline -- plus the cited synthesis with an

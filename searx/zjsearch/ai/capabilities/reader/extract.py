@@ -235,7 +235,7 @@ def _title_of(doc: lhtml.HtmlElement, body: lhtml.HtmlElement) -> str:
 
 def _links_of(main: lhtml.HtmlElement, base_url: str) -> list[str]:
     """A capped, deduplicated appendix of the page's links -- the model
-    can ``web_crawler`` its way through a site's structure."""
+    can ``web_reader`` its way through a site's structure."""
     lines: list[str] = []
     seen: set[str] = set()
     for anchor in main.iter("a"):
@@ -253,8 +253,8 @@ def _links_of(main: lhtml.HtmlElement, base_url: str) -> list[str]:
     return lines
 
 
-def _cap(text: str, max_chars: int) -> str:
-    if len(text) <= max_chars:
+def _cap(text: str, max_chars: int | None) -> str:
+    if max_chars is None or len(text) <= max_chars:
         return text
     cut = text[:max_chars]
     newline = cut.rfind("\n")
@@ -263,7 +263,7 @@ def _cap(text: str, max_chars: int) -> str:
     return f"{cut}\n\n[... truncated, the full page is {len(text)} characters ...]"
 
 
-def extract_page(html_text: str, base_url: str, max_chars: int) -> tuple[str, str]:
+def extract_page(html_text: str, base_url: str, max_chars: int | None) -> tuple[str, str]:
     """(title, markdown text) of a rendered page.  Raises
     :class:`PageReadError` when the markup is unreadable or nothing
     readable survives the pipeline."""
