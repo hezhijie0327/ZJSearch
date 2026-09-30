@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import {
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
   ArrowUpRight,
   BookOpen,
   Brain,
@@ -13,8 +10,6 @@ import {
   Compass,
   Copy,
   CornerDownRight,
-  Database,
-  DatabaseZap,
   Globe,
   Lightbulb,
   LoaderCircle,
@@ -23,12 +18,12 @@ import {
   Repeat2,
   RotateCw,
   Search,
-  Sparkles,
   Waypoints,
   X,
 } from "lucide-react";
 import { memo, useEffect, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
+import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import { type AiSourceMeta, citeToLinks } from "@/features/results/aiAnswer.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
@@ -40,7 +35,6 @@ import type {
   AiSearchStep,
 } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
-import { formatTokens } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 
@@ -362,81 +356,6 @@ function ElapsedTimer({ startedAt, endedAt }: { startedAt: number; endedAt: numb
       ? t("ai_elapsed_seconds", { n: String(seconds) })
       : t("ai_elapsed_minutes", { n: String(Math.floor(seconds / 60)), s: String(seconds % 60) });
   return <span className="ms-auto shrink-0 tabular-nums text-xs text-ink-3">{label}</span>;
-}
-
-/** The run's quiet meta line at the END of the answer (lobehub's message
-    footer): the model the API response reported on the left, the token
-    cluster next to it (labels ride the tooltips -- numbers only inline),
-    the transport outcome on the right.  EVERY finish reason gets a
-    visible state (truncation "length" and friends are warnings the user
-    must see, never silently swallowed).  Rendered once settled. */
-function RunFooter({ run }: { run: AiSearchRun }) {
-  const t = useT();
-  const { finish, model, usage } = run;
-  if (!finish && !usage && !model) {
-    return null;
-  }
-  let note: { text: string; warn: boolean } | null = null;
-  if (finish === "length") {
-    note = { text: t("ai_finish_length"), warn: true };
-  } else if (finish === "content_filter") {
-    note = { text: t("ai_finish_content_filter"), warn: true };
-  } else if (finish === "refusal") {
-    note = { text: t("ai_finish_refusal"), warn: true };
-  } else if (finish === "tool_calls") {
-    note = { text: t("ai_finish_tool_calls"), warn: false };
-  } else if (finish && finish !== "stop") {
-    note = { text: t("ai_finish_other", { reason: finish }), warn: true };
-  } else if (finish === "stop") {
-    note = { text: t("ai_finish_stop"), warn: false };
-  }
-  const segments: { icon: typeof ArrowUp; title: string; value: string }[] = usage
-    ? [
-        { icon: ArrowUp, title: t("ai_usage_input_title"), value: formatTokens(usage.input) },
-        { icon: ArrowDown, title: t("ai_usage_output_title"), value: formatTokens(usage.output) },
-        ...(usage.thoughts
-          ? [{ icon: Brain, title: t("ai_usage_thinking_title"), value: formatTokens(usage.thoughts) }]
-          : []),
-        ...(usage.cached
-          ? [{ icon: Database, title: t("ai_usage_cached_title"), value: formatTokens(usage.cached) }]
-          : []),
-        ...(usage.cache_write
-          ? [{ icon: DatabaseZap, title: t("ai_usage_cache_write_title"), value: formatTokens(usage.cache_write) }]
-          : []),
-      ]
-    : [];
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
-      {model ? (
-        <span
-          className="inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-full bg-surface-2 px-2.5"
-          title={t("ai_run_model_title")}
-        >
-          <Sparkles aria-hidden="true" className="size-3 shrink-0" />
-          <span className="truncate">{model}</span>
-        </span>
-      ) : null}
-      {segments.length ? (
-        <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 tabular-nums">
-          {segments.map(({ icon: Icon, title, value }) => (
-            <span className="inline-flex min-h-6 items-center gap-1" key={title} title={title}>
-              <Icon aria-hidden="true" className="size-3 shrink-0" />
-              {value}
-            </span>
-          ))}
-        </span>
-      ) : null}
-      {note ? (
-        <span
-          className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.warn ? "text-accent" : ""}`}
-          title={note.text}
-        >
-          {note.warn ? <AlertTriangle aria-hidden="true" className="size-3 shrink-0" /> : null}
-          <span className="truncate">{note.text}</span>
-        </span>
-      ) : null}
-    </div>
-  );
 }
 
 /** The clarify gate's question card: the run waits for the user's
@@ -790,7 +709,9 @@ function AiSearchRunSectionImpl({
 
               {/* the run's meta line at the END of the output (lobehub's
               message footer): model + tokens + transport outcome */}
-              {!streaming && !failed ? <RunFooter run={run} /> : null}
+              {!streaming && !failed ? (
+                <AiRunFooter finish={run.finish ?? null} model={run.model ?? null} usage={run.usage ?? null} />
+              ) : null}
 
               {failed ? (
                 <div className="rounded-lg border border-line p-3 text-xs text-danger">
@@ -800,15 +721,29 @@ function AiSearchRunSectionImpl({
                       {run.error}
                     </p>
                   ) : null}
-                  {onFallback ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {/* a transient failure (gateway hiccup, rate limit, a
+                    wrong model id that has since been fixed) is worth one
+                    click to re-run -- the retry re-asks the SAME question
+                    as a fresh run */}
                     <button
-                      className="mt-2 inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
-                      onClick={onFallback}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                      onClick={onRegenerate}
                       type="button"
                     >
-                      {t("ai_search_try_classic")}
+                      <RotateCw aria-hidden="true" className="size-3.5" />
+                      {t("regenerate")}
                     </button>
-                  ) : null}
+                    {onFallback ? (
+                      <button
+                        className="inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+                        onClick={onFallback}
+                        type="button"
+                      >
+                        {t("ai_search_try_classic")}
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>

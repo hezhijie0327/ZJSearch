@@ -544,8 +544,9 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   full-width label bar;
   below lg everything stacks: answer, related, actions, sources.  The
   thread's follow-up
-  pill floats `sticky bottom-6` above a palette fog fade (Perplexica's
-  pinned input).  `useAiSearch` rebuilds a CHRONOLOGICAL step
+  pill floats `sticky bottom-6` (Perplexica's pinned input; deliberately
+  NO fog scrim -- it washed out short content underneath, a failed run's
+  box read as dimmed).  `useAiSearch` rebuilds a CHRONOLOGICAL step
   timeline per run (`AiSearchStep`: collapsible think segment →
   intent line → expandable parallel call rows — a settled row with
   results toggles a swipe strip of that search's result cards, fed

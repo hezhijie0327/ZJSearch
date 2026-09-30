@@ -225,3 +225,34 @@ export function citeToLinks(text: string): string {
     })
     .join("\n");
 }
+
+/** The run's consolidated transport meta -- the same shape the AI Search's
+    finish wire event carries. */
+export interface AiRunMeta {
+  finish?: string | null;
+  model?: string | null;
+  usage?: {
+    input: number;
+    output: number;
+    thoughts: number | null;
+    cached: number;
+    cache_write: number;
+  } | null;
+}
+
+/** The AI Overview's raw-text wire carries that meta as a TRAILING
+    sentinel line (the <think>-style control channel of a plain-text
+    stream): strip it from the answer and parse it.  Only a tail that
+    actually parses is consumed -- anything else passes through untouched. */
+export function extractRunMeta(text: string): { meta: AiRunMeta | null; text: string } {
+  const match = /<<<zjs-meta:(\{.*\})>>>\s*$/.exec(text);
+  const payload = match?.[1];
+  if (!payload || match === null) {
+    return { meta: null, text };
+  }
+  try {
+    return { meta: JSON.parse(payload) as AiRunMeta, text: text.slice(0, match.index).trimEnd() };
+  } catch {
+    return { meta: null, text };
+  }
+}

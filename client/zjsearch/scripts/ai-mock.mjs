@@ -130,6 +130,26 @@ function streamChunks(res, pieces, finish) {
     res.write(sseChunk(piece));
   }
   res.write(sseChunk({}, finish));
+  // the openai usage contract: a terminal chunk with stream_options
+  // include_usage carries the totals (+ the cache/reasoning breakout the
+  // run footer renders) and NO choices
+  res.write(
+    `data: ${JSON.stringify({
+      id: "chatcmpl-zjaudit",
+      object: "chat.completion.chunk",
+      created: 0,
+      model: "zjaudit-mock",
+      choices: [],
+      usage: {
+        prompt_tokens: 9876,
+        completion_tokens: 7123,
+        total_tokens: 16999,
+        cache_creation_input_tokens: 1234,
+        prompt_tokens_details: { cached_tokens: 3210 },
+        completion_tokens_details: { reasoning_tokens: 2444 },
+      },
+    })}\n\n`,
+  );
   res.write("data: [DONE]\n\n");
   res.end();
 }

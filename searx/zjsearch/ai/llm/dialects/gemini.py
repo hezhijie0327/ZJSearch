@@ -215,8 +215,13 @@ async def pump(  # pylint: disable=too-many-locals, too-many-branches
     finally:
         # a cancelled pump (idle timeout, client disconnect, budget) must
         # not abandon the SDK generator with its HTTP connection open --
-        # every sibling pump closes in a finally
-        await stream.close()
+        # every sibling pump closes in a finally.  google-genai's stream
+        # is an ASYNC GENERATOR: aclose(), not close() (a bare .close()
+        # raised AttributeError out of this finally and swallowed the
+        # finish event the body had already queued).
+        closer = getattr(stream, "aclose", None) or getattr(stream, "close", None)
+        if closer is not None:
+            await closer()
     if calls:
         events.put(("tool_calls", calls))
     events.put(("finish", {"finish": finish, "usage": usage_meta, "model": model}))

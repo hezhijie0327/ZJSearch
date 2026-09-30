@@ -754,23 +754,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                     open={aiHistoryOpen}
                   />
                   {aiSearch.phase === "done" ? (
-                    // Perplexica's floating follow-up: pinned above the fold
-                    // while the thread scrolls under it, a palette fog fading
-                    // the content beneath the pill
+                    // Perplexica's floating follow-up: pinned above the
+                    // fold.  No fog scrim -- it washed out whatever sat
+                    // under it on short pages (a failed run's box read as
+                    // dimmed); the pill's own card shadow separates it.
                     <div className="sticky bottom-6 z-10">
-                      {/* the fog masks content emerging ABOVE the pinned
-                          pill; it must not wrap below it -- a translucent
-                          band under the pill reads as a stray shadow box.
-                          The bleed mirrors the main column's own padding
-                          (px-4 / sm:px-6) so it ends AT the viewport edge
-                          instead of spilling past it into a horizontal pan.
-                          Tall and double-stopped: a short two-stop fade
-                          over bright content (a gallery tile) reads as a
-                          hard band across the page */}
-                      <div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute -inset-x-4 -top-20 bottom-full -z-10 bg-gradient-to-t from-bg from-30% via-bg/60 to-transparent sm:-inset-x-6"
-                      />
                       {jumpLatest ? (
                         <div className="relative z-10 mb-2 flex justify-center">
                           <button

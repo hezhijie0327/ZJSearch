@@ -7,6 +7,7 @@ stream the raw-text answer with the ``<think>`` markers rendered around
 the framework's shared ThinkGate state.
 """
 
+import json
 import logging
 import typing as t
 
@@ -86,6 +87,13 @@ def _answer() -> flask.Response:
             kind, text = next(events, ("end", None))
         if gate.opened and not gate.closed:
             yield "</think>"
+        # the run's consolidated transport meta (finish reason + usage +
+        # the API-reported model) rides the stream TAIL as a sentinel line
+        # the client strips before rendering -- the raw-text wire's own
+        # <think>-style control channel
+        if kind == "finish" and isinstance(text, dict):
+            meta = {"finish": text.get("finish"), "model": text.get("model"), "usage": text.get("usage")}
+            yield f"\n<<<zjs-meta:{json.dumps(meta, ensure_ascii=False)}>>>"
 
     return http.streaming_response(generate(), "text/plain")
 

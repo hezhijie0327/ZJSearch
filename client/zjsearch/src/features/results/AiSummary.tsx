@@ -14,10 +14,12 @@ import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
+import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import {
   type AiSearchGallery,
   type AiSourceMeta,
   citeToLinks,
+  extractRunMeta,
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
 import { AnswerGallery, renderWithGalleries } from "@/features/results/aiSearch/AnswerGallery.tsx";
@@ -716,7 +718,10 @@ export function AiAnswerCard({
       setThinkForced(null);
     }
   }, [state.phase]);
-  const { think, answer, thinking } = splitAnswerStream(state.text);
+  // the raw-text stream's trailing meta sentinel (finish + usage + model)
+  // is stripped before anything renders and surfaces as the run footer
+  const { meta, text: bareText } = extractRunMeta(state.text);
+  const { think, answer, thinking } = splitAnswerStream(bareText);
   const hasThink = think.trim().length > 0;
   const hasAnswer = answer.trim().length > 0;
   const streaming = state.phase === "streaming";
@@ -791,6 +796,13 @@ export function AiAnswerCard({
       ) : streaming && !hasThink ? (
         <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>
       ) : null}
+      {/* the run's meta line at the END of the output (lobehub's message
+          footer): model + tokens + transport outcome */}
+      {!streaming && !failed && meta ? (
+        <div className="mt-2">
+          <AiRunFooter finish={meta.finish ?? null} model={meta.model ?? null} usage={meta.usage ?? null} />
+        </div>
+      ) : null}
       {failed ? (
         <div className="mt-2 text-xs text-danger">
           <p>{t("ai_answer_failed")}</p>
@@ -801,6 +813,18 @@ export function AiAnswerCard({
               {state.error}
             </p>
           ) : null}
+          {/* a transient failure (gateway hiccup, rate limit) is worth one
+              click to re-run -- the retry re-asks the SAME question */}
+          <button
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+            onClick={() => {
+              state.regenerate();
+            }}
+            type="button"
+          >
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            {t("regenerate")}
+          </button>
         </div>
       ) : null}
     </div>

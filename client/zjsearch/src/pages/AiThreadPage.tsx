@@ -130,12 +130,9 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
             ))}
             {aiSearch.phase === "done" ? (
               // Perplexica's floating follow-up, the takeover page's composer
-              // in the thread page's own measure (palette fog + pinned pill)
+              // in the thread page's own measure (no fog scrim -- it washed
+              // out short content underneath)
               <div className="sticky bottom-6 z-10">
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute -inset-x-4 -top-20 bottom-full -z-10 bg-gradient-to-t from-bg from-30% via-bg/60 to-transparent sm:-inset-x-6"
-                />
                 <form
                   aria-label={t("ai_search_followup")}
                   className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent"

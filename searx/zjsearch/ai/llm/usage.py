@@ -47,10 +47,13 @@ def openai_usage(usage: t.Any) -> dict[str, t.Any]:
     cached = getattr(prompt_details, "cached_tokens", None) if prompt_details else None
     if cached is None:
         cached = getattr(usage, "prompt_cache_hit_tokens", None)
+    # some openai-compatible gateways forward anthropic-style cache-write
+    # counters -- read them when they ride along
+    cache_write = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
     return {
         "input": int(getattr(usage, "prompt_tokens", 0) or getattr(usage, "input_tokens", 0) or 0),
         "output": int(getattr(usage, "completion_tokens", 0) or getattr(usage, "output_tokens", 0) or 0),
         "thoughts": int(thoughts) if thoughts else None,
         "cached": int(cached) if cached else 0,
-        "cache_write": 0,
+        "cache_write": cache_write,
     }
