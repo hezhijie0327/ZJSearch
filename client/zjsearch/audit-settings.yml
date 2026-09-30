@@ -75,7 +75,7 @@ engines:
 # audited against the deterministic mock transport — scripts/ai-mock.mjs,
 # spawned by the gate on :8909.  It is the AI counterpart of the zjaudit
 # fixture engine: fixed completions keyed by request shape, zero model
-# variance (the transport contract lives in searx/zjsearch/ai/llm.py).
+# variance (the transport contract lives in the searx/zjsearch/ai/llm/ package).
 zjsearch:
   ai:
     enabled: true

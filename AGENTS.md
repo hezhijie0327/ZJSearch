@@ -207,8 +207,20 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   imports `gates.research_gate`, `tools.tool_spec`,
   `prompts.initial_messages`, `config.budget`/`enabled`, ...);
   the AI layer's layout is INFRA + CAPABILITIES +
-  FEATURES: infra lives at the `ai/` top level -- `llm.py` (transport,
-  per-feature config helpers, the JSON gate), `agent.py` (the loop +
+  FEATURES: infra lives at the `ai/` top level -- `llm/` (the LLM
+  transport PACKAGE: `config` the settings surface, `security` the HMAC
+  page-data token gate, `clients` the cached SDK clients, `caching` the
+  request shaping + prompt-cache strategies, `usage` the canonical
+  finish/usage contract, `streaming` the LlmStream queue bridge,
+  `json_gate` the tiered structured-output completion, and `dialects/`
+  ONE MODULE PER SDK -- openai_chat / openai_responses / anthropic /
+  gemini -- behind the uniform `KIND`/`JSON_TIERS`/`pump`/`json_completion`
+  interface with a `DIALECTS` registry; adding a transport is one module
+  + one registry line; the package `__init__` is a FACADE re-exporting
+  the whole public surface so consumers keep
+  `from searx.zjsearch.ai import llm` -- naming rule: cross-module
+  collaborators are public (no underscore) in their home module,
+  module-internal helpers stay `_`-prefixed), `agent.py` (the loop +
   ThinkGate), `prompts.py` (the composable XML fragments + the shared
   `answer_contract` spine), `http.py` (the route prologue: authorize /
   answer_lang / streaming / 502 helpers) -- `capabilities/` holds the
