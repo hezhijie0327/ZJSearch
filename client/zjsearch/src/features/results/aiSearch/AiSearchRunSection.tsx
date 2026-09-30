@@ -266,7 +266,11 @@ function StepSegment({
       <div className={index > 0 ? "mt-2.5" : ""}>
         <ThinkSegment
           live={streaming && index === run.steps.length - 1}
-          open={streaming && index === run.steps.length - 1}
+          // while the run streams, only the LIVE round's reasoning is open
+          // (older rounds fold as the next one starts); once settled every
+          // segment opens -- the inter-round reasoning IS the reply between
+          // the call rows, and ThinkScroll caps the volume per segment
+          open={streaming ? index === run.steps.length - 1 : true}
           step={step}
         />
       </div>

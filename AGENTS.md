@@ -490,7 +490,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   from the run's registry slice; no step/time statistics are shown),
   in the model's own order; a
   round's `calls` event freezes its pending prose as the intent step.
-  Prose after the first `calls` streams into the answer live AND is
+  Think segments DEFAULT OPEN once the run settles — the inter-round
+  reasoning IS the reply between the call rows (reasoning models often
+  write their round commentary into the reasoning channel only, so a
+  collapsed-by-default timeline reads as calls with nothing between);
+  while streaming only the LIVE round's segment stays open, and
+  ThinkScroll caps each segment at `max-h-40` so the volume stays
+  bounded.  Prose after the first `calls` streams into the answer live AND is
   held as the turn's pending slice — when the turn's own `calls` land,
   that slice is split back out of the answer into the intent step, so
   the settled answer is the final synthesis alone.  State-discipline
