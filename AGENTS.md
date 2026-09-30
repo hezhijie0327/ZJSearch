@@ -477,9 +477,24 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   silence), the cited synthesis with its inline image groups and the
   run's Related questions follow it, and the run's OWN source cards
   (skeleton until its searches settle) ride a STICKY RIGHT RAIL
-  (`lg:w-72 xl:w-80`, internal scroll — ONE responsive markup that is a
-  2-column grid below lg and a vertical card list from lg, so the
-  `[data-ai-n]` citation-jump target exists exactly once in the DOM);
+  (`lg:w-72 xl:w-80` — ONE responsive markup that is a 2-column grid
+  below lg and a vertical card list from lg, so the
+  `[data-ai-n]` citation-jump target exists exactly once in the DOM).
+  The sources section keeps the ORIGINAL collapse shape -- the first
+  four cards inline with the card-shaped 查看全部 toggle (favicon
+  preview of what's hidden) right below them -- and the revealed list
+  is a scroll box sized to EIGHT visible cards (`max-h` 17rem mobile =
+  4 rows x 2 cols, 25.5rem desktop rail = 8 rows; the rest scrolls
+  inside): the toggle is ALWAYS the section's last
+  element (查看全部 below the inline cards, 收起 below the revealed
+  list -- it never sits mid-grid), so a 90-source run reads as a
+  bounded block, not an endless page.  A READ-IN-FULL card carries a
+  thin amber ring (`ring-accent-soft` -- the model verified that source
+  first-hand, scannable at a glance without layout shifts), and the
+  read-in-full mark is an icon chip in the card's meta row riding a
+  FIXED-WIDTH slot (an empty reservation on plain cards), so the [n]
+  numbers right-align across crawled and plain cards alike -- never a
+  full-width label bar;
   below lg everything stacks: answer, related, actions, sources.  The
   thread's follow-up
   pill floats `sticky bottom-6` above a palette fog fade (Perplexica's

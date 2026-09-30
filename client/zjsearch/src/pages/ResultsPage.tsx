@@ -405,10 +405,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     // ONE logic for every citation: locate the source card in this run's
-    // grid and flash it.  A card behind the grid's view-more cap is not in
-    // the DOM yet -- expand that run's grid, wait for the commit, then
-    // locate.  Only a truly missing card (should not happen) opens the
-    // page instead.
+    // grid and flash it.  A card behind the reveal cap is not in the DOM
+    // yet -- expand that run's sources, wait for the commit, then locate.
+    // Only a truly missing card (should not happen) opens the page instead.
     let card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
     // the poll must not outlive its page: a new search mid-wait unmounts
     // this list -- bail instead of window.open'ing from a dead view
@@ -421,6 +420,17 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           await new Promise((resolve) => setTimeout(resolve, 30));
           card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
         }
+      }
+    }
+    // the card may sit outside the bounded sources box's viewport: bring
+    // it into the box's view first (the box scrolls independently of the
+    // page scroll the animated jump below drives)
+    const box = card?.closest<HTMLElement>("[role='region']");
+    if (card && box) {
+      const boxRect = box.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      if (cardRect.top < boxRect.top || cardRect.bottom > boxRect.bottom) {
+        box.scrollTop += cardRect.top - boxRect.top - 12;
       }
     }
     if (!card || hrefRef.current !== startHref) {
