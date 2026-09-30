@@ -298,24 +298,14 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
         answer = answer.slice(0, core.answerFrom);
       }
       if (intent) {
-        // the narration is ONE flowing text across rounds -- a model that
-        // calls tools mid-sentence continues the sentence next round, and
-        // a per-round fragment would shred it into broken half-lines
-        // (「…桥接项目（MCP」|「、Perplexica 等）…」).  Every fragment
-        // therefore joins the run's single intent step.
-        let merged = false;
-        for (let i = steps.length - 1; i >= 0; i--) {
-          const step = steps[i];
-          if (step === undefined || step.kind !== "intent") {
-            continue;
-          }
-          steps[i] = { kind: "intent", text: step.text + intent };
-          merged = true;
-          break;
-        }
-        if (!merged) {
-          steps.push({ kind: "intent", text: intent });
-        }
+        // CHRONOLOGICAL narration: each round's prose is its own intent step
+        // sitting right before that round's call rows -- the model's own
+        // order (think -> narration -> calls, ZCode's rhythm).  The old
+        // one-merged-step design flattened every round's narration into a
+        // single wall detached from its rounds; a model that calls tools
+        // mid-sentence now reads as the next paragraph after the calls row
+        // it belongs to, instead of pulling all narration out of sequence.
+        steps.push({ kind: "intent", text: intent });
       }
       steps.push({
         kind: "calls",

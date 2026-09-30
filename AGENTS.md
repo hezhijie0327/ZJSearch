@@ -176,13 +176,17 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the failed box (reason + retry + classic fallback), never silent
   nothing (the user's stop button marks the run `stopped`, which stays
   exempt -- an intentional cut is not a failure).  The narration contract:
-  a model may call tools MID-SENTENCE and continue the sentence next
-  round, so the client merges ALL research narration into ONE intent step
-  per run (a `plan`-tool step is kind `plan`, never a merge target), and
-  the researcher prompt tells the model to finish its sentence before the
-  calls; the writer prompt pins the ```related fence AFTER the complete
-  prose (a fence-only writer once settled a run with suggestions but no
-  answer).
+  the client renders CHRONOLOGICALLY -- each round's narration is its own
+  intent step sitting right before that round's call rows (the model's own
+  think → narration → calls order, ZCode's rhythm; an earlier one-merged-
+  intent-step design flattened interleaved reasoning models into a single
+  narration wall detached from its rounds).  A model that calls tools
+  MID-SENTENCE reads its continuation as the next paragraph after the
+  calls row it belongs to (a `plan`-tool step is kind `plan`, never a
+  narration merge target), and the researcher prompt tells the model to
+  finish its sentence before the calls; the writer prompt pins the
+  ```related fence AFTER the complete prose (a fence-only writer once
+  settled a run with suggestions but no answer).
   The clarify gate (quality/goal, first run
   only) may open a run with structured questions (`ask` wire event, run
   settles `awaiting`); the answers travel back as `clarifications` and
