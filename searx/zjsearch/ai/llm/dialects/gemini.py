@@ -99,12 +99,14 @@ def _messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.Any]]:
         parts: list[t.Any] = []
         for tc in message.get("tool_calls") or []:
             fn = tc.get("function") or {}
+            signature_b64 = tc.get("thought_signature")
+            signature = base64.b64decode(signature_b64) if signature_b64 else _MAGIC_THOUGHT_SIGNATURE
             parts.append(
                 types.Part(
                     function_call=types.FunctionCall(
                         name=str(fn.get("name") or ""), args=json_args_of(fn.get("arguments"))
                     ),
-                    thought_signature=_MAGIC_THOUGHT_SIGNATURE,
+                    thought_signature=signature,
                 )
             )
         content = message.get("content")
@@ -134,7 +136,7 @@ def _messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.Any]]:
     return system or None, contents
 
 
-async def pump(  # pylint: disable=too-many-locals
+async def pump(  # pylint: disable=too-many-locals, too-many-branches
     cfg: dict[str, t.Any],
     base: str,
     messages: list[dict[str, t.Any]],
@@ -186,9 +188,18 @@ async def pump(  # pylint: disable=too-many-locals
             for part in parts or []:
                 fc = getattr(part, "function_call", None)
                 if fc is not None and getattr(fc, "name", None):
-                    calls.append(
-                        {"id": f"call_{len(calls)}", "name": str(fc.name), "arguments": json.dumps(dict(fc.args or {}))}
-                    )
+                    call: dict[str, str] = {
+                        "id": f"call_{len(calls)}",
+                        "name": str(fc.name),
+                        "arguments": json.dumps(dict(fc.args or {})),
+                    }
+                    # Gemini 3 validates that function calls carry their
+                    # thought signature back on the next request -- capture
+                    # the REAL one (b64 str) for the canonical history
+                    signature = getattr(part, "thought_signature", None)
+                    if signature:
+                        call["thought_signature"] = base64.b64encode(signature).decode()
+                    calls.append(call)
                     continue
                 if not part.text:
                     continue

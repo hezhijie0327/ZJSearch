@@ -143,15 +143,24 @@ zjsearch:
     base_url: "http://localhost:1234/v1"
     api_key: ""
     model: "qwen/qwen3.6-35b-a3b"
-    # thinking-intensity knobs live in params under each SDK's own name:
+    # thinking knobs live in params under each SDK's own name.  The
+    # chain-of-thought SURFACES natively on every dialect (anthropic:
+    # extended thinking default-on, budget 2048 -- params.thinking
+    # overrides, false opts out; gemini 2.5+: includeThoughts folded in
+    # automatically; openai dialects: passive -- reasoning models emit
+    # reasoning_content on their own):
     #   openai_chat_completions -> reasoning_effort: low | medium | high
     #   openai_responses        -> reasoning: {effort: low, summary: auto}
-    #                              (summary deltas surface in the thinking
-    #                              block; reasoning models only)
-    #   anthropic               -> thinking is NATIVELY enabled by default
-    #                              (budget 2048); params.thinking overrides
-    #                              (false opts out entirely)
-    #   gemini                  -> thinking_config: {thinking_budget: 1024}
+    #   anthropic               -> thinking: {type: enabled, budget_tokens: N}
+    #                              (overrides the native default)
+    #   gemini                  -> thinking_config: {thinking_budget: N}
+    # the reasoning ECHO (history replay of each round's reasoning for
+    # tool-call loops -- several families REJECT the request without it)
+    # is opt-in at the ai level: reasoning_passback takes a keyword LIST
+    # matched on the model id (new families need zero code) or `true`
+    # for every model:
+    #   reasoning_passback: [kimi, minimax, mimo, deepseek]
+    #   reasoning_passback: true
     params:
       reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
     # prompt caching per dialect (the prompts are byte-stable per

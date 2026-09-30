@@ -8,35 +8,27 @@ from .. import caching, clients, config, usage
 
 KIND = "openai_chat_completions"
 
-_PASSBACK_MODEL_KEYWORDS = ("deepseek", "glm", "kimi", "minimax", "mimo", "doubao")
-"""Model families whose thinking mode requires the historical
-``reasoning_content`` echoed back when the assistant turn also carries
-``tool_calls`` -- upstream rejects the request outright otherwise
-(Moonshot: "If thinking mode and tool_calls, reasoning_content must be
-passed back to the API").  Matched on the MODEL id, not the provider:
-these families mostly arrive through aggregators and user-configured
-proxies where the provider key says nothing about the family (LobeHub's
-passback list, plus minimax/mimo).
-"""
-
 JSON_TIERS = 2
 """strict ``json_schema`` first, the weaker ``json_object`` mode second
 (DeepSeek and friends support the latter where the full schema is
 unavailable)."""
 
 
-def wire_messages(model: str, params: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
+def wire_messages(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
     """The canonical conversation in chat-completions wire shape: the dicts
-    go over the wire verbatim EXCEPT the internal ``reasoning_blocks`` key
-    is stripped, and an assistant turn that reasoned echoes its
-    ``reasoning_content`` back for the passback families
-    (``params.reasoning_echo`` forces on/off; otherwise the model-id
-    keyword list decides)."""
-    echo_flag = params.get("reasoning_echo")
-    echo = echo_flag is True or (echo_flag is None and any(k in model.lower() for k in _PASSBACK_MODEL_KEYWORDS))
+    go over the wire verbatim EXCEPT the internal ``reasoning_blocks`` /
+    ``thought_signature`` keys are stripped, and an assistant turn that
+    reasoned echoes its ``reasoning_content`` back when the deployment
+    asked for it (``zjsearch.ai.reasoning_passback`` -- a keyword list
+    matched on the model id, or ``true`` for every model)."""
+    passback = config.reasoning_passback(cfg)
+    echo = passback is True or any(k in str(cfg.get("model") or "").lower() for k in passback)
     out: list[dict[str, t.Any]] = []
     for message in messages:
-        wire = {k: v for k, v in message.items() if k != "reasoning_blocks"}
+        wire = {k: v for k, v in message.items() if k not in ("reasoning_blocks", "thought_signature")}
+        for tc in wire.get("tool_calls") or []:
+            if isinstance(tc, dict):
+                tc.pop("thought_signature", None)
         if wire.get("role") == "assistant" and message.get("encrypted_content"):
             # doubao's encrypted 思考原文: tool loops MUST echo it back
             # verbatim, and it takes priority over the summary text
@@ -73,7 +65,7 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals
     extra = {"tools": [{"type": "function", "function": tool} for tool in tools]} if tools else {}
     kwargs: dict[str, t.Any] = {
         "model": str(cfg.get("model")),
-        "messages": wire_messages(str(cfg.get("model") or ""), config.params(cfg), messages),
+        "messages": wire_messages(cfg, messages),
         "stream": True,
         "timeout": clients.sdk_timeout(),
         "extra_headers": config.extra_headers(cfg),
@@ -150,7 +142,7 @@ async def json_completion(
     )
     response = await client.chat.completions.create(
         model=str(cfg.get("model")),
-        messages=wire_messages(str(cfg.get("model") or ""), config.params(cfg), messages),
+        messages=wire_messages(cfg, messages),
         response_format=response_format,
         timeout=clients.sdk_timeout(),
         extra_headers=config.extra_headers(cfg),

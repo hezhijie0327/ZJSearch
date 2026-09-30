@@ -233,13 +233,40 @@ the SDK's own convention:
 ``params`` carries the chosen SDK's ``create()`` kwargs (``max_tokens``
 translates to each API's own key; ``temperature`` stays opt-in) and
 ``extra_body`` / ``extra_headers`` pass through 1:1 as the
-provider-specific escape hatches.  The thinking-intensity knobs are the
-SDK's own names — ``reasoning_effort: low`` (chat completions),
-``reasoning: {effort: low}`` (Responses API — its ``summary`` deltas
-surface in the card's thinking block), ``thinking: {type: enabled,
-budget_tokens: 2048}`` (Anthropic), ``thinking_config:
-{thinking_budget: 1024}`` (Gemini).  The stream protocol and the client
-card live in ``features/results/AiSummary.tsx``.
+provider-specific escape hatches.
+
+Thinking — the chain-of-thought that surfaces in the UI's collapsible
+thinking block — is native on every dialect:
+
+- **chat completions** — passive: models that emit
+  ``reasoning_content`` (deepseek, glm, kimi, minimax, mimo, doubao, …)
+  stream it without any knob; ``reasoning_effort`` tunes its length on
+  the models that support it.
+- **Responses API** — ``reasoning: {effort: low, summary: auto}``
+  tunes the reasoning and surfaces its summary deltas in the thinking
+  block (only reasoning models accept the parameter).
+- **Anthropic** — extended thinking is ON by default (budget 2048):
+  ``thinking: {type: enabled, budget_tokens: N}`` overrides (``false``
+  opts out entirely), and a user-set ``temperature`` suppresses the
+  default (the Messages API rejects the pairing; a gateway that rejects
+  the parameter gets one automatic thinking-free retry).
+- **Gemini** — thought parts are surfaced natively for 2.5+ generation
+  models (``thinkingConfig.includeThoughts: true`` is folded in
+  automatically); ``thinking_config: {thinking_budget: N}`` tunes the
+  budget.
+
+Reasoning ECHO-BACK (interleaved thinking): each research round's
+reasoning is replayed on the next request's history — Anthropic
+thinking blocks + signatures, the Responses reasoning items, and
+``reasoning_content`` / doubao's ``encrypted_content`` on the chat
+dialect.  The chat echo is OPT-IN at the instance level
+(``zjsearch.ai.reasoning_passback`` — a keyword list matched on the
+model id, so a brand-new model family needs zero code, or ``true``
+for every model; several families reject the request without the
+echo).  Gemini needs no echo: every synthesized part carries LobeHub's
+``skip_thought_signature_validator`` thoughtSignature bypass.  The
+stream protocol and the client card live in
+``features/results/AiSummary.tsx``.
 
 Which dialect for which provider?  Aggregators (aihubmix, openrouter,
 inferera, …) expose **OpenAI-compatible routes for every model** —

@@ -141,6 +141,9 @@ def _assistant_tool_calls_message(
                 "id": str(call.get("id") or ""),
                 "type": "function",
                 "function": {"name": str(call.get("name") or ""), "arguments": str(call.get("arguments") or "{}")},
+                # the gemini dialect's REAL thought signature (b64) -- other
+                # dialects strip it from their wire shape
+                **({"thought_signature": str(call["thought_signature"])} if call.get("thought_signature") else {}),
             }
             for call in calls
         ],

@@ -126,6 +126,23 @@ def feature_capability(feature: str) -> dict[str, str] | None:
     return capability()
 
 
+def reasoning_passback(cfg: dict[str, t.Any]) -> list[str] | bool:
+    """The ``zjsearch.ai.reasoning_passback`` setting: which model ids get
+    their reasoning echoed back on replayed history (the openai chat
+    dialect's tool-call loops -- several families REJECT the request
+    without the echo, Moonshot's kimi among them).  A keyword LIST is
+    matched case-insensitively against the model id; ``true`` echoes for
+    every model; absent or ``false`` keeps the history clean (the safe
+    default -- endpoints that forbid echoed reasoning would error on
+    it)."""
+    value = cfg.get("reasoning_passback")
+    if value is True:
+        return True
+    if isinstance(value, list):
+        return [str(k).lower() for k in value if str(k).strip()]
+    return []
+
+
 def sdk_missing(cfg: dict[str, t.Any]) -> str | None:
     """The missing transport SDK package for the configured dialect, or
     ``None`` when it imports -- the install gate the feature routes
