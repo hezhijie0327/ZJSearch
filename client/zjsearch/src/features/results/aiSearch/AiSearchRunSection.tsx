@@ -146,14 +146,17 @@ function PageReading({ call }: { call: AiSearchCall }) {
 }
 
 /** One tool-call row: status + query/url + result/char count, EXPANDABLE --
-    a search row reveals its result cards, a page read reveals the READING
-    PANE (the crawled content itself). */
+    a search row reveals its raw arguments (debug: exactly what the model
+    passed) plus its result cards, a page read reveals the READING PANE
+    (the crawled content itself). */
 function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
+  const copyToast = useCopyToast();
   const [open, setOpen] = useState(false);
   const ok = call.status === "ok";
   const isPage = call.tool === "web_crawler";
-  const expandable = isPage ? Boolean(call.text) : results.length > 0;
+  const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
+  const expandable = (isPage ? Boolean(call.text) : results.length > 0) || Boolean(rawArgs);
   return (
     <div>
       <button
@@ -207,7 +210,34 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           />
         ) : null}
       </button>
-      {open && expandable ? isPage ? <PageReading call={call} /> : <CallResults results={results} /> : null}
+      {open && expandable ? (
+        <>
+          {rawArgs ? (
+            // the DEBUG pane: the model's raw tool-call arguments, exactly
+            // as passed -- mono, scroll-capped, copyable
+            <div className="group relative mt-1">
+              <div
+                className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+                dir="ltr"
+              >
+                {rawArgs}
+              </div>
+              <button
+                aria-label={t("copy")}
+                className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+                onClick={() => {
+                  copyToast(rawArgs);
+                }}
+                title={t("copy")}
+                type="button"
+              >
+                <Copy aria-hidden="true" className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+          {isPage ? <PageReading call={call} /> : <CallResults results={results} />}
+        </>
+      ) : null}
     </div>
   );
 }

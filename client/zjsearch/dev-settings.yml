@@ -126,15 +126,17 @@ engines:
     shortcut: zja
     disabled: false
 
-# the whole-page AI Overview (features/results/AiSummary.tsx) -- dev points
-# at the local LM Studio; the key travels via the ZJSEARCH_AI_KEY env so it
-# stays out of the repository.  base_url goes to the SDK exactly as written
-# (each SDK appends its own method paths):
+# ── the AI transport (zjsearch.ai) ─────────────────────────────────────
+# One transport serves BOTH AI features: the whole-page AI Overview
+# (features/results/AiSummary.tsx) and AI Search (features/results/aiSearch/).
+# Dev points at the local LM Studio; the key travels via the ZJSEARCH_AI_KEY
+# env so it stays out of the repository.  base_url goes to the SDK exactly as
+# written (each SDK appends its own method paths):
 #   openai_chat_completions / openai_responses -> https://api.openai.com/v1
 #   anthropic -> https://api.anthropic.com                     (no /v1)
 #   gemini    -> https://generativelanguage.googleapis.com     (gateway
 #                prefixes like https://gw.example.com/gemini work too)
-# aggregators (aihubmix, openrouter, inferera, ...) expose OpenAI-compatible
+# Aggregators (aihubmix, openrouter, inferera, ...) expose OpenAI-compatible
 # routes for every model -- the openai dialect covers them all.
 zjsearch:
   ai:
@@ -143,44 +145,47 @@ zjsearch:
     base_url: "http://localhost:1234/v1"
     api_key: ""
     model: "qwen/qwen3.6-35b-a3b"
-    # thinking knobs live in params under each SDK's own name.  The
-    # chain-of-thought SURFACES natively on every dialect (anthropic:
-    # extended thinking default-on, budget 2048 -- params.thinking
-    # overrides, false opts out; gemini 2.5+: includeThoughts folded in
-    # automatically; openai dialects: passive -- reasoning models emit
-    # reasoning_content on their own):
+    # ── params: the chosen SDK's create() kwargs ──────────────────────
+    # max_tokens translates to each API's own key; temperature stays
+    # opt-in.  The THINKING knobs are the SDK's own names — fill in the
+    # one matching the chosen sdk, and the chain-of-thought SURFACES in
+    # the UI's collapsible thinking block on every dialect:
     #   openai_chat_completions -> reasoning_effort: low | medium | high
     #   openai_responses        -> reasoning: {effort: low, summary: auto}
-    #   anthropic               -> thinking: {type: enabled, budget_tokens: N}
-    #                              (overrides the native default)
+    #   anthropic               -> OMIT for the native default (extended
+    #                              thinking on, budget 2048), or
+    #                              thinking: {type: enabled, budget_tokens: N}
     #   gemini                  -> thinking_config: {thinking_budget: N}
-    # the reasoning ECHO (history replay of each round's reasoning for
-    # tool-call loops -- several families REJECT the request without it)
-    # is opt-in at the ai level: reasoning_passback takes a keyword LIST
-    # matched on the model id (new families need zero code) or `true`
-    # for every model:
-    #   reasoning_passback: [kimi, minimax, mimo, deepseek]
-    #   reasoning_passback: true
+    #                              (includeThoughts folds in natively)
     params:
       reasoning_effort: "low"  # the openai dialect's thinking-intensity knob
-    # prompt caching per dialect (the prompts are byte-stable per
-    # mode+language by design, which is what makes prefix caching apply):
+    # ── the reasoning ECHO (interleaved thinking) ─────────────────────
+    # each research round's reasoning replays on the next request's
+    # history -- several model families REJECT tool-call loops without it.
+    # A simple switch, since the transport configures ONE model:
+    #   reasoning_passback: true   # 回传每轮思考（kimi/minimax/mimo 等）
+    # absent/false keeps the history clean (endpoints that forbid echoed
+    # reasoning would error on it).
+    # ── prompt caching ────────────────────────────────────────────────
+    # the prompts are byte-stable per mode+language by design, which is
+    # what makes prefix caching apply:
     #   openai dialects -> prompt_cache_key rides every request
     #     (supported endpoints group the cache; the rest ignore it)
-    #   anthropic -> explicit cache_control breakpoints (system + last
-    #     message) on api.anthropic.com; set cache_control: true/false to
-    #     force it for a gateway endpoint
+    #   anthropic -> cache_control breakpoints default ON on every
+    #     anthropic-dialect endpoint (system + last tool + last message);
+    #     cache_control: false opts out for a gateway that rejects them
     #   gemini -> implicit prefix caching, no wire field needed
-    # cache_control: true
+    # NOTE cache_control is an ai-LEVEL toggle (not a params entry).
     # extra_body:  # LM Studio / vLLM only -- drop it for online providers.
     #   chat_template_kwargs:
     #     enable_thinking: false
     #   NOTE: reasoning_effort and this LM Studio hard-off are mutually
     #   exclusive -- sending an effort implies a reasoning request and
     #   re-enables thinking despite the template kwarg.
-    # feature switches -- both default to true; setting one to false makes
-    # the endpoint answer 404 AND the client hide its entry point (the AI
-    # Overview trigger / the [classic|AI] switch).
+    # ── feature switches ──────────────────────────────────────────────
+    # both default to true; setting one to false makes the endpoint answer
+    # 404 AND the client hide its entry point (the AI Overview trigger /
+    # the [classic|AI] switch).
     overview:
       enabled: true
     # AI Search rides the same transport; the model must support native
@@ -202,7 +207,7 @@ zjsearch:
     #   sdk: gemini
     #   base_url: "https://generativelanguage.googleapis.com"
     #   model: "gemini-..."
-    # AI Search's open_page tool: the Browserless v2 page reader (a real
+    # ── AI Search's open_page tool: the Browserless v2 page reader (a real
     # Chrome for JS/SPA pages).  endpoint = the self-hosted v2 root; the
     # key may travel via the ZJSEARCH_BROWSERLESS_KEY env instead (kept
     # out of the repo, like ZJSEARCH_AI_KEY).  Unconfigured = the tool

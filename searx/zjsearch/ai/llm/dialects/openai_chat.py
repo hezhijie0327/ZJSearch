@@ -19,10 +19,8 @@ def wire_messages(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> li
     go over the wire verbatim EXCEPT the internal ``reasoning_blocks`` /
     ``thought_signature`` keys are stripped, and an assistant turn that
     reasoned echoes its ``reasoning_content`` back when the deployment
-    asked for it (``zjsearch.ai.reasoning_passback`` -- a keyword list
-    matched on the model id, or ``true`` for every model)."""
+    asked for it (``zjsearch.ai.reasoning_passback: true``)."""
     passback = config.reasoning_passback(cfg)
-    echo = passback is True or any(k in str(cfg.get("model") or "").lower() for k in passback)
     out: list[dict[str, t.Any]] = []
     for message in messages:
         wire = {k: v for k, v in message.items() if k not in ("reasoning_blocks", "thought_signature")}
@@ -33,7 +31,7 @@ def wire_messages(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> li
             # doubao's encrypted 思考原文: tool loops MUST echo it back
             # verbatim, and it takes priority over the summary text
             wire["encrypted_content"] = message["encrypted_content"]
-        if echo and wire.get("role") == "assistant" and wire.get("tool_calls") and message.get("reasoning_blocks"):
+        if passback and wire.get("role") == "assistant" and wire.get("tool_calls") and message.get("reasoning_blocks"):
             wire["reasoning_content"] = "\n\n".join(
                 str(b.get("text") or "") for b in message["reasoning_blocks"] if b.get("text")
             )

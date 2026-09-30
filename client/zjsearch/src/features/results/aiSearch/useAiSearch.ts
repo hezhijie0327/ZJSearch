@@ -56,6 +56,9 @@ export interface AiSearchCall {
   /** web_crawler: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
+  /** the model's RAW tool-call arguments (q / category / ...) -- the
+      timeline row's debug expansion shows exactly what was passed */
+  args?: Record<string, unknown>;
 }
 
 /** One chronological segment of a run's research timeline.  "plan" is the
@@ -286,7 +289,14 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
     }
     case "calls": {
       const items =
-        (event.items as Array<{ id?: number; tool?: string; q?: string; url?: string; category?: string }>) ?? [];
+        (event.items as Array<{
+          id?: number;
+          tool?: string;
+          q?: string;
+          url?: string;
+          category?: string;
+          args?: Record<string, unknown>;
+        }>) ?? [];
       const steps = [...run.steps];
       const earlier = hasCalls(run);
       let answer = run.answer;
@@ -316,6 +326,7 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
           q: String(item.q ?? ""),
           url: item.url ? String(item.url) : undefined,
           category: String(item.category ?? ""),
+          args: item.args,
           status: "pending" as const,
         })),
       });

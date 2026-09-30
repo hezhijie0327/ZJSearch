@@ -259,11 +259,11 @@ Reasoning ECHO-BACK (interleaved thinking): each research round's
 reasoning is replayed on the next request's history — Anthropic
 thinking blocks + signatures, the Responses reasoning items, and
 ``reasoning_content`` / doubao's ``encrypted_content`` on the chat
-dialect.  The chat echo is OPT-IN at the instance level
-(``zjsearch.ai.reasoning_passback`` — a keyword list matched on the
-model id, so a brand-new model family needs zero code, or ``true``
-for every model; several families reject the request without the
-echo).  Gemini needs no echo: every synthesized part carries LobeHub's
+dialect.  The chat echo is a SIMPLE SWITCH at the instance level
+(``zjsearch.ai.reasoning_passback: true`` — the transport configures
+one model, so there is nothing to match; several families reject the
+request without the echo).  Gemini needs no echo: every synthesized
+part carries LobeHub's
 ``skip_thought_signature_validator`` thoughtSignature bypass.  The
 stream protocol and the client card live in
 ``features/results/AiSummary.tsx``.

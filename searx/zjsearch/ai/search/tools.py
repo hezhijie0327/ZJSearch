@@ -289,15 +289,40 @@ def parse_page_call(call: dict[str, t.Any]) -> str:
     return str(args.get("url") or "").strip()[:2000]
 
 
+def _raw_args(call: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The model's RAW tool-call arguments as a dict -- the timeline row's
+    debug expansion shows exactly what was passed (q, category, ...),
+    unfiltered."""
+    try:
+        value = json.loads(str(call.get("arguments") or "") or "{}")
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 def display_item(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
     """One ``calls`` wire item: the client's timeline row.  ``tool``
     discriminates the row kind -- a search renders its query, a page read
     its url.  Site filters display folded into the query so the row shows
     the operators the engine will enforce."""
     if str(call.get("name") or "") == PAGE_TOOL:
-        return {"id": idx, "tool": PAGE_TOOL, "url": parse_page_call(call)}
+        # args rides along: the RAW tool-call arguments -- the timeline row's
+        # debug expansion shows exactly what the model passed
+        return {
+            "id": idx,
+            "tool": PAGE_TOOL,
+            "url": parse_page_call(call),
+            "args": _raw_args(call),
+        }
     query, category, time_range, include, exclude = parse_call(call)
     operators = " ".join([f"site:{host}" for host in include] + [f"-site:{host}" for host in exclude])
     if operators:
         query = f"{query} {operators}"
-    return {"id": idx, "tool": TOOL_NAME, "q": query, "category": category, "time_range": time_range or None}
+    return {
+        "id": idx,
+        "tool": TOOL_NAME,
+        "q": query,
+        "category": category,
+        "time_range": time_range or None,
+        "args": _raw_args(call),
+    }
