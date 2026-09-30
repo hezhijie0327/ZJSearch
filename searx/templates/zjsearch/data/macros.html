@@ -372,6 +372,14 @@ pipeline features without any Python changes. -#}
 }
 {%- endmacro %}
 
+{#- the standalone AI thread page: the thread lives in the browser's
+    storage keyed by the uuid in the url -- the payload carries the
+    identity plus fresh capability tokens and nothing else (the AI search
+    endpoint stays stateless; see AiThreadPage / threadStore) #}
+{% macro page_ai_thread(thread) -%}
+{"globals": {{ globals('ai_thread') }}, "thread": {{ thread|tojson }}}
+{%- endmacro %}
+
 {% macro page_results(results, q, selected_categories, pageno, time_range,
                       suggestions, corrections, answers, infoboxes,
                       engine_data, paging, unresponsive_engines, timings,

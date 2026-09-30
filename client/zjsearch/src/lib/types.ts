@@ -30,7 +30,7 @@ export interface AiCapability {
 }
 
 export interface GlobalData {
-  page: "index" | "results" | "preferences" | "stats" | "info" | "404" | "redirect" | "error";
+  page: "index" | "results" | "preferences" | "stats" | "info" | "ai_thread" | "404" | "redirect" | "error";
   instance_name: string;
   version: string;
   git_url: string;
@@ -524,11 +524,20 @@ export interface ErrorPageData {
   message: string;
 }
 
+/** The standalone AI thread page (`/ai/thread/<uuid>`): the payload carries
+    the thread identity plus fresh capability tokens -- the conversation
+    itself lives in the browser's storage (see lib/threadStore). */
+export interface AiThreadPageData {
+  globals: GlobalData;
+  thread: string;
+}
+
 export type AnyPageData =
   | SearchPageData
   | PreferencesPageData
   | StatsPageData
   | InfoPageData
+  | AiThreadPageData
   | RedirectPageData
   | ErrorPageData
   | BasicPageData;
@@ -559,4 +568,8 @@ export function isStatsPageData(data: AnyPageData): data is StatsPageData {
 
 export function isInfoPageData(data: AnyPageData): data is InfoPageData {
   return data.globals.page === "info";
+}
+
+export function isAiThreadPageData(data: AnyPageData): data is AiThreadPageData {
+  return data.globals.page === "ai_thread";
 }

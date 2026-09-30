@@ -9,9 +9,15 @@ import { RouterProvider, useRouter } from "@/lib/router.tsx";
 import type { ClientSettings } from "@/lib/settings.ts";
 import { SettingsContext } from "@/lib/settings.ts";
 import type { AnyPageData } from "@/lib/types.ts";
-import { isInfoPageData, isPreferencesPageData, isSearchPageData, isStatsPageData } from "@/lib/types.ts";
+import {
+  isAiThreadPageData,
+  isInfoPageData,
+  isPreferencesPageData,
+  isSearchPageData,
+  isStatsPageData,
+} from "@/lib/types.ts";
 import { IndexPage } from "@/pages/IndexPage.tsx";
-import { InfoPage, PreferencesPage, ResultsPage, StatsPage } from "@/pages/lazyPages.ts";
+import { AiThreadPage, InfoPage, PreferencesPage, ResultsPage, StatsPage } from "@/pages/lazyPages.ts";
 
 function Pages() {
   const { data, error } = useRouter();
@@ -55,6 +61,13 @@ function Pages() {
     return (
       <Suspense fallback={<PageFallback />}>
         <InfoPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isAiThreadPageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <AiThreadPage data={data} />
       </Suspense>
     );
   }

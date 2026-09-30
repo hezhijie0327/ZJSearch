@@ -40,6 +40,12 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     """AI Search: the researcher/writer split on the shared agent loop."""
     cfg = llm.ai_cfg()
     payload, q, _ctx = http.authorize(gate=enabled() and llm.configured(cfg))
+    # the client-owned thread identity (browser-stored conversation): logged
+    # for problem localization, never stored server-side -- the endpoint
+    # stays stateless
+    thread = str(payload.get("thread") or "").strip()[:64]
+    if thread:
+        logger.info("zjsearch_ai_search: thread %s", thread)
     # follow-up thread: prior Q&A turns + the global [n] numbering base
     raw_history = payload.get("history")
     history: list[dict[str, str]] = []

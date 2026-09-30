@@ -1,0 +1,13 @@
+{#- zjsearch: the standalone AI thread page.  The thread lives in the
+    browser's storage keyed by the uuid in the url -- the server payload
+    carries the identity plus fresh capability tokens and nothing else
+    (the AI search endpoint stays stateless; see AiThreadPage /
+    threadStore).  Decoupled from the /search render on purpose (LobeHub's
+    conversation shape): an AI session has its own address, survives a
+    reload, and never depends on a search page lifecycle. -#}
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_ai_thread with context %}
+{% block title %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{{ url_for('static', filename='chunk/zjs-results.min.js') }}">{% endblock %}
+{% block app_skeleton %}{% include "zjsearch/skeleton.html" %}{% endblock %}
+{% block page_data %}{{ page_ai_thread(ai_thread) }}{% endblock %}

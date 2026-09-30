@@ -22,6 +22,8 @@ export function preloadResultsPage(): void {
   void import("@/pages/ResultsPage.tsx");
 }
 
+export const AiThreadPage = lazy(() => import("@/pages/AiThreadPage.tsx").then((m) => ({ default: m.AiThreadPage })));
+
 export const PreferencesPage = lazy(() =>
   import("@/pages/preferences/PreferencesPage.tsx").then((m) => ({ default: m.PreferencesPage })),
 );

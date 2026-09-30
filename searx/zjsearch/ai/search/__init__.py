@@ -39,7 +39,12 @@ one-way -- config <- tools/prompts/gates <- executor/wire <- route:
 - :py:mod:`searx.zjsearch.ai.search.wire` -- the fence splitter and the
   events-to-NDJSON adapter;
 - :py:mod:`searx.zjsearch.ai.search.route` -- the ``POST /ai/search``
-  view and the install hook.
+  view and the install hook;
+- :py:mod:`searx.zjsearch.ai.search.page` -- the standalone thread page
+  (``GET /ai/thread/<uuid>``): a slim shell carrying the conversation
+  identity + fresh capability tokens -- the thread itself lives in the
+  browser's storage (LobeHub's conversation shape; the endpoint stays
+  stateless).
 
 Wire protocol (NDJSON, one JSON object per line; the stream never ends
 silently):
@@ -88,6 +93,13 @@ Overview mirrors that under ``zjsearch.ai.overview.enabled``).
 """
 
 from searx.zjsearch.ai.search.config import capability
-from searx.zjsearch.ai.search.route import install
+from searx.zjsearch.ai.search.page import install as page_install
+from searx.zjsearch.ai.search.route import install as route_install
+
+
+def install(app) -> None:  # pylint: disable=missing-function-docstring
+    page_install(app)
+    route_install(app)
+
 
 __all__ = ["capability", "install"]

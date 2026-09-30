@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
@@ -20,6 +20,7 @@ import {
   collectAiImages,
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
+import { AiHistoryDrawer } from "@/features/results/aiSearch/AiHistoryDrawer.tsx";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -43,6 +44,7 @@ import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
+import { threadUrl } from "@/lib/threadStore.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
@@ -57,7 +59,7 @@ const EMPTY_META: AiSourceMeta[] = [];
 export function ResultsPage({ data }: { data: SearchPageData }) {
   const t = useT();
   const copyToast = useCopyToast();
-  const { search, loading, error, href } = useRouter();
+  const { navigate, search, loading, error, href } = useRouter();
   const hasPlugin = useHasPlugin();
   const infiniteScroll = hasPlugin("infiniteScroll");
 
@@ -132,6 +134,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const hrefRef = useRef(href);
   hrefRef.current = href;
   const [followupQuery, setFollowupQuery] = useState("");
+  const [aiHistoryOpen, setAiHistoryOpen] = useState(false);
   // the hero's depth pick travels as the `mode` URL param (validated --
   // anything unknown falls back to balanced)
   const [researchMode, setResearchMode] = useState<AiSearchMode>(() =>
@@ -302,6 +305,15 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // (live-verified against LM Studio + qwen3.6), defeating the whole "AI
   // drives the searches" point.  The agent runs on the question alone.
   const aiSearchRan = useRef(false);
+  // the conversation's canonical address: a refresh lands on the thread
+  // page and restores from the browser store (the takeover view stays
+  // mounted -- replaceState only rewrites the entry's url)
+  useEffect(() => {
+    if (!aiMode || !aiSearch.threadId) {
+      return;
+    }
+    window.history.replaceState(null, "", threadUrl(aiSearch.threadId));
+  }, [aiMode, aiSearch.threadId]);
   // no dependency array on purpose: the guard ref makes it run once per
   // search.  allResults is deliberately NOT a gate — the takeover page has
   // no classic results to wait for (the server skipped the raw fan-out)
@@ -721,6 +733,16 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       sourceMeta={runSourceMetas[index] ?? EMPTY_META}
                     />
                   ))}
+                  <AiHistoryDrawer
+                    currentId={aiSearch.threadId}
+                    onClose={() => {
+                      setAiHistoryOpen(false);
+                    }}
+                    onNavigate={(url) => {
+                      navigate(url);
+                    }}
+                    open={aiHistoryOpen}
+                  />
                   {aiSearch.phase === "done" ? (
                     // Perplexica's floating follow-up: pinned above the fold
                     // while the thread scrolls under it, a palette fog fading
@@ -788,6 +810,17 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             value={aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode}
                           />
                           <div className="flex items-center gap-2">
+                            <button
+                              aria-label={t("ai_history")}
+                              className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                              onClick={() => {
+                                setAiHistoryOpen(true);
+                              }}
+                              title={t("ai_history")}
+                              type="button"
+                            >
+                              <History aria-hidden="true" className="size-4.5" />
+                            </button>
                             <SubmitCircle disabled={!followupQuery.trim()} label={t("ai_search_followup")} send />
                           </div>
                         </div>

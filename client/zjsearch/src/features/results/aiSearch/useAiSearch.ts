@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AiSearchGallery } from "@/features/results/aiAnswer.ts";
 import { fetchEventStream } from "@/lib/http.ts";
+import { loadThread, newThreadId, saveThread } from "@/lib/threadStore.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /**
@@ -140,16 +141,15 @@ export interface AiSearchRun {
   } | null;
 }
 
-interface AiSearchState {
-  phase: AiSearchPhase;
-  runs: AiSearchRun[];
-  sources: AiSearchSource[];
-  error: string | null;
+interface AiSearchState extends Core {
   start(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   followup(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   /** answer the awaiting run's clarify questions (null = skip) and start
       its research on the SAME run */
   submitClarify(text: string | null, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
+  /** restore a browser-stored thread (/ai/thread/<id> boot): false when the
+      id has no stored conversation */
+  resume(threadId: string): boolean;
   stop(): void;
   reset(): void;
 }
@@ -170,6 +170,9 @@ interface Core {
   answerFrom: number;
   /** true while the last think step still takes deltas */
   thinkOpen: boolean;
+  /** the conversation's uuid (the /ai/thread/<id> address + the storage
+      key) -- minted on start, kept across follow-ups */
+  threadId: string;
 }
 
 const IDLE: Core = {
@@ -180,6 +183,7 @@ const IDLE: Core = {
   pending: "",
   answerFrom: 0,
   thinkOpen: false,
+  threadId: "",
 };
 
 const lastStep = (run: AiSearchRun): AiSearchStep | undefined =>
@@ -553,8 +557,61 @@ function applyEvent(core: Core, event: Record<string, unknown>): Core {
 export function useAiSearch(capability: AiCapability | undefined): AiSearchState {
   const [core, setCore] = useState<Core>(IDLE);
   const abortRef = useRef<AbortController | null>(null);
+  // the conversation identity rides a ref: start() mints it synchronously
+  // and beginRun (called right after) must POST the NEW id, not the stale
+  // state's
+  const threadIdRef = useRef("");
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // persist the thread when it settles: the browser store is the ONLY
+  // thread storage (the server keeps nothing) -- a reload restores from
+  // here, /ai/thread/<id> is the address
+  useEffect(() => {
+    if (core.phase !== "done" || !core.threadId || core.runs.length === 0) {
+      return;
+    }
+    saveThread(core.threadId, core.runs[0]?.q ?? "", { thread: core.threadId, runs: core.runs });
+  }, [core.phase, core.threadId, core.runs]);
+
+  /** Restore a stored thread (the /ai/thread/<id> boot): normalize the
+      transient streaming state away -- an interrupted run is a done run
+      with interrupted call rows, an awaiting clarify never survives. */
+  const resume = (threadId: string): boolean => {
+    const raw = loadThread(threadId) as { thread?: string; runs?: AiSearchRun[] } | null;
+    const runs = Array.isArray(raw?.runs) ? raw.runs : null;
+    if (!runs || runs.length === 0) {
+      return false;
+    }
+    abortRef.current?.abort();
+    threadIdRef.current = threadId;
+    setCore({
+      phase: "done",
+      runs: runs.map((run) => ({
+        ...run,
+        status: run.status === "streaming" ? "done" : run.status,
+        ask: null,
+        wrappingUp: false,
+        steps: run.steps.map((step) =>
+          step.kind === "calls"
+            ? {
+                ...step,
+                calls: step.calls.map((call) =>
+                  call.status === "pending" ? { ...call, status: "interrupted" as const } : call,
+                ),
+              }
+            : step,
+        ),
+      })),
+      sources: runs.flatMap((run) => run.sources),
+      error: null,
+      pending: "",
+      answerFrom: 0,
+      thinkOpen: false,
+      threadId,
+    });
+    return true;
+  };
 
   const beginRun = (
     q: string,
@@ -595,6 +652,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         search_language: searchLanguage,
         clarify_state: clarify?.state ?? "ask",
         clarifications: clarify?.text ?? "",
+        // the client-owned conversation identity: logged server-side, never
+        // stored there (the thread lives in the browser's storage)
+        thread: threadIdRef.current,
       },
       apply,
       controller.signal,
@@ -618,6 +678,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!capability) {
       return;
     }
+    threadIdRef.current = newThreadId();
     setCore({
       phase: "streaming",
       runs: [
@@ -644,6 +705,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       pending: "",
       answerFrom: 0,
       thinkOpen: false,
+      threadId: threadIdRef.current,
     });
     beginRun(q, lang, [], 0, mode, searchLanguage);
   };
@@ -760,5 +822,5 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setCore(IDLE);
   };
 
-  return { ...core, start, followup, submitClarify, stop, reset };
+  return { ...core, start, followup, submitClarify, resume, stop, reset };
 }

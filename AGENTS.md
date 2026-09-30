@@ -505,6 +505,21 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the model routes the whole answer into the reasoning channel; gemma-4
   ignores that knob and streams a reasoning channel regardless (harmless
   — think segments render in the Research timeline).
+- AI SESSIONS are LobeHub-style CONVERSATIONS: every run lives in a
+  browser-stored THREAD identified by a uuid — the takeover (`?ai=1`)
+  mints one on start and `history.replaceState`s its canonical address
+  `/ai/thread/<uuid>` (`ai/search/page.py` + `ai_thread.html`: a slim
+  server shell carrying fresh capability tokens and nothing else).  The
+  thread (runs, sources, usage) persists in localStorage ONLY
+  (`lib/threadStore.ts`: one key per thread + an index, LRU ~20,
+  quota-evicting oldest-first) — the server stays stateless (`POST
+  /ai/search` logs the optional `thread` field for problem localization
+  and forgets it).  A reload or a history-drawer revisit lands on the
+  thread route and restores via `useAiSearch.resume` (pending calls
+  settle as interrupted; an awaiting clarify never survives).  The
+  drawer (`AiHistoryDrawer`) lists/opens/deletes threads from the
+  takeover composer row and the thread page; deleting is permanent and
+  browser-local by design (never syncs across devices).
 - The boot skeleton (`zjsearch/skeleton.html` + the `.zjs-boot` block in
   `src/styles/boot.css`) is a **geometry mirror of the real results page**, not an
   invented loading screen — it only covers the JS-boot window (server flush →
