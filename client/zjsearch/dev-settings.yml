@@ -148,7 +148,9 @@ zjsearch:
     #   openai_responses        -> reasoning: {effort: low, summary: auto}
     #                              (summary deltas surface in the thinking
     #                              block; reasoning models only)
-    #   anthropic               -> thinking: {type: enabled, budget_tokens: 2048}
+    #   anthropic               -> thinking is NATIVELY enabled by default
+    #                              (budget 2048); params.thinking overrides
+    #                              (false opts out entirely)
     #   gemini                  -> thinking_config: {thinking_budget: 1024}
     params:
       reasoning_effort: "low"  # the openai dialect's thinking-intensity knob

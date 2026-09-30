@@ -16,16 +16,28 @@ _ANTHROPIC_DEFAULT_MAX_TOKENS = 4096
 ``params.max_tokens`` is unset (reasoning models can burn it on thinking;
 raise it there or override via extra_body)."""
 
+_ANTHROPIC_THINKING_BUDGET = 2048
+"""The native progressive-thinking default for the Anthropic dialect:
+extended thinking ON with a 2048-token budget.  ``params.thinking`` wins
+when set (an explicit ``false`` opts out entirely)."""
 
-def model_kwargs(params: dict[str, t.Any], kind: str) -> dict[str, t.Any]:
+
+def model_kwargs(params: dict[str, t.Any], kind: str, with_native_thinking: bool = True) -> dict[str, t.Any]:
     """The ``params`` entries as SDK create kwargs: ``max_tokens`` translates
     to each API's own key (and fills the Anthropic mandatory default), the
     rest pass through under their SDK names -- including the thinking knobs
     (``reasoning_effort`` / ``reasoning`` / ``thinking`` /
-    ``thinking_config``, whichever the chosen SDK speaks)."""
+    ``thinking_config``, whichever the chosen SDK speaks).
+    ``with_native_thinking`` lets callers that do not benefit from a
+    reasoning phase (the JSON gates) opt out of the native default."""
     max_tokens = params.get("max_tokens")
     kwargs = {name: value for name, value in params.items() if name != "max_tokens" and value is not None}
     if kind == "anthropic":
+        thinking = params.get("thinking")
+        if thinking is None and with_native_thinking and "temperature" not in params:
+            thinking = {"type": "enabled", "budget_tokens": _ANTHROPIC_THINKING_BUDGET}
+        if thinking is not None:
+            kwargs["thinking"] = thinking
         kwargs["max_tokens"] = int(max_tokens) if max_tokens else _ANTHROPIC_DEFAULT_MAX_TOKENS
     elif kind in ("openai_responses", "gemini"):
         if max_tokens:

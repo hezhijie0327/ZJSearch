@@ -19,13 +19,59 @@ JSON_TIERS = 1
 """one native tier: ``response_json_schema`` (the ``strict`` flag is
 accepted and ignored)."""
 
+_MAGIC_THOUGHT_SIGNATURE = b"skip_thought_signature_validator"
+"""Gemini 2.5+/3 return ``thoughtSignature`` values on their parts and
+VALIDATE that multi-turn conversations (and function-calling loops) echo
+them back -- a replayed history without the signatures is rejected.  The
+agent loop replays history every turn but does not store the realtime
+signatures, so every part this dialect synthesizes carries LobeHub's
+magic bypass literal instead (the value Vertex AI also accepts).
+@see https://ai.google.dev/gemini-api/docs/thought-signatures"""
+
+_THINKING_CAPABLE = re.compile(r"gemini-(\d+)(?:\.(\d+))?", re.IGNORECASE)
+"""Gemini 2.5+ generation models return thought parts when
+``thinkingConfig.includeThoughts`` is set; older generations either
+ignore or reject the flag, so the native visibility injection is
+version-gated (LobeHub's model-version sniff)."""
+
+
+def _thinking_capable(model: str) -> bool:
+    match = _THINKING_CAPABLE.search(model or "")
+    if not match:
+        return False
+    major, minor = int(match.group(1)), int(match.group(2) or 0)
+    return major > 2 or (major == 2 and minor >= 5)
+
+
+def _content_config(
+    cfg: dict[str, t.Any],
+    system: str | None,
+    *,
+    native_thinking: bool,
+    **extra: t.Any,
+) -> t.Any:
+    """The GenerateContentConfig of one request: the ``params``-derived
+    kwargs plus the NATIVE progressive-thinking visibility -- Gemini does
+    not return thought parts unless ``thinkingConfig.includeThoughts`` is
+    set (the user's own budget passes through; the JSON gates opt out)."""
+    from google.genai import types  # pylint: disable=import-outside-toplevel
+
+    kwargs = caching.model_kwargs(config.params(cfg), KIND, with_native_thinking=native_thinking)
+    if native_thinking and _thinking_capable(str(cfg.get("model") or "")):
+        thinking = dict(kwargs.get("thinking_config") or {})
+        thinking.setdefault("include_thoughts", True)
+        kwargs["thinking_config"] = thinking
+    return types.GenerateContentConfig(system_instruction=system, **kwargs, **extra)
+
 
 def _messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.Any]]:
     """(system_instruction, contents) in google-genai shape: text parts pass
     through, inline base64 images become ``Part.from_bytes`` blocks -- the
     Gemini API takes no remote image references on this path.  Assistant
     tool calls become ``function_call`` parts (role ``model``), canonical
-    ``tool`` results ``function_response`` parts (role ``user``)."""
+    ``tool`` results ``function_response`` parts (role ``user``).  Every
+    part carries the magic ``thoughtSignature`` bypass -- replayed history
+    without echoed signatures is rejected by the API."""
     from google.genai import types  # pylint: disable=import-outside-toplevel
 
     system = system_of(messages)
@@ -43,7 +89,8 @@ def _messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.Any]]:
                             function_response=types.FunctionResponse(
                                 name=str(message.get("name") or "tool"),
                                 response={"result": str(message.get("content") or "")},
-                            )
+                            ),
+                            thought_signature=_MAGIC_THOUGHT_SIGNATURE,
                         )
                     ],
                 )
@@ -56,14 +103,15 @@ def _messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.Any]]:
                 types.Part(
                     function_call=types.FunctionCall(
                         name=str(fn.get("name") or ""), args=json_args_of(fn.get("arguments"))
-                    )
+                    ),
+                    thought_signature=_MAGIC_THOUGHT_SIGNATURE,
                 )
             )
         content = message.get("content")
         if isinstance(content, list):
             for part in content:
                 if part.get("type") == "text":
-                    parts.append(types.Part(text=str(part.get("text"))))
+                    parts.append(types.Part(text=str(part.get("text")), thought_signature=_MAGIC_THOUGHT_SIGNATURE))
                 elif part.get("type") == "image_url":
                     m = re.match(
                         r"^data:(image/[^;,]+);base64,(.*)$",
@@ -71,11 +119,16 @@ def _messages(messages: list[dict[str, t.Any]]) -> tuple[t.Any, list[t.Any]]:
                         re.DOTALL,
                     )
                     if m:
-                        parts.append(types.Part.from_bytes(data=base64.b64decode(m.group(2)), mime_type=m.group(1)))
+                        parts.append(
+                            types.Part(
+                                inline_data=types.Blob(data=base64.b64decode(m.group(2)), mime_type=m.group(1)),
+                                thought_signature=_MAGIC_THOUGHT_SIGNATURE,
+                            )
+                        )
                     else:
                         logger.warning("zjsearch_ai: gemini dialect skips a non-inline image part")
         elif content:
-            parts.append(types.Part(text=str(content)))
+            parts.append(types.Part(text=str(content), thought_signature=_MAGIC_THOUGHT_SIGNATURE))
         if parts:
             contents.append(types.Content(role="model" if role == "assistant" else "user", parts=parts))
     return system or None, contents
@@ -99,9 +152,7 @@ async def pump(  # pylint: disable=too-many-locals
 
     client = clients.gemini_client(cfg, base)
     system, contents = _messages(messages)
-    genai_config = types.GenerateContentConfig(
-        system_instruction=system, **caching.model_kwargs(config.params(cfg), KIND)
-    )
+    genai_config = _content_config(cfg, system, native_thinking=True)
     if tools:
         # the declarations take an OpenAPI-schema dict; lowercase JSON-schema
         # type names are accepted by the v1beta API
@@ -164,18 +215,17 @@ async def json_completion(  # pylint: disable=unused-argument
     schema: dict[str, t.Any],
     strict: bool,
 ) -> str:
-    from google.genai import types  # pylint: disable=import-outside-toplevel
-
     client = clients.gemini_client(cfg, base)
     system, contents = _messages(messages)
     # response_json_schema takes a RAW JSON Schema dict (response_schema
     # wants genai's OpenAPI dialect -- the SDK docs redirect standard
     # JSON Schema there); response_mime_type is required alongside
-    genai_config = types.GenerateContentConfig(
-        system_instruction=system,
+    genai_config = _content_config(
+        cfg,
+        system,
+        native_thinking=False,
         response_mime_type="application/json",
         response_json_schema=schema,
-        **caching.model_kwargs(config.params(cfg), KIND),
     )
     response = await client.aio.models.generate_content(
         model=str(cfg.get("model")), contents=contents, config=genai_config

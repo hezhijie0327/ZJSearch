@@ -5,6 +5,8 @@ import re
 import queue
 import typing as t
 
+from anthropic import BadRequestError, UnprocessableEntityError  # pylint: disable=import-outside-toplevel
+
 from .. import caching, clients, config, usage
 from .base import json_args_of, system_of
 
@@ -120,17 +122,27 @@ async def pump(  # pylint: disable=too-many-branches, too-many-locals, too-many-
             tool_specs[-1] = {**tool_specs[-1], "cache_control": {"type": "ephemeral"}}
         caching.anthropic_cache_tail(msgs)
     extra: dict[str, t.Any] = {"tools": tool_specs} if tool_specs else {}
-    stream = await client.messages.create(
-        model=str(cfg.get("model")),
-        system=system,
-        messages=msgs,
-        stream=True,
-        timeout=clients.sdk_timeout(),
-        extra_headers=config.extra_headers(cfg),
-        extra_body=config.extra_body(cfg),
+    kwargs: dict[str, t.Any] = {
+        "model": str(cfg.get("model")),
+        "system": system,
+        "messages": msgs,
+        "stream": True,
+        "timeout": clients.sdk_timeout(),
+        "extra_headers": config.extra_headers(cfg),
+        "extra_body": config.extra_body(cfg),
         **caching.model_kwargs(config.params(cfg), KIND),
         **extra,
-    )
+    }
+    try:
+        stream = await client.messages.create(**kwargs)
+    except (BadRequestError, UnprocessableEntityError):
+        # an endpoint that rejects the NATIVE thinking default (gateways to
+        # non-Anthropic backends mostly) still streams -- retry once without
+        # it, the run degrades to a no-visible-reasoning turn instead of
+        # failing.  A user-SET thinking param that errors lands here too:
+        # their configuration is simply not supported by the endpoint.
+        kwargs.pop("thinking", None)
+        stream = await client.messages.create(**kwargs)
     calls: dict[int, dict[str, str]] = {}
     finish: str | None = None
     input_tokens = 0
@@ -213,6 +225,6 @@ async def json_completion(  # pylint: disable=unused-argument
         timeout=clients.sdk_timeout(),
         extra_headers=config.extra_headers(cfg),
         extra_body=config.extra_body(cfg),
-        **caching.model_kwargs(config.params(cfg), KIND),
+        **caching.model_kwargs(config.params(cfg), KIND, with_native_thinking=False),
     )
     return "".join(str(block.text) for block in response.content or [] if getattr(block, "type", "") == "text")

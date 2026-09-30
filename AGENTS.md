@@ -480,6 +480,21 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (`lg:w-72 xl:w-80` — ONE responsive markup that is a 2-column grid
   below lg and a vertical card list from lg, so the
   `[data-ai-n]` citation-jump target exists exactly once in the DOM).
+  NATIVE PROGRESSIVE THINKING: the think relay (``relay_reasoning``) is
+  passive for dialects that emit reasoning on their own (deepseek-style
+  ``reasoning_content`` on the openai chat dialect, Responses-API
+  reasoning summaries), and NATIVELY ENABLED where the API needs an
+  explicit knob -- the anthropic dialect default-ENABLES extended
+  thinking (budget 2048; ``params.thinking`` wins, an explicit false
+  opts out, a user-set ``temperature`` suppresses the default since the
+  Messages API rejects the pairing, and a gateway that rejects the
+  parameter gets one automatic thinking-free retry), the gemini dialect
+  folds ``thinkingConfig.includeThoughts: true`` for 2.5+ generation
+  models, and the gemini dialect stamps every synthesized part with
+  LobeChat's ``skip_thought_signature_validator`` magic
+  ``thoughtSignature`` (replayed history without echoed signatures is
+  rejected by 2.5+/3 function calling).  The JSON gates opt out of the
+  native default (a raw JSON payload needs no reasoning phase).
   The sources section keeps the ORIGINAL collapse shape -- the first
   four cards inline with the card-shaped 查看全部 toggle (favicon
   preview of what's hidden) right below them -- and the revealed list
