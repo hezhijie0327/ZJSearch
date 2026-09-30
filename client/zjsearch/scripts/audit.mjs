@@ -68,6 +68,12 @@ const SEARCH_PATHS = [
   "/search?q=zjaudit+apps&categories=apps",
 ];
 
+/** The standalone AI thread page: a fresh gate browser carries no stored
+    thread (the conversation is browser-local by design), so this audits the
+    page shell + the not-found empty state — the same composition language
+    as the results empty state.  Not a search page: SEO stays enforceable. */
+const THREAD_PATH = "/ai/thread/00000000-0000-4000-8000-000000000000";
+
 /** Floors.  Every search page's SEO category is EXEMPT (null): upstream
     robots.txt disallows `/*?*q=*` and upstream wants search pages
     unindexed — correct behaviour, not a theme defect.  The fixture engine
@@ -109,6 +115,12 @@ function thresholdsFor(path) {
 
 const PATHS = [
   { path: "/", thresholds: thresholdsFor("/") },
+  {
+    path: THREAD_PATH,
+    thresholds: MOBILE
+      ? { performance: 85, accessibility: 100, "best-practices": 100, seo: 95, "agentic-browsing": 100 }
+      : { performance: 90, accessibility: 100, "best-practices": 100, seo: 95, "agentic-browsing": 100 },
+  },
   ...SEARCH_PATHS.map((path) => ({ path, thresholds: thresholdsFor(path) })),
   /** The no-JS face, materialised by the gate: Lighthouse needs script
       execution, so the gate strips every <script> and unwraps the

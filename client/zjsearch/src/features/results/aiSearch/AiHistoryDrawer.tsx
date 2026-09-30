@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { History, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -29,6 +29,22 @@ export function AiHistoryDrawer({
   const { render, closing } = useExitPresence(open);
   const ref = useDialogFocus<HTMLDivElement>(open && !closing);
   const [threads, setThreads] = useState<AiThreadMeta[]>(() => listThreads());
+  // Escape closes (the dialog contract keeps Escape with each dialog's own
+  // handler); the closing window short-circuits a second press
+  useEffect(() => {
+    if (!open || closing) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open, closing, onClose]);
   if (!render) {
     return null;
   }
