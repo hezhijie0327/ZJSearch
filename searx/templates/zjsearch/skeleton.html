@@ -2,10 +2,15 @@
     finishes (see zjsearch_search_stream).  It is wiped when React boots with
     the pending page payload and hidden entirely when JavaScript is disabled
     (the noscript results replace it).  Geometry mirrors the real results page
-    chrome — header row (brand, query box, action buttons), category tabs,
-    filter row, text-card list, reserved-empty right rail — so the swap to the
-    React pending state does not shift the layout.  Keep in sync with
-    ResultsPage / ResultSkeleton. -#}
+    chrome — header row (brand, query box, action buttons) and then, per mode:
+
+    - classic: category tabs, filter row, text-card list, reserved-empty
+      right rail (ResultsPage / ResultSkeleton);
+    - AI takeover (ai=1): the run title, the OPEN research box and the
+      sources rail (AiSearchRunSection's boot state) — the takeover never
+      renders tabs/filters/card lists, so neither does its skeleton.
+
+    Keep in sync with ResultsPage / AiSearchRunSection / boot.css. -#}
 <div aria-busy="true" class="zjs-boot">
   <div class="zjs-boot-top">
     <div class="zjs-boot-brand">{{ instance_name }}<span>.</span></div>
@@ -24,8 +29,25 @@
       <span class="zjs-skeleton zjs-boot-action"></span>
     </div>
   </div>
-  <div class="zjs-boot-body">
+  <div class="zjs-boot-body{% if ai_mode %} is-ai{% endif %}">
     <div class="zjs-boot-main">
+      {%- if ai_mode -%}
+      {#- the agent page boots into its own shape: the run title (the real
+          query — the same string the takeover renders), the research
+          header (icon + label + timer ghosts) and the OPEN research box
+          with the planning-note ghost; no tabs, no filters, no cards -#}
+      <div class="zjs-boot-ai-title">{{ q|e }}</div>
+      <div aria-hidden="true" class="zjs-boot-ai-process">
+        <span class="zjs-skeleton zjs-boot-ai-glyph"></span>
+        <span class="zjs-skeleton zjs-boot-ai-label"></span>
+        <span class="zjs-skeleton zjs-boot-ai-count"></span>
+      </div>
+      <div aria-hidden="true" class="zjs-boot-ai-box">
+        <div class="zjs-skeleton zjs-boot-ai-note"></div>
+        <div class="zjs-skeleton zjs-boot-ai-row"></div>
+        <div class="zjs-skeleton zjs-boot-ai-row is-short"></div>
+      </div>
+      {%- else -%}
       <div aria-hidden="true" class="zjs-boot-tabs">
         <span class="zjs-skeleton zjs-boot-tab is-selected"></span>
         <span class="zjs-skeleton zjs-boot-tab"></span>
@@ -49,10 +71,26 @@
         </div>
         {%- endfor -%}
       </div>
+      {%- endif -%}
     </div>
+    {%- if ai_mode -%}
+    {#- the run's sources rail: header ghost + the four pulse cards of
+        AiSearchSourcesSkeleton — two grid columns below lg (the stacked
+        aside), one fixed-width column from lg (lg:w-72 xl:w-80) -#}
+    <div aria-hidden="true" class="zjs-boot-ai-side">
+      <div class="zjs-boot-ai-src-head">
+        <span class="zjs-skeleton zjs-boot-ai-glyph"></span>
+        <span class="zjs-skeleton zjs-boot-ai-src-title"></span>
+      </div>
+      {%- for _ in range(4) -%}
+      <div class="zjs-skeleton zjs-boot-ai-src"></div>
+      {%- endfor -%}
+    </div>
+    {%- else -%}
     {#- the real page reserves the right rail even when it stays empty
         (ResultsPage renders it for the infobox) — reserve the width only -#}
     <div aria-hidden="true" class="zjs-boot-side"></div>
+    {%- endif -%}
   </div>
   <noscript>
     <style>.zjs-boot { display: none !important; }</style>

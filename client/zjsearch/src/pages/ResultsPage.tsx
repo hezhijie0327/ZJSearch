@@ -20,6 +20,7 @@ import {
   splitAnswerStream,
 } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
+import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
@@ -39,7 +40,7 @@ import { citedSourceNumbers } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { downloadThreadMarkdown } from "@/lib/exporters.ts";
-import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
+import { type Translate, themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { recordClassicResults, recordSearch, searchReaderPages, threadUrl } from "@/lib/knowledgeStore.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -56,6 +57,38 @@ const EMPTY_AI_CITED: ReadonlySet<number> = new Set();
 /** stable empty citation meta: the `?? []` fallback of the per-run meta
     must keep its identity or the section memo would defeat itself */
 const EMPTY_META: AiSourceMeta[] = [];
+
+/** The AI takeover's boot ghost (page-private): the shape
+    AiSearchRunSection renders at zero events — run title, the research
+    header with its planning note, the sources rail skeleton — so the
+    static boot skeleton (skeleton.html's ai_mode branch + boot.css) hands
+    over to React WITHOUT flashing the classic card-list geometry.  Keep
+    the class values in sync with the .zjs-boot-ai* family in boot.css. */
+function AiBootGhost({ q, t }: { q: string; t: Translate }) {
+  return (
+    <div aria-busy="true" className="animate-fade-up space-y-5">
+      <h1 className="break-words text-3xl font-medium leading-tight text-ink" dir="auto">
+        {q}
+      </h1>
+      <section aria-label={t("ai_search_process")}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span aria-hidden="true" className="size-5 animate-pulse rounded-full bg-surface-2" />
+          <span className="text-xl font-medium text-ink">{t("ai_search_process")}</span>
+          <span className="text-xs text-ink-3">{t("ai_elapsed_seconds", { n: "0" })}</span>
+        </div>
+        <div className="mt-3 rounded-lg border border-line p-3">
+          <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
+        </div>
+      </section>
+      <div className="lg:flex lg:items-start lg:justify-between lg:gap-8">
+        <div aria-hidden="true" className="min-w-0 flex-1" />
+        <aside className="mt-5 w-full lg:mt-0 lg:w-72 lg:shrink-0 xl:w-80">
+          <AiSearchSourcesSkeleton />
+        </aside>
+      </div>
+    </div>
+  );
+}
 
 export function ResultsPage({ data }: { data: SearchPageData }) {
   const t = useT();
@@ -316,9 +349,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   }, [aiMode, aiSearch.threadId]);
   // no dependency array on purpose: the guard ref makes it run once per
   // search.  allResults is deliberately NOT a gate — the takeover page has
-  // no classic results to wait for (the server skipped the raw fan-out)
+  // no classic results to wait for (the server skipped the raw fan-out) —
+  // and neither is the pending flag: the run starts from the BOOT payload's
+  // q (identical to the real payload's) so the research begins while the
+  // boot round-trip settles, and the takeover's own shape replaces the
+  // boot ghost within the first frames
   useEffect(() => {
-    if (!aiMode || showSkeletons || error || aiSearchRan.current) {
+    if (!aiMode || !data.q || error || aiSearchRan.current) {
       return;
     }
     aiSearchRan.current = true;
@@ -913,11 +950,15 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
             ) : null}
 
             {showSkeletons ? (
-              <div aria-busy="true" className="mt-2 space-y-1">
-                {Array.from({ length: 5 }, (_, index) => (
-                  <ResultSkeleton key={index} />
-                ))}
-              </div>
+              aiMode ? (
+                <AiBootGhost q={data.q} t={t} />
+              ) : (
+                <div aria-busy="true" className="mt-2 space-y-1">
+                  {Array.from({ length: 5 }, (_, index) => (
+                    <ResultSkeleton key={index} />
+                  ))}
+                </div>
+              )
             ) : aiMode ? // AI takeover: the panel + blocks above ARE the page; the
             // classic lower half (fed by the skipped raw search) stays off
             null : (

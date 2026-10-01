@@ -205,11 +205,22 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   category-tab (first tab amber-underlined) + filter rows, card bars in the
   exact `ResultSkeleton` rhythm (url / mt-1 title / mt-1.5 snippet ×2 / mt-2
   engines pill), right rail reserved width-only (20rem at lg, 24rem at xl).
-  The three-way swap static skeleton → React pending → real results must never
-  shift layout: change `skeleton.html`, the `.zjs-boot` CSS and
-  `ResultSkeleton` together in one change, and re-verify at mobile / lg / xl
+  The skeleton has TWO modes, keyed on the render context's `ai_mode`:
+  the CLASSIC shape above, and the AI-takeover shape (`ai=1`) — the run
+  title in real query text at text-3xl, the OPEN research box (process-row
+  ghosts + bordered box, `.zjs-boot-ai-*`), and the sources rail
+  (`lg:w-72 xl:w-80`, two grid columns below lg) — the takeover never
+  renders tabs/filters/card lists, so its skeleton never does either, and
+  the React pending leg (`AiBootGhost` in ResultsPage, page-private)
+  mirrors the same shape.  The AI run starts from the BOOT payload (the
+  start gate ignores `pending` — the server skipped the classic fan-out),
+  so the research begins during the boot round-trip.  The three-way swap
+  static skeleton → React pending → real results must never shift layout:
+  change `skeleton.html`, the `.zjs-boot` CSS and the mirroring client
+  pieces together in one change, and re-verify at mobile / lg / xl
   widths (a no-JS preview of the streamed early chunk up to
-  `<!--zjs-shell-->` with the scripts stripped keeps the skeleton on screen).
+  `<!--zjs-shell-->` with the scripts stripped — stylesheet relinked to a
+  live instance — keeps the skeleton on screen).
 
 - The data contract lives in `searx/templates/zjsearch/data/macros.html` and is
   mirrored by TS types in `client/zjsearch/src/lib/types.ts`. **Keep both in sync.**

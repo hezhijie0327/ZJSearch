@@ -197,6 +197,105 @@
     margin-top: 8px;
     border-radius: 9999px;
   }
+  /* ── AI takeover variant (ai=1): the agent page boots into ITS OWN
+     geometry — the run title, the OPEN research box and the sources rail —
+     never the classic tabs/filters/card list (the takeover never renders
+     them).  Mirrors AiSearchRunSection's boot state: title text-3xl
+     font-medium, header row icon+label+timer, the rounded-lg bordered box
+     with the planning note, the lg:w-72 xl:w-80 sources rail with
+     AiSearchSourcesSkeleton's four pulse cards (two grid columns below
+     lg, where the aside stacks under the answer). */
+  .zjs-boot-body.is-ai {
+    flex-direction: column;
+  }
+  @media (min-width: 64rem) {
+    .zjs-boot-body.is-ai {
+      flex-direction: row;
+    }
+  }
+  .zjs-boot-ai-title {
+    margin-top: 0.25rem;
+    overflow-wrap: break-word;
+    font-size: 1.875rem;
+    font-weight: 500;
+    line-height: 2.25rem;
+    color: var(--ink);
+  }
+  .zjs-boot-ai-process {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+  }
+  .zjs-boot-ai-glyph {
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 9999px;
+  }
+  .zjs-boot-ai-label {
+    width: 5.5rem;
+    height: 1.25rem;
+  }
+  .zjs-boot-ai-count {
+    width: 4rem;
+    height: 1rem;
+  }
+  .zjs-boot-ai-box {
+    margin-top: 0.75rem;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+  }
+  .zjs-boot-ai-note {
+    height: 1rem;
+    width: 11rem;
+  }
+  .zjs-boot-ai-row {
+    height: 1.5rem;
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+  .zjs-boot-ai-row.is-short {
+    width: 82%;
+  }
+  .zjs-boot-ai-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    align-content: start;
+    margin-top: 1.25rem;
+  }
+  .zjs-boot-ai-src-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    grid-column: 1 / -1;
+  }
+  .zjs-boot-ai-src-title {
+    width: 4rem;
+    height: 1.25rem;
+  }
+  .zjs-boot-ai-src {
+    height: 3.875rem;
+    width: 100%;
+  }
+  @media (min-width: 64rem) {
+    .zjs-boot-ai-side {
+      display: flex;
+      flex: 0 0 18rem;
+      flex-direction: column;
+      margin-top: 0;
+    }
+    .zjs-boot-ai-src {
+      height: 2.75rem;
+    }
+  }
+  @media (min-width: 80rem) {
+    .zjs-boot-ai-side {
+      flex-basis: 20rem;
+    }
+  }
   /* width-only reservation of the results right rail (lg:w-80 xl:w-96),
       which the real page keeps even while it is empty */
   .zjs-boot-side {

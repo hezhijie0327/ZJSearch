@@ -117,6 +117,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | Surface | Query / URL | Expect |
 |---|---|---|
 | Direct URL boot | `/search?q=test` (no homepage hop) | React mounts, results render |
+| AI boot skeleton | `/search?q=…&ai=1` (strip scripts on the early chunk for the static leg) | the skeleton renders the TAKEOVER's shape (real-query title, open research box, sources rail) — never classic tabs/filters/card bars; the AI POST fires without waiting for the payload swap |
 | SPA search (homepage) | submit from the ask-card | leaves the hero IMMEDIATELY (pending skeleton), results swap in when engines settle; the page must never sit on the homepage or show a ghost of it |
 | SPA re-search (results) | new query from the results header | pending skeleton with the NEW query — never the previous query's results/input text |
 | Race | submit query B while query A streams | B wins; A's late payload is dropped (seq guard) |
@@ -323,7 +324,10 @@ rules and the shared-token inventory from AGENTS.md, covering:
    multi-keyword queries, unknown locations = silence).
 4. **Icons** — text-only controls next to icon-paired siblings.
 5. **Design tokens** — light/dark/black sweeps, widescreen/centered,
-   contrast tiers, skeleton geometry vs real page (boot.css drift audit).
+   contrast tiers, skeleton geometry vs real page (boot.css drift audit) in
+   BOTH modes: the classic card-list mirror AND the AI-takeover branch
+   (`.zjs-boot-ai*` vs `AiSearchRunSection`'s zero-event state vs
+   `AiBootGhost` — three renderings of one geometry, kept in sync by hand).
 6. **Result cards** — every category layout renders its full presentation;
    field-shape tolerance (filesize string|number, timedelta variants).
 7. **Interface uniformity** — preferences tabs share the row language;
