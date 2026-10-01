@@ -20,7 +20,8 @@ local/py3/bin/pip install -r requirements.txt        # + granian if missing
 # a mirror serving 0-byte wheels (ustc did once) fails the hash check.
 # ZJSEARCH_AI_KEY feeds the LLM transport (zjsearch.llm — the endpoint
 # VALIDATES the bearer token, the placeholder "none" gets a 401).
-# ZJSEARCH_EMBEDDING_KEY is optional: the research library's semantic search.
+# ZJSEARCH_EMBEDDING_KEY is optional: the knowledge base's semantic search
+# (drawer + the client-side recall that feeds the AI runs).
 SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/dev-settings.yml \
 ZJSEARCH_AI_KEY='<key from the secret store, never into the repo>' \
 GRANIAN_INTERFACE=wsgi GRANIAN_HOST=127.0.0.1 GRANIAN_PORT=8888 \
@@ -78,7 +79,7 @@ pnpm add -D @biomejs/biome@<new pin>         # for exactly-pinned dev deps
 - After updating: `pnpm run lint` + `make themes.zjsearch`, RESTART the
   instance (new hashes), then regress the surfaces that exercise the
   moved packages — the AI overview (react-markdown / remark-* / katex /
-  mermaid / lucide-react), the research library drawer and the
+  mermaid / lucide-react), the knowledge-base drawer and the
   preferences PGlite tab (@electric-sql/pglite*), a grid page (ol), and
   the streamed boot (vite output shape feeds the static-root publishing
   contract).
@@ -129,10 +130,10 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
 | AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
-| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources) |
+| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources).  With a non-empty browser corpus the researcher gains a `past_research` RAG round (full-text heads + source identities as history [n] rows); the audit mock falls back to a plain search when the tool is not registered — the audited timeline must show NO error row either way |
 | AI clarify / ask_user | an ambiguous query in quality/goal (live), or the mock's clarify fixture | the clarify modal with the 2-question form (提交 / 跳过); answering seeds a clarify step at the timeline head; a mid-research ask_user renders as a call row + the same modal |
 | AI memory | any researched run (live model) | stored facts ride the run's `<user_memory>` block; a `user_memory` save renders a memory row AFTER settle; the extractor's saves appear in the drawer's 记忆 tab |
-| Research library | header History icon | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them; EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab |
+| Knowledge base (知识库) | header LibraryBig icon (`KnowledgeDrawer`) | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them + the ×N cross-session badge (N = past runs that referenced the url, from the PRE-run recall); EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab; the keyword/semantic/hybrid modes come from the deployment (`history_search`) |
 | Thread page | `/zjsearch/ai/thread/<id>` direct boot + REFRESH | the run replays with its timeline; a refresh must NEVER flash 找不到该会话 (resume awaits the store fallback, not just the per-tab mirror) |
 | Print view | 📄 on a settled run, in EVERY theme (light/dark/black) | the print dialog opens IMMEDIATELY (no preview hop); the sheet is light on pure white in all themes; the live page never re-renders (no mermaid flash); the saved filename mirrors the MD export |
 | MD thread export | the export action on the run actions row | valid markdown: one `## ` per question, sources at the foot, `{{zjs-gallery:i}}` NEVER appears (each becomes its images' markdown figures) |
@@ -155,6 +156,13 @@ Plugin answers (server-side; test via curl §6, not the browser):
 | `test -wikipedia.org` | **zero** wikipedia hits (-domain promotion) |
 | `test -site:en.wikipedia.org` | same, explicit form |
 | `"finite state machine"` | exact phrase |
+
+Result-ordering plugin (test via curl, not the browser — ordering has no
+answer payload):
+
+| Check | Expect |
+|---|---|
+| `python tutorial` vs the same + `&disabled_plugins=bm25_reranker` | both 200 with results; the enabled run rewrites `positions` (order may differ; on a zero-signal query the engine order STANDS — do not expect a flip) |
 
 ## 5. Browser measurement recipes (browser-use)
 
@@ -247,7 +255,14 @@ html = sys.stdin.read()
 m = re.search(r'<script id=\"page-data\" type=\"application/json\">(.*?)</script>', html, re.DOTALL)
 print(json.loads(m.group(1))['globals']['ai_search']['tk'])")
 curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ai/search' -H 'Content-Type: application/json' \
-  -d "{\"q\":\"<question>\",\"tk\":\"$TOKEN\",\"mode\":\"balanced\",\"lang\":\"zh-CN\"}"
+  -d "{\"q\":\"<question>\",\"tk\":\"$TOKEN\",\"mode\":\"balanced\",\"lang\":\"zh-CN\",
+  \"past_research\":[{\"url\":\"https://example.com/a\",\"title\":\"A past page\",\"text\":\"remembered body\"}]}"
+
+# the RAG tool registers only when that index is non-empty: a past_research
+# tool call in the replay then returns the matching heads as history [n]
+# sources (an identity-only entry -- no text -- points the model at
+# web_reader for a live re-read).  The retired payload key ``web_memory``
+# still parses (a deploy-window browser may still send it).
 ```
 
 - The alphabet (`framework/wire.py`): open / think / say / calls / call /
@@ -316,7 +331,29 @@ rules and the shared-token inventory from AGENTS.md, covering:
    tool unprompted), the MCP bridge (a dead endpoint contributes
    NOTHING; past 8 registered tools the `mcp_search_tools` discovery
    tool replaces the schema dump), and the print view's off-screen
-   mermaid render (the live page never re-renders — §5 recipe 5).  The
+   mermaid render (the live page never re-renders — §5 recipe 5).  Newer
+   contracts, each with an explicit check: the GOAL LOOP (the mode is the
+   unbounded one — the loop ends on the task ledger closing or a stalled
+   run, never on a small count; 32 rounds is the runaway guard, the
+   budget note fires at the last round); the ask_user SHAPE EQUALITY
+   (the tool spec and `gates.sanitize_questions` must advertise the same
+   wire — a type the sanitizer downgrades must not be offered to the
+   model; the current contract is single/multi + 2-4 options + the
+   client's free-text line, no importance field); the HUMAN-IN-THE-LOOP
+   posture (the ambiguity_escape block and the clarify gate license
+   asking on high-stakes deliverables — forecasts, money/health/legal —
+   where a wrong assumption changes the answer); the past_research DUAL
+   INDEX (page entries carry ~1500-char heads, source entries identity
+   only and point at web_reader; `assign_past_sources` never numbers a
+   url the researcher already numbered); the OVERVIEW accuracy path (the
+   client's eager PGlite recall trails the context as labeled [n] lines
+   whose citation chips open the url; server-side the numbered lines are
+   cosine-REORDERED past 12k and the 16k cap cuts at a LINE boundary —
+   both silent when the embedding endpoint is off); the spine FIGURES
+   rule (a writer/overview has no calculator — it must never present a
+   derived number as if a source stated it); and the cross-session
+   badge (pastRefs is captured at the PRE-run recall — the run's own
+   ref-count increment must never badge itself).  The
    audit mock's event sequence (§6 recipe against :8907) exercises the
    plumbing without a live model.
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,

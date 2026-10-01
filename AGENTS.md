@@ -157,7 +157,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
     shared prompt spine (identity/citations/markdown/voice/answer
-    contract) is `runtime/spine.py`; the reader/calcuator/memory/mcp
+    contract) is `runtime/spine.py`; the reader/calculator/past_research/user_memory/mcp
     tool implementations are `ai/capabilities/`.
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
@@ -884,23 +884,82 @@ future skills system must follow it too.  The amap E2E: 15 tools listed, real ge
 calls answered.  KEYS live in the config file (never env) and NEVER enter
 git — dev-settings.yml carries them locally only.
 
-## Subagents (quality/goal decomposition + delegation)
+## Task decomposition (quality/goal) and the GOAL LOOP
 
 quality/goal decompose: the model writes a LIVING task list
 (`task_write` — 2-4 subtasks with pending/active/done statuses; the
 client renders it as the TASK CARD above the timeline: three-state rows
-+ a done/total counter) and delegates each subtask via `spawn_subtask`
-— a nested, speed-grade `run_agent` (2 rounds, tools = search +
-calculator ONLY, sharing the SAME Searches state: numbering, dedup and
-the feed are global, so sub-sources become citable [n] entries and
-duplicate queries dedup across the nest).  The sub's mini-writer
-compresses its findings into the feed as a block AND the tool result.
-The SPAWN RECURSION GUARD: `in_subtask` rejects nested delegation and
-no-ops nested task_write (a rogue sub-model calling spawn would
-otherwise recurse without bound — the mock caught exactly this).
-`plan_tool=register_plan` now gates task_write+spawn (the one-shot plan
-tool is superseded; its prompt block was removed).  The old one-shot
-plan tool stays unregistered.
++ a done/total counter; `Coverage` marks a subtask done only when real
+source titles matched — a subtask that never gathered a source is NOT
+flipped to done).  The old `spawn_subtask` subagent nest and the
+one-shot plan tool are REMOVED — the task list is the only decomposition
+surface; the client's `spawn_subtask` tool name survives solely as a
+stored-legacy thread renderer.
+
+GOAL is the LOOP mode: the four depths are budget/decomposition/
+output-shape differences on ONE loop, and goal's contract is "researches
+until the goal is met" — the loop ends on the task ledger closing (the
+model stops calling tools) or a stalled run (3 unproductive rounds),
+never on a small count.  `max_rounds: 32` is the runaway guard, not the
+plan (override: `zjsearch.feature.ai_search.max_rounds`); the prompt
+tells the researcher to keep working open ledger items and to switch
+tools freely (searches, page reads, the calculator).
+
+## The human-in-the-loop doctrine (ask_user / clarify)
+
+The agent must NOT plow ahead on a guess: the `<ambiguity_escape>`
+researcher block and the `ask_user` tool spec license asking the moment
+the run could miss what the user wants — a genuinely ambiguous subject,
+a scope/success criterion only the user can state, and ALWAYS on
+high-stakes deliverables (forecasts, investment/purchase/health/legal)
+whose assumptions change the answer.  The clarify gate carries the same
+high-stakes posture in BOTH gated modes (quality keeps its narrower
+"only when direction depends on intent" rule on top).  Guardrails stay:
+one ask per turn, max 3 questions, never for what a quick search
+settles.  SHAPE EQUALITY is a contract: the tool spec advertises exactly
+what `gates.sanitize_questions` passes (single/multi + 2-4 options; the
+client's free-text line covers yes/no and open answers — a type the
+sanitizer would downgrade must not be offered to the model).
+
+## Knowledge base (知识库 -- the browser-local RAG + memory layer)
+
+The PGlite store IS the theme's RAG + memory system; the header drawer
+(`KnowledgeDrawer`, opened by the LibraryBig button) is its DISPLAY —
+four tabs: 搜索 (classic search history) / 会话 (AI threads) / 来源
+(the corpus: sources + reader full-texts, BM25+pgvector+RRF searchable)
+/ 记忆 (user facts).  The store layer is `src/lib/knowledgeStore.ts`
+(renamed from threadStore — it was never only threads); table DDLs live
+in `src/lib/pg.ts` (pgvector + pg_textsearch extensions, dimension-locked
+columns from `zjsearch.embedding.dimensions`).
+
+How runs consume the corpus (the client recalls BEFORE every AI-search
+POST; the server stays stateless):
+
+- `history_sources` — `recallSources(q, 6)` (hybrid BM25+vector RRF,
+  cited-count bump): WRITER-phase only (numbered after the live feed,
+  `<past_research>` block; a url the researcher already numbered keeps
+  ITS number).  THE RED LINE: recalled sources never seed the
+  researcher's feed — ready-made material kills the live-search
+  incentive.
+- `past_research` — the RAG TOOL index (renamed from web_memory): page
+  entries carry ~1500-char reader-cache heads, source entries identity
+  only (the tool's feed then points at web_reader for a live re-read);
+  matches become citable history [n] sources.  Registered only when the
+  index is non-empty; the retired `web_memory` payload key still parses.
+- `user_memories` — the full snapshot (see the next section).
+- The `pastRefs` cross-session badge on source rail cards reads the
+  PRE-run recall's ref counts — the run's own increment must never
+  badge itself.
+
+AI OVERVIEW accuracy levers: the classic page recalls up to 2
+reader-cache pages EAGERLY (a click-time recall would stall the first
+paint on an embedding round trip) and trails them as labeled [n]
+context lines (their citation chips open the url — no in-page card);
+server-side, `overview._ordered_context` cosine-reorders the numbered
+lines past 12k chars (the 16k cap cuts at a LINE boundary) — both
+silent when `zjsearch.embedding` is off.  The bm25_reranker plugin
+improves the overview too: the client assembles its context from the
+page payload AFTER server reranking.
 
 ## User memory (browser-local durable facts)
 
@@ -973,6 +1032,14 @@ The facts ride every request (inherent: the model must read them).
 - `time_zone`: an unknown location is silence (ValueError swallowed), not a
   plugin error.  The filler word "in" is stripped from the search term, so
   "time in tokyo" resolves like "time tokyo" instead of going silent.
+- `calculator` (AI capability, `searx/zjsearch/ai/capabilities/calculator.py`):
+  the researcher's NON-NEGOTIABLE number rule — every non-trivial figure
+  (ratios, growth, averages, financial/forecast math) goes through the
+  tool, never in-head; the `<calculator>` prompt block names earnings and
+  forecast material explicitly.  The writer/overview have NO tools, so
+  the spine's `<figures>` rule does the honest second half: derive only
+  from cited inputs, keep the derivation visible, never present a
+  computed number as if a source stated it.
 - `stock_quote`: `$AAPL`, `AAPL stock` render the `Stock.tsx` DDG-style
   card: price hero, change with the locale's red/green convention (zh-CN:
   red up), range pills (1D/5D/1M/YTD/1Y/5Y/MAX, all series pre-fetched in
