@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { useEffect, useRef, useState } from "react";
-import type { AiSearchGallery } from "@/features/results/aiAnswer.ts";
+import type { AiSearchGallery } from "@/features/results/aiOverview.ts";
 import { fetchEventStream } from "@/lib/http.ts";
 import {
   archiveReaderPage,
@@ -58,7 +58,6 @@ export interface AiSearchCall {
     | "user_memory"
     | "past_research"
     | "task_write"
-    | "spawn_subtask"
     | "ask_user";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
@@ -86,13 +85,13 @@ export interface AiSearchCall {
 
 /** One chronological segment of a run's research timeline, mirroring one
     server-side ENTRY (framework/loop.py): a research entry renders as its
-    think segment, its intent narration and its call rows.  "plan" /
-    "clarify" survive for browser-stored legacy threads; new runs never
-    produce them (the clarify round-trip seeds a "clarify" step). */
+    think segment, its intent narration and its call rows; the clarify
+    round-trip seeds a "clarify" step.  (The stored-legacy "plan" step kind
+    of the pre-wire-v2 threads was dropped with the threads' own era --
+    those rows simply no longer render.) */
 export type AiSearchStep =
   | { kind: "think"; text: string; entry?: number }
   | { kind: "intent"; text: string; entry?: number }
-  | { kind: "plan"; text: string }
   | { kind: "clarify"; pairs: Array<{ q: string; a: string }> }
   | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] };
 
@@ -632,11 +631,9 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
                 ? ("past_research" as const)
                 : tool === "task_write"
                   ? ("task_write" as const)
-                  : tool === "spawn_subtask"
-                    ? ("spawn_subtask" as const)
-                    : tool === "ask_user"
-                      ? ("ask_user" as const)
-                      : ("web_search" as const),
+                  : tool === "ask_user"
+                    ? ("ask_user" as const)
+                    : ("web_search" as const),
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
     q: String(item.q ?? ""),

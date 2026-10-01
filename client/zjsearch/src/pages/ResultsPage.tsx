@@ -18,7 +18,7 @@ import {
   buildAiContext,
   collectAiImages,
   splitAnswerStream,
-} from "@/features/results/aiAnswer.ts";
+} from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";

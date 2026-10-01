@@ -779,10 +779,6 @@ export function listMemories(): Array<{ id: string; content: string; updated: nu
   return memories;
 }
 
-export function memoryCount(): number {
-  return memories.length;
-}
-
 /** The corpus' recent sources (the 来源 tab's default listing). */
 export async function listRecentSources(limit = 40): Promise<RecallHit[]> {
   await ready;
@@ -811,7 +807,7 @@ export async function listRecentSources(limit = 40): Promise<RecallHit[]> {
 export async function searchReaderPages(
   query: string,
   limit = 4,
-): Promise<Array<{ url: string; title: string; text: string }>> {
+): Promise<Array<{ url: string; title: string; chars: number; text: string }>> {
   const trimmed = query.trim();
   if (!trimmed) {
     return [];
@@ -825,12 +821,13 @@ export async function searchReaderPages(
   interface Row {
     url: string;
     title: string;
+    chars: number;
     text: string;
   }
   const [keywordRows, semanticRows] = await Promise.all([
     keywords
       ? pgQuery<Row>(
-          `SELECT url, title, substr(markdown, 1, 1500) AS text
+          `SELECT url, title, chars, substr(markdown, 1, 1500) AS text
            FROM reader_cache
            WHERE (search_text <@> to_bm25query($1, 'reader_bm25')) <> 0
            ORDER BY (search_text <@> to_bm25query($1, 'reader_bm25')) DESC
@@ -845,7 +842,7 @@ export async function searchReaderPages(
             return [] as Row[];
           }
           return pgQuery<Row>(
-            `SELECT url, title, substr(markdown, 1, 1500) AS text
+            `SELECT url, title, chars, substr(markdown, 1, 1500) AS text
              FROM reader_cache WHERE embedding IS NOT NULL
              ORDER BY embedding <=> $1::vector LIMIT $2`,
             [toVectorLiteral(queryVector), limit * 2],

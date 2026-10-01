@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
 import { Shell } from "@/components/Shell.tsx";
-import type { AiSourceMeta } from "@/features/results/aiAnswer.ts";
+import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -112,7 +112,12 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                   flashToast(t("ai_thread_exported"), { tone: "ok", timeoutMs: 2000 });
                 }}
                 onFallback={onRunFallback}
-                onRegenerate={() => {}}
+                onRegenerate={() => {
+                  // in-place re-run of the last run -- the same semantic the
+                  // takeover's 重新生成 carries (the button was a silent
+                  // no-op here once)
+                  aiSearch.retry(aiLang, researchMode, "");
+                }}
                 onRelated={(question) => {
                   setFollowupQuery("");
                   aiSearch.followup(question, aiLang, researchMode);

@@ -35,7 +35,7 @@ import { createPortal } from "react-dom";
 import { Collapse } from "@/components/Collapse.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
-import type { AiSourceMeta } from "@/features/results/aiAnswer.ts";
+import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { PrintView } from "@/features/results/aiSearch/PrintView.tsx";
 import type {
@@ -490,14 +490,10 @@ function StepSegment({
       </div>
     );
   }
-  if (step.kind === "intent" || step.kind === "plan") {
+  if (step.kind === "intent") {
     return (
       <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
-        {step.kind === "plan" ? (
-          <Compass aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
-        ) : (
-          <Lightbulb aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
-        )}
+        <Lightbulb aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
         <p className="py-0.5 text-[13px] leading-relaxed text-ink-2" dir="auto">
           {step.text}
         </p>

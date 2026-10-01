@@ -199,7 +199,7 @@ export function KnowledgeDrawer({
       ])
         .then(([sources, pages]) => {
           setCorpusSources(sources);
-          setCorpusPages(pages.map((page) => ({ ...page, fetchedAt: Date.now(), chars: 0 })));
+          setCorpusPages(pages.map((page) => ({ ...page, fetchedAt: Date.now() })));
         })
         .catch(() => {
           /* best-effort */

@@ -20,7 +20,7 @@ import {
   type AiSourceMeta,
   extractRunMeta,
   splitAnswerStream,
-} from "@/features/results/aiAnswer.ts";
+} from "@/features/results/aiOverview.ts";
 import { AnswerGallery, renderWithGalleries } from "@/features/results/aiSearch/AnswerGallery.tsx";
 import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";

@@ -31,6 +31,7 @@ from searx.zjsearch.ai.runtime.feed import RESULTS_CAP, build_search_feed, seria
 from searx.zjsearch.ai.runtime.prompts import STALL_NOTE
 from searx.zjsearch.ai.runtime.registry import SourcesRegistry
 from searx.zjsearch.ai.runtime.tools import (
+    ASK_TOOL,
     PAGE_TOOL,
     parse_call,
     parse_page_call,
@@ -221,26 +222,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # subtask goes done and the opened page's [n] rides its provenance
         if self.coverage.task_list:
             self.coverage.track(url, [title], [n])
-        yield (
-            "page",
-            {
-                "round": rnd,
-                "id": idx,
-                "status": "ok",
-                "url": url,
-                "title": title,
-                "chars": len(text),
-                "ms": ms,
-                # the extracted readable content rides to the client: the
-                # timeline row expands into a READING PANE (what did the
-                # model actually see?) -- capped like the feed copy
-                "text": text,
-            },
-        )
-        # the read page always rides a sources event: a NEW url registers its
-        # card, an already-numbered one re-emits its [n] with ``crawled``
-        # set -- the client upgrades the existing card in place (the
-        # read-in-full badge marks what the model verified first-hand)
+        # the read page always rides a sources event FIRST: a NEW url
+        # registers its card, an already-numbered one re-emits its [n] with
+        # ``crawled`` set -- the client upgrades the existing card in place
+        # (the read-in-full badge marks what the model verified
+        # first-hand).  Sources lead so the call settlement below can look
+        # the title up on the card when it archives the page.
         yield (
             "sources",
             {
@@ -259,6 +246,24 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         "crawled": True,
                     }
                 ]
+            },
+        )
+        # the row settlement is a CALL event (wire v2's closed set -- the
+        # reader's payload rides the row exactly like an MCP preview):
+        # chars for the count, text for the READING PANE (what did the
+        # model actually see?) and the reader-cache archive.  The pre-v2
+        # tuple name "page" never joined the closed set -- every
+        # successful read crashed the whole stream with
+        # ``unknown wire event: 'page'``.
+        yield (
+            "call",
+            {
+                "call": idx,
+                "status": "ok",
+                "url": url,
+                "ms": ms,
+                "chars": len(text),
+                "text": text,
             },
         )
 
@@ -282,6 +287,16 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         page_jobs: list[tuple[int, str]] = []
         for wire_id, call in enumerate(calls, 1):
             tool_name = str(call.get("name") or "")
+            if tool_name == ASK_TOOL:
+                # the ask intercept in the loop handles a SOLO ask call (the
+                # prompted shape); one mixed into a parallel batch lands here
+                # -- settle the row honestly instead of letting it fall
+                # through to the web_search branch's empty-query error
+                feeds[wire_id - 1] = (
+                    "error: the ask_user tool must be the ONLY call of its turn" " -- ask again alone in the next turn."
+                )
+                yield ("call", {"call": wire_id, "status": "error", "q": ""})
+                continue
             if tool_name == calculator.CALCULATOR_TOOL:
                 feed, event = calculator.evaluate_call(call, rnd, wire_id)
                 feeds[wire_id - 1] = feed
@@ -295,6 +310,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 self.coverage.task_list = items
                 yield ("tasks", {"round": rnd, "id": wire_id, "items": items})
                 done = sum(1 for item in items if item["status"] == "done")
+                summary = f"{done}/{len(items)}"
+                # the row settles like every other (a plan write is instant
+                # work -- leaving it pending read as 已中断 at the settle)
+                yield ("call", {"call": wire_id, "status": "ok", "q": summary})
                 feeds[wire_id - 1] = (
                     f"plan written: {done}/{len(items)} subtasks covered."
                     " Search each subtask's keywords; a subtask with sources"
@@ -308,6 +327,17 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     events: list[dict[str, t.Any]] = []
                     blocks: list[str] = []
                     for entry in matches:
+                        # a url the live feed already numbered keeps ITS [n]:
+                        # the past head supplements the existing source
+                        # instead of minting a duplicate identity
+                        known_n = self.reg.known(reader.normalize_url(entry["url"]))
+                        if known_n is not None:
+                            blocks.append(
+                                f"[{known_n}] {entry['title']} -- {entry['url']}\n{entry['text']}"
+                                if entry["text"]
+                                else f"[{known_n}] {entry['title']} -- {entry['url']} (already among your sources)"
+                            )
+                            continue
                         n = self.next_n
                         self.next_n += 1
                         if entry["text"]:
@@ -331,7 +361,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         "from the user's PAST research (may be outdated --"
                         " live sources take precedence):\n\n" + "\n\n".join(blocks)
                     )
-                    yield ("sources", {"items": events})
+                    if events:
+                        yield ("sources", {"items": events})
                 else:
                     feeds[wire_id - 1] = "(no page in the user's past research matches -- continue with live search)"
                 yield ("call", {"call": wire_id, "status": "ok", "n": len(matches)})

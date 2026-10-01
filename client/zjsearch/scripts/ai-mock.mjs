@@ -322,12 +322,27 @@ function researcher(answered, messages, res, tools = []) {
         ],
       },
       {
+        // the SECOND task_write (the status update): a proper declaration
+        // plus the full done-list args in two chunks -- the previous tail
+        // chunks never declared the tool and parsed as garbage, leaving a
+        // bogus 失败 row on the audited timeline
+        tool_calls: [
+          {
+            index: 5,
+            id: "call-zjaudit-6",
+            type: "function",
+            function: { name: "task_write", arguments: "" },
+          },
+        ],
+      },
+      {
         tool_calls: [
           {
             index: 5,
             function: {
               arguments:
                 '{"items": [{"title": "Fixture subtask A", "status": "done"}, {"title": "Fixture subtask B", "status": "done"}]}'.slice(
+                  0,
                   30,
                 ),
             },
@@ -339,7 +354,10 @@ function researcher(answered, messages, res, tools = []) {
           {
             index: 5,
             function: {
-              arguments: '{"title": "Fixture subtask A", "questions": ["audit fixture detail"]}'.slice(25),
+              arguments:
+                '{"items": [{"title": "Fixture subtask A", "status": "done"}, {"title": "Fixture subtask B", "status": "done"}]}'.slice(
+                  30,
+                ),
             },
           },
         ],

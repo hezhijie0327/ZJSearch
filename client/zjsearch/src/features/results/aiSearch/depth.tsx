@@ -7,7 +7,7 @@ import type { Translate } from "@/lib/i18n.ts";
 
 /** The valid research depths, in dropdown order -- the single source of
     truth for parsing the `mode` URL param (server-side mirror:
-    SEARCH_MODES in searx/zjsearch/ai/search/config.py). */
+    SEARCH_MODES in searx/zjsearch/ai/runtime/profile.py). */
 const DEPTH_MODES: readonly AiSearchMode[] = ["speed", "balanced", "quality", "goal"];
 
 /** Parse a raw `mode` param: anything unknown falls back to balanced. */

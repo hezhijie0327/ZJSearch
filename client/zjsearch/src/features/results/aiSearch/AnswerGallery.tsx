@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { type ReactNode, useState } from "react";
-import { type AiSearchGallery, splitGallerySegments } from "@/features/results/aiAnswer.ts";
+import { type AiSearchGallery, splitGallerySegments } from "@/features/results/aiOverview.ts";
 
 /**
  * One inline image group of the AI answer (the server-validated
