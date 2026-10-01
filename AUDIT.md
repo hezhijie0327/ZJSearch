@@ -118,6 +118,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 |---|---|---|
 | Direct URL boot | `/search?q=test` (no homepage hop) | React mounts, results render |
 | AI boot skeleton | `/search?q=…&ai=1` (strip scripts on the early chunk for the static leg) | the skeleton renders the TAKEOVER's shape (real-query title, open research box, sources rail) — never classic tabs/filters/card bars; the AI POST fires without waiting for the payload swap |
+| POST-mode AI Search | preferences → HTTP 方法 = POST, then a hero AI search | the hidden-form POST navigates (navigation type `navigate`, url `/search` bare), the takeover still boots (payload `globals.ai_mode`, no query string needed), the run streams; a follow-up appends in-place; the classic POST search (`/search`, results render) is the sibling regression |
 | SPA search (homepage) | submit from the ask-card | leaves the hero IMMEDIATELY (pending skeleton), results swap in when engines settle; the page must never sit on the homepage or show a ghost of it |
 | SPA re-search (results) | new query from the results header | pending skeleton with the NEW query — never the previous query's results/input text |
 | Race | submit query B while query A streams | B wins; A's late payload is dropped (seq guard) |
