@@ -211,7 +211,7 @@ AI Overview (optional)
 ======================
 
 The whole-page AI answer is **off by default**.  Enable it in the instance
-settings (``zjsearch.ai``); ``searx/zjsearch_ai.py`` drives the official
+settings (``zjsearch.llm``); ``searx/zjsearch_ai.py`` drives the official
 SDK of the chosen dialect (``openai`` / ``anthropic`` / ``google-genai``,
 pinned in ``requirements.txt``).  ``base_url`` is used **exactly as
 configured** — each SDK appends its own method paths, so the value follows
@@ -220,9 +220,13 @@ the SDK's own convention:
 .. code-block:: yaml
 
    zjsearch:
-     ai:
+     llm:
        enabled: true
-       sdk: openai_chat_completions  # openai_chat_completions | openai_responses | anthropic | gemini
+       sdk: openai  # openai (= the Responses API, the latest) |
+                    # openai.chat_completions | openai.responses |
+                    # anthropic | gemini
+                    # (the pre-rename dotted-less openai_chat_completions /
+                    # openai_responses still work as aliases)
        base_url: "https://api.openai.com/v1"                    # openai dialects
        # base_url: "https://api.anthropic.com"                  # anthropic -- no /v1
        # base_url: "https://generativelanguage.googleapis.com"  # gemini (a gateway
@@ -233,7 +237,7 @@ the SDK's own convention:
 ``params`` carries the chosen SDK's ``create()`` kwargs VERBATIM under
 their SDK names — nothing is translated: name the output cap
 ``max_tokens`` on the anthropic dialect and ``max_output_tokens`` on
-``openai_responses`` / ``gemini`` (the Messages API fills its mandatory
+the openai / gemini dialects (the Messages API fills its mandatory
 ``max_tokens`` with 4096 when ``params`` omits one).
 ``extra_body`` / ``extra_headers`` pass through 1:1 on EVERY dialect as
 the provider-specific escape hatches — ``extra_headers`` rides the
@@ -266,7 +270,7 @@ reasoning is replayed on the next request's history — Anthropic
 thinking blocks + signatures, the Responses reasoning items, and
 ``reasoning_content`` / doubao's ``encrypted_content`` on the chat
 dialect.  The chat echo is a SIMPLE SWITCH at the instance level
-(``zjsearch.ai.reasoning_passback: true`` — the transport configures
+(``zjsearch.llm.reasoning_passback: true`` — the transport configures
 one model, so there is nothing to match; several families reject the
 request without the echo).  Gemini needs no echo: every synthesized
 part carries LobeHub's
@@ -276,7 +280,7 @@ stream protocol and the client card live in
 
 Which dialect for which provider?  Aggregators (aihubmix, openrouter,
 inferera, …) expose **OpenAI-compatible routes for every model** —
-Claude and Gemini included — so ``openai_chat_completions`` covers them
+Claude and Gemini included — so ``openai.chat_completions`` covers them
 all.  The ``anthropic`` / ``gemini`` dialects matter for the official
 APIs (or gateways that only speak those protocols).
 

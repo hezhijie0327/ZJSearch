@@ -123,476 +123,76 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   errors fall through to the upstream view unchanged. `_render_context` in
   the module mirrors `webapp.render`'s context building — re-sync it if
   upstream changes `render`.
-- The AI Overview (`searx/zjsearch/ai/feature/overview/`, route `POST /ai/answer`; client
-  `features/results/AiSummary.tsx` + `aiAnswer.ts`): the gate is an HMAC
-  token in the page-data globals, the client assembles the numbered source
-  context from the payload it already has, and the endpoint streams a cited
-  markdown answer (reasoning relayed wrapped in `<think>`).  As soon as
-  the answer settles, every result it actually cites is marked with the
-  persistent dashed accent frame — the cited source numbers are parsed
-  from the settled text (`citedSourceNumbers`, same grammar and code-block
-  skips as the renderer).  Clicking a citation chip scrolls to its result
-  row and adds the one-shot locate tint (`data-ai-flash`, base.css); the
-  marks belong to the answer that produced them — regenerate and new
-  searches drop the set (ResultsPage `aiCited`).  A stream that
-  dies before its first token answers 502 with a truncated upstream reason
-  in the body (tags stripped — gateways answer with HTML pages), which
-  fetchStream carries as the error detail and the card renders under its
-  failed label. Transports are
-  the official SDKs (openai chat/responses, anthropic, gemini), configured
-  under `zjsearch: ai:` in settings; the API key may travel via the
-  `ZJSEARCH_AI_KEY` env (dev-settings deliberately keeps it out of the
-  repo). NOTE: LM Studio VALIDATES the bearer token — the placeholder
-  "none" that local auth-free endpoints get is rejected with 401, so LM
-  Studio deployments must set a real key. Lighthouse-critical: the
-  feature adds zero bytes to the eager graph (the trigger lives in the
-  results chunk; KaTeX/mermaid load only when the answer uses them).
-- Both AI features run ONE agent framework (`searx/zjsearch/ai/agent.py`):
-  `run_agent` drives turns over the `llm.py` transport (the four dialect
-  pumps collect `think`/`delta`/`tool_calls`; a turn ends in tool calls
-  only when a `tools` spec + executor are given).  The executor is a
-  generator that yields feature events and MUST end with aligned
-  `("tool_results", [(call, text), ...])`; the research budget is
-  PROGRESS, not time or counts: max_rounds is only a safety ceiling, and
-  the real termination is the stall detector -- a round that adds no new
-  information (repeats/empty results) is unproductive, and
-  stall_rounds consecutive unproductive rounds (1/2/2/3 by tier) end the
-  research with a stale-research explanation.  TIME limits are removed
-  on purpose (the model may take as long as it needs; the user's stop
-  button is the control and a live 已调研 X 秒 timer the visibility;
-  every engine request carries its own per-request timeout and
-  per-round call counts are the MODEL's call -- uncapped, queued through
-  MAX_PARALLEL slots).  An exhausted budget forces the next turn to run
-  WITHOUT tools.  The forced-answer transition is EXPLAINED, never
-  silent: the model gets a wrap-up message (a silently tool-less model
-  emits tool-call markup as raw text -- the DSML leak) and a `wrapup`
-  wire event (the client discards partial prose); a deadline cutting a
-  turn mid-stream gets a grace turn that rewrites the complete answer.
-  There is NO answer-review gate, on purpose (it was tried and removed):
-  a second-pass reviewer's audit-voice critique leaked straight into the
-  patched answer (「阅读说明/待核实/原句可核」 header blocks that read like
-  an inspection report, not an answer) while rejecting drafts that were
-  better than the patch -- morphic and Vane both ship quality through ONE
-  reader-facing system prompt instead; `prompts.reader_voice()` is the
-  anti-parroting rule that keeps the audit vocabulary out of the answer.
-  Writer-phase resilience: a writer stream that closes with ZERO events
-  (a 200-empty gateway body) gets ONE silent retry; a writer that
-  answered in its reasoning channel only is NOT retried (the identical
-  request would repeat the misroute) -- it fails the run with an
-  explained error.  The failure surface
-  is the CLIENT's contract -- a settled run without an answer text shows
-  the failed box (reason + retry + classic fallback), never silent
-  nothing (the user's stop button marks the run `stopped`, which stays
-  exempt -- an intentional cut is not a failure).  The narration contract:
-  the client renders CHRONOLOGICALLY -- each round's narration is its own
-  intent step sitting right before that round's call rows (the model's own
-  think → narration → calls order, ZCode's rhythm; an earlier one-merged-
-  intent-step design flattened interleaved reasoning models into a single
-  narration wall detached from its rounds).  A model that calls tools
-  MID-SENTENCE reads its continuation as the next paragraph after the
-  calls row it belongs to (a `plan`-tool step is kind `plan`, never a
-  narration merge target), and the researcher prompt tells the model to
-  finish its sentence before the calls; the writer prompt pins the
-  ```related fence AFTER the complete prose (a fence-only writer once
-  settled a run with suggestions but no answer).
-  The clarify gate (quality/goal, first run
-  only) may open a run with structured questions (`ask` wire event, run
-  settles `awaiting`); the answers travel back as `clarifications` and
-  the SAME run researches on.  `ThinkGate` owns the `<think>` semantics (open on first
-  reasoning, close on first content, stray reasoning after content
-  dropped) — the Overview's raw-text adapter and AI Search's NDJSON
-  events render around that one state machine.  Multimodal (text/image
-  parts) is part of the canonical message contract on `llm.py`; the
-  abandoned-stream cancel discipline lives in `run_agent`'s finally.
-- DEPLOYMENT (public instances): `/ai/answer` and `/ai/search` sit
-  OUTSIDE upstream botdetection's `/search` burst limits, and the HMAC
-  gate token ships in every page-data payload (TTL 1h) — it authenticates,
-  it does not rate-limit.  A public deployment must front the AI routes
-  with its own per-IP limit (reverse proxy or a custom limiter); each
-  `/ai/search` drives real engine fan-outs plus a dozen LLM calls —
-  and, with `web_reader` configured, real Browserless renders (a
-  browser launch per read on a server that has its own concurrency
-  ceiling, typically 3).
-- AI Search (the `searx/zjsearch/ai/feature/search/` package, route
-  `POST /ai/search`).  NAMING: underscore = module-private only --
-  every cross-module collaborator is a public name (search/route
-  imports `gates.research_gate`, `tools.tool_spec`,
-  `prompts.initial_messages`, `config.budget`/`enabled`, ...);
-  the AI layer's layout is INFRA + CAPABILITIES +
-  FEATURES: infra lives at the `ai/` top level -- `llm/` (the LLM
-  transport PACKAGE: `config` the settings surface, `security` the HMAC
-  page-data token gate, `clients` the cached SDK clients, `caching` the
-  request shaping + prompt-cache strategies, `usage` the canonical
-  finish/usage contract, `streaming` the LlmStream queue bridge,
-  `json_gate` the tiered structured-output completion, and `dialects/`
-  ONE MODULE PER SDK -- openai_chat / openai_responses / anthropic /
-  gemini -- behind the uniform `KIND`/`JSON_TIERS`/`pump`/`json_completion`
-  interface with a `DIALECTS` registry; adding a transport is one module
-  + one registry line; the package `__init__` is a FACADE re-exporting
-  the whole public surface so consumers keep
-  `from searx.zjsearch.ai import llm` -- naming rule: cross-module
-  collaborators are public (no underscore) in their home module,
-  module-internal helpers stay `_`-prefixed), `agent.py` (the loop +
-  ThinkGate), `prompts.py` (the composable XML fragments + the shared
-  `answer_contract` spine), `http.py` (the route prologue: authorize /
-  answer_lang / streaming / 502 helpers) -- `capabilities/` holds the
-  cross-feature services (`images.py` the multimodal attachments any
-  feature can compose, `reader/` the page reader); the features live
-  grouped under `feature/` (mirroring the `zjsearch.feature.*` settings
-  keys) -- each feature is a subpackage with a thin `__init__`
-  re-exporting `capability` + `install` and its own
-  config/tools/prompts/gates/executor/wire/route
-  modules (overview: route/prompts only) -- research gate and route:
-  the RESEARCHER/WRITER split (Vane's shape).  A PRE-FLIGHT GATE
-  (`_research_gate`, Vane's skipSearch narrowed) runs one small JSON
-  completion first: greetings, chat and writing tasks skip research
-  entirely — the run emits a `direct` wire event and the writer answers
-  alone (the zero-tool case of the shared loop; the client hides the
-  research box); a question carrying a URL always researches (and the
-  `<page_reader>` prompt rule tells the model to open that page with
-  `web_reader` FIRST instead of searching for it — Morphic's fetch-first
-  rule, prompt-level like the original).  A research agent
-  analyses the question, states a one-line intent, then calls the
-  `web_search` tool — several calls per turn run as REAL instance
-  searches (the `SearchWithPlugins` path, plugins included) in a worker
-  pool whose callables are wrapped in `copy_current_request_context`
-  (the search machinery needs a live request context; construct the
-  search objects inside the wrapper).  Each search's results are
-  serialized through the `_result_data` macro — import it via the
-  public `result_data` wrapper macro (Jinja refuses underscore imports)
-  and keep array separators as block-ifs — and stream as page-data-shaped
-  `sources` events; researcher and writer both consume a globally
-  numbered `[n]` feed (5 deep + 5 shallow per search; image-bearing
-  results append `img=` URLs to the deep feed lines and register them in
-  `state.gallery_pool`; the executor accumulates every block in
-  `state.feed`).  A url already numbered in the run is DEDUPED in the
-  feed (its existing [n] is reused — the numbering stays contiguous and
-  the sources grid shows the page once).  When the research ends —
-  the model stops calling tools, the ceiling/stall verdict halts it, or
-  a research turn's transport dies — agent.py flies a `wrapup` event and
-  a FRESH WRITER completion (`prompts._writer_messages`) writes the cited answer
-  from the accumulated feed: the researcher's prose is STRUCTURALLY
-  unable to leak into the answer, and the shared answer contract
-  (citations/markdown/grounding/voice — the prompts.py fragments) lives
-  exactly where the answer is written.  The tier split is therefore
-  two-sided: `_DEPTH_RESEARCH` (round policy) prompts the researcher,
-  `_DEPTH_SHAPE` (output shape) prompts the writer.  Over the 40k writer
-  cap whole OLDEST feed blocks are evicted (`_fit_context`), never a
-  mid-block slice (a silently cut tail could drop the source the model
-  was about to cite).  The writer's system prompt is ordered
-  CACHE-FRIENDLY — byte-stable blocks first (role/identity/date/language/
-  shape/citations/markdown/voice), per-run variable blocks (research
-  plan, halt notes) last — and `<identity>` names the engine zjsearch
-  (Morphic's brand guidance: never claim to be ChatGPT/Claude/…).
-  Follow-ups are
-  rewritten into self-contained questions first (Vane's standalone
-  follow-up: `gates._standalone_question`, one small JSON completion, fail-open
-  to the original wording — the thread still shows the user's own
-  question).  All four gates (research, clarify, related fallback,
-  standalone rewrite)
-  ride `llm.json_completion` — NATIVE structured output per dialect
-  (openai chat `response_format` / responses `text.format` / anthropic
-  `output_config.format` / gemini `response_json_schema`, verified
-  against the installed SDKs) with Vane's belt-and-braces: a lenient
-  brace-scan repair on every payload (gateways ignore output
-  constraints), a `json_object` second tier for openai-family
-  endpoints that reject the full schema (DeepSeek does), the plain
-  streaming completion as the last tier, and a per-endpoint 400
-  memory so a rejected tier is skipped on later gate calls.  The
-  writer emits its follow-up suggestions IN-STREAM: a ```related fence
-  at the very end of the answer (Morphic's in-stream related, with the
-  Deepen/Act/Broaden intent rule and skip criteria) — `_generate`'s
-  `_FenceSplitter` intercepts it (and the ```zjs-images gallery fences,
-  same mechanism) so no raw fence text ever reaches the client, and the
-  questions fly as a `related` event BEFORE `end`; a writer that skips
-  the fence falls back to the post-`end` small completion (which is why
-  that completion still exists — on reasoning models it can think for
-  the better part of a minute, so the fence is the fast path).  The
-  splitter holds text in BOTH states: the opener search holds 20 chars,
-  the in-fence state holds 2 — a closer split across deltas (`` + `)
-  must re-assemble or the body swallows prose up to the NEXT fence's
-  opener (this once shipped a whole answer tail into a gallery body).
-  The narration side has its own discipline: the splitter FLUSHES at
-  each `calls` event (a held tail landing after the calls line would
-  end up in the client's answer slice instead of the round's intent)
-  and the wrapup clears the accumulated answer parts (the researcher's
-  narration must not pollute the related fallback).  Gallery
-  fences carry a JSON array of URLs copied verbatim from the feed's
-  `img=` entries and are VALIDATED against `state.gallery_pool`
-  server-side (invented URLs are dropped, an all-invalid group renders
-  nothing); a valid group flies as a `gallery` event plus a
-  `{{zjs-gallery:i}}` placeholder delta at its position, which
-  `renderWithGalleries` (AnswerGallery.tsx) expands into a MODEST inline
-  strip (small fixed-height thumbs in a wrapping row -- the sources rail
-  owns the page's visual weight; a full-measure hero insert reads
-  oversized) whose tiles re-use the citation jump ([n] badge, click =
-  scroll to the source card).  Local models may skip the images fence
-  (qwen3.6 at low effort does; the related fence it writes) — the
-  degradation is silent by design.  Prompt
-  organization is XML blocks end to end: prompts.py
-  fragments emit `<tag>` blocks, the researcher prompt composes
-  `<role>/<today>/<step_notes>/<how_to_search>/<examples>` (few-shot,
-  composed from the tools THIS run registers — an example demonstrating
-  an unregistered tool teaches a broken call) plus per-tool capability
-  blocks.  Wire protocol: NDJSON lines
-  (`think`/`delta`/`calls`/`search`/`sources`/`page`/`plan`/
-  `direct`/`gallery`/`wrapup`/`ask`/`related`/`error`/`finish`/`end`); a
-  stream that dies before its first
-  line answers 502 like the Overview.  CHANNEL DOCTRINE (strict): the
-  reasoning channel (`reasoning_content` and friends) is ALWAYS think --
-  timeline material, never the answer -- and the content channel is
-  ALWAYS the answer; there is NO promotion fallback (the old guard that
-  promoted think as the answer once shipped the writer's chain-of-thought
-  as the "report").  Every turn's pump carries the wire's `finish_reason`
-  and usage (`finish` per dialect: openai chat asks `stream_options`
-  include_usage with a 400/422 retry without it; responses maps
-  `max_output_tokens` to `length`; anthropic maps `stop_reason`; gemini
-  maps `finishReason`) -- agent.py consolidates them (LAST turn's finish
-  reason = the answer's state, usage summed across turns) and yields ONE
-  `finish` event before `end`; the client renders EVERY reason in the
-  research header (`RunOutcome`: "length" = truncation warning, stop =
-  quiet 正常完成) plus the token totals, so a truncation can never end
-  silently again.  Usage is RENDER-WHAT-YOU-GET: the pumps surface
-  whatever the endpoint reports -- input/output, `thoughts` (openai
-  reasoning_tokens, gemini thoughts), `cached` (openai
-  prompt_tokens_details.cached_tokens / DeepSeek prompt_cache_hit_tokens
-  / anthropic cache_read_input_tokens / gemini
-  cached_content_token_count) and `cache_write` (anthropic
-  cache_creation_input_tokens) -- zero when an endpoint does not break a
-  field out.  A turn that answers in its reasoning channel ONLY
-  fails the run loudly (`error`: answered-in-reasoning-only) -- the
-  model's thinking configuration is the user's setting and is never
-  overridden to work around a misrouting template (qwen3.6 + LM Studio
-  does this when enable_thinking is on; the fix is the deployment's
-  extra_body, not ours).  `end` settles
-  the run FIRST and `related` trails as a post-end event: the small
-  completion behind the follow-up suggestions can think for the better
-  part of a minute on reasoning models, and the follow-up box must not
-  wait for it (the client accepts `related` after phase=done; the
-  related completion itself needs `relay_reasoning=True` — with the
-  channel dropped the queue sits silent through the think phase and the
-  idle timeout kills the completion before any content arrives).
-  The `web_reader` tool
-  (`searx/zjsearch/ai/capabilities/reader/`) reads ONE result's page in full
-  through the self-hosted Browserless v2 browser (`POST /content` — a
-  real Chrome, so JS/SPA pages come out complete) and feeds the model
-  real Markdown from a compact lxml pipeline (main-content heuristic +
-  noise/permalink-anchor stripping) converted by `html-to-markdown` —
-  ATX headings, GFM tables with separator rows, code-block languages,
-  inline semantics — plus a 25-link appendix the model can follow with
-  further reads.  The dependency is MIT with ZERO runtime deps and a
-  compiled core (requirements.txt, theme section); without it the reader
-  logs a warning and degrades to the built-in walker (markdown-ish, no
-  inline semantics — the pre-converter fallback lives in the same file).
-  The HTTP call rides a DEDICATED network
-  (`get_network("zjsearch-reader")`, falling back to the default) — the
-  app-initialized DEFAULT network is HTTPS-ONLY (searx hard-codes
-  `enable_http: false` into its `default_params`), so a plain-http
-  Browserless — a self-hosted LAN deployment, the audit gate's mock —
-  needs an `outgoing.networks.zjsearch-reader: {enable_http: true}`
-  entry; https endpoints are unaffected.  `outgoing.proxies` still apply
-  through the network definition.  Config = `zjsearch.reader`, a sibling
-  of `zjsearch.ai` (`base_url` + `api_key`, the key via the
-  `ZJSEARCH_READER_KEY` env like `ZJSEARCH_AI_KEY`; `enabled` default
-  ON, `false` = the tool never registers; `max_chars` UNSET = no cap —
-  the whole readable text goes to the model, a set value truncates at a
-  line boundary with an honest marker; a `params` block passes through
-  1:1 into the render body, merged LAST — every structural field is
-  overridable through it (`gotoOptions` / `waitForTimeout` /
-  `rejectResourceTypes` included, a key replaces the whole value; only
-  `url` stays the tool's argument).  Dev carries
-  `blockAds: true` + `launch: {stealth: true}`: ad-block keeps promo
-  noise out of the extraction, the stealth launch lowers bot-walls):
-  UNCONFIGURED = the tool never
-  registers (the web_search description's cross-reference is
-  conditional on the same check).  Its executor shares the search
-  worker pool; a read of a url already in the run's `[n]` registry
-  reuses that number, a NEW url mints the next `[n]` (a `sources`
-  event follows, so the answer can cite the opened page and its card
-  joins the grid; favicon stays empty — the client renders the Globe
-  fallback; the entry carries `crawled: true`, and a re-read of an
-  already-numbered url RE-EMITS its `[n]` so the client upgrades the
-  existing card in place — the 已读全文/Read-in-full badge marks the
-  sources the model verified first-hand), a re-read settles
-  `duplicate` without rendering again,
-  and an in-process 10-min TTL cache (128 pages) absorbs repeat reads
-  across runs.  `_guard_url` refuses non-public http(s) targets
-  (loopback/private/link-local — `not ip.is_global` — plus
-  `.local`/`.internal` hostnames): the render happens inside the
-  Browserless host's network and the model is untrusted input.
-  Read events ride the `page` wire event (`status`/`url`/`title`/
-  `chars`); the client's call row branches on the `calls` item's
-  `tool` field (`web_search` renders the query, `web_reader` a
-  host+path label and a char count) and a successful read's source
-  card becomes the row's swipe strip, same as a search's.
-  The `web_search` tool also takes `included_sites`/`excluded_sites`
-  (Morphic's domain filters, enforced on OUR side): bare domains the
-  model passes only on a user source preference ("在 GitHub 上找" ->
-  ["github.com"]); the executor appends them to the query as
-  `site:`/`-site:` operators, which the advanced_search_syntax plugin
-  enforces AUTHORITATIVELY on every result — the timeline row displays
-  the operators folded into its query label.
-  The executor's round-end tool results carry the model-facing budget
-  notes (Vane rebuilds the system prompt with an iteration counter every
-  turn; this is the canonical-messages equivalent): one round before the
-  ceiling the last feed gets "ONE research round remains", and past a
-  24k feed a one-shot "context is getting large — converge" note fires.
-  The `plan` tool (quality/goal tiers, agent-level like `ask_user`)
-  is the answer-planning escape valve adapted from Vane's reasoning
-  preamble: the model's deliberation about the SHAPE of its final
-  answer goes into the tool (alone in its turn) — agent.py answers the
-  turn WITHOUT executing anything (a FREE turn: no round consumed, the
-  progress verdict never sees it) and yields a `plan` wire event; the
-  client re-homes that prose as an intent step, and the plan text rides
-  to the writer as `<research_plan>` guidance (the writer, not the
-  researcher, writes the answer).
-  Config: transport =
-  `zjsearch.ai`; feature flags = `zjsearch.feature.ai_search.enabled` and
-  `zjsearch.feature.ai_overview.enabled`, BOTH DEFAULTING TO TRUE — setting one
-  false makes the endpoint answer 404 AND the page-data drop the
-  capability (globals.ai / globals.ai_search absent), which hides the UI
-  entry point (the AI Overview trigger / the [classic|AI] switch; the
-  hero also ignores `?ai=1` without the capability).  AI Search needs a
-  tool-capable model — gemma-4-26b-a4b-qat in LM
-  Studio intermittently skips tool calls ENTIRELY and answers from
-  memory even when the prompt demands a search; qwen3.6 is reliable).
-  AI mode is a FULL TAKEOVER:
-  `ai=1` + capability makes `stream.py` skip the raw query's engine
-  fan-out entirely (`ZjsearchAiModeSearch` — an empty, instant payload;
-  `globals.ai_mode` tells the client) and ResultsPage renders ONLY the
-  agent experience — the `[classic|AI]` switch (`AiModeSwitch`, now
-  HOMEPAGE-ONLY: it lives in the ask-card's bottom row; the results
-  header dropped it, so the boot skeleton no longer mirrors it either)
-  writes the
-  `ai` URL/body flag (`searchParams.ts`), the homepage's AI hero is
-  morphic's ask-card — SearchBox `variant="bare"` (no pill chrome, no
-  submit circle) inside a bordered card whose bottom row carries the
-  mode switch, the research-depth dropdown and the circular submit —
-  and the depth pick travels as the `mode` URL param to seed
-  `researchMode` (both hero and results page re-read `mode` from the
-  URL on navigation, and `buildParams` re-emits it whenever the ai flag
-  is set).  The depths are speed / balanced / quality / goal --
-  speed/balanced/quality raise the research budget AND change the output
-  shape (speed = ONE search round ceiling, Morphic's quick discipline,
-  and one dense "what is this" paragraph with no sections;
-  quality = structured "## " sections, tables, heavy citation); goal is
-  the iterate-until-met tier: the model plans the evidence the target
-  needs, self-checks the gap after each round and keeps searching until
-  the goal is demonstrably met (16 rounds / 600s ceiling --
-  every tier still ends with a forced no-tools answer), and closes with
-  a GFM task-list evidence ledger.  The client parses `mode` through
-  parseDepthMode (depth.tsx, single source of truth; server mirror:
-  SEARCH_MODES).  ResultsPage auto-runs one
-  `POST /ai/search` (`useAiSearch`, `fetchEventStream` NDJSON client;
-  the classic tabs/filters/meta/suggestions/results/pagination are all
-  hidden).  The page is a THREADED Vane-style layout: every question —
-  the initial one and each follow-up (`followup()`, prior Q&A travels
-  as history, `sources_base` continues the global [n] numbering) —
-  appends an `AiSearchRunSection` behind a `border-t` divider
-  (auto-scrolled into view).  Each run is TWO-COLUMN from lg
-  (Perplexity's shape): the question heading, the collapsible Research
-  box and the answer body keep the reading measure on the LEFT (the
-  answer carries NO header row — the prose is the anchor; while the
-  writer has not started, one compact "正在撰写回答…" line covers the
-  silence), the cited synthesis with its inline image groups and the
-  run's Related questions follow it, and the run's OWN source cards
-  (skeleton until its searches settle) ride a STICKY RIGHT RAIL
-  (`lg:w-72 xl:w-80` — ONE responsive markup that is a 2-column grid
-  below lg and a vertical card list from lg, so the
-  `[data-ai-n]` citation-jump target exists exactly once in the DOM).
-  NATIVE PROGRESSIVE THINKING: the think relay (``relay_reasoning``) is
-  passive for dialects that emit reasoning on their own (deepseek-style
-  ``reasoning_content`` on the openai chat dialect, Responses-API
-  reasoning summaries), and NATIVELY ENABLED where the API needs an
-  explicit knob -- the anthropic dialect default-ENABLES extended
-  thinking (budget 2048; ``params.thinking`` wins, an explicit false
-  opts out, a user-set ``temperature`` suppresses the default since the
-  Messages API rejects the pairing, and a gateway that rejects the
-  parameter gets one automatic thinking-free retry), the gemini dialect
-  folds ``thinkingConfig.includeThoughts: true`` for 2.5+ generation
-  models, and the gemini dialect stamps every synthesized part with
-  LobeChat's ``skip_thought_signature_validator`` magic
-  ``thoughtSignature`` (replayed history without echoed signatures is
-  rejected by 2.5+/3 function calling).  The JSON gates opt out of the
-  native default (a raw JSON payload needs no reasoning phase).  The
-  agent loop ECHOES each turn's reasoning back on the replayed history
-  (canonical ``reasoning_blocks`` / ``encrypted_content`` /
-  ``reasoning_items``): anthropic requires the thinking blocks + their
-  signatures on tool-use turns (the pump captures them from
-  ``thinking_delta`` / ``signature_delta``), and the openai chat
-  dialect echoes ``reasoning_content`` (doubao's
-  ``encrypted_content`` too, which takes priority) when the
-  deployment's ``zjsearch.ai.reasoning_passback: true`` asks for it
-  (a plain switch -- the transport configures one model; default
-  off), while
-  the responses dialect echoes its captured reasoning input items
-  verbatim.  LobeHub is the reference for all of it.
-  The sources section keeps the ORIGINAL collapse shape -- the first
-  four cards inline with the card-shaped 查看全部 toggle (favicon
-  preview of what's hidden) right below them -- and the revealed list
-  is a scroll box sized to EIGHT visible cards (`max-h` 17rem mobile =
-  4 rows x 2 cols, 25.5rem desktop rail = 8 rows; the rest scrolls
-  inside): the toggle is ALWAYS the section's last
-  element (查看全部 below the inline cards, 收起 below the revealed
-  list -- it never sits mid-grid), so a 90-source run reads as a
-  bounded block, not an endless page.  A READ-IN-FULL card carries a
-  thin amber ring (`ring-accent-soft` -- the model verified that source
-  first-hand, scannable at a glance without layout shifts), and the
-  read-in-full mark is an icon chip in the card's meta row riding a
-  FIXED-WIDTH slot (an empty reservation on plain cards), so the [n]
-  numbers right-align across crawled and plain cards alike -- never a
-  full-width label bar;
-  below lg everything stacks: answer, related, actions, sources.  The
-  thread's follow-up
-  pill floats `sticky bottom-6` (Perplexica's pinned input; deliberately
-  NO fog scrim -- it washed out short content underneath, a failed run's
-  box read as dimmed).  `useAiSearch` rebuilds a CHRONOLOGICAL step
-  timeline per run (`AiSearchStep`: collapsible think segment →
-  intent line → expandable parallel call rows — a settled row with
-  results toggles a swipe strip of that search's result cards, fed
-  from the run's registry slice; no step/time statistics are shown),
-  in the model's own order; a
-  round's `calls` event freezes its pending prose as the intent step.
-  Think segments DEFAULT OPEN once the run settles — the inter-round
-  reasoning IS the reply between the call rows (reasoning models often
-  write their round commentary into the reasoning channel only, so a
-  collapsed-by-default timeline reads as calls with nothing between);
-  while streaming only the LIVE round's segment stays open, and
-  ThinkScroll caps each segment at `max-h-40` so the volume stays
-  bounded.  Prose after the first `calls` streams into the answer live AND is
-  held as the turn's pending slice — when the turn's own `calls` land,
-  that slice is split back out of the answer into the intent step, so
-  the settled answer is the final synthesis alone.  State-discipline
-  trap learned the hard way: EVERY event handler in `applyEvent` that
-  touches `runs` must return `{...core, runs}` — returning `core`
-  discards the freshly built array (React bails out on the identical
-  reference) and the event silently never applies (this once froze all
-  call rows at "searching…" and starved the sources grid, whose
-  `sources` event case had also been dropped outright).
-  `ai=1` WITHOUT the capability (hand-crafted URL,
-  feature switched off) falls back to the classic page client-side;
-  the server-side skip only fires when the capability exists.  The raw
-  results are deliberately NOT fed to the agent as a seed — reference
-  material makes it skip searching (live-verified).  LM Studio +
-  qwen3.6 note: enable_thinking must be off via extra_body, otherwise
-  the model routes the whole answer into the reasoning channel; gemma-4
-  ignores that knob and streams a reasoning channel regardless (harmless
-  — think segments render in the Research timeline).
-- AI SESSIONS are LobeHub-style CONVERSATIONS: every run lives in a
-  browser-stored THREAD identified by a uuid — the takeover (`?ai=1`)
-  mints one on start and `history.replaceState`s its canonical address
-  `/ai/thread/<uuid>` (`ai/feature/search/page.py` + `ai_thread.html`: a slim
-  server shell carrying fresh capability tokens and nothing else).  The
-  thread (runs, sources, usage) persists in localStorage ONLY
-  (`lib/threadStore.ts`: one key per thread + an index, LRU ~20,
-  quota-evicting oldest-first) — the server stays stateless (`POST
-  /ai/search` logs the optional `thread` field for problem localization
-  and forgets it).  A reload or a history-drawer revisit lands on the
-  thread route and restores via `useAiSearch.resume` (pending calls
-  settle as interrupted; an awaiting clarify never survives).  The
-  drawer (`AiHistoryDrawer`) lists/opens/deletes threads from the
-  takeover composer row and the thread page; deleting is permanent and
-  browser-local by design (never syncs across devices).
+- The AI stack (`searx/zjsearch/ai/`) is a THREE-LAYER architecture --
+  infra / framework / runtime; the dependency direction is strictly
+  downwards:
+
+  - **infra/** — the providers. `sdk/` holds ONE factory per SDK family
+    (openai with both chat wire shapes + embeddings, anthropic,
+    gemini), centrally registered in `sdk.resolve()`; the stream
+    queue-bridge (`streaming.LlmStream`), the canonical finish/usage
+    contract (`usage`), the prompt-cache shaping (`caching`), the
+    tiered structured-output gate (`jsongate`), the embedding SERVICE
+    (`embed` — config + server-side call; the browser proxy is a thin
+    runtime route), the HMAC gate (`security`) and the shared route
+    prologue (`http`).  Adding a provider = one module under `sdk/`
+    with a `factory()` + one line in `resolve()`.
+  - **framework/** — the provider-agnostic agent ENGINE. `loop.py` is
+    the phase machine (RESEARCH tool turns → WRITE turn; ask_user is a
+    first-class turn outcome) that YIELDS WIRE EVENTS; `wire.py` is the
+    CLOSED event set (open/think/say/calls/call/close/tasks/sources/
+    answer/ask/gallery/related/memory/settle — a misspelled event
+    raises); `executor.py` is the tool-executor contract (generator →
+    position-aligned `tool_results`); `thinkgate/echo/fences` carry the
+    channel doctrine, the cross-dialect reasoning echo payloads and the
+    stream fence splitter.  Every delta carries its entry id and
+    channel — the client appends, it never reconstructs.
+  - **runtime/** — the concrete tasks ON the engine. AI Search
+    (`runtime/search/`: profile/prompts/gates/tools/executor/route;
+    four depth modes = budget/decomposition/output-shape differences on
+    ONE loop; the executor splits into `registry` ([n]/dedup/gallery
+    whitelist), `coverage` (the task card's bidirectional-containment
+    tracker), `feed` (the writer's compact [n] block builder) and the
+    Searches facade) and the AI OVERVIEW (`runtime/overview.py` — the
+    FIXED QUICK TASK: one write turn over the client-assembled context,
+    zero separate design), plus `embed_route` and the thread page.  The
+    shared prompt spine (identity/citations/markdown/voice/answer
+    contract) is `runtime/spine.py`; the reader/calcuator/memory/mcp
+    tool implementations are `ai/capabilities/`.
+
+- The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
+  silently): events are TIMELINE OPERATIONS — `{"e":"open","id","kind":
+  research|write,"round"}` opens an entry; `think`/`say` deltas carry
+  that entry's id; `calls` announces the entry's batch; `call` settles
+  ONE call (`{id, call, status, n/chars/result/text/preview/label/
+  action}`); `tasks` is the task card's AUTHORITATIVE snapshot;
+  `sources` the global [n] registry; `answer` deltas are the writer's
+  OWN buffer (narration never mixes in); `ask` is the clarify gate AND
+  the mid-research ask_user (same schema); `settle` declares the
+  terminal state (`status: done|awaiting|error` + finish/usage/model/
+  halt).  After the settle only `related`/`memory` may follow (the
+  related fallback completion and memory extraction trail behind — the
+  follow-up box unlocks on settle, not on them).  A stream that dies
+  before its first content event answers 502 (the route PRIMES the
+  stream before responding).
+
+- The client mirror is `features/results/aiSearch/useAiSearch.ts`: a
+  dumb renderer over the timeline ops — steps mirror entries one-to-one
+  (a research entry = its think segment + intent line + call rows), the
+  answer buffer is its own field, and `settle` IS the terminal state
+  (the old answerFrom/pending/thinkOpen reconstruction heuristics died
+  with the old protocol).  The clarify round-trip seeds a `clarify`
+  step (the confirmed direction) at the answered run's timeline head;
+  the task card is STATUS-ONLY (pending dot / active ping / done check
+  / `missed` warning — a subtask that never gathered a source is NOT
+  flipped to done), and the research box stays OPEN through the run's
+  whole life (it IS the record of how the report was made).
+
+- The AI Overview client (`features/results/AiSummary.tsx`) consumes the
+  SAME NDJSON timeline (the hook adapts it into the card's raw-text
+  rendering contract: `<think>` markers + the tail meta sentinel are
+  synthesized client-side from the `think`/`answer`/`settle` events).
+
 - The boot skeleton (`zjsearch/skeleton.html` + the `.zjs-boot` block in
   `src/styles/boot.css`) is a **geometry mirror of the real results page**, not an
   invented loading screen — it only covers the JS-boot window (server flush →
@@ -1199,7 +799,27 @@ theme-only fields like title_html are dropped) and answers in the msgspec
 `engine` (see `_answer_data` in macros.html).  RSS mirrors
 `zjsearch/opensearch_response_rss.xml` line by line.  CSV keeps the upstream
 columns but fills the answer rows gracefully (the server CSV crashes on
-answers: `parsed_url` is null there).  Suggestions render as a single-row
+answers: `parsed_url` is null there).  MARKDOWN is the one client-only
+export (no server format endpoint): an MD chip after the server formats,
+plus `downloadThreadMarkdown` — the AI conversation export (one `## `
+section per question, the answer verbatim — gallery placeholders become
+their images' markdown figures — the run's sources at its foot) hosted on
+the last run's actions row.  PDF is the browser's own dialog, not a jsPDF
+dependency (CJK font embedding would torpedo the no-webfont budget): the
+📄 action mounts `PrintView`, which builds the print document (brand,
+question, rendered answer with the research box stripped, numbered sources
+at the tail; filename mirrors the MD export via `document.title`) and
+calls `window.print()` immediately.  `styles/print.css` is print-only by
+construction (`@media print` + selectors that match nothing on screen) and
+PAPER IS ALWAYS LIGHT ON A PURE-WHITE GROUND: the color tokens are
+`@property`-registered, so `initial` restores the light palette from
+tokens.css (one source of truth, `--bg` pinned `#ffffff` as the paper
+exception); `.zjs-print-hide` marks the chrome that must never print,
+clamps expand, Collapse panels print open, reading measures widen.  The
+one component with colors BAKED into the DOM is mermaid: blocks carry
+`data-zjs-mermaid` and PrintView renders its own NEUTRAL copies
+off-screen (global mermaid config restored after) — the live page never
+re-renders, so nothing flashes.  Suggestions render as a single-row
 chip strip
 under the results meta line (`SuggestionsBox`, all breakpoints): chips
 are single-line truncated, the row pages via ‹ › ghost arrows that stay
@@ -1234,6 +854,81 @@ build; upstream `simple` instead links a dedicated built rss.css).  Rules:
   searxng's gettext catalogs into zjsearch chrome, on the server side
   either.
 
+## MCP tool servers (streamable HTTP)
+
+`zjsearch.mcp` bridges external MCP servers into the agent's tool surface —
+a LIST of single-key mappings, the server name mapping to its connection
+(`url` required; `header` carries whatever auth the server wants, merged
+verbatim onto the request).  Streamable HTTP ONLY (stdio/SSE are out of
+scope).  The official `mcp` SDK (MIT, theme requirements section) drives
+the wire; each operation runs inside ONE self-contained connection (open →
+initialize → act → close, a single loop task — the SDK's anyio task groups
+cannot survive the next `run_coroutine_threadsafe` task, so sessions are
+deliberately NOT cached).  Tools are namespaced `mcp_<server>_<tool>`,
+their descriptions and JSON schemas ride the model's tools array verbatim,
+and the researcher prompt gains nothing extra (the descriptions carry it).
+Executor dispatch is the `mcp_` prefix branch: blocking on the shared
+loop's result with a 90s budget, the timeline row renders the server-scoped
+tool name with a Plug icon.  Unconfigured = silence (no specs, no
+sessions); a dead endpoint contributes nothing (one server failing must
+not take the run down).  PROGRESSIVE DISCLOSURE (the Agent Skills
+injection pattern) governs the tool surface: past 8 tools total
+(`PROGRESSIVE_THRESHOLD`) the run registers ONE `mcp_search_tools`
+discovery tool instead of every schema — the model keyword-searches it,
+receives the matched tools' COMPLETE parameter schemas, and calls them
+by name next turn (a miss returns the inventory for re-querying).
+Below the threshold the tools inject directly.  This is the same
+three-layer idea as LobeHub's skills (`activateSkill`: name+summary
+first, full instructions on activation, references on demand) — any
+future skills system must follow it too.  The amap E2E: 15 tools listed, real geo/weather
+calls answered.  KEYS live in the config file (never env) and NEVER enter
+git — dev-settings.yml carries them locally only.
+
+## Subagents (quality/goal decomposition + delegation)
+
+quality/goal decompose: the model writes a LIVING task list
+(`task_write` — 2-4 subtasks with pending/active/done statuses; the
+client renders it as the TASK CARD above the timeline: three-state rows
++ a done/total counter) and delegates each subtask via `spawn_subtask`
+— a nested, speed-grade `run_agent` (2 rounds, tools = search +
+calculator ONLY, sharing the SAME Searches state: numbering, dedup and
+the feed are global, so sub-sources become citable [n] entries and
+duplicate queries dedup across the nest).  The sub's mini-writer
+compresses its findings into the feed as a block AND the tool result.
+The SPAWN RECURSION GUARD: `in_subtask` rejects nested delegation and
+no-ops nested task_write (a rogue sub-model calling spawn would
+otherwise recurse without bound — the mock caught exactly this).
+`plan_tool=register_plan` now gates task_write+spawn (the one-shot plan
+tool is superseded; its prompt block was removed).  The old one-shot
+plan tool stays unregistered.
+
+## User memory (browser-local durable facts)
+
+The `memories` table (PGlite, sixth table) stores durable facts about
+the user — one flat layer of self-contained sentences (home city,
+occupation, standing preferences), deliberately NOT LobeHub's five-layer
+taxonomy.  Two paths, both stateless-server:
+
+- READ: the run pre-sends every stored fact (`user_memories`, capped 50
+  x 300 chars) and the researcher prompt injects them in a
+  `<user_memory>` block — ALWAYS rendered (the empty state carries the
+  save guidance; small models never call the tool unprompted).
+- WRITE: two ways, deliberately redundant.  The `user_memory` tool
+  (`action: search|save` — search scores the pre-sent snapshot; save
+  yields a `memory` wire event), AND the post-run EXTRACTOR
+  (`extract_facts` in `capabilities/user_memory.py`): one small
+  json_completion after `end` decides whether the exchange revealed
+  durable facts — the belt-and-braces for small models that never call
+  the save tool (glm-4-flash never did; the extractor cannot be
+  skipped).  The client persists each fact into PGlite; the `memory`
+  wire event trails `end` and passes the client's late-event gate
+  (like `related`).  json_gate note: models answer "return a list"
+  prompts with a BARE array — `_parsed` wraps it into the schema's
+  single array property.
+
+The facts ride every request (inherent: the model must read them).
+`threadStats` counts them; the store reset clears them.
+
 ## Custom plugin behaviour (server side, keep with the theme)
 
 - `unit_converter` / `currency_convert`: value-less queries ("kg to lb",
@@ -1266,6 +961,15 @@ build; upstream `simple` instead links a dedicated built rss.css).  Rules:
   `client/zjsearch/dev-settings.yml`; a deployment host has to enable it
   in its own settings (the upstream `searx/settings.yml` is left
   untouched by the theme).
+- `bm25_reranker` (internal, bm25s): post_search BM25 reranking of the
+  merged results — CJK-aware tokenization (each han character counts on
+  its own, latin runs stay words, same rule as the theme's embedder),
+  title tokens weighted 2x, and weighted reciprocal-rank fusion
+  (BM25 1.0 vs engine order 0.25, k=60) rewriting each result's
+  `positions` before the container closes.  Zero-signal guard: when no
+  query term matches any result the engine order stands.  Depends on
+  `bm25s` (requirements.txt).  Toggle via the preferences plugin switch;
+  per-request A/B with `&disabled_plugins=bm25_reranker`.
 - `time_zone`: an unknown location is silence (ValueError swallowed), not a
   plugin error.  The filler word "in" is stripped from the search term, so
   "time in tokyo" resolves like "time tokyo" instead of going silent.
@@ -1395,7 +1099,7 @@ LOADED/NOT LOADED).
   audit-settings.yml reduces the engine list (keep_only) to `zjaudit`
   (searx/engines/zjsearch_fixtures.py), a deterministic offline engine
   whose fixture sets are keyed by the query token, and points
-  `zjsearch.ai` at the MOCK transport (`scripts/ai-mock.mjs`, spawned by
+  `zjsearch.llm` at the MOCK transport (`scripts/ai-mock.mjs`, spawned by
   the gate on :8909) — the AI counterpart of the fixture engine, routing
   fixed completions by request shape (gates via
   `response_format.json_schema.name`, the researcher via `tools` presence,
@@ -1432,7 +1136,7 @@ LOADED/NOT LOADED).
   system block + LAST TOOL + last message (the tools spec is the run's
   biggest byte-stable prefix; 3 of the 4 allowed breakpoints, each turn
   prefix-hits at 0.1x and writes only the tail) — ON BY DEFAULT for every
-  Anthropic-dialect endpoint, `zjsearch.ai.cache_control: false` is the
+  Anthropic-dialect endpoint, `zjsearch.llm.cache_control: false` is the
   opt-out for a gateway that validates strictly; Gemini runs on implicit
   prefix caching (no wire field; explicit `cachedContent` resources are a
   managed TTL/billing surface deliberately not adopted).

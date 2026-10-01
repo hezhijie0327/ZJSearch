@@ -5,7 +5,7 @@
  * -- the AI counterpart of the zjaudit fixture engine.
  *
  * Speaks JUST enough of the OpenAI chat-completions wire protocol for the
- * theme's `openai_chat_completions` transport (searx/zjsearch/ai/llm.py):
+ * theme's `openai.chat_completions` transport (searx/zjsearch/ai/llm/):
  * SSE chunks with content / reasoning_content / tool_calls deltas, plus
  * non-streaming JSON objects for the structured gates.  Every completion is
  * FIXED text keyed by request shape, so the audited AI pages are as
@@ -95,6 +95,19 @@ call row shows exactly this text.</p>
 <tr><td>Kind</td><td>offline fixture</td></tr>
 <tr><td>Transport</td><td>mock browserless</td></tr>
 </table>
+<h2>Extended section (progressive disclosure fixture)</h2>
+<p>This trailing section pushes the extracted markdown past the reading
+pane's preview threshold, so the call row stages its content: a fixed
+preview first, one expand control, then the scroll-capped full text.
+Each numbered paragraph below adds bulk.</p>
+<p>Paragraph 1: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 2: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 3: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 4: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 5: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 6: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 7: deterministic filler for the audit run's reading pane.</p>
+<p>Paragraph 8: deterministic filler for the audit run's reading pane.</p>
 </article>
 </body>
 </html>`;
@@ -249,6 +262,86 @@ function researcher(answered, messages, res) {
       },
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(0, pageHalf) } }] },
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(pageHalf) } }] },
+      // the calculator round: exercises the exact-eval tool offline (spec
+      // visibility, executor branch, the calc wire event, the result row)
+      {
+        tool_calls: [
+          { index: 2, id: "call-zjaudit-3", type: "function", function: { name: "calculator", arguments: "" } },
+        ],
+      },
+      // the web_memory round: exercises the past-research search offline
+      // (the client pre-sends the index; matches become history sources)
+      {
+        tool_calls: [
+          { index: 3, id: "call-zjaudit-4", type: "function", function: { name: "web_memory", arguments: "" } },
+        ],
+      },
+      // the decomposition + delegation rounds: task card -> spawn -> done
+      {
+        tool_calls: [
+          { index: 4, id: "call-zjaudit-5", type: "function", function: { name: "task_write", arguments: "" } },
+        ],
+      },
+      {
+        tool_calls: [
+          {
+            index: 4,
+            function: {
+              arguments:
+                '{"items": [{"title": "Fixture subtask A", "status": "pending"}, {"title": "Fixture subtask B", "status": "pending"}]}'.slice(
+                  0,
+                  30,
+                ),
+            },
+          },
+        ],
+      },
+      {
+        tool_calls: [
+          {
+            index: 4,
+            function: {
+              arguments:
+                '{"items": [{"title": "Fixture subtask A", "status": "pending"}, {"title": "Fixture subtask B", "status": "pending"}]}'.slice(
+                  30,
+                ),
+            },
+          },
+        ],
+      },
+      {
+        tool_calls: [
+          {
+            index: 5,
+            function: {
+              arguments:
+                '{"items": [{"title": "Fixture subtask A", "status": "done"}, {"title": "Fixture subtask B", "status": "done"}]}'.slice(
+                  30,
+                ),
+            },
+          },
+        ],
+      },
+      {
+        tool_calls: [
+          {
+            index: 5,
+            function: {
+              arguments: '{"title": "Fixture subtask A", "questions": ["audit fixture detail"]}'.slice(25),
+            },
+          },
+        ],
+      },
+      {
+        tool_calls: [{ index: 3, function: { arguments: '{"query": "audit fixture"}'.slice(0, 14) } }],
+      },
+      {
+        tool_calls: [{ index: 3, function: { arguments: '{"query": "audit fixture"}'.slice(14) } }],
+      },
+      {
+        tool_calls: [{ index: 2, function: { arguments: '{"expression": "12 * 1.08", "precision": 2}'.slice(0, 24) } }],
+      },
+      { tool_calls: [{ index: 2, function: { arguments: '{"expression": "12 * 1.08", "precision": 2}'.slice(24) } }] },
     ],
     "tool_calls",
   );

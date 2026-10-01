@@ -18,8 +18,9 @@ local/py3/bin/pip install -r requirements.txt        # + granian if missing
 
 # dev instance — run granian DIRECTLY: `manage webapp.run` re-runs pip and
 # a mirror serving 0-byte wheels (ustc did once) fails the hash check.
-# ZJSEARCH_AI_KEY is required for the AI overview: LM Studio VALIDATES the
-# bearer token, the auth-free placeholder "none" gets a 401.
+# ZJSEARCH_AI_KEY feeds the LLM transport (zjsearch.llm — the endpoint
+# VALIDATES the bearer token, the placeholder "none" gets a 401).
+# ZJSEARCH_EMBEDDING_KEY is optional: the research library's semantic search.
 SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/dev-settings.yml \
 ZJSEARCH_AI_KEY='<key from the secret store, never into the repo>' \
 GRANIAN_INTERFACE=wsgi GRANIAN_HOST=127.0.0.1 GRANIAN_PORT=8888 \
@@ -30,8 +31,11 @@ GRANIAN_INTERFACE=wsgi GRANIAN_HOST=127.0.0.1 GRANIAN_PORT=8888 \
 # ETags for up to 30 s — reload twice before concluding anything).
 ```
 
-LM Studio (or any OpenAI-compatible endpoint) must be up for AI tests;
-`curl -s http://127.0.0.1:1234/v1/models` is the connectivity check.
+The configured LLM endpoint (dev-settings' `zjsearch.llm` — any
+OpenAI-compatible server, or the anthropic/gemini protocol per `sdk`) must
+be up for live AI tests; the embedding endpoint (`zjsearch.embedding`) only
+when the library's semantic search is under test.  dev-settings.yml ships
+PLACEHOLDER keys — paste the real ones locally, never commit them.
 
 ## 2. Quality gates (every round, before browser work)
 
@@ -74,18 +78,27 @@ pnpm add -D @biomejs/biome@<new pin>         # for exactly-pinned dev deps
 - After updating: `pnpm run lint` + `make themes.zjsearch`, RESTART the
   instance (new hashes), then regress the surfaces that exercise the
   moved packages — the AI overview (react-markdown / remark-* / katex /
-  mermaid / lucide-react), a grid page (ol), and the streamed boot (vite
-  output shape feeds the static-root publishing contract).
+  mermaid / lucide-react), the research library drawer and the
+  preferences PGlite tab (@electric-sql/pglite*), a grid page (ol), and
+  the streamed boot (vite output shape feeds the static-root publishing
+  contract).
 
 python — the three AI SDK transports live in requirements.txt as exact
 pins; bump only when the index is actually ahead, then reinstall, restart,
-and re-run the LM Studio AI test (they have exactly one consumer,
-`searx/zjsearch_ai.py`):
+and re-run the live AI test (their only consumers are the SDK factories in
+`searx/zjsearch/ai/infra/sdk/`).  The theme's other own pins (bm25s =
+the reranker plugin, mcp = the tool-server bridge, html-to-markdown =
+the reader) follow the same rule, each with its area's regression: the
+§4 plugin matrix for bm25s, one real MCP tool call for mcp, one
+web_crawler read for html-to-markdown.
 
 ```sh
 local/py3/bin/pip index versions openai
 local/py3/bin/pip index versions anthropic
 local/py3/bin/pip index versions google-genai
+local/py3/bin/pip index versions bm25s
+local/py3/bin/pip index versions mcp
+local/py3/bin/pip index versions html-to-markdown
 ```
 
 - The rest of requirements.txt is upstream-owned: check for awareness,
@@ -111,13 +124,19 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | Themes | `simple_style=light/dark/black` cookie | palette flips, skeleton included |
 | Mobile | 390×844 viewport | filter rows swipe, no layout break |
 | Wide | 1920 / centered-mode toggle | container-query grids re-step |
-| Preferences | drawer, all 5 tabs | row language uniform, autosave toast |
+| Preferences | drawer, all 6 tabs (incl. PGlite) | row language uniform, autosave toast |
 | About/Stats | header icon buttons | drawer panels, internal links browse in-panel |
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
 | AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
-| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering |
-| AI failure UX (overview) | point `zjsearch.ai.base_url` at a dead port | 502 body reason readable under the card's failed label |
+| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources) |
+| AI clarify / ask_user | an ambiguous query in quality/goal (live), or the mock's clarify fixture | the clarify modal with the 2-question form (提交 / 跳过); answering seeds a clarify step at the timeline head; a mid-research ask_user renders as a call row + the same modal |
+| AI memory | any researched run (live model) | stored facts ride the run's `<user_memory>` block; a `user_memory` save renders a memory row AFTER settle; the extractor's saves appear in the drawer's 记忆 tab |
+| Research library | header History icon | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them; EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab |
+| Thread page | `/zjsearch/ai/thread/<id>` direct boot + REFRESH | the run replays with its timeline; a refresh must NEVER flash 找不到该会话 (resume awaits the store fallback, not just the per-tab mirror) |
+| Print view | 📄 on a settled run, in EVERY theme (light/dark/black) | the print dialog opens IMMEDIATELY (no preview hop); the sheet is light on pure white in all themes; the live page never re-renders (no mermaid flash); the saved filename mirrors the MD export |
+| MD thread export | the export action on the run actions row | valid markdown: one `## ` per question, sources at the foot, `{{zjs-gallery:i}}` NEVER appears (each becomes its images' markdown figures) |
+| AI failure UX (overview) | point `zjsearch.llm.base_url` at a dead port | 502 body reason readable under the card's failed label |
 | AI failure UX (search) | a settled run with NO answer (writer empty/dead stream) | the failed box with reason + retry + classic fallback — a researched-then-empty run must NEVER settle as silent nothing (stop-button cuts are exempt: `stopped` runs stay quiet) |
 
 Plugin answers (server-side; test via curl §6, not the browser):
@@ -166,6 +185,14 @@ bugs. Probe BEFORE concluding anything:
    clicks time out but `elementsFromPoint` shows the target on top, fall
    back to CUA coordinates; if synthetic keydown never reaches the page,
    CUA `type`/`keypress` carries real input events.
+5. **The print dialog cannot be automated**: verify the print view by
+   no-op patching `window.print` BEFORE clicking 📄, then inspecting
+   `#zjs-print-view-root` (research box gone, sources tail present,
+   `zjs-print-sheet` on the root) and — for colors — setting the tokens
+   to `initial` on `<html>` with `html.style.transition = "none"` FIRST
+   (the palette cross-fade otherwise feeds the probe mid-flight colors,
+   which once "proved" the paper tinted).  Fire `afterprint` manually to
+   tear the view down; `body.zjs-print-view` must end up removed.
 
 Animation measurement (the reusable sampler — attach BEFORE the action):
 
@@ -208,7 +235,9 @@ prefers the LAST parseable one). Contract sync checks: walk
 answer kind; check every serialized key has a consumer.
 
 AI wire regression (no browser needed — the fastest full-stack check of
-both AI endpoints). Extract the HMAC token from page-data globals, then
+both AI endpoints; the event ALPHABET is CLOSED server-side, so a
+malformed producer crashes loudly instead of shipping a silent drift).
+Extract the per-capability HMAC token from page-data globals, then
 replay the NDJSON and CHECK THE EVENT ORDER:
 
 ```sh
@@ -216,28 +245,37 @@ TOKEN=$(curl -s 'http://127.0.0.1:8888/search?q=audit' | python3 -c "
 import sys, re, json
 html = sys.stdin.read()
 m = re.search(r'<script id=\"page-data\" type=\"application/json\">(.*?)</script>', html, re.DOTALL)
-print(json.loads(m.group(1))['globals']['ai']['tk'])")
-curl -s -X POST 'http://127.0.0.1:8888/ai/search' -H 'Content-Type: application/json' \
+print(json.loads(m.group(1))['globals']['ai_search']['tk'])")
+curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ai/search' -H 'Content-Type: application/json' \
   -d "{\"q\":\"<question>\",\"tk\":\"$TOKEN\",\"mode\":\"balanced\",\"lang\":\"zh-CN\"}"
 ```
 
-- research run order: `think`×N (EVERY reasoning delta relays — a relay
-  that only accumulates once left the client's think segment holding the
-  first delta alone) → (`delta` intent) → `calls` →
-  `search`/`page`/`sources` per round → … → `wrapup` → `delta`×N (the
-  writer) → `gallery`? (with the `{{zjs-gallery:i}}` placeholder INSIDE
-  the answer text) → `related` (before `end`) → `end`; a greeting run:
-  `direct` → `delta` → `end`.  `delta` before the first `calls` is round narration
-  (the client re-homes it into the timeline's intent step).
-- Reconstruct the intents the way the CLIENT does (prose between `calls`
-  events; the wire's `intent` field is advisory) to verify narration
-  integrity — the run's narration is ONE flowing text across rounds even
-  when a model calls tools mid-sentence.
-- `/ai/answer` streams `<think>…</think>` wrapped reasoning then the cited
-  markdown — a dead-before-first-token upstream answers plain-text 502.
+- The alphabet (`framework/wire.py`): open / think / say / calls / call /
+  close / tasks / sources / answer / ask / gallery / related / memory /
+  usage / settle — an unknown event raises server-side (wire.encode).
+- Research run shape: `open` (kind research, round N) → `think`/`say`
+  deltas carrying THAT entry id → `calls` (the batch) → one `call`
+  settlement per tool (`{id, call, status, n/chars/...}`) → `close` →
+  next round … → `open` (kind write) → `answer` deltas (the writer's OWN
+  buffer; narration never mixes in) → `gallery`? (placeholders inside
+  the answer text) → `settle` `{status: done|awaiting|error, finish,
+  usage, model, halt}`.  `tasks` snapshots and `sources` (the [n]
+  registry) ride along as authoritative state — the client never
+  reconstructs anything (there are no heuristics left to audit).
+- AFTER `settle` only `related` / `memory` / `usage` may trail (the late
+  set — the follow-up box unlocks on settle, not on them).
+- `ask` is the clarify gate AND the mid-research ask_user (same schema);
+  the ask branch emits the tool's call row BEFORE the ask event.
+- A greeting-style run skips research: `open` (kind write) → `answer`
+  deltas → `settle`.
+- The overview endpoint `/zjsearch/ai/answer` streams the SAME event set
+  (its token is `globals.ai.tk`); the `<think>` markers and the tail
+  meta sentinel its card renders are synthesized CLIENT-side.
+- A stream that dies before its first content event answers plain-text
+  502 (the route primes the stream before responding).
 - The audit instance variant (:8907 + `zjaudit` queries + the mock
-  transport on :8909) replays the SAME checks with zero model variance and
-  milliseconds of latency — use it when the failure is in the SERVER
+  transport on :8909) replays the SAME checks with zero model variance
+  and milliseconds of latency — use it when the failure is in the SERVER
   plumbing rather than the model.
 
 ## 7. Code audit dimensions (the sweep)
@@ -264,38 +302,48 @@ rules and the shared-token inventory from AGENTS.md, covering:
 7. **Interface uniformity** — preferences tabs share the row language;
    empty/final states share the composition language; zero-result pages
    carry no pager.
-8. **AI feature** — LM Studio live test (stream, citations, thinking,
+8. **AI feature** — live-model test (stream, citations, thinking,
    regenerate, copy) + backend review (timeouts, silence contracts, token
    gate, image SSRF path).  The resilience contracts each get an explicit
    check: the writer's empty-stream retry (one silent second attempt — a
    200-with-zero-events gateway must not end a researched run answerless),
    the fence-last prompt rule (a writer that emits ONLY the ```related
    fence used to settle the run with suggestions but no answer), the
-   settled-run-without-answer failed box (see the §4 matrix), the merged
-   narration intent (one intent step per run — per-round fragments shredded
-   a mid-sentence continuation into broken half-lines), and the audit
-   mock's event sequence (§6 recipe against :8907 exercises all of it
-   without a live model).
+   settled-run-without-answer failed box (see the §4 matrix), the spawn
+   recursion guard (a sub-model calling spawn_subtask or task_write must
+   no-op, not recurse), the memory pair (the pre-sent `<user_memory>`
+   block + the post-run extractor — small models never call the save
+   tool unprompted), the MCP bridge (a dead endpoint contributes
+   NOTHING; past 8 registered tools the `mcp_search_tools` discovery
+   tool replaces the schema dump), and the print view's off-screen
+   mermaid render (the live page never re-renders — §5 recipe 5).  The
+   audit mock's event sequence (§6 recipe against :8907) exercises the
+   plumbing without a live model.
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,
    `alt` on images, keyboard reachability.
-10. **Prompts (agentic)** — both AI system prompts must COMPOSE the shared
-   fragments in `searx/zjsearch/ai/prompts.py` (citation grammar, the full
-   markdown surface, language directive, grounding fallback, opening
-   rule) — never hand-copied copies (the drift this caught: the search
+10. **Prompts (agentic)** — the shared prompt spine is
+   `searx/zjsearch/ai/runtime/spine.py` (identity / citation grammar / the
+   full markdown surface / language directive / grounding fallback /
+   opening rule / answer contract); the search preset's assembly lives in
+   `runtime/prompts.py` (`initial_messages`) — the spine fragments must be
+   COMPOSED, never hand-copied (the drift this once caught: the search
    copy was missing task lists / strikethrough / the once-only LaTeX
-   rule).  Round policy lives ONLY in the depth branches (a base-level
-   round cap contradicts quality/goal).  The reply language follows the
-   ACTIVE UI locale: the client resolves it to the SHIPPED catalog tag
-   (`themeLocaleTag`, zh-Hant → en included) and `language_directive` is
-   a DATA TABLE from catalog tag → language name — adding an i18n
-   language is one client catalog plus one server table row, never a new
-   branch.  The `web_search` tool exposes the parameter surface SearXNG
-   actually supports (category, time_range), the precision operators the
-   advanced_search_syntax plugin enforces (site: / filetype: / quotes /
-   before:after:), the engine-bang escape hatch (user-named engines only,
-   e.g. `!baidu`), and the empty-result fallback (retry once without the
-   filter).  Verify with composition asserts over `_answer_system` /
-   `_initial_messages` / `_tool_spec`.
+   rule).  Round policy lives ONLY in the depth branches of
+   `runtime/profile.py` (a base-level round cap contradicts quality/goal —
+   the four modes are budget/decomposition/output-shape differences on ONE
+   loop, `SEARCH_MODES`/`CLARIFY_MODES` are the single facts).  The reply
+   language follows the ACTIVE UI locale: the client resolves it to the
+   SHIPPED catalog tag (`themeLocaleTag`, zh-Hant → en included) and
+   `language_directive` is a DATA TABLE from catalog tag → language name —
+   adding an i18n language is one client catalog plus one server table
+   row, never a new branch.  The `web_search` tool exposes the parameter
+   surface SearXNG actually supports (category, time_range), the precision
+   operators the advanced_search_syntax plugin enforces (site: /
+   filetype: / quotes / before:after:), the engine-bang escape hatch
+   (user-named engines only, e.g. `!baidu`), and the empty-result
+   fallback (retry once without the filter).  Verify with composition
+   asserts over `spine.build_messages` / `runtime.prompts.initial_messages`
+   / the tool spec in `runtime/tools.py`.
 
 ## 8. Known environment traps
 
@@ -314,6 +362,11 @@ rules and the shared-token inventory from AGENTS.md, covering:
 - `$AAPL` is `%24AAPL` — a mis-encoded test vector once sent the audit
   chasing a non-existent stock-plugin bug. Double-check encodings before
   suspecting the code.
+- `dev-settings.yml` ships PLACEHOLDER keys (the tree is public) — a
+  fresh clone has NO working LLM/embedding/MCP endpoint until the real
+  keys are pasted in locally; "the AI test failed with 401/403" on a new
+  machine is the placeholder, not a regression.  The one REAL key that
+  must stay local-only after every pull is the amap MCP url.
 
 ## 9. Closing the loop
 

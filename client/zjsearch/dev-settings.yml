@@ -91,6 +91,8 @@ plugins:
     active: true
   searx.plugins.ahmia_filter.SXNGPlugin:
     active: true
+  searx.plugins.bm25_reranker.SXNGPlugin:
+    active: true
   searx.plugins.calculator.SXNGPlugin:
     active: true
   searx.plugins.currency_convert.SXNGPlugin:
@@ -131,36 +133,39 @@ engines:
     shortcut: zja
     disabled: false
 
-# ── the AI transport (zjsearch.ai) ─────────────────────────────────────
+# ── the LLM transport (zjsearch.llm) ─────────────────────────────────────
 # One transport serves BOTH AI features: the whole-page AI Overview
 # (features/results/AiSummary.tsx) and AI Search (features/results/aiSearch/).
 # Dev points at the local LM Studio; the key travels via the ZJSEARCH_AI_KEY
 # env so it stays out of the repository.  base_url goes to the SDK exactly as
 # written (each SDK appends its own method paths):
-#   openai_chat_completions / openai_responses -> https://api.openai.com/v1
+#   openai (Responses API, the latest) / openai.chat_completions
+#     -> https://api.openai.com/v1
 #   anthropic -> https://api.anthropic.com                     (no /v1)
 #   gemini    -> https://generativelanguage.googleapis.com     (gateway
 #                prefixes like https://gw.example.com/gemini work too)
 # Aggregators (aihubmix, openrouter, inferera, ...) expose OpenAI-compatible
-# routes for every model -- the openai dialect covers them all.
+# routes for every model -- the openai dialects cover them all.  The
+# pre-rename dotted-less names (openai_chat_completions / openai_responses)
+# still work as aliases.
 zjsearch:
-  ai:
+  llm:
     enabled: true
 
     # ── transport (pick ONE dialect; complete examples per SDK below) ─
     # DEV: the inferera gateway speaks the native Gemini protocol under
     # the /gemini prefix (the SDK appends /v1beta/... itself).
-    sdk: gemini
-    base_url: "https://api.inferera.com/gemini"
+    sdk: anthropic
+    base_url: "https://api.deepseek.com/anthropic"
     # api_key: "" = the ZJSEARCH_AI_KEY env (the key stays out of the
     # repository).
     api_key: ""
-    model: "gemini-3.8-flash"
+    model: "deepseek-flash"
 
     # ── params: the chosen SDK's create() kwargs, VERBATIM ────────────
     # every entry passes through under its SDK name -- no translation
     # (output cap: max_tokens on anthropic, max_output_tokens on
-    # openai_responses / gemini; anthropic fills a 4096 default when
+    # openai / gemini; anthropic fills a 4096 default when
     # unset).  The THINKING knob is the SDK's own name and surfaces the
     # chain-of-thought in the UI's collapsible thinking block:
     #   gemini -> thinking_config: {thinking_budget: N}
@@ -194,13 +199,14 @@ zjsearch:
     # ═══ per-SDK examples: uncomment ONE block and swap it over the ═══
     # ═══ active sdk/base_url/api_key/model AND params above          ═══
 
-    # openai_chat_completions -- the official API (https://api.openai.com/v1)
-    # AND every OpenAI-compatible server (LM Studio, vLLM; the aggregators
-    # openrouter / aihubmix / inferera speak this route for every model):
-    # sdk: openai_chat_completions
+    # openai.chat_completions -- the Chat Completions API (official:
+    # https://api.openai.com/v1) AND every OpenAI-compatible server (LM
+    # Studio, vLLM; the aggregators openrouter / aihubmix / inferera speak
+    # this route for every model):
+    # sdk: openai.chat_completions
     # base_url: "https://api.inferera.com/v1"
     # api_key: "sk-..."
-    # model: "deepseek-flash"
+    # model: "gpt-6-luna"
     # params:
     #   temperature: 0.7
     #   max_tokens: 8192
@@ -209,13 +215,14 @@ zjsearch:
     #   HTTP-Referer: "https://search.example.com"   # discount gateway's
     #   X-Title: "zjsearch"                          # APP-Code header
 
-    # openai_responses -- the Responses API (official: https://api.openai.com/v1;
+    # openai / openai.responses -- the Responses API, OpenAI's LATEST
+    # (bare `openai` points here; official: https://api.openai.com/v1;
     # some aggregators expose the protocol too; summary streams into the UI
     # think block -- only reasoning models accept the parameter):
-    # sdk: openai_responses
+    # sdk: openai
     # base_url: "https://api.inferera.com/v1"
     # api_key: "sk-..."
-    # model: "deepseek-flash"
+    # model: "gpt-6.1-sol"
     # params:
     #   max_output_tokens: 8192
     #   reasoning: {effort: "medium", summary: "auto"}
@@ -229,7 +236,7 @@ zjsearch:
     # sdk: anthropic
     # base_url: "https://api.inferera.com"
     # api_key: "sk-..."
-    # model: "deepseek-flash"
+    # model: "claude-sonnet-5-5"
     # params:
     #   max_tokens: 16384
     #   thinking: {type: "enabled", budget_tokens: 4096}
@@ -241,9 +248,9 @@ zjsearch:
     # surface natively on 2.5+ models -- includeThoughts folds in
     # automatically, thinking_config only sizes the budget:
     # sdk: gemini
-    # base_url: "https://generativelanguage.googleapis.com"
+    # base_url: "https://api.inferera.com/gemini"
     # api_key: "AIza..."
-    # model: "gemini-2.5-flash"
+    # model: "gemini-3.8-flash"
     # params:
     #   max_output_tokens: 8192
     #   thinking_config: {thinking_budget: 1024}
@@ -255,6 +262,10 @@ zjsearch:
       enabled: true
     ai_search:
       enabled: true
+      # history_search: hybrid    # the history drawer's default search mode:
+      #                           # keyword (BM25, free/offline) | semantic
+      #                           # (pgvector, needs zjsearch.embedding) |
+      #                           # hybrid (weighted RRF over both, default)
       # max_rounds: 4              # rounds SAFETY ceiling, not the plan
       # stall_rounds: 2            # consecutive no-new-info rounds that
       #                            # end the research (PROGRESS, not time)
@@ -262,6 +273,49 @@ zjsearch:
   # ── the page-reader provider (AI Search's web_reader tool) ─────────
   # renders one URL in a real Chrome (JS/SPA pages come out complete).
   # Unconfigured or disabled = the tool never registers.
+  # ── the thread-embedding model (the history drawer's semantic search):
+  #    the key may travel via the ZJSEARCH_EMBEDDING_KEY env.
+  #    Unconfigured = history search off.
+  embedding:
+    enabled: true
+    # sdk: openai (default -- ANY OpenAI-compatible /embeddings route)
+    #   | gemini (google-genai embed_content; base_url may stay empty
+    #   for the google default endpoint, or a gateway prefix that
+    #   already includes the API name)
+    base_url: "https://api.inferera.com/v1"
+    api_key: ""                    # or the ZJSEARCH_EMBEDDING_KEY env
+    model: "embedding-3"
+    params:
+      dimensions: 1024             # the pgvector column width
+    # params / extra_headers / extra_body ride EVERY request verbatim
+    # under the CHOSEN sdk's own names (openai: embeddings.create
+    # kwargs; gemini: EmbedContentConfig fields) -- the keys are
+    # per-sdk, do NOT mix them.  openai extras:
+    # params:
+    #   encoding_format: float
+    # extra_headers:
+    #   X-Some-Header: "1"
+    # extra_body:
+    #   user: zjs-search
+    #
+    # gemini example (sdk + base_url + key + model + params are one set):
+    # sdk: gemini
+    # base_url: "https://api.inferera.com/gemini"   # empty = google default
+    # api_key: "AIza..."
+    # model: "gemini-embedding-2"
+    # params:
+    #   task_type: RETRIEVAL_DOCUMENT    # RETRIEVAL_QUERY for the searches
+    #   output_dimensionality: 768       # the pgvector column width
+    #   # auto_truncate: true            # Vertex only
+  # ── MCP tool servers (streamable HTTP only) -- the model's tools gain
+  #    everything these servers expose, namespaced mcp_<server>_<tool>.
+  #    header carries whatever auth the server wants.  KEYS LIVE HERE AND
+  #    NEVER TRAVEL VIA ENV -- do not commit a real key.
+  mcp:
+    - amap-maps:
+        # the real key stays local: this checked-in example carries a
+        # placeholder -- swap yours in here (and never commit it)
+        url: "https://mcp.amap.com/mcp?key=YOUR_AMAP_KEY"
   reader:
     # enabled: true              # default ON; false = web_reader never
     #                            # registers

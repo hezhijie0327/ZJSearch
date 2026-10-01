@@ -77,9 +77,9 @@ engines:
 # fixture engine: fixed completions keyed by request shape, zero model
 # variance (the transport contract lives in the searx/zjsearch/ai/llm/ package).
 zjsearch:
-  ai:
+  llm:
     enabled: true
-    sdk: openai_chat_completions
+    sdk: openai.chat_completions
     base_url: "http://127.0.0.1:8909/v1"
     api_key: "zjaudit"
     model: "zjaudit-mock"
@@ -92,6 +92,23 @@ zjsearch:
   # the same mock server answers the page reader's POST /content with a
   # fixture document, so the web_reader call row, the reading pane and
   # the read-in-full badge are audited offline too
+  # ── the thread-embedding model (the history drawer's semantic search):
+  #    an OpenAI-compatible /embeddings route; the key may travel via the
+  #    ZJSEARCH_EMBEDDING_KEY env.  Unconfigured = history search off.
+  embedding:
+    # e2e probe: ON with the REAL BigModel embeddings (512 via params) --
+    # the mock transport produces the runs, the embeddings are real
+    enabled: true
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""                    # or the ZJSEARCH_EMBEDDING_KEY env
+    model: "embedding-3"
+    params:
+      encoding_format: float
+      dimensions: 512              # the pgvector column width
+    extra_headers:
+      X-ZJS-Test: "1"
+    extra_body:
+      user: zjs-audit
   reader:
     base_url: "http://127.0.0.1:8909/browserless"
     api_key: "zjaudit"
