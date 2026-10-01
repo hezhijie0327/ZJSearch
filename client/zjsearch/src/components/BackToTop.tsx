@@ -26,7 +26,7 @@ export function BackToTop() {
   return (
     <button
       aria-label={t("back_to_top")}
-      className={`fixed bottom-6 right-6 z-40 grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-pop transition-colors hover:text-accent ${
+      className={`zjs-print-hide fixed bottom-6 right-6 z-40 grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-pop transition-colors hover:text-accent ${
         closing ? "animate-fade-out" : "animate-fade-in"
       }`}
       onClick={() => {

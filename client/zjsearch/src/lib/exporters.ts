@@ -31,6 +31,7 @@ import type { AnswerData, ResultItem, SearchPageData } from "@/lib/types.ts";
 const EXPORT_MIME: Record<string, string> = {
   csv: "application/csv",
   json: "application/json",
+  md: "text/markdown",
   rss: "text/xml",
   xml: "text/xml",
 };
@@ -334,10 +335,91 @@ function buildResultsRss(data: SearchPageData, results: ResultItem[], origin: st
   ].join("\n");
 }
 
-/** Build and download the current results as `format` (csv/json/rss; xml is
-    an alias of rss) in the same structure as the server's format endpoints.
-    Returns false when the format has no client-side builder — the caller
-    then leaves the server URL link untouched. */
+function buildResultsMarkdown(data: SearchPageData, results: ResultItem[], origin: string): string {
+  const lines: string[] = [
+    `# ${data.q}`,
+    "",
+    `_${results.length} results · ${data.globals.instance_name} · ${new Date().toLocaleString()} · ${origin}/search?q=${urlencode(data.q)}_`,
+  ];
+  if (data.answers.length > 0) {
+    lines.push("", "## Answers", "");
+    for (const answer of data.answers) {
+      lines.push(`- ${"answer" in answer ? answer.answer : answer.template}`);
+    }
+  }
+  lines.push("", "## Results", "");
+  results.forEach((result, index) => {
+    lines.push(`${index + 1}. [${result.title_text}](${result.url})`);
+    if (result.content_text) {
+      lines.push(`   ${result.content_text.replaceAll("\n", " ")}`);
+    }
+    if (result.engines.length > 0) {
+      lines.push(`   _${result.engines.join(", ")}_`);
+    }
+  });
+  return lines.join("\n");
+}
+
+/** The structural run shape the AI-thread export reads (lib stays free of
+    the feature's types). */
+export interface MarkdownRun {
+  q: string;
+  answer: string;
+  mode?: string;
+  sources?: Array<{ n: number; title: string; url: string }>;
+  /** the answer's inline image groups (the {{zjs-gallery:i}} placeholders
+      index into this array) */
+  galleries?: Array<Array<{ url: string; title?: string }>>;
+}
+
+/** One AI conversation as a readable Markdown document: title header, one
+    `## ` section per question with the settled answer verbatim (it IS
+    markdown -- citations kept as literal [n], the source list grounds
+    them) and the run's source registry at its foot.  The gallery
+    placeholders never appear on paper: each becomes its group's images
+    as markdown figures (an empty group just vanishes). */
+export function buildThreadMarkdown(threadId: string, title: string, runs: MarkdownRun[], instance: string): string {
+  const lines: string[] = [`# ${title}`, "", `_${instance} · ${threadId} · ${new Date().toLocaleString()}_`];
+  for (const run of runs) {
+    lines.push("", `## ${run.q}`, "");
+    const answer = run.answer.replaceAll(/\{\{zjs-gallery:(\d+)\}\}/g, (_, index: string) => {
+      const group = run.galleries?.[Number.parseInt(index, 10)] ?? [];
+      return group.map((image) => `![${image.title ?? ""}](${image.url})`).join("\n");
+    });
+    if (answer.trim()) {
+      lines.push(answer.trim(), "");
+    } else {
+      lines.push(`_(no answer${run.mode ? ` · ${run.mode}` : ""})_`, "");
+    }
+    const sources = run.sources ?? [];
+    if (sources.length > 0) {
+      lines.push("**Sources**", "");
+      for (const source of [...sources].sort((a, b) => a.n - b.n)) {
+        lines.push(`- [${source.n}] [${source.title || source.url}](${source.url})`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+/** Trigger a browser download for one generated text file. */
+function downloadText(filename: string, text: string, mime: string): void {
+  const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Build and download the current results as `format` (csv/json/rss/md; xml
+    is an alias of rss) in the same structure as the server's format
+    endpoints (markdown is the one client-only extra).  Returns false when
+    the format has no client-side builder — the caller then leaves the
+    server URL link untouched. */
 export function downloadResults(format: string, data: SearchPageData, results: ResultItem[], origin: string): boolean {
   const mime = EXPORT_MIME[format];
   if (!mime) {
@@ -348,21 +430,34 @@ export function downloadResults(format: string, data: SearchPageData, results: R
       ? buildResultsCsv(data, results)
       : format === "json"
         ? buildResultsJson(data, results)
-        : buildResultsRss(data, results, origin);
+        : format === "md"
+          ? buildResultsMarkdown(data, results, origin)
+          : buildResultsRss(data, results, origin);
   const safeQuery =
     data.q
       .replace(/[/\\:*?"<>|]+/g, "_")
       .trim()
       .slice(0, 64) || "results";
   const extension = format === "rss" || format === "xml" ? "xml" : format;
-  const blob = new Blob([text], { type: `${mime};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `zjsearch_${safeQuery}.${extension}`;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
+  downloadText(`zjsearch_${safeQuery}.${extension}`, text, mime);
   return true;
+}
+
+/** Download one AI conversation as Markdown (the thread actions' export). */
+export function downloadThreadMarkdown(
+  threadId: string,
+  title: string,
+  runs: MarkdownRun[],
+  instance = "zjsearch",
+): void {
+  const safeTitle =
+    title
+      .replace(/[/\\:*?"<>|]+/g, "_")
+      .trim()
+      .slice(0, 64) || "thread";
+  downloadText(
+    `zjsearch_${safeTitle}.${threadId.slice(0, 8)}.md`,
+    buildThreadMarkdown(threadId, title, runs, instance),
+    EXPORT_MIME.md ?? "text/markdown",
+  );
 }

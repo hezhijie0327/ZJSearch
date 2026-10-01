@@ -1,0 +1,295 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/** The print / Save-as-PDF face of the theme (the AI report's engine is
+    the browser's own dialog — no jsPDF, no CJK font embedding): the
+    design language on paper.  PAPER IS ALWAYS THE LIGHT THEME — a white
+    ground and the warm light palette — but every value stays the theme's
+    own: the color tokens are @property-registered <color>s whose
+    registered initial-value IS the light palette, so neutralizing the
+    dark/black overrides with `initial` restores them from the one source
+    of truth (tokens.css) with no hex duplication to drift (a browser
+    without @property prints plain black-on-white instead — readable,
+    just unaccented).  Interactive chrome disappears, clamped content
+    expands, Collapse panels print open, and the wordmark stays.  A
+    `.zjs-print-hide` hook marks the components that must never print
+    (floating pills, overlays, export chips); the structural selectors
+    below cover the rest. */
+
+@media print {
+  /* ── palette: paper is always the LIGHT theme ─────────────────────
+     the dark/black token overrides neutralize on paper: `initial` on a
+     registered custom property computes to its registered initial-value,
+     which tokens.css pins to the light palette.  The one deliberate
+     exception is --bg: the PAPER GROUND is pure white (the app's light
+     --bg is a warm off-white that reads as a smudge against the white
+     @page margins); every surface tier above it stays tokened. */
+  .dark,
+  .black {
+    --bg: #ffffff;
+    --surface: initial;
+    --surface-2: initial;
+    --line: initial;
+    --ink: initial;
+    --ink-2: initial;
+    --ink-3: initial;
+    --accent: initial;
+    --accent-hover: initial;
+    --accent-strong: initial;
+    --accent-strong-hover: initial;
+    --accent-soft: initial;
+    --accent-contrast: initial;
+    --highlight-bg: initial;
+    --danger: initial;
+    --warning: initial;
+    --ok: initial;
+    --shadow-card: initial;
+    --shadow-pop: initial;
+    color-scheme: light;
+  }
+
+  * {
+    print-color-adjust: exact;
+  }
+
+  /* the palette cross-fade must never bleed into a print snapshot: the
+     light force applies ATOMICALLY on paper */
+  html {
+    transition: none !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* the hero shell locks document scrolling — printing needs it back */
+  .zjs-hero-lock,
+  .zjs-hero-lock body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* ── chrome: gone on paper ──────────────────────────────────────── */
+  .zjs-print-hide,
+  /* header action circles, drawers, floating pills, export chips,
+     back-to-top, follow-up composer, autocomplete, toasts */
+  [data-dialog-close],
+  .zjs-boot,
+  aside[data-zjs-rail] {
+    display: none !important;
+  }
+
+  /* position-fixed furniture (sticky follow-up pill, BackToTop, the
+     progress bar) either vanishes or breaks the page flow */
+  .fixed,
+  .sticky {
+    position: static !important;
+  }
+
+  /* ── content: fully revealed ────────────────────────────────────── */
+  /* clamps expand: snippets, infobox abstracts, AI overviews */
+  .line-clamp-1,
+  .line-clamp-2,
+  .line-clamp-3 {
+    -webkit-line-clamp: unset !important;
+    line-clamp: unset !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Collapse panels print open (the research timeline is part of the
+     record); the inline 0fr loses to !important */
+  [style*="grid-template-rows"] {
+    grid-template-rows: 1fr !important;
+  }
+
+  /* entrance animations must not start from opacity 0 on paper */
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  /* reading measures widen to the paper (the lg:max-w-3xl columns) */
+  .lg\:max-w-3xl,
+  .lg\:max-w-prose {
+    max-width: none !important;
+  }
+
+  /* links show their target — a printout needs the url, the chips do
+     not repeat it */
+  .zjs-results-main a[href^="http"]:not(:empty)::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    word-break: break-all;
+  }
+
+  /* citations keep their number styling but lose the click affordance */
+  a[href^="#ref-"]::after {
+    content: none !important;
+  }
+
+  /* avoid a card splitting across pages */
+  .rounded-lg,
+  .rounded-xl,
+  .rounded-2xl {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}
+
+/* ── the dedicated print view: while body.zjs-print-view is set, ONLY the
+   report sheet prints — the app underneath disappears.  Paper is always
+   LIGHT: the registered-token force above whitens even a dark user's
+   sheet (token-driven components recolor through their variables; the
+   mermaid diagrams — the one component family with colors BAKED into the
+   DOM — re-render light via the same body-class marker, see
+   PrintView/MermaidBlock).  The sheet's own face is the
+   .zjs-print-sheet report theme below. ── */
+#zjs-print-view-root {
+  display: none;
+}
+
+@media print {
+  body.zjs-print-view > *:not(#zjs-print-view-root) {
+    display: none !important;
+  }
+
+  #zjs-print-view-root {
+    display: block !important;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 40px;
+  }
+}
+
+/* ── the report sheet: the print document's own compact type scale, with
+   every color riding the theme tokens (light on paper, per the force
+   above) — nothing here re-states a palette value. */
+@page {
+  size: a4;
+  margin: 16mm 14mm;
+}
+
+.zjs-print-sheet {
+  font-size: 12.5px;
+  line-height: 1.85;
+  color: var(--ink);
+}
+
+/* the question heading is the document title; model headings (rendered
+   as h3) are the section track */
+.zjs-print-sheet h2 {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+}
+
+.zjs-print-sheet h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 14px 0 8px;
+}
+
+/* the answer wrapper pins text-sm — the body scale is restated here so
+   prose prints at the sheet's measure, not the screen's */
+.zjs-print-sheet :is(p, li, dd, dt, blockquote) {
+  font-size: 12.5px;
+}
+
+.zjs-print-sheet p {
+  margin: 0 0 10px;
+}
+
+.zjs-print-sheet ul,
+.zjs-print-sheet ol {
+  margin: 0 0 10px;
+  padding-inline-start: 18px;
+}
+
+.zjs-print-sheet li {
+  margin-bottom: 4px;
+}
+
+.zjs-print-sheet blockquote {
+  margin: 0 0 10px;
+  padding: 2px 12px;
+  border-inline-start: 3px solid var(--line);
+  color: var(--ink-2);
+}
+
+.zjs-print-sheet img {
+  max-width: 100%;
+  height: auto;
+}
+
+.zjs-print-sheet hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
+
+/* the screen-time horizontal scrollers become full-width on paper */
+.zjs-print-sheet .zjs-md-table {
+  overflow-x: visible;
+}
+
+.zjs-print-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 11.5px;
+}
+
+.zjs-print-sheet th,
+.zjs-print-sheet td {
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+  text-align: start;
+  vertical-align: top;
+}
+
+.zjs-print-sheet th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.zjs-print-sheet code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.zjs-print-sheet pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  break-inside: avoid;
+  font-size: 11px;
+}
+
+.zjs-print-sheet h2,
+.zjs-print-sheet h3 {
+  break-after: avoid;
+}
+
+.zjs-print-sheet table,
+.zjs-print-sheet pre {
+  break-inside: auto;
+}

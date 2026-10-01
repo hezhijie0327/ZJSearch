@@ -16,6 +16,7 @@
 @import "./boot.css";
 @import "./prose.css";
 @import "./behaviors.css";
+@import "./print.css";
 @import "./map.css";
 
 @custom-variant dark (&:where(.dark, .dark *));

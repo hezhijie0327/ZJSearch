@@ -15,9 +15,11 @@ import {
   FileCode2,
   FileJson,
   FileSpreadsheet,
+  FileText,
   Link2,
   List,
   type LucideIcon,
+  Printer,
   Rss,
   Timer,
 } from "lucide-react";
@@ -187,6 +189,36 @@ export function DebugPanels({
                       </a>
                     );
                   })}
+                {/* markdown is the client-only export: the on-screen list as a
+                    readable document (no server format endpoint behind it) */}
+                <a
+                  className={stripChip}
+                  href={`${searchUrl}&format=md`}
+                  onClick={(event) => {
+                    if (isModifiedClick(event)) {
+                      return;
+                    }
+                    event.preventDefault();
+                    if (downloadResults("md", data, results, window.location.origin)) {
+                      flashToast(`${t("exported")} ${results.length} ${t("meta_results")}`, { tone: "ok" });
+                    }
+                  }}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  <FileText className="size-3.5 shrink-0 text-ink-3" />
+                  MD
+                </a>
+                <button
+                  className={stripChip}
+                  onClick={() => {
+                    window.print();
+                  }}
+                  type="button"
+                >
+                  <Printer className="size-3.5 shrink-0 text-ink-3" />
+                  {t("print_page")}
+                </button>
               </div>
             </div>
           ) : null}
