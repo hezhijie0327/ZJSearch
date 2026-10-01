@@ -51,3 +51,4 @@ client/zjsearch/.lighthouse-archive/
 
 # lighthouse gate materialised no-JS page (transient)
 /searx/static/audit-nojs.html
+gui-test-screenshots/
