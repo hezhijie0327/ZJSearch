@@ -20,11 +20,19 @@ export interface AiSourceMeta {
   t: string;
   /** result url — the panel's external-open icon */
   u: string;
+  /** recalled from the browser's knowledge base (a reader-cache page
+      head) — no in-page result card exists, so the citation chip opens
+      the url instead of scrolling */
+  history?: boolean;
 }
 
 /** Favicon + domain per result (citation order) — the AI overview chips
     render these inline, Google AI Overview style. */
-export function aiSourceMeta(results: ResultItem[], max = 20): AiSourceMeta[] {
+export function aiSourceMeta(
+  results: ResultItem[],
+  max = 20,
+  recalled: Array<{ url: string; title: string }> = [],
+): AiSourceMeta[] {
   const out: AiSourceMeta[] = [];
   for (const result of results.slice(0, max)) {
     out.push({
@@ -32,6 +40,18 @@ export function aiSourceMeta(results: ResultItem[], max = 20): AiSourceMeta[] {
       favicon: result.favicon || "",
       t: result.title_text.slice(0, 200),
       u: result.url,
+    });
+  }
+  // the recalled knowledge-base pages CONTINUE the [n] sequence (their
+  // context lines sit after the results) — meta must cover them or their
+  // citations would render as bare chips
+  for (const hit of recalled) {
+    out.push({
+      domain: resultHost(hit.url, undefined, true),
+      favicon: "",
+      t: hit.title.slice(0, 200),
+      u: hit.url,
+      history: true,
     });
   }
   return out;
@@ -80,6 +100,8 @@ const DEEP_SOURCES = 5;
 const SHALLOW_SOURCES = 15;
 const DEEP_SNIPPET_CHARS = 800;
 const INFOBOX_CHARS = 2000;
+const RECALLED_PAGES = 2;
+const RECALLED_CHARS = 1200;
 
 function dateOf(result: ResultItem): string {
   return result.published_date ? ` (${result.published_date.slice(0, 10)})` : "";
@@ -106,7 +128,11 @@ export function collectAiImages(results: ResultItem[], max = 4): string[] {
   return urls;
 }
 
-export function buildAiContext(results: ResultItem[], infoboxes: InfoboxData[]): string {
+export function buildAiContext(
+  results: ResultItem[],
+  infoboxes: InfoboxData[],
+  recalled: Array<{ url: string; title: string; text: string }> = [],
+): string {
   const lines: string[] = [];
   let index = 0;
   for (const result of results.slice(0, DEEP_SOURCES)) {
@@ -123,6 +149,16 @@ export function buildAiContext(results: ResultItem[], infoboxes: InfoboxData[]):
   if (infobox) {
     index += 1;
     lines.push(`[${index}] ${infobox.title}: ${htmlToText(infobox.content_html).slice(0, INFOBOX_CHARS)}`);
+  }
+  // the knowledge base's recall (PGlite reader cache, semantic+BM25
+  // matched client-side): full-text heads of pages the user's PAST
+  // research already read -- deep material the live snippets lack,
+  // clearly labeled so the model treats it as possibly outdated
+  for (const hit of recalled.slice(0, RECALLED_PAGES)) {
+    index += 1;
+    lines.push(
+      `[${index}] ${resultHost(hit.url, undefined)}: ${hit.title} (from your past research, read in full; may be outdated): ${hit.text.slice(0, RECALLED_CHARS)}`,
+    );
   }
   return lines.join("\n");
 }

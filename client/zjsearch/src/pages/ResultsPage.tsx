@@ -40,11 +40,11 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
+import { recordClassicResults, recordSearch, searchReaderPages, threadUrl } from "@/lib/knowledgeStore.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
-import { recordClassicResults, recordSearch, threadUrl } from "@/lib/threadStore.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
@@ -342,7 +342,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     aiOverviewRan.current = true;
-    aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
+    aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes, aiRecall), aiImages);
   });
   // a hand-crafted ?ai=1 (or the feature switched off mid-session) without
   // the capability: the server ran no classic search either — fall back to
@@ -513,7 +513,30 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     };
   }, [aiMode]);
   const aiImages = useMemo(() => collectAiImages(allResults), [allResults]);
-  const aiMeta = useMemo(() => aiSourceMeta(allResults), [allResults]);
+  // the knowledge base's recall for the AI Overview: computed EAGERLY once
+  // per search (a click-time recall would stall the card's first paint on
+  // an embedding round trip); a fresh search invalidates it via the query
+  const [aiRecall, setAiRecall] = useState<Array<{ url: string; title: string; text: string }>>([]);
+  useEffect(() => {
+    setAiRecall([]);
+    if (data.pending || !data.q) {
+      return;
+    }
+    let cancelled = false;
+    searchReaderPages(data.q, 2)
+      .then((hits) => {
+        if (!cancelled) {
+          setAiRecall(hits);
+        }
+      })
+      .catch(() => {
+        /* the recall is a bonus context line -- silence on failure */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.q, data.pending]);
+  const aiMeta = useMemo(() => aiSourceMeta(allResults, 20, aiRecall), [allResults, aiRecall]);
 
   // Quick Answer citation [n] → the n-th result of the flat list the answer
   // context was built from.  The cited indices live in STATE keyed to the
@@ -542,6 +565,14 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     (index: number): boolean => {
       const result = allResults[index - 1];
       if (!result) {
+        // a recalled knowledge-base source (past research, beyond the
+        // result list): there is no card to scroll to -- its citation chip
+        // opens the page instead
+        const recalled = aiMeta[index - 1];
+        if (recalled?.history && recalled.u) {
+          window.open(recalled.u, "_blank", "noopener");
+          return true;
+        }
         return false;
       }
       const card = findResultCard(index - 1, result);
@@ -566,7 +597,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       }, 1900);
       return true;
     },
-    [allResults, findResultCard, aiCited, href],
+    [allResults, aiMeta, findResultCard, aiCited, href],
   );
 
   // the marks belong to the answer that produced them: a fresh ask
@@ -853,7 +884,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                         globals.ai && allResults.length > 0 ? (
                           <AiAnswerTrigger
                             onToggle={() => {
-                              aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes), aiImages);
+                              aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes, aiRecall), aiImages);
                             }}
                             open={aiAnswer.open}
                             phase={aiAnswer.phase}

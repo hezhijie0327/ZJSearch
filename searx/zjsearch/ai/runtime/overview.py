@@ -14,6 +14,7 @@ multimodal request to text-only, stream.
 """
 
 import logging
+import re
 import typing as t
 
 import flask
@@ -23,6 +24,7 @@ from searx.zjsearch.ai.framework import loop as engine
 from searx.zjsearch.ai.framework import wire
 from searx.zjsearch.ai.infra import config as llm_config
 from searx.zjsearch.ai.infra import http
+from searx.zjsearch.ai.infra.embed import cosine, run_batch
 from searx.zjsearch.ai.runtime import spine
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,54 @@ logger = logging.getLogger(__name__)
 _CONTEXT_MAX_CHARS = 16000
 """Hard cap on the client-assembled context (deep 5 + shallow 15 + infobox
 lands around 7k; the cap only guards abuse)."""
+
+_OVERVIEW_RERANK_ABOVE = 12_000
+"""Context size past which the numbered source lines are re-ordered by
+embedding cosine against the question -- the cap sits at 16k, so past
+this point the least relevant lines sit in the cap's shadow and the
+model reads noise before the goods.  A fitting context keeps the
+engine's relevance order (fresh, already reranked by the bm25 plugin)
+and costs no embedding round trip.  Silent degradation: embedding off /
+slow / dead -> original order."""
+
+_NUMBERED_LINE_RE = re.compile(r"^\[\d+\] ")
+_EMBED_TIMEOUT = 4.0
+"""The ordering embed's wall clock -- a quick-answer endpoint must not
+stall on a slow embedding upstream; past it the original order ships."""
+
+
+def _ordered_context(question: str, context: str) -> str:
+    """The numbered source lines ordered most-question-relevant-first
+    (one embedding batch, cosine against the question).  The [n] labels
+    travel with their lines, so the client's citation grammar is
+    untouched; below the threshold, with too few numbered lines, or on
+    any embedding failure the context returns unchanged."""
+    lines = context.split("\n")
+    numbered = [i for i, line in enumerate(lines) if _NUMBERED_LINE_RE.match(line)]
+    if len(numbered) < 4 or len(context) <= _OVERVIEW_RERANK_ABOVE:
+        return context
+    batch = run_batch([question] + [lines[i][:600] for i in numbered], timeout=_EMBED_TIMEOUT)
+    if not batch:
+        return context
+    vectors = batch[0]
+    if len(vectors) != len(numbered) + 1:
+        return context
+    probe = vectors[0]
+    order = sorted(range(len(numbered)), key=lambda k: -cosine(vectors[k + 1], probe))
+    result = list(lines)
+    for slot, k in enumerate(order):
+        result[numbered[slot]] = lines[numbered[k]]
+    return "\n".join(result)
+
+
+def _cap_lines(context: str) -> str:
+    """The hard cap at a LINE boundary -- a raw string slice could cut a
+    source line in half and leave the model citing a truncated [n]."""
+    if len(context) <= _CONTEXT_MAX_CHARS:
+        return context
+    cut = context.rfind("\n", 0, _CONTEXT_MAX_CHARS)
+    return context[: cut if cut > 0 else _CONTEXT_MAX_CHARS]
+
 
 _ANSWER_USER_PROMPT = "<q>{q}</q>\n<sources>\n{context}\n</sources>"
 
@@ -77,7 +127,7 @@ def _answer() -> flask.Response:
         gate=llm_config.feature_enabled("overview") and llm_config.configured(llm_config.llm_cfg()), context=True
     )
     cfg = llm_config.llm_cfg()
-    context = context[:_CONTEXT_MAX_CHARS]
+    context = _cap_lines(_ordered_context(q, context))
     lang = http.answer_lang(payload)
     image_parts = attach_images(payload, cfg)
 
