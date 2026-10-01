@@ -24,6 +24,33 @@ import type { AiThreadPageData } from "@/lib/types.ts";
 
 const EMPTY_META: AiSourceMeta[] = [];
 
+/** The thread page's resume ghost (page-private): while the async resume
+    reads the store (the per-tab mirror may miss; PGlite is the fallback)
+    the main column rendered BLANK -- a shared thread link read as dead.
+    The ghost mirrors AiSearchRunSection's zero-event state. */
+function ThreadGhost() {
+  return (
+    <div aria-busy="true" className="mt-4 animate-fade-up space-y-5">
+      <span className="zjs-skeleton block h-9 w-72 max-w-full" />
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="zjs-skeleton size-5 rounded-full" />
+        <span className="zjs-skeleton h-5 w-24" />
+        <span className="zjs-skeleton h-4 w-16" />
+      </div>
+      <div className="rounded-lg border border-line p-3">
+        <span className="zjs-skeleton block h-4 w-44" />
+        <span className="zjs-skeleton mt-2 block h-6 w-full" />
+        <span className="zjs-skeleton mt-2 block h-6 w-[82%]" />
+      </div>
+      <div className="space-y-3">
+        <span className="zjs-skeleton block h-4 w-full" />
+        <span className="zjs-skeleton block h-4 w-[93%]" />
+        <span className="zjs-skeleton block h-4 w-[70%]" />
+      </div>
+    </div>
+  );
+}
+
 export function AiThreadPage({ data }: { data: AiThreadPageData }) {
   const globals = data.globals;
   const t = useT();
@@ -91,7 +118,9 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
   return (
     <Shell globals={globals}>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
-        {hasThread ? (
+        {resuming ? (
+          <ThreadGhost />
+        ) : hasThread ? (
           <div className="mt-4 space-y-8">
             {aiSearch.runs.map((run, index) => (
               <AiSearchRunSection

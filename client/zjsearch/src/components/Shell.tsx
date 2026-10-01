@@ -72,6 +72,43 @@ const LazyKnowledgeDrawer = lazy(() =>
   import("@/features/results/aiSearch/KnowledgeDrawer.tsx").then((m) => ({ default: m.KnowledgeDrawer })),
 );
 
+/** The knowledge drawer's load ghost (Suspense fallback): the drawer's
+    chunk rides the results feature tree, so a FIRST open on a cold page
+    fetches it over the wire -- fallback=null read as a dead click (bare
+    backdrop, empty sheet).  The ghost mirrors the real sheet's chrome:
+    backdrop, end-anchored panel, header, tab pills, search box, list
+    rows (the .zjs-skeleton shimmer primitive). */
+function DrawerGhost() {
+  return (
+    <div aria-hidden="true">
+      <div className="fixed inset-0 z-50 animate-fade-in bg-black/60" />
+      <div className="absolute inset-y-0 end-0 flex w-full max-w-3xl flex-col bg-bg shadow-pop animate-slide-in-right">
+        <div className="flex items-center justify-between border-b border-line px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="zjs-skeleton size-4.5 rounded-md" />
+            <span className="zjs-skeleton h-5 w-20" />
+          </div>
+          <span className="zjs-skeleton size-9 rounded-full" />
+        </div>
+        <div className="flex items-center gap-1 border-b border-line px-3 py-2">
+          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
+          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
+          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
+          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
+        </div>
+        <div className="border-b border-line px-3 py-2.5">
+          <span className="zjs-skeleton block h-8 w-full rounded-lg" />
+        </div>
+        <div aria-busy="true" className="flex flex-1 flex-col gap-2 overflow-hidden p-3">
+          {Array.from({ length: 8 }, (_, i) => (
+            <span className="zjs-skeleton h-14 rounded-xl" key={i} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function KnowledgeButton({ globals }: { globals: GlobalData }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -95,7 +132,7 @@ function KnowledgeButton({ globals }: { globals: GlobalData }) {
         <LibraryBig className="size-4.5" />
       </button>
       {open ? (
-        <Suspense fallback={null}>
+        <Suspense fallback={<DrawerGhost />}>
           <LazyKnowledgeDrawer
             currentId={currentId}
             initialMode={

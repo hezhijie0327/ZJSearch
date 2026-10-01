@@ -221,6 +221,18 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   widths (a no-JS preview of the streamed early chunk up to
   `<!--zjs-shell-->` with the scripts stripped — stylesheet relinked to a
   live instance — keeps the skeleton on screen).
+- SKELETON COVERAGE IS UNIVERSAL: every surface a user can reach renders
+  its OWN real shape while it loads — never a blank pane, a lone spinner,
+  or (worst) a dishonest empty state.  The inventory: classic results
+  (static skeleton + `ResultSkeleton`), AI takeover (the ai_mode skeleton
+  branch + `AiBootGhost`), lazy page chunks (`PageFallback` in app.tsx —
+  the family page scaffold, since Shell itself is inside the chunk),
+  overlay panels (the panel-chrome `PanelSkeleton`), the knowledge drawer's
+  lazy chunk (`DrawerGhost` in Shell) and its async tabs (null →
+  `DrawerRowsSkeleton`; `[]` after resolve is the only honest empty), and
+  the AI thread page's async resume (`ThreadGhost`).  A new surface ships
+  with its ghost in the same change; a load state that renders an empty
+  message while data is still in flight is a bug.
 
 - The data contract lives in `searx/templates/zjsearch/data/macros.html` and is
   mirrored by TS types in `client/zjsearch/src/lib/types.ts`. **Keep both in sync.**

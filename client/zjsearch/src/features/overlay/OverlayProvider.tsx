@@ -250,11 +250,26 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
   );
 }
 
+/** The overlay panels' load ghost (preferences / about / stats share one
+    shape): heading, section-tab pills, then setting rows of a label + a
+    control -- panel chrome, not six anonymous bars.  Generic on purpose:
+    one fallback serves every panel payload and the lazy page chunks. */
 const PanelSkeleton = () => (
-  <div aria-busy="true" className="space-y-3 p-6">
-    {Array.from({ length: 6 }, (_, i) => (
-      <div className="zjs-skeleton h-12" key={i} />
-    ))}
+  <div aria-busy="true" className="space-y-5 p-6">
+    <span className="zjs-skeleton block h-6 w-44" />
+    <div className="flex items-center gap-2">
+      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
+      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
+      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
+    </div>
+    <div className="space-y-4">
+      {Array.from({ length: 5 }, (_, i) => (
+        <div className="flex items-center justify-between gap-4" key={i}>
+          <span className="zjs-skeleton h-4 w-1/3" />
+          <span className="zjs-skeleton h-9 w-24 rounded-lg" />
+        </div>
+      ))}
+    </div>
   </div>
 );
 

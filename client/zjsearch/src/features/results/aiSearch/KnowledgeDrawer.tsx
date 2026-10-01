@@ -95,6 +95,18 @@ function MemoryList({
   ));
 }
 
+/** Loading rows for the async tabs (null state): the shimmer primitive
+    in the list-row rhythm -- a load must never read as an empty corpus. */
+function DrawerRowsSkeleton() {
+  return (
+    <div aria-busy="true" className="space-y-2">
+      {Array.from({ length: 6 }, (_, i) => (
+        <span className="zjs-skeleton block h-14 rounded-xl" key={i} />
+      ))}
+    </div>
+  );
+}
+
 export function KnowledgeDrawer({
   currentId,
   initialMode = "keyword",
@@ -132,10 +144,12 @@ export function KnowledgeDrawer({
   const [hits, setHits] = useState<AiThreadHit[] | null>(null);
   // the corpus tab (来源): recent lists hydrated on tab entry, the
   // search results swap in while a query is active
-  const [corpusSources, setCorpusSources] = useState<RecallHit[]>([]);
-  const [corpusPages, setCorpusPages] = useState<ReaderPageEntry[]>([]);
+  // null = the async query is still in flight (the tabs render loading
+  // rows; [] after resolve is the honest empty state)
+  const [corpusSources, setCorpusSources] = useState<RecallHit[] | null>(null);
+  const [corpusPages, setCorpusPages] = useState<ReaderPageEntry[] | null>(null);
   // the classic search history
-  const [searchHistory, setSearchHistory] = useState<SearchHistoryRow[]>([]);
+  const [searchHistory, setSearchHistory] = useState<SearchHistoryRow[] | null>(null);
   const [memories, setMemories] = useState<Array<{ id: string; content: string; updated: number }>>([]);
   // Escape closes (the dialog contract keeps Escape with each dialog's own
   // handler); the closing window short-circuits a second press
@@ -202,7 +216,8 @@ export function KnowledgeDrawer({
           setCorpusPages(pages.map((page) => ({ ...page, fetchedAt: Date.now() })));
         })
         .catch(() => {
-          /* best-effort */
+          setCorpusSources([]);
+          setCorpusPages([]);
         });
     };
     load();
@@ -262,11 +277,11 @@ export function KnowledgeDrawer({
   };
   const forgetSearch = (q: string, category: string): void => {
     deleteSearch(q, category);
-    setSearchHistory(searchHistory.filter((row) => row.q !== q || row.category !== category));
+    setSearchHistory((searchHistory ?? []).filter((row) => row.q !== q || row.category !== category));
   };
   const forgetSource = (url: string): void => {
     deleteSource(url);
-    setCorpusSources(corpusSources.filter((source) => source.url !== url));
+    setCorpusSources((corpusSources ?? []).filter((source) => source.url !== url));
   };
   const tabs: Array<{ id: DrawerTab; label: string }> = [
     { id: "searches", label: t("knowledge_tab_searches") },
@@ -609,10 +624,13 @@ function CorpusList({
   t,
 }: {
   forgetSource: (source: RecallHit) => void;
-  pages: ReaderPageEntry[];
-  sources: RecallHit[];
+  pages: ReaderPageEntry[] | null;
+  sources: RecallHit[] | null;
   t: Translate;
 }) {
+  if (sources === null || pages === null) {
+    return <DrawerRowsSkeleton />;
+  }
   if (sources.length === 0 && pages.length === 0) {
     return <p className="px-3 py-6 text-center text-sm text-ink-3">{t("knowledge_source_empty")}</p>;
   }
@@ -664,11 +682,14 @@ function SearchHistoryList({
   requestForget,
   t,
 }: {
-  history: SearchHistoryRow[];
+  history: SearchHistoryRow[] | null;
   onNavigate: (url: string) => void;
   requestForget: (entry: SearchHistoryRow) => void;
   t: Translate;
 }) {
+  if (history === null) {
+    return <DrawerRowsSkeleton />;
+  }
   if (history.length === 0) {
     return <p className="px-3 py-6 text-center text-sm text-ink-3">{t("ai_searches_empty")}</p>;
   }

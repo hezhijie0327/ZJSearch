@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Compass, LoaderCircle } from "lucide-react";
+import { Compass } from "lucide-react";
 import { Suspense } from "react";
 import { Link, Shell } from "@/components/Shell.tsx";
 import { OverlayProvider } from "@/features/overlay/OverlayProvider.tsx";
@@ -99,10 +99,34 @@ function Pages() {
   }
 }
 
+/** The lazy pages' load ghost: the lazy chunks (results / preferences /
+    stats / info) render NOTHING around them -- Shell included -- so a cold
+    chunk fetch read as a blank viewport with a spinner.  The ghost echoes
+    the family page scaffold instead: a top bar (brand + action circles)
+    and a reading column with a heading and prose rows.  Generic on
+    purpose: one static ghost serves every lazy page without pulling any
+    page chunk into the eager graph. */
 function PageFallback() {
   return (
-    <div className="grid min-h-[60vh] place-items-center">
-      <LoaderCircle className="size-6 animate-spin-slow text-ink-3" />
+    <div aria-busy="true">
+      <div className="flex items-center justify-between px-4 py-3 sm:px-6">
+        <span className="zjs-skeleton h-6 w-28" />
+        <span className="flex items-center gap-2">
+          <span className="zjs-skeleton size-9 rounded-full" />
+          <span className="zjs-skeleton size-9 rounded-full" />
+          <span className="zjs-skeleton size-9 rounded-full" />
+        </span>
+      </div>
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16 pt-6 sm:px-6">
+        <span className="zjs-skeleton block h-8 w-64 max-w-full" />
+        <div className="mt-6 space-y-3.5">
+          <span className="zjs-skeleton block h-4 w-full" />
+          <span className="zjs-skeleton block h-4 w-[92%]" />
+          <span className="zjs-skeleton block h-4 w-[96%]" />
+          <span className="zjs-skeleton block h-4 w-[85%]" />
+          <span className="zjs-skeleton block h-4 w-2/3" />
+        </div>
+      </main>
     </div>
   );
 }
