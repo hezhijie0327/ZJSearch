@@ -19,6 +19,7 @@ The Flask proxy the BROWSER calls is a runtime route
 import asyncio
 import importlib.util
 import logging
+import math
 import os
 import typing as t
 
@@ -117,6 +118,16 @@ def sdk_missing() -> str | None:
     return None
 
 
+def cosine(vec_a: list[float], vec_b: list[float]) -> float:
+    """Cosine similarity of two equal-width vectors -- the relevance
+    metric of every server-side embedding consumer (the writer's feed
+    ranking, the overview's context ordering)."""
+    dot = sum(x * y for x, y in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(x * x for x in vec_a)) or 1.0
+    norm_b = math.sqrt(sum(x * x for x in vec_b)) or 1.0
+    return dot / (norm_a * norm_b)
+
+
 async def _embed(texts: list[str]) -> list[list[float]]:
     """One batch through the family's SDK surface, bound to the embedding
     key (resolved into ``api_key`` -- the factories' env fallback is the
@@ -141,17 +152,20 @@ async def embed_texts(texts: list[str]) -> list[list[float]] | None:
         return None
 
 
-def run_batch(texts: list[str]) -> tuple[list[list[float]], str] | None:
+def run_batch(texts: list[str], timeout: float | None = None) -> tuple[list[list[float]], str] | None:
     """The browser-proxy workhorse: one batch on the shared loop, ``(vectors,
     model)`` out; ``None`` when the upstream fails (the route answers 502).
-    The route owns gating and validation -- this is transport only.  The
-    cached SDK clients are loop-bound, so the batch rides the SAME shared
-    network loop the chat transport built them on (asyncio.run per request
-    would strand them on a dead loop from call two on)."""
+    ``timeout`` bounds the wait for latency-sensitive callers (the
+    overview's context ordering) -- ``None`` waits unbounded, the proxy's
+    own contract.  The route owns gating and validation -- this is
+    transport only.  The cached SDK clients are loop-bound, so the batch
+    rides the SAME shared network loop the chat transport built them on
+    (asyncio.run per request would strand them on a dead loop from call
+    two on)."""
     try:
         vectors = asyncio.run_coroutine_threadsafe(
             _embed([str(text)[:MAX_TEXT_CHARS] for text in texts]), get_loop()
-        ).result()
+        ).result(timeout)
         return vectors, str(cfg().get("model"))
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_embedding: upstream failed: %s", exc)

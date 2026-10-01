@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-/** Browser-stored AI research memory (PGlite, relational v2): the server
-    owns nothing -- an AI session is identified by the uuid in its url
-    (`/zjsearch/ai/thread/<id>`) and survives a reload; storage is
-    browser-local
-    by design (never syncs across devices).
+/** The knowledge store (知识库): the browser's local RAG + memory layer
+    over PGlite -- the server owns nothing.  An AI session is identified
+    by the uuid in its url (`/zjsearch/ai/thread/<id>`) and survives a
+    reload; storage is browser-local by design (never syncs across
+    devices).
 
-    The store is the facade over pg.ts's four tables: threads (the
+    The store is the facade over pg.ts's tables: threads (the
     directory), runs (one row per question, its `data` jsonb the replay
     blob the UI rehydrates from), sources (the GLOBAL url-identity
-    research corpus with ref/cited counters) and run_sources (the links).
+    research corpus with ref/cited counters), run_sources (the links),
+    reader_cache (archived web_reader full-texts), memories (durable
+    user facts) and searches (the classic search history).  The AI
+    Search run recalls from this corpus before every POST
+    (history_sources / past_research / user_memories); the knowledge
+    drawer displays it.
     Every write updates the in-memory mirror first and persists the
     dirty threads through SQL on an ordered queue; reads stay
     SYNCHRONOUS on purpose -- the call sites render from the mirror
@@ -506,7 +511,7 @@ export function archiveReaderPage(url: string, title: string, markdown: string):
     });
 }
 
-/** One archived page's full markdown (the research library's reading
+/** One archived page's full markdown (the corpus tab's reading
     pane); ``null`` when the url was never archived.  Async (real SQL). */
 export async function getReaderPage(
   url: string,
@@ -778,16 +783,7 @@ export function memoryCount(): number {
   return memories.length;
 }
 
-// --------------------------------------------------- research library
-
-/** How many PAST research runs referenced this url (0 = new to the
-    corpus) -- the live source card's cross-session badge.  Synchronous
-    (the hydrated ref map). */
-export function sourcePastRefCount(url: string): number {
-  return sourceRefs.get(urlHash(url)) ?? 0;
-}
-
-/** The corpus' recent sources (the library view's default listing). */
+/** The corpus' recent sources (the 来源 tab's default listing). */
 export async function listRecentSources(limit = 40): Promise<RecallHit[]> {
   await ready;
   const rows = await pgQuery<{
@@ -811,7 +807,7 @@ export async function listRecentSources(limit = 40): Promise<RecallHit[]> {
 }
 
 /** Hybrid (BM25 + pgvector, weighted RRF) search over the reader cache
-    -- the semantic upgrade of the web_memory index picking. */
+    -- the semantic upgrade of the past_research index picking. */
 export async function searchReaderPages(
   query: string,
   limit = 4,
@@ -873,15 +869,18 @@ export async function searchReaderPages(
     .map((entry) => entry.row);
 }
 
-/** Record one classic (non-AI) search -- the browser-local search
-    history.  Same q+category collapses into one row (times++). */
+/** Forget one corpus source: its run links go first (run_sources keys
+    on url_hash -- the pre-fix statement selected a column that never
+    existed and silently removed nothing), then the row itself.  The
+    reader cache is a DIFFERENT table -- an archived full-text survives
+    a source forget (delete it explicitly from the 已读全文 list). */
 export function deleteSource(url: string): void {
+  const hash = urlHash(url);
   queue = queue
     .then(async () => {
       await ready;
-      await pgQuery("DELETE FROM run_sources WHERE source_id = (SELECT id FROM sources WHERE url = $1)", [url]);
-      await pgQuery("DELETE FROM sources WHERE url = $1", [url]);
-      const hash = urlHash(url);
+      await pgQuery("DELETE FROM run_sources WHERE url_hash = $1", [hash]);
+      await pgQuery("DELETE FROM sources WHERE url_hash = $1", [hash]);
       sourceTexts.delete(hash);
       readerTexts.delete(hash);
     })

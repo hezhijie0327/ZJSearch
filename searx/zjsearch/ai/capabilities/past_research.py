@@ -1,25 +1,33 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The web-memory capability: the model's window into the browser's
-PAST research (the sources and reader full-texts accumulated across
-sessions).  The run pre-sends a small candidate index -- reader-cache
-pages matching the question, WITH a content head each -- and the
-``web_memory`` tool searches it on the model's initiative, returning
-text slices that the executor numbers as real ``[n]`` sources (kind
-history, the same badge the automatic writer-injection carries).
+"""The past-research capability: the model's RAG window into the browser's
+LOCAL knowledge base (the PGlite corpus -- sources and reader full-texts
+accumulated across sessions).  The run pre-sends a small candidate index
+-- the semantic half already ran client-side when the index was picked --
+carrying TWO entry kinds:
+
+- ``page`` entries: reader-cache pages WITH a ~1500-char content head
+  (what a past ``web_reader`` read extracted);
+- ``source`` entries: corpus sources the user's past runs touched,
+  identity only (title + host -- no text stored).
+
+The :py:func:`past_research_spec` tool searches the index on the model's
+initiative.  A page match returns its content head; a source-only match
+returns the identity plus the instruction to re-verify it live through
+``web_reader`` -- past material supplements, live sources win.
 
 THE RED LINE (AGENTS.md): this is supplementary, OPT-IN material -- the
-model asks for memory when a past page may hold the missing detail; it
-never substitutes for live search and stale content loses to live
+model asks for its past when a stored page may hold the missing detail;
+it never substitutes for live search and stale content loses to live
 sources.  The server stays stateless: the index rides the request,
 nothing is stored server-side."""
 
 import re
 import typing as t
 
-WEB_MEMORY_TOOL = "web_memory"
+PAST_RESEARCH_TOOL = "past_research"
 
 MAX_ENTRIES = 12
-"""Index entries per request -- each carries a ~1500-char text head."""
+"""Index entries per request -- pages carry a ~1500-char text head."""
 MAX_TEXT = 1500
 """Per-entry text head at parse time (the client already truncates)."""
 MATCH_LIMIT = 4
@@ -27,7 +35,9 @@ MATCH_LIMIT = 4
 
 
 def parse_entries(raw: t.Any) -> list[dict[str, str]]:
-    """The run payload's ``web_memory`` index -- sanitized."""
+    """The run payload's ``past_research`` index -- sanitized.  An entry
+    with a ``text`` head is a reader page; one without is a corpus source
+    (identity only)."""
     out: list[dict[str, str]] = []
     if isinstance(raw, list):
         for item in raw[:MAX_ENTRIES]:
@@ -43,21 +53,24 @@ def parse_entries(raw: t.Any) -> list[dict[str, str]]:
     return out
 
 
-def web_memory_spec() -> dict[str, t.Any]:
-    """The ``web_memory`` tool spec -- registered only when the client
+def past_research_spec() -> dict[str, t.Any]:
+    """The ``past_research`` tool spec -- registered only when the client
     sent an index."""
     return {
-        "name": WEB_MEMORY_TOOL,
+        "name": PAST_RESEARCH_TOOL,
         "description": (
-            "Search YOUR past research with this user: pages you (or a"
-            " previous session) already read in full, matching the"
-            " keywords.  Returns each match's content head.  Use it when"
-            " a past page plausibly holds the missing detail (the user"
-            ' references "之前查过的/上次看的", or a prior topic recurs).'
-            "  Past content may be OUTDATED -- it supplements, never"
-            " replaces, live search: keep searching when the memory is"
-            " thin, and prefer fresh sources for anything time-sensitive."
-            "  Matched pages arrive as numbered [n] sources you can cite."
+            "Search YOUR past research with this user (the browser-local"
+            " knowledge base): pages you (or a previous session) already"
+            " read in full, and sources earlier runs already touched."
+            "  Full-text matches return their content head; source-only"
+            " matches return their identity -- re-read one with web_reader"
+            " before relying on its details.  Use it when a past page"
+            " plausibly holds the missing detail (the user references"
+            ' "之前查过的/上次看的", or a prior topic recurs).  Past content'
+            " may be OUTDATED -- it supplements, never replaces, live"
+            " search: keep searching when the memory is thin, and prefer"
+            " fresh sources for anything time-sensitive.  Matched pages"
+            " arrive as numbered [n] sources you can cite."
         ),
         "parameters": {
             "type": "object",
@@ -109,19 +122,3 @@ def rank(entries: list[dict[str, str]], query: str, limit: int = MATCH_LIMIT) ->
             scored.append((score, entry))
     scored.sort(key=lambda pair: -pair[0])
     return [entry for _, entry in scored[:limit]]
-
-
-def evaluate_call(call: dict[str, t.Any], entries: list[dict[str, str]]) -> tuple[str, list[dict[str, t.Any]], int]:
-    """One tool call -> (model feed, sources events, match count).  The
-    CALLER assigns the [n] numbers (state.next_n) and appends feed
-    blocks -- the matches become citable sources like any other."""
-    query = parse_query(call)
-    matches = rank(entries, query)
-    if not matches:
-        return "(no page in the user's past research matches -- continue with live search)", [], 0
-    blocks = [f"[placeholder] {entry['title']} -- {entry['url']}\n{entry['text']}" for entry in matches]
-    feed_head = (
-        f"from the user's PAST research (may be outdated -- live sources"
-        f" take precedence; {len(matches)} match(es)):"
-    )
-    return feed_head, blocks, len(matches)

@@ -175,8 +175,8 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
             <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
               <MessageCircleQuestion aria-hidden="true" className="size-7" />
             </span>
-            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink">{t("ai_history_not_found")}</h1>
-            <p className="mt-1.5 text-sm text-ink-2">{t("ai_history_not_found_hint")}</p>
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink">{t("knowledge_thread_not_found")}</h1>
+            <p className="mt-1.5 text-sm text-ink-2">{t("knowledge_thread_not_found_hint")}</p>
             <button
               className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
               onClick={() => {

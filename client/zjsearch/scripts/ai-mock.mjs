@@ -227,7 +227,7 @@ function gate(name, messages, res) {
   jsonCompletion(res, { research: true });
 }
 
-function researcher(answered, messages, res) {
+function researcher(answered, messages, res, tools = []) {
   if (answered) {
     // the round after the tool results: STOP researching (no tool calls)
     // -- the writer phase takes over
@@ -238,6 +238,11 @@ function researcher(answered, messages, res) {
   const half = Math.ceil(args.length / 2);
   const pageArgs = JSON.stringify({ url: "https://example.com/zjaudit/general/1" });
   const pageHalf = Math.ceil(pageArgs.length / 2);
+  // the RAG round only when the server REGISTERED the tool (the client
+  // pre-sends the index; a fresh audit browser has an empty corpus) --
+  // an unregistered call would land as an error row on the audited page,
+  // so the fixture falls back to a plain search with its own query
+  const hasRag = tools.some((tool) => (tool?.function?.name ?? tool?.name) === "past_research");
   streamChunks(
     res,
     [
@@ -269,14 +274,21 @@ function researcher(answered, messages, res) {
           { index: 2, id: "call-zjaudit-3", type: "function", function: { name: "calculator", arguments: "" } },
         ],
       },
-      // the web_memory round: exercises the past-research search offline
-      // (the client pre-sends the index; matches become history sources)
+      // the past_research round: exercises the RAG search over the
+      // browser's knowledge base offline (the client pre-sends the index;
+      // matches become history sources) -- falls back to a plain search
+      // when the corpus (and with it the tool) is empty
       {
         tool_calls: [
-          { index: 3, id: "call-zjaudit-4", type: "function", function: { name: "web_memory", arguments: "" } },
+          {
+            index: 3,
+            id: "call-zjaudit-4",
+            type: "function",
+            function: { name: hasRag ? "past_research" : "web_search", arguments: "" },
+          },
         ],
       },
-      // the decomposition + delegation rounds: task card -> spawn -> done
+      // the decomposition rounds: the living task card writes then closes
       {
         tool_calls: [
           { index: 4, id: "call-zjaudit-5", type: "function", function: { name: "task_write", arguments: "" } },
@@ -363,6 +375,7 @@ function route(body, res) {
       messages.some((m) => m?.role === "tool"),
       messages,
       res,
+      body.tools,
     );
     return;
   }

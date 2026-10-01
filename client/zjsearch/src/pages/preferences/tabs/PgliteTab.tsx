@@ -3,7 +3,7 @@
 import { Bomb, Database, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useT } from "@/lib/i18n.ts";
-import { clearAllThreads, resetAll, threadStats } from "@/lib/threadStore.ts";
+import { clearAllThreads, resetAll, threadStats } from "@/lib/knowledgeStore.ts";
 import { flashToast } from "@/lib/toast.ts";
 import { Card, SectionLabel, SettingRow } from "@/pages/preferences/parts.tsx";
 

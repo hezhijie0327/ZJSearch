@@ -24,8 +24,8 @@ from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
 from searx.zjsearch.ai.capabilities import calculator, mcp, reader
+from searx.zjsearch.ai.capabilities import past_research as past_research_cap
 from searx.zjsearch.ai.capabilities import user_memory as user_memory_cap
-from searx.zjsearch.ai.capabilities import web_memory as web_memory_cap
 from searx.zjsearch.ai.runtime.coverage import Coverage
 from searx.zjsearch.ai.runtime.feed import RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.runtime.prompts import STALL_NOTE
@@ -64,7 +64,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         user_plugins: list[str],
         sources_base: int = 0,
         user_memories: list[dict[str, str]] | None = None,
-        web_memory_entries: list[dict[str, str]] | None = None,
+        past_research_entries: list[dict[str, str]] | None = None,
         search_language: str = "",
         max_rounds: int = 0,
         lang: str = "",
@@ -80,9 +80,11 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # the browser's user-memory snapshot (pre-sent with the run): the
         # user_memory tool searches it; saves flow back as wire events
         self.user_memories = user_memories or []
-        # the web-memory index (past pages WITH text heads): the tool's
-        # matches get numbered as real history sources
-        self.web_memory_entries = web_memory_entries or []
+        # the past-research index (reader pages WITH text heads + corpus
+        # sources identity-only): the tool's matches get numbered as real
+        # history sources -- full-text matches return their content head,
+        # source-only matches point back at web_reader for a live re-read
+        self.past_research_entries = past_research_entries or []
         # the run's source registries (the [n] numbering, the two dedup
         # sets, the gallery whitelist) -- one object, see registry.py
         self.reg = SourcesRegistry(sources_base)
@@ -299,16 +301,23 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     " is marked done automatically."
                 )
                 continue
-            if tool_name == web_memory_cap.WEB_MEMORY_TOOL:
-                query = web_memory_cap.parse_query(call)
-                matches = web_memory_cap.rank(self.web_memory_entries, query)
+            if tool_name == past_research_cap.PAST_RESEARCH_TOOL:
+                query = past_research_cap.parse_query(call)
+                matches = past_research_cap.rank(self.past_research_entries, query)
                 if matches:
                     events: list[dict[str, t.Any]] = []
                     blocks: list[str] = []
                     for entry in matches:
                         n = self.next_n
                         self.next_n += 1
-                        blocks.append(f"[{n}] {entry['title']} -- {entry['url']}\n{entry['text']}")
+                        if entry["text"]:
+                            blocks.append(f"[{n}] {entry['title']} -- {entry['url']}\n{entry['text']}")
+                        else:
+                            blocks.append(
+                                f"[{n}] {entry['title']} -- {entry['url']}\n"
+                                "(past source, identity only -- re-read it with"
+                                f" {PAGE_TOOL} before relying on its details.)"
+                            )
                         events.append(
                             {
                                 "n": n,

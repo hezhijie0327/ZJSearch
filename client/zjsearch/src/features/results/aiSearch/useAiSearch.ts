@@ -12,7 +12,7 @@ import {
   saveMemory,
   saveThread,
   searchReaderPages,
-} from "@/lib/threadStore.ts";
+} from "@/lib/knowledgeStore.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /**
@@ -56,7 +56,7 @@ export interface AiSearchCall {
     | "calculator"
     | "mcp"
     | "user_memory"
-    | "web_memory"
+    | "past_research"
     | "task_write"
     | "spawn_subtask"
     | "ask_user";
@@ -324,7 +324,12 @@ function parseClarifyPairs(text: string): Array<{ q: string; a: string }> {
   return pairs;
 }
 
-function applyEvent(core: Core, event: Record<string, unknown>, saveMemory: (content: string) => void): Core {
+function applyEvent(
+  core: Core,
+  event: Record<string, unknown>,
+  saveMemory: (content: string) => void,
+  pastRefCounts?: Map<string, number>,
+): Core {
   const kind = event.e as string;
   const runs = [...core.runs];
   const lastIdx = runs.length - 1;
@@ -470,6 +475,10 @@ function applyEvent(core: Core, event: Record<string, unknown>, saveMemory: (con
           category: String(item.category ?? "") || undefined,
           crawled: Boolean(item.crawled),
           history: Boolean(item.history),
+          // the cross-session badge: how many PAST runs referenced this
+          // url, captured at the pre-run recall (never the run's own
+          // ref-count increment -- the map is read-only after beginRun)
+          pastRefs: pastRefCounts?.get(url) || undefined,
         });
       }
       if (!fresh.length) {
@@ -619,8 +628,8 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
             ? ("mcp" as const)
             : tool === "user_memory"
               ? ("user_memory" as const)
-              : tool === "web_memory"
-                ? ("web_memory" as const)
+              : tool === "past_research" || tool === "web_memory"
+                ? ("past_research" as const)
                 : tool === "task_write"
                   ? ("task_write" as const)
                   : tool === "spawn_subtask"
@@ -694,8 +703,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     const signal = controller.signal;
     void (async () => {
       // the browser recalls its PGlite corpus BEFORE the POST: past-research
-      // sources (WRITER-phase only), the reader-cache index (the
-      // web_memory tool's searchable slice) and the user-memory snapshot
+      // sources (WRITER-phase only), the past_research index (the RAG
+      // tool's searchable slice: reader full-text heads + corpus-source
+      // identities) and the user-memory snapshot
       const [pastRefs, readerHits] = await Promise.all([
         recallSources(q, 6).catch(() => []),
         searchReaderPages(q, 4).catch(() => []),
@@ -704,6 +714,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       if (signal.aborted) {
         return;
       }
+      // the cross-session badge's lookup: captured BEFORE this run links
+      // anything (the run's own ref-count increment must not badge itself)
+      const refCounts = new Map(pastRefs.map((hit) => [hit.url, hit.refCount]));
       const body = {
         tk: capability.tk,
         q,
@@ -717,14 +730,17 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         thread: threadId || undefined,
         history_sources: pastRefs.map((hit) => ({ url: hit.url, title: hit.title })),
         user_memories: userMemories.map((memory) => memory.content),
-        web_memory: readerHits.map((hit) => ({ url: hit.url, title: hit.title, text: hit.text })),
+        past_research: [
+          ...readerHits.map((hit) => ({ url: hit.url, title: hit.title, text: hit.text })),
+          ...pastRefs.map((hit) => ({ url: hit.url, title: hit.title, host: hit.host })),
+        ],
       };
       const apply = (event: Record<string, unknown>) => {
         setCore((prev) => {
           if (prev.phase !== "streaming" && prev.phase !== "awaiting") {
             return prev;
           }
-          return applyEvent(prev, event, saveMemory);
+          return applyEvent(prev, event, saveMemory, refCounts);
         });
       };
       try {

@@ -3,9 +3,9 @@
 import { createRoot } from "react-dom/client";
 import { App } from "@/app.tsx";
 import { configureEmbeddings } from "@/lib/embed.ts";
+import { configureEmbeddingDimensions } from "@/lib/knowledgeStore.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
-import { configureEmbeddingDimensions } from "@/lib/threadStore.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 import "./styles/global.css";
 

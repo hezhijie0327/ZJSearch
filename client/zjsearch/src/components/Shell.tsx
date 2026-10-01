@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChartColumn, History, Info, SlidersHorizontal } from "lucide-react";
+import { ChartColumn, Info, LibraryBig, SlidersHorizontal } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { BrandDot } from "@/components/Brand.tsx";
@@ -65,14 +65,14 @@ function ProgressBar({ active }: { active: boolean }) {
   );
 }
 
-/** The AI history drawer, lazy-loaded (it lives in the results feature
-    tree) and hosted here: the browser-local history is a GLOBAL affordance
+/** The knowledge-base drawer, lazy-loaded (it lives in the results feature
+    tree) and hosted here: the browser-local corpus is a GLOBAL affordance
     now that PGlite backs it -- not an AI-page strip button. */
-const LazyAiHistoryDrawer = lazy(() =>
-  import("@/features/results/aiSearch/AiHistoryDrawer.tsx").then((m) => ({ default: m.AiHistoryDrawer })),
+const LazyKnowledgeDrawer = lazy(() =>
+  import("@/features/results/aiSearch/KnowledgeDrawer.tsx").then((m) => ({ default: m.KnowledgeDrawer })),
 );
 
-function HistoryButton({ globals }: { globals: GlobalData }) {
+function KnowledgeButton({ globals }: { globals: GlobalData }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   // the thread on screen (its drawer row renders highlighted), derived
@@ -84,19 +84,19 @@ function HistoryButton({ globals }: { globals: GlobalData }) {
   return (
     <>
       <button
-        aria-label={t("ai_history")}
+        aria-label={t("knowledge_open")}
         className={ICON_BTN}
         onClick={() => {
           setOpen(true);
         }}
-        title={t("ai_history")}
+        title={t("knowledge_open")}
         type="button"
       >
-        <History className="size-4.5" />
+        <LibraryBig className="size-4.5" />
       </button>
       {open ? (
         <Suspense fallback={null}>
-          <LazyAiHistoryDrawer
+          <LazyKnowledgeDrawer
             currentId={currentId}
             initialMode={
               (globals.ai_search as { history_mode?: "hybrid" | "keyword" | "semantic" } | undefined)?.history_mode ??
@@ -126,7 +126,7 @@ export function HeaderActions({ globals }: { globals: GlobalData }) {
   const { openOverlay } = useOverlay();
   return (
     <div className="zjs-print-hide flex items-center gap-0.5 sm:gap-1">
-      <HistoryButton globals={globals} />
+      <KnowledgeButton globals={globals} />
       {globals.about_url ? (
         <button
           aria-label={t("about")}

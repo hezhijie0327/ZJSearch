@@ -254,14 +254,14 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const isPage = call.tool === "web_reader";
   const isCalc = call.tool === "calculator";
   const isMemory = call.tool === "user_memory";
-  const isWebMemory = call.tool === "web_memory";
+  const isPastResearch = call.tool === "past_research";
   const isTask = call.tool === "task_write";
   const isAsk = call.tool === "ask_user";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
   const expandable =
     (isPage || call.tool === "mcp"
       ? Boolean(call.text)
-      : isCalc || isMemory || isWebMemory
+      : isCalc || isMemory || isPastResearch
         ? false
         : results.length > 0) || Boolean(rawArgs);
   return (
@@ -297,7 +297,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           <MessageCircleQuestion aria-hidden="true" className="size-3 shrink-0" />
         ) : call.tool === "mcp" ? (
           <Plug aria-hidden="true" className="size-3 shrink-0" />
-        ) : isWebMemory ? (
+        ) : isPastResearch ? (
           <BookMarked aria-hidden="true" className="size-3 shrink-0" />
         ) : isMemory ? (
           <BookUser aria-hidden="true" className="size-3 shrink-0" />
@@ -315,7 +315,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                   ? call.name === "search_tools"
                     ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
                     : (call.name ?? t("ai_mcp_tool"))
-                  : isWebMemory
+                  : isPastResearch
                     ? call.q
                     : isMemory
                       ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
@@ -333,8 +333,8 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                     ? t("ai_ask_awaiting")
                     : call.tool === "mcp"
                       ? t("ai_mcp_running")
-                      : isWebMemory
-                        ? t("ai_web_memory_running")
+                      : isPastResearch
+                        ? t("ai_past_research_running")
                         : isMemory
                           ? t("ai_memory_running")
                           : t("ai_search_running")
@@ -349,8 +349,8 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                       ? ""
                       : call.tool === "mcp"
                         ? t("ai_mcp_done")
-                        : isWebMemory
-                          ? t("ai_web_memory_hits", { n: String(call.n ?? 0) })
+                        : isPastResearch
+                          ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
                           : isMemory
                             ? ""
                             : t("ai_search_results", { n: String(call.n ?? 0) })

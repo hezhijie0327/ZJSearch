@@ -27,7 +27,7 @@ USER_MEMORY_TOOL = "user_memory"
 
 TASK_TOOL = "task_write"
 
-WEB_MEMORY_TOOL_NAME = "web_memory"
+PAST_RESEARCH_TOOL = "past_research"
 
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The verticals the model may pick; each has a dedicated client layout."""
@@ -387,14 +387,14 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": str(ask_args.get("intro") or "").strip()[:120] or first,
             "args": ask_args,
         }
-    if call_name == WEB_MEMORY_TOOL_NAME:
+    if call_name == PAST_RESEARCH_TOOL:
         try:
             memory_args = _raw_args(call)
         except Exception:  # pylint: disable=broad-except
             memory_args = {}
         return {
             "id": idx,
-            "tool": WEB_MEMORY_TOOL_NAME,
+            "tool": PAST_RESEARCH_TOOL,
             "q": str(memory_args.get("query") or "")[:120],
             "args": memory_args,
         }

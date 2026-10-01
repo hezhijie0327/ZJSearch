@@ -6,7 +6,7 @@ import {
   Clock3,
   ExternalLink,
   Globe,
-  History,
+  LibraryBig,
   MessageCircleQuestion,
   Search,
   Trash2,
@@ -16,7 +16,6 @@ import { useEffect, useState } from "react";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { formatDate } from "@/lib/format.ts";
 import { type Translate, useT } from "@/lib/i18n.ts";
-import { ICON_BTN } from "@/lib/styles.ts";
 import {
   type AiThreadHit,
   type AiThreadMeta,
@@ -36,10 +35,11 @@ import {
   searchThreads,
   type ThreadSearchMode,
   threadUrl,
-} from "@/lib/threadStore.ts";
+} from "@/lib/knowledgeStore.ts";
+import { ICON_BTN } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
-type DrawerTab = "threads" | "library" | "searches" | "memory";
+type DrawerTab = "threads" | "sources" | "searches" | "memory";
 
 interface ReaderPageEntry {
   url: string;
@@ -56,13 +56,8 @@ interface SearchHistoryRow {
   lastRan: number;
 }
 
-/** The browser's history, one slide-in sheet in THREE tabs: 会话 (the AI
-    threads), 研究库 (the research corpus -- every source and reader
-    full-text, keyword/semantically searchable) and 搜索历史 (the classic
-    search history, clickable to re-run).  All browser-local (the server
-    keeps nothing); deletion is local and permanent.  Purely client data,
-    so this is a plain dialog, not an overlay panel (those carry server
-    page payloads). */
+/** One memory row list (the 记忆 tab): plain substring filter -- the
+    facts are few and self-contained, SQL/semantic search is overkill. */
 function MemoryList({
   memories,
   query,
@@ -100,7 +95,7 @@ function MemoryList({
   ));
 }
 
-export function AiHistoryDrawer({
+export function KnowledgeDrawer({
   currentId,
   initialMode = "keyword",
   onNavigate,
@@ -135,10 +130,10 @@ export function AiHistoryDrawer({
   // that spend is not the user's to flip at runtime
   const mode = initialMode;
   const [hits, setHits] = useState<AiThreadHit[] | null>(null);
-  // the research library: recent lists hydrated on tab entry, the search
-  // results swap in while a query is active
-  const [librarySources, setLibrarySources] = useState<RecallHit[]>([]);
-  const [libraryPages, setLibraryPages] = useState<ReaderPageEntry[]>([]);
+  // the corpus tab (来源): recent lists hydrated on tab entry, the
+  // search results swap in while a query is active
+  const [corpusSources, setCorpusSources] = useState<RecallHit[]>([]);
+  const [corpusPages, setCorpusPages] = useState<ReaderPageEntry[]>([]);
   // the classic search history
   const [searchHistory, setSearchHistory] = useState<SearchHistoryRow[]>([]);
   const [memories, setMemories] = useState<Array<{ id: string; content: string; updated: number }>>([]);
@@ -191,9 +186,9 @@ export function AiHistoryDrawer({
       window.clearTimeout(timer);
     };
   }, [query, mode, open, closing, tab]);
-  // the library tab: recent lists on entry, debounced search while typing
+  // the sources tab: recent lists on entry, debounced search while typing
   useEffect(() => {
-    if (!open || closing || tab !== "library") {
+    if (!open || closing || tab !== "sources") {
       return;
     }
     const load = () => {
@@ -203,8 +198,8 @@ export function AiHistoryDrawer({
         trimmed ? searchReaderPages(trimmed, 12) : listReaderPages(20),
       ])
         .then(([sources, pages]) => {
-          setLibrarySources(sources);
-          setLibraryPages(pages.map((page) => ({ ...page, fetchedAt: Date.now(), chars: 0 })));
+          setCorpusSources(sources);
+          setCorpusPages(pages.map((page) => ({ ...page, fetchedAt: Date.now(), chars: 0 })));
         })
         .catch(() => {
           /* best-effort */
@@ -271,18 +266,18 @@ export function AiHistoryDrawer({
   };
   const forgetSource = (url: string): void => {
     deleteSource(url);
-    setLibrarySources(librarySources.filter((source) => source.url !== url));
+    setCorpusSources(corpusSources.filter((source) => source.url !== url));
   };
   const tabs: Array<{ id: DrawerTab; label: string }> = [
-    { id: "searches", label: t("ai_drawer_tab_searches") },
-    { id: "threads", label: t("ai_drawer_tab_threads") },
-    { id: "library", label: t("ai_drawer_tab_library") },
-    { id: "memory", label: t("ai_drawer_tab_memory") },
+    { id: "searches", label: t("knowledge_tab_searches") },
+    { id: "threads", label: t("knowledge_tab_threads") },
+    { id: "sources", label: t("knowledge_tab_sources") },
+    { id: "memory", label: t("knowledge_tab_memory") },
   ];
   return (
     <div aria-hidden={closing || undefined}>
       <div
-        aria-label={t("ai_history")}
+        aria-label={t("knowledge_open")}
         className={`fixed inset-0 z-50 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
         inert={closing}
         ref={ref}
@@ -305,14 +300,14 @@ export function AiHistoryDrawer({
         >
           <div className="flex items-center justify-between border-b border-line px-5 py-3">
             <div className="flex items-center gap-2">
-              <History aria-hidden="true" className="size-4.5 text-ink-3" />
-              <h2 className="text-lg font-semibold text-ink">{t("ai_drawer_title")}</h2>
+              <LibraryBig aria-hidden="true" className="size-4.5 text-ink-3" />
+              <h2 className="text-lg font-semibold text-ink">{t("knowledge_title")}</h2>
             </div>
             <button aria-label={t("close")} className={ICON_BTN} data-dialog-close="" onClick={onClose} type="button">
               <X aria-hidden="true" className="size-4.5" />
             </button>
           </div>
-          {/* the three surfaces: threads / research library / search history */}
+          {/* the four tabs: searches / threads / corpus / memory */}
           <div className="flex items-center gap-1 border-b border-line px-3 py-2">
             {tabs.map((entry) => (
               <button
@@ -337,7 +332,7 @@ export function AiHistoryDrawer({
             <div className="flex items-center gap-2 rounded-lg bg-surface-2 px-2.5">
               <Search aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
               <input
-                aria-label={t("ai_history_search")}
+                aria-label={t("knowledge_thread_search")}
                 autoComplete="off"
                 className="h-8 w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
                 dir="auto"
@@ -345,11 +340,11 @@ export function AiHistoryDrawer({
                   setQuery(event.target.value);
                 }}
                 placeholder={
-                  tab === "library"
-                    ? t("ai_library_search")
+                  tab === "sources"
+                    ? t("knowledge_source_search")
                     : tab === "memory"
                       ? t("ai_memory_search_placeholder")
-                      : t("ai_history_search")
+                      : t("knowledge_thread_search")
                 }
                 type="text"
                 value={query}
@@ -369,16 +364,16 @@ export function AiHistoryDrawer({
                 t={t}
                 threads={threads}
               />
-            ) : tab === "library" ? (
-              <LibraryList
+            ) : tab === "sources" ? (
+              <CorpusList
                 forgetSource={(source) => {
                   setPending({
                     label: source.title || source.url,
                     run: () => forgetSource(source.url),
                   });
                 }}
-                pages={libraryPages}
-                sources={librarySources}
+                pages={corpusPages}
+                sources={corpusSources}
                 t={t}
               />
             ) : tab === "memory" ? (
@@ -473,7 +468,7 @@ function ThreadList({
   if (shown.length === 0) {
     return (
       <p className="px-3 py-6 text-center text-sm text-ink-3">
-        {searching && hits !== null ? t("ai_history_no_match") : t("ai_history_empty")}
+        {searching && hits !== null ? t("knowledge_thread_no_match") : t("knowledge_thread_empty")}
       </p>
     );
   }
@@ -556,10 +551,10 @@ function SourceRow({ requestForget, source }: { requestForget: (source: RecallHi
           <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-3">
             <span className="truncate">{source.host}</span>
             {source.refCount > 0 ? (
-              <span className="shrink-0">{t("ai_library_refs", { n: String(source.refCount) })}</span>
+              <span className="shrink-0">{t("knowledge_source_refs", { n: String(source.refCount) })}</span>
             ) : null}
             {source.citedCount > 0 ? (
-              <span className="shrink-0">{t("ai_library_cited", { n: String(source.citedCount) })}</span>
+              <span className="shrink-0">{t("knowledge_source_cited", { n: String(source.citedCount) })}</span>
             ) : null}
           </span>
         </button>
@@ -599,7 +594,7 @@ function SourceRow({ requestForget, source }: { requestForget: (source: RecallHi
               {pane}
             </pre>
           ) : (
-            <p className="text-xs text-ink-3">{t("ai_library_not_read")}</p>
+            <p className="text-xs text-ink-3">{t("knowledge_source_not_read")}</p>
           )}
         </div>
       ) : null}
@@ -607,7 +602,7 @@ function SourceRow({ requestForget, source }: { requestForget: (source: RecallHi
   );
 }
 
-function LibraryList({
+function CorpusList({
   forgetSource,
   pages,
   sources,
@@ -619,7 +614,7 @@ function LibraryList({
   t: Translate;
 }) {
   if (sources.length === 0 && pages.length === 0) {
-    return <p className="px-3 py-6 text-center text-sm text-ink-3">{t("ai_library_empty")}</p>;
+    return <p className="px-3 py-6 text-center text-sm text-ink-3">{t("knowledge_source_empty")}</p>;
   }
   return (
     <div className="space-y-4">
@@ -634,7 +629,7 @@ function LibraryList({
         <div>
           <p className="flex items-center gap-1.5 px-2 pb-1 text-xs font-medium text-ink-3">
             <BookMarked aria-hidden="true" className="size-3.5" />
-            {t("ai_library_pages")}
+            {t("knowledge_source_pages")}
           </p>
           {/* the reading pane: clicking a page expands the ARCHIVED markdown
               right here -- getReaderPage fetches the full content */}

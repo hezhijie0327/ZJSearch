@@ -96,6 +96,18 @@ function SourceCard({ source }: { source: AiSearchSource }) {
                 >
                   <History aria-hidden="true" className="size-2.5" />
                 </span>
+              ) : source.pastRefs ? (
+                // the cross-session trust mark: this url surfaced in N past
+                // runs (the pre-run PGlite recall's count) -- the badge tier's
+                // 11px floor, the count IS the label
+                <span
+                  aria-label={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+                  className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-[11px] font-medium leading-none tabular-nums text-ink-3 ring-1 ring-line"
+                  role="img"
+                  title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+                >
+                  ×{source.pastRefs}
+                </span>
               ) : null}
             </span>
             <span aria-hidden="true" className="size-1 rounded-full bg-ink-3" />

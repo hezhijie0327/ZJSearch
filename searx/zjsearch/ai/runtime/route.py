@@ -13,7 +13,6 @@ settles as an error BEFORE any content event becomes the plain-text 502
 """
 
 import logging
-import math
 import re
 import typing as t
 
@@ -22,14 +21,16 @@ import flask
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai.capabilities import mcp, reader
 from searx.zjsearch.ai.capabilities.calculator import calculator_spec
+from searx.zjsearch.ai.capabilities.past_research import parse_entries as parse_past_research
+from searx.zjsearch.ai.capabilities.past_research import past_research_spec
 from searx.zjsearch.ai.capabilities.user_memory import extract_facts, parse_memories, user_memory_spec
-from searx.zjsearch.ai.capabilities.web_memory import parse_entries as parse_web_memory, web_memory_spec
 from searx.zjsearch.ai.framework import loop as engine
 from searx.zjsearch.ai.framework import wire
 from searx.zjsearch.ai.framework.fences import parse_fence_json
 from searx.zjsearch.ai.infra import config as llm_config
 from searx.zjsearch.ai.infra import http, jsongate
 from searx.zjsearch.ai.infra import sdk as sdk_registry
+from searx.zjsearch.ai.infra.embed import cosine as _cosine
 from searx.zjsearch.ai.infra.embed import embed_texts
 from searx.zjsearch.ai.runtime.executor import Searches, round_progress
 from searx.zjsearch.ai.runtime.gates import (
@@ -62,13 +63,6 @@ feed keeps its chronological order and costs no embedding round trip."""
 _CONTENT_EVENTS = ("open", "think", "say", "answer", "calls", "call", "tasks", "sources", "ask", "gallery")
 """The wire events that prove the upstream is alive: a ``settle`` before
 any of these is the 502 path (the stream died before its first token)."""
-
-
-def _cosine(vec_a: list[float], vec_b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(vec_a, vec_b))
-    norm_a = math.sqrt(sum(x * x for x in vec_a)) or 1.0
-    norm_b = math.sqrt(sum(x * x for x in vec_b)) or 1.0
-    return dot / (norm_a * norm_b)
 
 
 async def _relevance_order(question: str, feed: list[str]) -> list[int] | None:
@@ -124,14 +118,16 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         sources_base = min(abs(int(payload.get("sources_base"))), 200)
     except (TypeError, ValueError):
         sources_base = 0
-    # the browser's research memory (the client recalls its PGlite source
-    # corpus before posting): WRITER-PHASE ONLY -- numbered after the live
-    # feed, never seeded into the researcher (ready-made material kills
-    # the live-search incentive).  The user-memory snapshot and the
-    # web-memory index (reader-cache heads) ride the same pre-send: the
-    # model searches them through their tools, saves flow back as events.
+    # the browser's research memory (the client recalls its PGlite corpus
+    # before posting): WRITER-PHASE ONLY -- numbered after the live feed,
+    # never seeded into the researcher (ready-made material kills the
+    # live-search incentive).  The user-memory snapshot and the
+    # past-research index (reader heads + corpus sources) ride the same
+    # pre-send: the model searches them through their tools, saves flow
+    # back as events.  (``web_memory`` is the retired payload key -- a
+    # browser still running the previous bundle during a deploy window.)
     user_memories = parse_memories(payload.get("user_memories"))
-    web_memory_entries = parse_web_memory(payload.get("web_memory"))
+    past_research_entries = parse_past_research(payload.get("past_research") or payload.get("web_memory"))
     past_sources: list[dict[str, str]] = []
     raw_past = payload.get("history_sources")
     if isinstance(raw_past, list):
@@ -194,7 +190,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         search_language=raw_search_language,
         max_rounds=max_rounds,
         user_memories=user_memories,
-        web_memory_entries=web_memory_entries,
+        past_research_entries=past_research_entries,
         lang=lang,
         cfg=cfg,
     )
@@ -203,13 +199,17 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     def assign_past_sources() -> list[dict[str, t.Any]]:
         """Number the recalled past-research sources AFTER the live feed's
         final [n] (idempotent: the pre-write sources event and the writer
-        prompt share one assignment)."""
+        prompt share one assignment).  A url the researcher already
+        numbered (a ``past_research`` tool match, a re-read) keeps ITS
+        number -- the same page never rides two [n] labels."""
         if not past_sources:
             return []
         if not past_ref:
-            for i, item in enumerate(past_sources):
-                past_ref.append({**item, "n": state.next_n + i, "history": True})
-            state.next_n += len(past_sources)
+            for item in past_sources:
+                if state.reg.known(reader.normalize_url(item["url"])) is not None:
+                    continue
+                past_ref.append({**item, "n": state.next_n, "history": True})
+                state.next_n += 1
         return past_ref
 
     async def write(halt: str | None) -> list[dict[str, t.Any]]:
@@ -257,7 +257,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             user_memories=user_memories,
         ),
         tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec()]
-        + ([web_memory_spec()] if web_memory_entries else [])
+        + ([past_research_spec()] if past_research_entries else [])
         + ([page_spec()] if pages_on else [])
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])
