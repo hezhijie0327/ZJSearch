@@ -18,11 +18,11 @@ import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import {
   type AiSearchGallery,
   type AiSourceMeta,
-  citeToLinks,
   extractRunMeta,
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
 import { AnswerGallery, renderWithGalleries } from "@/features/results/aiSearch/AnswerGallery.tsx";
+import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -118,12 +118,59 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     setText("");
     setError(null);
     setOpen(true);
+    // the endpoint streams the SAME timeline NDJSON as search (closed-set
+    // wire events); this hook adapts it into the card's raw-text rendering
+    // contract: <think> markers around the reasoning, the meta sentinel at
+    // the tail (both parsed back out by splitAnswerStream/extractRunMeta)
     let accumulated = "";
+    let thinkOpen = false;
+    let lineBuffer = "";
+    const consume = (line: string) => {
+      if (!line) {
+        return;
+      }
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      const kind = event.e;
+      if (kind === "think") {
+        if (!thinkOpen) {
+          accumulated += "<think>";
+          thinkOpen = true;
+        }
+        accumulated += String(event.t ?? "");
+      } else if (kind === "answer") {
+        if (thinkOpen) {
+          accumulated += "</think>";
+          thinkOpen = false;
+        }
+        accumulated += String(event.t ?? "");
+      } else if (kind === "settle") {
+        if (thinkOpen) {
+          accumulated += "</think>";
+          thinkOpen = false;
+        }
+        const meta = {
+          finish: event.finish ?? null,
+          model: event.model ?? null,
+          usage: event.usage ?? null,
+        };
+        accumulated += `\n<<<zjs-meta:${JSON.stringify(meta)}>>>`;
+      }
+    };
     void fetchStream(
-      "/ai/answer",
+      "/zjsearch/ai/answer",
       { context, images, lang, q, tk: capability.tk },
       (chunk) => {
-        accumulated += chunk;
+        lineBuffer += chunk;
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() ?? "";
+        for (const line of lines) {
+          consume(line);
+        }
         if (!controller.signal.aborted) {
           setText(accumulated);
         }
@@ -131,7 +178,9 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
       controller.signal,
     )
       .then(() => {
+        consume(lineBuffer);
         if (!controller.signal.aborted) {
+          setText(accumulated);
           setPhase("done");
         }
       })
@@ -396,7 +445,10 @@ let mermaidSeq = 0;
     code block (parse() runs first -- a failed render can litter the DOM).
     The card only mounts this once its stream has settled -- the fence grows
     chunk by chunk while streaming, and re-rendering the SVG on every chunk
-    reads as flicker (the streaming view is the code fallback). */
+    reads as flicker (the streaming view is the code fallback).  The chart
+    source rides a data-zjs-mermaid attribute so the print view can render
+    its own LIGHT copies off-screen (print.css's token force cannot recolor
+    a baked svg, and re-rendering in place would flash the live page). */
 function MermaidBlock({ chart }: { chart: string }) {
   const t = useT();
   const [svg, setSvg] = useState<string | null>(null);
@@ -479,6 +531,7 @@ function MermaidBlock({ chart }: { chart: string }) {
         aria-label={t("ai_figure")}
         className="zjs-mermaid mt-2 overflow-x-auto rounded-xl bg-surface-2 p-3"
         dangerouslySetInnerHTML={{ __html: svg }}
+        data-zjs-mermaid={chart}
         role="img"
       />
     );
@@ -486,7 +539,9 @@ function MermaidBlock({ chart }: { chart: string }) {
   if (failed) {
     return <CodeBlock>{chart}</CodeBlock>;
   }
-  return <div className="zjs-mermaid mt-2 min-h-24 rounded-xl bg-surface-2" ref={containerRef} />;
+  return (
+    <div className="zjs-mermaid mt-2 min-h-24 rounded-xl bg-surface-2" data-zjs-mermaid={chart} ref={containerRef} />
+  );
 }
 
 /** The text content of a react-markdown code child (the raw fence body). */

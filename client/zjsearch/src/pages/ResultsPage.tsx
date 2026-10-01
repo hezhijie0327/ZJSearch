@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronDown, History, Home } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
@@ -8,7 +8,7 @@ import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
 import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
-import { HeaderActions, Link, Shell } from "@/components/Shell.tsx";
+import { HeaderActions, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
@@ -16,11 +16,9 @@ import {
   type AiSourceMeta,
   aiSourceMeta,
   buildAiContext,
-  citedSourceNumbers,
   collectAiImages,
   splitAnswerStream,
 } from "@/features/results/aiAnswer.ts";
-import { AiHistoryDrawer } from "@/features/results/aiSearch/AiHistoryDrawer.tsx";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -37,14 +35,17 @@ import { Pagination } from "@/features/results/Pagination.tsx";
 import { ResultsView } from "@/features/results/ResultsView.tsx";
 import { Sidebar } from "@/features/results/Sidebar.tsx";
 import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
+import { citedSourceNumbers } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
+import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
-import { threadUrl } from "@/lib/threadStore.ts";
+import { recordClassicResults, recordSearch, threadUrl } from "@/lib/threadStore.ts";
+import { flashToast } from "@/lib/toast.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
@@ -59,7 +60,7 @@ const EMPTY_META: AiSourceMeta[] = [];
 export function ResultsPage({ data }: { data: SearchPageData }) {
   const t = useT();
   const copyToast = useCopyToast();
-  const { navigate, search, loading, error, href } = useRouter();
+  const { search, loading, error, href } = useRouter();
   const hasPlugin = useHasPlugin();
   const infiniteScroll = hasPlugin("infiniteScroll");
 
@@ -134,7 +135,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const hrefRef = useRef(href);
   hrefRef.current = href;
   const [followupQuery, setFollowupQuery] = useState("");
-  const [aiHistoryOpen, setAiHistoryOpen] = useState(false);
   // the hero's depth pick travels as the `mode` URL param (validated --
   // anything unknown falls back to balanced)
   const [researchMode, setResearchMode] = useState<AiSearchMode>(() =>
@@ -454,10 +454,17 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const onRunFallback = useCallback(() => {
     search(buildParamsRef.current({ ai: false }), { replace: true });
   }, [search]);
+  const onRunExportThread = useCallback(() => {
+    const view = aiViewStateRef.current;
+    const runs = aiSearchRef.current;
+    downloadThreadMarkdown(runs.threadId, runs.runs[0]?.q ?? "", runs.runs, view.data.globals.instance_name);
+    flashToast(t("ai_thread_exported"), { tone: "ok", timeoutMs: 2000 });
+  }, [t]);
   const onRunRegenerate = useCallback(() => {
     const view = aiViewStateRef.current;
-    aiSearchRef.current.reset();
-    aiSearchRef.current.start(view.data.q, view.aiLang, view.researchMode, view.filterValues.search_language);
+    // in-place re-run of the last run (retry or regenerate): the thread
+    // and its numbered sources survive, only the section starts over
+    aiSearchRef.current.retry(view.aiLang, view.researchMode, view.filterValues.search_language);
   }, []);
   const onRunRelated = useCallback((question: string) => {
     const view = aiViewStateRef.current;
@@ -617,6 +624,19 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     () => detectResultsLayout(data, selectedCategories, allResults),
     [data, selectedCategories, allResults],
   );
+  // the browser-local search history: one record per settled page-1
+  // classic search (AI takeovers do not land here; pager appends carry
+  // page>1 and are not the query's first look)
+  useEffect(() => {
+    if (data.pending || !data.q || Number(new URLSearchParams(window.location.search).get("pageno") ?? "1") > 1) {
+      return;
+    }
+    recordSearch(data.q, selectedCategories[0] ?? "general", allResults.length);
+    recordClassicResults(
+      data.q,
+      allResults.map((result) => ({ url: result.url, title: result.title_text })),
+    );
+  }, [data.q, data.pending, allResults, selectedCategories]);
   // stable identity: ResultsView is memoized against the AI stream's
   // per-chunk re-renders, an inline closure would break the memo
   const onToggleBlock = useCallback((key: string) => {
@@ -676,20 +696,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           // instance name must never push the slim bar into a horizontal pan
           <>
             <h1 className="sr-only">{data.q}</h1>
-            <div className="zjs-results-header-row mx-auto flex w-full items-center gap-3 px-4 pt-3 sm:px-6">
-              <div className="hidden min-[480px]:block">
-                <Brand className="text-xl" globals={globals} />
+            <div className="zjs-results-header-row mx-auto flex w-full min-w-0 items-center gap-3 px-4 pt-3 sm:px-6">
+              {/* the wordmark stays visible at EVERY width now -- the takeover
+                  page has no other brand surface; overflow-hidden + a short
+                  max-width keeps a long instance name from panning */}
+              <div className="min-w-0 max-w-[40vw] overflow-hidden">
+                <Brand className="truncate text-lg sm:text-xl" globals={globals} />
               </div>
-              {/* below 480px the wordmark hides -- a ghost home circle keeps
-                  the way back (>=480px the brand IS the home link) */}
-              <Link
-                ariaLabel={t("home")}
-                className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink min-[480px]:hidden"
-                href="/"
-                title={t("home")}
-              >
-                <Home aria-hidden="true" className="size-4.5" />
-              </Link>
               <div className="ms-auto flex items-center gap-3">
                 <HeaderActions globals={globals} />
               </div>
@@ -744,6 +757,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onCite={(n) => {
                         return onRunCite(index, n);
                       }}
+                      onExportThread={onRunExportThread}
                       onFallback={onRunFallback}
                       onRegenerate={onRunRegenerate}
                       onRelated={onRunRelated}
@@ -753,22 +767,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       sourceMeta={runSourceMetas[index] ?? EMPTY_META}
                     />
                   ))}
-                  <AiHistoryDrawer
-                    currentId={aiSearch.threadId}
-                    onClose={() => {
-                      setAiHistoryOpen(false);
-                    }}
-                    onNavigate={(url) => {
-                      navigate(url);
-                    }}
-                    open={aiHistoryOpen}
-                  />
-                  {aiSearch.phase === "done" ? (
+                  {aiSearch.phase !== "idle" && aiSearch.phase !== "error" ? (
                     // Perplexica's floating follow-up: pinned above the
                     // fold.  No fog scrim -- it washed out whatever sat
                     // under it on short pages (a failed run's box read as
                     // dimmed); the pill's own card shadow separates it.
-                    <div className="sticky bottom-6 z-10">
+                    <div className="zjs-print-hide sticky bottom-6 z-10">
                       {jumpLatest ? (
                         <div className="relative z-10 mb-2 flex justify-center">
                           <button
@@ -818,18 +822,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             value={aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode}
                           />
                           <div className="flex items-center gap-2">
-                            <button
-                              aria-label={t("ai_history")}
-                              className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                              onClick={() => {
-                                setAiHistoryOpen(true);
-                              }}
-                              title={t("ai_history")}
-                              type="button"
-                            >
-                              <History aria-hidden="true" className="size-4.5" />
-                            </button>
-                            <SubmitCircle disabled={!followupQuery.trim()} label={t("ai_search_followup")} send />
+                            <SubmitCircle
+                              disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
+                              label={t("ai_search_followup")}
+                              send
+                            />
                           </div>
                         </div>
                       </form>

@@ -2,18 +2,27 @@
 
 import {
   ArrowUpRight,
+  BookMarked,
   BookOpen,
+  BookUser,
   Brain,
+  Calculator,
   Check,
   ChevronDown,
+  CircleAlert,
   CircleStop,
   Compass,
   Copy,
   CornerDownRight,
+  FileDown,
+  FileText,
   Globe,
   Lightbulb,
+  ListTodo,
   LoaderCircle,
+  MessageCircleQuestion,
   Minus,
+  Plug,
   Plus,
   Repeat2,
   RotateCw,
@@ -21,12 +30,14 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Collapse } from "@/components/Collapse.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
-import { type AiSourceMeta, citeToLinks } from "@/features/results/aiAnswer.ts";
+import type { AiSourceMeta } from "@/features/results/aiAnswer.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
+import { PrintView } from "@/features/results/aiSearch/PrintView.tsx";
 import type {
   AiAskQuestion,
   AiSearchCall,
@@ -34,6 +45,7 @@ import type {
   AiSearchSource,
   AiSearchStep,
 } from "@/features/results/aiSearch/useAiSearch.ts";
+import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
@@ -99,22 +111,43 @@ function pageLabel(url: string | undefined): string {
   }
 }
 
-/** The web_reader row's expansion: the crawled page's markdown revealed
-    DIRECTLY under its row (the same inline language as a search row's
-    result cards -- the row is the title, no second header).  Long pages
-    cap into an internal scroll; the corner chips (hover, the CodeBlock
-    pattern) carry the external-open and copy paths. */
-function PageReading({ call }: { call: AiSearchCall }) {
+/** A tool row's content pane (the web_reader page markdown, an MCP
+    result) under PROGRESSIVE DISCLOSURE: a fixed-height preview first --
+    bottom-faded, one 展开全文 pill -- expanding into the scroll-capped
+    full text on demand.  Short content skips the staging entirely.
+    The corner chips (hover, the CodeBlock pattern) carry the
+    external-open and copy paths. */
+function CallContent({ call }: { call: AiSearchCall }) {
   const t = useT();
   const copyToast = useCopyToast();
+  const text = call.text ?? "";
+  const long = text.length > 900;
+  const [full, setFull] = useState(false);
   return (
-    <div className="group relative mt-1">
+    <div className="relative mt-1">
       <div
-        className="max-h-80 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+        className={`relative rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2 ${
+          full ? "max-h-96 overflow-y-auto overscroll-contain" : long ? "max-h-40 overflow-hidden" : ""
+        }`}
         dir="auto"
       >
-        {call.text}
+        {text}
+        {!full && long ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-lg bg-gradient-to-t from-surface-2/50 to-transparent" />
+        ) : null}
       </div>
+      {!full && long ? (
+        <button
+          className="mt-1 inline-flex items-center gap-1 text-xs text-accent transition-colors hover:text-accent-hover"
+          onClick={() => {
+            setFull(true);
+          }}
+          type="button"
+        >
+          <ChevronDown aria-hidden="true" className="size-3" />
+          {t("ai_content_expand")}
+        </button>
+      ) : null}
       <div className="absolute end-2 top-2 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         {call.url ? (
           <a
@@ -132,7 +165,7 @@ function PageReading({ call }: { call: AiSearchCall }) {
           aria-label={t("copy")}
           className="inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
           onClick={() => {
-            copyToast(call.text ?? "");
+            copyToast(text);
           }}
           title={t("copy")}
           type="button"
@@ -141,6 +174,71 @@ function PageReading({ call }: { call: AiSearchCall }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/** The living task list (the task_write tool maintains it): a STATUS-ONLY
+    card -- one colored mark per state (pending dot, active ping, done
+    check, uncovered warning), a done/total counter in the header.  How
+    each subtask was researched is the research process timeline's job;
+    this card never expands. */
+function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
+  const t = useT();
+  if (tasks.length === 0) {
+    return null;
+  }
+  const done = tasks.filter((task) => task.status === "done").length;
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2">
+        <ListTodo aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
+        <h3 className="text-base font-semibold text-ink">{t("ai_task_card")}</h3>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">
+          {done}/{tasks.length}
+        </span>
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {tasks.map((task, index) => (
+          <TaskItem key={`${index}-${task.title}`} task={task} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** One task row: the colored status mark + the subtask title (+ its source
+    count once covered).  Not interactive -- the process lives in the
+    research timeline. */
+function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
+  const t = useT();
+  return (
+    <li>
+      <div className="flex items-start gap-2 text-xs">
+        {task.status === "done" ? (
+          <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+        ) : task.status === "active" ? (
+          <span className="relative mt-1 flex size-3 shrink-0 items-center justify-center">
+            <span className="absolute size-3 animate-ping rounded-full bg-accent/40" />
+            <span className="size-1.5 rounded-full bg-accent" />
+          </span>
+        ) : task.status === "missed" ? (
+          <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
+        ) : (
+          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-ink-3/50" />
+        )}
+        <span className={`min-w-0 flex-1 break-words ${task.status === "done" ? "text-ink-3" : "text-ink"}`} dir="auto">
+          {task.title}
+          {task.status === "missed" ? (
+            <span className="ms-1.5 whitespace-nowrap text-[11px] text-warning">{t("ai_task_missed")}</span>
+          ) : null}
+        </span>
+        {task.status === "done" && (task.sources?.length ?? 0) > 0 ? (
+          <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
+            {t("ai_task_sources", { n: String(task.sources?.length ?? 0) })}
+          </span>
+        ) : null}
+      </div>
+    </li>
   );
 }
 
@@ -154,8 +252,18 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const [open, setOpen] = useState(false);
   const ok = call.status === "ok";
   const isPage = call.tool === "web_reader";
+  const isCalc = call.tool === "calculator";
+  const isMemory = call.tool === "user_memory";
+  const isWebMemory = call.tool === "web_memory";
+  const isTask = call.tool === "task_write";
+  const isAsk = call.tool === "ask_user";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
-  const expandable = (isPage ? Boolean(call.text) : results.length > 0) || Boolean(rawArgs);
+  const expandable =
+    (isPage || call.tool === "mcp"
+      ? Boolean(call.text)
+      : isCalc || isMemory || isWebMemory
+        ? false
+        : results.length > 0) || Boolean(rawArgs);
   return (
     <div>
       <button
@@ -181,21 +289,71 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
         )}
         {isPage ? (
           <BookOpen aria-hidden="true" className="size-3 shrink-0" />
+        ) : isCalc ? (
+          <Calculator aria-hidden="true" className="size-3 shrink-0" />
+        ) : isTask ? (
+          <ListTodo aria-hidden="true" className="size-3 shrink-0" />
+        ) : isAsk ? (
+          <MessageCircleQuestion aria-hidden="true" className="size-3 shrink-0" />
+        ) : call.tool === "mcp" ? (
+          <Plug aria-hidden="true" className="size-3 shrink-0" />
+        ) : isWebMemory ? (
+          <BookMarked aria-hidden="true" className="size-3 shrink-0" />
+        ) : isMemory ? (
+          <BookUser aria-hidden="true" className="size-3 shrink-0" />
         ) : (
           <Search aria-hidden="true" className="size-3 shrink-0" />
         )}
         <span className="truncate" dir="auto">
-          {isPage ? pageLabel(call.url) : call.q}
+          {isPage
+            ? pageLabel(call.url)
+            : isTask
+              ? t("ai_task_row")
+              : isAsk
+                ? call.q || t("ai_ask_row")
+                : call.tool === "mcp"
+                  ? call.name === "search_tools"
+                    ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
+                    : (call.name ?? t("ai_mcp_tool"))
+                  : isWebMemory
+                    ? call.q
+                    : isMemory
+                      ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
+                      : call.q}
         </span>
-        <span className="ms-auto shrink-0 ps-2 tabular-nums">
+        <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">
           {call.status === "pending"
             ? isPage
               ? t("ai_page_reading")
-              : t("ai_search_running")
+              : isCalc
+                ? t("ai_calc_running")
+                : isTask
+                  ? t("ai_task_writing")
+                  : isAsk
+                    ? t("ai_ask_awaiting")
+                    : call.tool === "mcp"
+                      ? t("ai_mcp_running")
+                      : isWebMemory
+                        ? t("ai_web_memory_running")
+                        : isMemory
+                          ? t("ai_memory_running")
+                          : t("ai_search_running")
             : ok
               ? isPage
                 ? t("ai_page_chars", { n: String(call.chars ?? 0) })
-                : t("ai_search_results", { n: String(call.n ?? 0) })
+                : isCalc
+                  ? `= ${call.result ?? "?"}`
+                  : isTask
+                    ? (call.q ?? "")
+                    : isAsk
+                      ? ""
+                      : call.tool === "mcp"
+                        ? t("ai_mcp_done")
+                        : isWebMemory
+                          ? t("ai_web_memory_hits", { n: String(call.n ?? 0) })
+                          : isMemory
+                            ? ""
+                            : t("ai_search_results", { n: String(call.n ?? 0) })
               : call.status === "interrupted"
                 ? t("ai_search_row_interrupted")
                 : call.status === "duplicate"
@@ -234,7 +392,11 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
               </button>
             </div>
           ) : null}
-          {isPage ? <PageReading call={call} /> : <CallResults results={results} />}
+          {isPage || call.tool === "mcp" ? (
+            <CallContent call={call} />
+          ) : isTask || isAsk ? null : (
+            <CallResults results={results} />
+          )}
         </>
       ) : null}
     </div>
@@ -290,6 +452,7 @@ function StepSegment({
   step: AiSearchStep;
   streaming: boolean;
 }) {
+  const t = useT();
   if (step.kind === "think") {
     return (
       <div className={index > 0 ? "mt-2.5" : ""}>
@@ -302,6 +465,28 @@ function StepSegment({
           open={streaming ? index === run.steps.length - 1 : true}
           step={step}
         />
+      </div>
+    );
+  }
+  if (step.kind === "clarify") {
+    // the confirmed direction OPENS the process record: the questions the
+    // clarify gate asked and the answers that steered the research --
+    // parsed from the same "1. Question：Answer" lines the rail segment
+    // shows (how this report's direction was decided)
+    return (
+      <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
+        <Compass aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
+        <div className="min-w-0 flex-1 py-0.5">
+          <p className="text-[13px] font-medium text-ink-2">{t("ai_clarify_summary")}</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {step.pairs.map((pair, pi) => (
+              <li className="text-xs leading-relaxed text-ink-2" dir="auto" key={pi}>
+                <span className="text-ink-3">{pair.q}：</span>
+                {pair.a}
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     );
   }
@@ -409,19 +594,19 @@ function AskCard({
   return (
     <div
       aria-label={t("ai_clarify_title")}
-      className="animate-fade-up rounded-2xl border border-line bg-surface p-4"
+      className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface p-4"
       role="form"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Compass aria-hidden="true" className="size-5 shrink-0 text-ink-3" />
         <h3 className="text-xl font-medium text-ink">{t("ai_clarify_title")}</h3>
       </div>
       {ask.intro ? (
-        <p className="mt-2 text-sm leading-relaxed text-ink-2" dir="auto">
+        <p className="mt-2 shrink-0 text-sm leading-relaxed text-ink-2" dir="auto">
           {ask.intro}
         </p>
       ) : null}
-      <div className="mt-3 space-y-4">
+      <div className="mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto">
         {ask.questions.map((question, qi) => (
           <div key={qi}>
             <p className="text-[13px] font-medium text-ink" dir="auto">
@@ -454,7 +639,7 @@ function AskCard({
       </div>
       <input
         aria-label={t("ai_clarify_more")}
-        className="mt-3 h-9 w-full rounded-lg border border-line bg-transparent px-3 text-base text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+        className="mt-3 h-9 w-full shrink-0 rounded-lg border border-line bg-transparent px-3 text-base text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
         dir="auto"
         onChange={(event) => {
           setNote(event.target.value);
@@ -462,7 +647,7 @@ function AskCard({
         placeholder={t("ai_clarify_more")}
         value={note}
       />
-      <div className="mt-3 flex items-center justify-between gap-2">
+      <div className="mt-3 flex shrink-0 items-center justify-between gap-2">
         <button
           className="text-[13px] text-ink-3 transition-colors hover:text-ink hover:underline underline-offset-2"
           onClick={() => {
@@ -489,32 +674,85 @@ function AskCard({
     OPEN by default so the user can always review what shaped the run
     (morphic keeps the clarification exchange in the transcript; a thin
     one-line summary just reads as broken). */
-function ClarifySegment({ clarify }: { clarify: string }) {
+function AskArchiveCard({ clarify }: { clarify: string }) {
   const t = useT();
-  const [open, setOpen] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  // parse "1. Question：Answer" lines into confirmed-context pairs; the
+  // trailing free-text note (no separator) rides as its own item
   const text = clarify.trim();
+  const pairs: Array<{ q: string; a: string }> = [];
+  let note = "";
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const match = /^(?:\d+[.、]\s*)?(.+?)[：:]\s*(.+)$/.exec(trimmed);
+    if (match?.[1] && match[2]) {
+      pairs.push({ q: match[1].trim(), a: match[2].trim() });
+    } else {
+      note = (note ? `${note} ` : "") + trimmed;
+    }
+  }
+  if (!text) {
+    return null;
+  }
+  const items: Array<{ q: string; a: string }> = [...pairs];
+  if (note) {
+    items.push({ q: t("ai_clarify_more"), a: note });
+  }
   return (
-    <div>
-      <button
-        aria-expanded={open}
-        className="inline-flex min-h-6 items-center gap-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
-        onClick={() => {
-          setOpen(!open);
-        }}
-        type="button"
-      >
-        <Compass aria-hidden="true" className="size-3.5 shrink-0 text-accent" />
-        {text ? t("ai_clarify_summary") : t("ai_clarify_skipped")}
-        <ChevronDown aria-hidden="true" className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {text ? (
-        <Collapse className={open ? "mt-1" : ""} open={open}>
-          <p className="whitespace-pre-wrap break-words ps-5 text-[13px] leading-relaxed text-ink-2" dir="auto">
-            {text}
-          </p>
-        </Collapse>
-      ) : null}
-    </div>
+    // the ask round ARCHIVED, in the sources section's own language:
+    // header + SourceCard-shaped rows -- one card per ask round, click to
+    // expand the full Q/A detail
+    <section aria-label={t("ai_clarify_summary")}>
+      <div className="mb-4">
+        <div className="flex items-center gap-2">
+          <MessageCircleQuestion aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
+          <h3 className="text-base font-semibold text-ink">{t("ai_clarify_summary")}</h3>
+          <span className="shrink-0 text-xs tabular-nums text-ink-3">{items.length}</span>
+        </div>
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            aria-expanded={expanded}
+            className={`flex items-center gap-2.5 rounded-lg bg-surface-2/70 p-2.5 text-start transition-colors hover:bg-surface-2 ${expanded ? "ring-1 ring-accent-soft" : ""}`}
+            onClick={() => {
+              setExpanded(!expanded);
+            }}
+            type="button"
+          >
+            <span className="flex size-4 shrink-0 items-center justify-center self-center overflow-hidden rounded-[5px] bg-surface ring-1 ring-line lg:self-auto">
+              <MessageCircleQuestion aria-hidden="true" className="size-3.5 text-ink-3" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-xs font-medium text-ink" dir="auto">
+                {pairs[0]?.q ?? t("ai_clarify_summary")}
+              </span>
+              <span className="mt-0.5 flex items-center justify-between gap-1.5">
+                <span className="truncate text-xs text-ink-3">{items.map((item) => item.a).join(" · ")}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-3.5 shrink-0 text-ink-3 transition-transform ${expanded ? "rotate-180" : ""}`}
+                />
+              </span>
+            </span>
+          </button>
+          <Collapse className={expanded ? "ps-1" : ""} open={expanded} unmountAfterHide>
+            <div className="space-y-1.5">
+              {items.map((item) => (
+                <div className="flex items-start gap-2 text-xs" key={item.q}>
+                  <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+                  <span className="min-w-0 flex-1 break-words">
+                    <span className="block text-ink">{item.a}</span>
+                    <span className="block text-ink-3">{item.q}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Collapse>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -527,6 +765,7 @@ function AiSearchRunSectionImpl({
   onCite,
   onRegenerate,
   onFallback,
+  onExportThread,
   onRelated,
   onStop,
   onSubmitClarify,
@@ -540,6 +779,9 @@ function AiSearchRunSectionImpl({
   sourceMeta: AiSourceMeta[];
   onCite?: (index: number) => void;
   onRegenerate?: () => void;
+  /** download the WHOLE thread as a Markdown document (the last run's
+      actions row hosts it -- end of the conversation, where users look) */
+  onExportThread?: () => void;
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
@@ -550,9 +792,20 @@ function AiSearchRunSectionImpl({
   const t = useT();
   const copyToast = useCopyToast();
   const [researchForced, setResearchForced] = useState<boolean | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  // stable: PrintView's build pipeline runs in an effect keyed on its props —
+  // a fresh closure per render would cancel and restart it forever
+  const closePrint = useCallback(() => {
+    setPrintOpen(false);
+  }, []);
   const streaming = run.status === "streaming" && live;
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
-  const researchOpen = researchForced ?? streaming;
+  // the process timeline is the record of how the report was made: OPEN
+  // through the research phase, FOLDED once the writer takes over (the
+  // answer becomes the focus; the record is one click away) -- an explicit
+  // user toggle always wins
+  const researchOpen =
+    researchForced ?? ((streaming && !run.wrappingUp) || (run.status === "awaiting" && run.ask !== null));
   // a settled run without an answer is a FAILURE the user must see (the
   // writer can degrade to an empty/fence-only stream after a full
   // research phase -- silent nothing reads as a hung page), EXCEPT when
@@ -571,236 +824,258 @@ function AiSearchRunSectionImpl({
         {run.q}
       </h2>
 
-      {awaiting && run.ask ? (
-        // the clarify gate asked for the direction BEFORE researching:
-        // the question card IS the section until the user answers
-        <AskCard ask={run.ask} onSubmit={onSubmitClarify ?? (() => {})} />
-      ) : (
-        <>
-          {run.ask && run.clarify !== undefined ? (
-            // the clarify round-trip: the confirmed direction (or the
-            // skip) the research below is built on -- inspectable
-            <ClarifySegment clarify={run.clarify} />
-          ) : null}
-
-          {/* research: think stream + intent + parallel tool calls */}
-          <section aria-busy={streaming} aria-label={t("ai_search_process")}>
-            <div className="flex flex-wrap items-center gap-2">
-              <Waypoints
-                aria-hidden="true"
-                className={`size-5 shrink-0 ${streaming ? "animate-pulse text-ink-2" : "text-ink-3"}`}
-              />
-              <button
-                aria-expanded={researchOpen}
-                className="inline-flex min-h-6 items-center gap-1.5 text-xl font-medium text-ink transition-colors hover:text-ink-2"
-                onClick={() => {
-                  setResearchForced(!researchOpen);
-                }}
-                type="button"
-              >
-                {t("ai_search_process")}
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
-                />
-              </button>
-              {/* the research shape at a glance (morphic/Vane carry a step
-                  count in the collapsed label too) */}
-              {totalCalls > 0 ? (
-                <span className="shrink-0 text-xs text-ink-3">
-                  {t("ai_search_calls_count", { n: String(totalCalls) })}
-                </span>
-              ) : null}
-              <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
-              {streaming ? (
-                <button
-                  aria-label={t("stop")}
-                  className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  onClick={onStop}
-                  title={t("stop")}
-                  type="button"
-                >
-                  <CircleStop className="size-4" />
-                </button>
-              ) : null}
-            </div>
-            <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
-              <div className="break-words rounded-lg border border-line p-3">
-                {run.steps.map((step, index) => (
-                  <StepSegment
-                    index={index}
-                    key={`${step.kind}-${index}`}
-                    run={run}
-                    step={step}
-                    streaming={streaming}
-                  />
-                ))}
-                {streaming && !run.steps.length ? (
-                  <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
-                ) : null}
+      {/* the clarify modal floats OVER the page -- PORTALed to the body:
+          the run section's animate-fade-up leaves a residual transform and
+          a fixed child of a transformed ancestor positions (and clips)
+          against THAT box, not the viewport */}
+      {awaiting && run.ask
+        ? createPortal(
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div aria-hidden="true" className="absolute inset-0 bg-black/30" />
+              <div className="relative z-10 flex max-h-full w-full max-w-lg animate-fade-up">
+                <AskCard ask={run.ask} onSubmit={onSubmitClarify ?? (() => {})} />
               </div>
-            </Collapse>
-          </section>
+            </div>,
+            document.body,
+          )
+        : null}
 
-          {/* the budget took the tools away: the model was told to summarize
-          and is rewriting the complete answer (partial prose discarded) */}
-          {run.wrappingUp && streaming ? (
-            <p className="flex items-center gap-1.5 text-xs text-ink-3">
-              <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
-              {t("ai_wrapup")}
-            </p>
+      {/* research: think stream + intent + parallel tool calls */}
+      <section aria-busy={streaming} aria-label={t("ai_search_process")}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Waypoints
+            aria-hidden="true"
+            className={`size-5 shrink-0 ${streaming ? "animate-pulse text-ink-2" : "text-ink-3"}`}
+          />
+          <button
+            aria-expanded={researchOpen}
+            className="inline-flex min-h-6 items-center gap-1.5 text-xl font-medium text-ink transition-colors hover:text-ink-2"
+            onClick={() => {
+              setResearchForced(!researchOpen);
+            }}
+            type="button"
+          >
+            {t("ai_search_process")}
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {/* the research shape at a glance (morphic/Vane carry a step
+                  count in the collapsed label too) */}
+          {totalCalls > 0 ? (
+            <span className="shrink-0 text-xs text-ink-3">{t("ai_search_calls_count", { n: String(totalCalls) })}</span>
           ) : null}
+          <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
+          {streaming ? (
+            <button
+              aria-label={t("stop")}
+              className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={onStop}
+              title={t("stop")}
+              type="button"
+            >
+              <CircleStop className="size-4" />
+            </button>
+          ) : null}
+        </div>
+        <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
+          <div className="break-words rounded-lg border border-line p-3">
+            {run.steps.map((step, index) => (
+              <StepSegment index={index} key={`${step.kind}-${index}`} run={run} step={step} streaming={streaming} />
+            ))}
+            {streaming && !run.steps.length ? (
+              <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
+            ) : null}
+          </div>
+        </Collapse>
+      </section>
 
-          {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
+      {/* the budget took the tools away: the model was told to summarize
+          and is rewriting the complete answer (partial prose discarded) */}
+      {run.wrappingUp && streaming ? (
+        <p className="flex items-center gap-1.5 text-xs text-ink-3">
+          <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
+          {t("ai_wrapup")}
+        </p>
+      ) : null}
+
+      {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
               the prose keeps its reading measure on the left, the run's
               source cards become a sticky rail on the right; below lg
               everything stacks: answer, related, actions, sources.  The
               answer carries no header row -- the prose is the anchor; one
               compact line covers the writer's silent start. */}
-          <div className="lg:flex lg:items-start lg:justify-between lg:gap-8">
-            <div className="min-w-0 flex-1 space-y-5 lg:max-w-3xl">
-              {streaming &&
-              !run.answer &&
-              (run.wrappingUp || run.direct || run.steps.some((step) => step.kind === "calls")) ? (
-                <p className="flex items-center gap-1.5 text-xs text-ink-3">
-                  <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
-                  {t("ai_answer_writing")}
+      <div className="lg:flex lg:items-start lg:justify-between lg:gap-8">
+        <div className="min-w-0 flex-1 space-y-5 lg:max-w-3xl">
+          {streaming &&
+          !run.answer &&
+          (run.wrappingUp || run.direct || run.steps.some((step) => step.kind === "calls")) ? (
+            <p className="flex items-center gap-1.5 text-xs text-ink-3">
+              <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
+              {t("ai_answer_writing")}
+            </p>
+          ) : null}
+
+          {/* synthesis */}
+
+          {/* zjs-answer-body: PrintView's strip keeps the citation chips
+              (buttons) that live inside it — they are report content */}
+          {run.answer ? (
+            <div className="zjs-answer-body text-sm leading-relaxed text-ink">
+              <MarkdownAnswer
+                galleries={run.galleries}
+                markdown={citeToLinks(run.answer)}
+                meta={sourceMeta}
+                onCite={onCite}
+                settled={!streaming}
+              />
+            </div>
+          ) : null}
+          {!streaming && isLast && run.answer ? (
+            <div className="flex items-center gap-1">
+              {/* [retry | copy] -- twin ghost circles: the fill is HOVER
+                  feedback only (a persistent disc reads as a selected state) */}
+              <button
+                aria-label={t("regenerate")}
+                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={onRegenerate}
+                title={t("regenerate")}
+                type="button"
+              >
+                <RotateCw className="size-4" />
+              </button>
+              <button
+                aria-label={t("copy")}
+                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={() => {
+                  copyToast(run.answer);
+                }}
+                title={t("copy")}
+                type="button"
+              >
+                <Copy className="size-4" />
+              </button>
+              {onExportThread ? (
+                <button
+                  aria-label={t("ai_thread_export")}
+                  className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                  onClick={onExportThread}
+                  title={t("ai_thread_export")}
+                  type="button"
+                >
+                  <FileDown className="size-4" />
+                </button>
+              ) : null}
+              <button
+                aria-label={t("ai_pdf_download")}
+                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={() => {
+                  setPrintOpen(true);
+                }}
+                title={t("ai_pdf_download")}
+                type="button"
+              >
+                <FileText className="size-4" />
+              </button>
+            </div>
+          ) : null}
+          {printOpen ? <PrintView onClose={closePrint} run={run} /> : null}
+
+          {/* the run's meta line at the END of the output (lobehub's
+              message footer): model + tokens + transport outcome */}
+          {!streaming && !failed ? (
+            <AiRunFooter finish={run.finish ?? null} model={run.model ?? null} usage={run.usage ?? null} />
+          ) : null}
+
+          {failed ? (
+            <div className="rounded-lg border border-line p-3 text-xs text-danger">
+              <p>{t("ai_search_failed")}</p>
+              {run.error ? (
+                <p className="mt-1 break-words text-danger/80" dir="auto">
+                  {run.error}
                 </p>
               ) : null}
-
-              {/* synthesis */}
-              {run.answer ? (
-                <div className="text-sm leading-relaxed text-ink">
-                  <MarkdownAnswer
-                    galleries={run.galleries}
-                    markdown={citeToLinks(run.answer)}
-                    meta={sourceMeta}
-                    onCite={onCite}
-                    settled={!streaming}
-                  />
-                </div>
-              ) : null}
-              {!streaming && isLast && run.answer ? (
-                <div className="flex items-center gap-1">
-                  {/* [retry | copy] -- twin ghost circles: the fill is HOVER
-                  feedback only (a persistent disc reads as a selected state) */}
-                  <button
-                    aria-label={t("regenerate")}
-                    className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                    onClick={onRegenerate}
-                    title={t("regenerate")}
-                    type="button"
-                  >
-                    <RotateCw className="size-4" />
-                  </button>
-                  <button
-                    aria-label={t("copy")}
-                    className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                    onClick={() => {
-                      copyToast(run.answer);
-                    }}
-                    title={t("copy")}
-                    type="button"
-                  >
-                    <Copy className="size-4" />
-                  </button>
-                </div>
-              ) : null}
-
-              {/* the run's meta line at the END of the output (lobehub's
-              message footer): model + tokens + transport outcome */}
-              {!streaming && !failed ? (
-                <AiRunFooter finish={run.finish ?? null} model={run.model ?? null} usage={run.usage ?? null} />
-              ) : null}
-
-              {failed ? (
-                <div className="rounded-lg border border-line p-3 text-xs text-danger">
-                  <p>{t("ai_search_failed")}</p>
-                  {run.error ? (
-                    <p className="mt-1 break-words text-danger/80" dir="auto">
-                      {run.error}
-                    </p>
-                  ) : null}
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {/* a transient failure (gateway hiccup, rate limit, a
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* a transient failure (gateway hiccup, rate limit, a
                     wrong model id that has since been fixed) is worth one
                     click to re-run -- the retry re-asks the SAME question
                     as a fresh run */}
-                    <button
-                      className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
-                      onClick={onRegenerate}
-                      type="button"
-                    >
-                      <RotateCw aria-hidden="true" className="size-3.5" />
-                      {t("regenerate")}
-                    </button>
-                    {onFallback ? (
-                      <button
-                        className="inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
-                        onClick={onFallback}
-                        type="button"
-                      >
-                        {t("ai_search_try_classic")}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
+                <button
+                  className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                  onClick={onRegenerate}
+                  type="button"
+                >
+                  <RotateCw aria-hidden="true" className="size-3.5" />
+                  {t("regenerate")}
+                </button>
+                {onFallback ? (
+                  <button
+                    className="inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
+                    onClick={onFallback}
+                    type="button"
+                  >
+                    {t("ai_search_try_classic")}
+                  </button>
+                ) : null}
+              </div>
             </div>
+          ) : null}
+        </div>
 
-            {/* this run's own source cards -- the evidence behind the
+        {/* this run's own source cards -- the evidence behind the
             answer; the sticky right rail from lg, stacked below it on
             narrow screens (the run hides the slot entirely when it can
             never get content: a settled no-source run) */}
-            {run.sources.length > 0 || streaming ? (
-              <aside className="mt-5 w-full lg:sticky lg:top-4 lg:mt-0 lg:w-72 lg:shrink-0 xl:w-80">
-                {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
-              </aside>
-            ) : null}
-          </div>
+        {run.sources.length > 0 || streaming ? (
+          <aside className="mt-5 w-full lg:sticky lg:top-4 lg:mt-0 lg:w-72 lg:shrink-0 xl:w-80">
+            {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
+            {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
+            {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
+          </aside>
+        ) : null}
+      </div>
 
-          {/* this run's follow-up suggestions: AFTER the two-column wrapper
+      {/* this run's follow-up suggestions: AFTER the two-column wrapper
               so the stacked (mobile) order reads answer → actions → sources
               → related; on desktop the block keeps the answer's reading
               measure, exactly where it sat inside the left column */}
-          {run.related.length > 0 ? (
-            <section aria-label={t("related")} className="lg:max-w-3xl">
-              <div className="flex items-center gap-2">
-                <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
-                <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
+      {run.related.length > 0 ? (
+        <section aria-label={t("related")} className="lg:max-w-3xl">
+          <div className="flex items-center gap-2">
+            <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
+            <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
+          </div>
+          <div className="mt-1">
+            {run.related.map((question, i) => (
+              <div key={i}>
+                <div className="h-px bg-line" />
+                <button
+                  className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
+                  onClick={() => {
+                    onRelated?.(question);
+                  }}
+                  type="button"
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <CornerDownRight
+                      aria-hidden="true"
+                      className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                    />
+                    <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
+                      {question}
+                    </span>
+                  </span>
+                  <Plus
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                  />
+                </button>
               </div>
-              <div className="mt-1">
-                {run.related.map((question, i) => (
-                  <div key={i}>
-                    <div className="h-px bg-line" />
-                    <button
-                      className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
-                      onClick={() => {
-                        onRelated?.(question);
-                      }}
-                      type="button"
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <CornerDownRight
-                          aria-hidden="true"
-                          className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                        />
-                        <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
-                          {question}
-                        </span>
-                      </span>
-                      <Plus
-                        aria-hidden="true"
-                        className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                      />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
-        </>
-      )}
+            ))}
+          </div>
+        </section>
+      ) : null}
     </section>
   );
 }

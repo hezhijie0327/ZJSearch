@@ -1,22 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { History, MessageCircleQuestion } from "lucide-react";
+import { MessageCircleQuestion } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import type { AiSourceMeta } from "@/features/results/aiAnswer.ts";
-import { AiHistoryDrawer } from "@/features/results/aiSearch/AiHistoryDrawer.tsx";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
+import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
-import { threadUrl } from "@/lib/threadStore.ts";
+import { flashToast } from "@/lib/toast.ts";
 import type { AiThreadPageData } from "@/lib/types.ts";
 
-/** The standalone AI conversation page (`/ai/thread/<uuid>`): the thread is
+/** The standalone AI conversation page (`/zjsearch/ai/thread/<uuid>`):
+    the thread is
     restored from the browser's storage (the ONLY storage it has -- the
     server endpoint stays stateless) and follow-ups append to it.  A missing
     store entry (another browser, quota eviction) renders the empty state. */
@@ -32,16 +33,20 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
   const aiSearch = useAiSearch(globals.ai_search);
   const [followupQuery, setFollowupQuery] = useState("");
   const [researchMode, setResearchMode] = useState<AiSearchMode>("balanced");
-  const [historyOpen, setHistoryOpen] = useState(false);
 
-  // restore once per page instance (the router remounts pages per payload)
+  // restore once per page instance (the router remounts pages per payload);
+  // the resume is ASYNC now (it may read PGlite when this tab's mirror
+  // misses) -- the not-found gate waits for it
   const restored = useRef(false);
+  const [resuming, setResuming] = useState(true);
   useEffect(() => {
     if (restored.current) {
       return;
     }
     restored.current = true;
-    aiSearch.resume(data.thread);
+    aiSearch.resume(data.thread).finally(() => {
+      setResuming(false);
+    });
     // no dependency array on purpose: the guard ref fires it once
   });
 
@@ -80,27 +85,12 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
 
   const lastMode = aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode;
   const hasThread = aiSearch.runs.length > 0;
+  // the not-found empty state only shows AFTER the resume attempt resolved
+  const showMissing = !resuming && !hasThread;
 
   return (
     <Shell globals={globals}>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
-        <div className="flex items-center justify-between gap-2">
-          <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
-            <MessageCircleQuestion aria-hidden="true" className="size-3.5 shrink-0" />
-            {t("ai_history_thread")}
-          </span>
-          <button
-            className="inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
-            onClick={() => {
-              setHistoryOpen(true);
-            }}
-            type="button"
-          >
-            <History aria-hidden="true" className="size-3.5 shrink-0" />
-            {t("ai_history")}
-          </button>
-        </div>
-
         {hasThread ? (
           <div className="mt-4 space-y-8">
             {aiSearch.runs.map((run, index) => (
@@ -111,6 +101,15 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                 live={index === aiSearch.runs.length - 1 && aiSearch.phase === "streaming"}
                 onCite={() => {
                   return undefined;
+                }}
+                onExportThread={() => {
+                  downloadThreadMarkdown(
+                    aiSearch.threadId || data.thread,
+                    aiSearch.runs[0]?.q ?? "",
+                    aiSearch.runs,
+                    globals.instance_name,
+                  );
+                  flashToast(t("ai_thread_exported"), { tone: "ok", timeoutMs: 2000 });
                 }}
                 onFallback={onRunFallback}
                 onRegenerate={() => {}}
@@ -128,7 +127,7 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                 sourceMeta={EMPTY_META}
               />
             ))}
-            {aiSearch.phase === "done" ? (
+            {aiSearch.phase !== "idle" && aiSearch.phase !== "error" ? (
               // Perplexica's floating follow-up, the takeover page's composer
               // in the thread page's own measure (no fog scrim -- it washed
               // out short content underneath)
@@ -161,13 +160,17 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                       options={depthOptions(t)}
                       value={lastMode}
                     />
-                    <SubmitCircle disabled={!followupQuery.trim()} label={t("ai_search_followup")} send />
+                    <SubmitCircle
+                      disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
+                      label={t("ai_search_followup")}
+                      send
+                    />
                   </div>
                 </form>
               </div>
             ) : null}
           </div>
-        ) : (
+        ) : showMissing ? (
           <div className="mt-24 flex flex-col items-center text-center animate-fade-up">
             <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
               <MessageCircleQuestion aria-hidden="true" className="size-7" />
@@ -184,25 +187,8 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
               {t("back_to_search")}
             </button>
           </div>
-        )}
+        ) : null}
       </main>
-      <AiHistoryDrawer
-        currentId={aiSearch.threadId || data.thread}
-        onClose={() => {
-          setHistoryOpen(false);
-        }}
-        onNavigate={(url) => {
-          if (url === threadUrl(data.thread)) {
-            // the restored thread's own address: a full load re-hydrates the
-            // page payload (the takeover's replaceState makes this the
-            // canonical url of the current view)
-            navigate(url, { replace: true });
-          } else {
-            navigate(url);
-          }
-        }}
-        open={historyOpen}
-      />
     </Shell>
   );
 }

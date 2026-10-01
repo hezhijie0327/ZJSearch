@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { BookOpen, ChevronDown, Globe } from "lucide-react";
+import { BookOpen, ChevronDown, Globe, History } from "lucide-react";
 import { useState } from "react";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -74,9 +74,9 @@ function SourceCard({ source }: { source: AiSearchSource }) {
             <span className="truncate text-xs text-ink-3">{source.netloc}</span>
           </span>
           <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-ink-3">
-            {/* the read-in-full mark rides a FIXED-WIDTH slot: with the
-                badge present or not, the [n] number stays right-aligned
-                across crawled and plain cards alike */}
+            {/* the read-in-full / history marks ride a FIXED-WIDTH slot:
+                with a badge present or not, the [n] number stays
+                right-aligned across crawled, recalled and plain cards */}
             <span className="flex w-4 shrink-0 items-center justify-end">
               {source.crawled ? (
                 <span
@@ -86,6 +86,15 @@ function SourceCard({ source }: { source: AiSearchSource }) {
                   title={t("ai_source_crawled")}
                 >
                   <BookOpen aria-hidden="true" className="size-2.5" />
+                </span>
+              ) : source.history ? (
+                <span
+                  aria-label={t("ai_source_history")}
+                  className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
+                  role="img"
+                  title={t("ai_source_history")}
+                >
+                  <History aria-hidden="true" className="size-2.5" />
                 </span>
               ) : null}
             </span>

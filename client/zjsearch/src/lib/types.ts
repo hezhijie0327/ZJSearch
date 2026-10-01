@@ -63,8 +63,12 @@ export interface GlobalData {
   rtl: boolean;
   ai?: AiCapability;
   /** AI Search mode capability (same token shape): absent when the
-      zjsearch.ai.search flag is off — the client hides its mode switch */
+      zjsearch.feature.ai_search flag is off — the client hides its mode switch */
   ai_search?: AiCapability;
+  /** Thread-embedding capability (token + model + vector width): absent
+      when the zjsearch.embedding feature is off/unconfigured — the
+      history drawer's semantic search hides itself */
+  embedding?: { tk: string; model: string; dimensions?: number };
   /** true when THIS request runs in AI search takeover (ai=1 + capability):
       the classic engine fan-out was skipped, the page is the agent */
   ai_mode?: boolean;
@@ -524,7 +528,8 @@ export interface ErrorPageData {
   message: string;
 }
 
-/** The standalone AI thread page (`/ai/thread/<uuid>`): the payload carries
+/** The standalone AI thread page (`/zjsearch/ai/thread/<uuid>`): the
+    payload carries
     the thread identity plus fresh capability tokens -- the conversation
     itself lives in the browser's storage (see lib/threadStore). */
 export interface AiThreadPageData {

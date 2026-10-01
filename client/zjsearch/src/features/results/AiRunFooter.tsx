@@ -20,12 +20,27 @@ import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 /** The run's consolidated token usage -- the shape every dialect's usage
     capture produces (AI Search's finish wire event and the AI Overview's
     trailing meta sentinel both carry it). */
+export interface AiUsagePhase {
+  input: number;
+  output: number;
+  thoughts?: number;
+  cached?: number;
+  cache_write?: number;
+}
+
 export interface AiUsage {
   input: number;
   output: number;
   thoughts: number | null;
   cached: number;
   cache_write: number;
+  /** the PER-PHASE split (the loop's research turns vs the writer) and the
+      gates' account (the small completions: research gate, clarify,
+      standalone rewrite, related fallback, memory extraction) -- the row
+      shows the totals; every segment toggles ITS metric's distribution */
+  research?: AiUsagePhase | null;
+  write?: AiUsagePhase | null;
+  gates?: (AiUsagePhase & { calls: number }) | null;
 }
 
 /** The run's quiet meta line at the END of the answer (lobehub's message
@@ -84,7 +99,7 @@ export function AiRunFooter({
     // language: overflow-x + hidden scrollbar + shrink-0 children) --
     // wrapping a token cluster reads as broken layout
     <div
-      className={`flex items-center gap-x-3 overflow-x-auto whitespace-nowrap text-xs text-ink-3 ${SCROLLBAR_NONE} [&>*]:shrink-0`}
+      className={`zjs-print-hide flex items-center gap-x-3 overflow-x-auto whitespace-nowrap text-xs text-ink-3 ${SCROLLBAR_NONE} [&>*]:shrink-0`}
     >
       {model ? (
         <span
