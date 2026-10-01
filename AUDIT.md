@@ -123,14 +123,18 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | Back/forward | back from search B to search A | content matches the URL (pending skeleton → A's results), never a foreign page |
 | Zero results | `zzxxqq11223344 +notpresentwordxyz` (`+` = `%2B`) | engines panel open, NO pager, Sorry state |
 | Themes | `simple_style=light/dark/black` cookie | palette flips, skeleton included |
-| Mobile | 390×844 viewport | filter rows swipe, no layout break |
+| Mobile 390×844 — general | `/search?q=...` | brand hidden (<30rem), category tabs wrap to two rows, filter row swipes, NO horizontal pan (scrollWidth == 390), result cards keep the fixed slot anatomy |
+| Mobile — grids | images / videos / files URLs | masonry tiles flow 2-up-ish by container query; videos drop to ONE column under `@[24rem]`, files keep two compact columns; no pan |
+| Mobile — AI takeover | `?...&ai=1` | timeline + task card + answer + the follow-up composer all fit; no pan |
+| Mobile — knowledge drawer | header button | FULL-WIDTH sheet (w==390) with an opaque `bg-bg` ground, four tabs; judge by DOM geometry — the IAB screenshot pipeline serves stale frames here routinely (§5) |
+| Mobile — AI Overview | `?...&ai_overview=1` | card auto-opens at the 16px page margins, citations + run footer render |
 | Wide | 1920 / centered-mode toggle | container-query grids re-step |
 | Preferences | drawer, all 6 tabs (incl. PGlite) | row language uniform, autosave toast |
 | About/Stats | header icon buttons | drawer panels, internal links browse in-panel |
 | 404 / NoJS / RSS | `/nonexistent`, noscript block, `format=rss` | canonical faces (rss.xsl self-contained) |
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
 | AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
-| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources).  With a non-empty browser corpus the researcher gains a `past_research` RAG round (full-text heads + source identities as history [n] rows); the audit mock falls back to a plain search when the tool is not registered — the audited timeline must show NO error row either way |
+| AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources).  With a non-empty browser corpus the researcher gains a `past_research` RAG round (full-text heads + source identities as history [n] rows); the audit mock falls back to a plain search when the tool is not registered — the audited timeline must show NO error row either way: every row settles (the reader row with its char count, the TWO task_write rows 0/2 → 2/2) and the web_reader settlement must not kill the stream (a wire-v2 closed-set violation once crashed every successful page read — §7.8) |
 | AI clarify / ask_user | an ambiguous query in quality/goal (live), or the mock's clarify fixture | the clarify modal with the 2-question form (提交 / 跳过); answering seeds a clarify step at the timeline head; a mid-research ask_user renders as a call row + the same modal |
 | AI memory | any researched run (live model) | stored facts ride the run's `<user_memory>` block; a `user_memory` save renders a memory row AFTER settle; the extractor's saves appear in the drawer's 记忆 tab |
 | Knowledge base (知识库) | header LibraryBig icon (`KnowledgeDrawer`) | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them + the ×N cross-session badge (N = past runs that referenced the url, from the PRE-run recall); EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab; the keyword/semantic/hybrid modes come from the deployment (`history_search`) |
@@ -301,6 +305,14 @@ rules and the shared-token inventory from AGENTS.md, covering:
 0. **Structure/naming/reuse** — duplicated JSX blocks, hand-typed tokens
    (CHIP/PILL/SEGMENT_*), reinvented hostname/date/number formatting, dead
    exports (grep-verify each claim), parts-file naming, layer inversions.
+   The family doctrine (ZJBlog DESIGN.md §12) governs placement:
+   `components/` is CROSS-PAGE only — a single-page piece folds into its
+   page file (AiModeSwitch once sat here with one consumer); features own
+   real domains; lib modules are lowercase topics; zero default exports.
+   Run the orphan-export scan (every `export` grepped against the tree)
+   and the legacy-compat sweep each round: stored-legacy unions
+   (`spawn_subtask`, the `"plan"` step kind) die with their era instead of
+   riding forever.
 1. **Performance** — bundle sizes, eager graph, lazy boundaries, memo on
    hot trees (results during AI streaming).
 2. **Animation completeness** — every conditional render either animates
@@ -353,7 +365,13 @@ rules and the shared-token inventory from AGENTS.md, covering:
    rule (a writer/overview has no calculator — it must never present a
    derived number as if a source stated it); and the cross-session
    badge (pastRefs is captured at the PRE-run recall — the run's own
-   ref-count increment must never badge itself).  The
+   ref-count increment must never badge itself); and the WIRE PRODUCER
+   check: every event tuple the executor yields must be in
+   `framework/wire.py`'s closed EVENTS set — the v2 set made a stale
+   producer name crash the whole stream LOUDLY (the `("page", ...)`
+   reader settlement killed every successful web_reader read for two
+   commits), so a replay containing a reader read (§6) is the regression.
+   The
    audit mock's event sequence (§6 recipe against :8907) exercises the
    plumbing without a live model.
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,

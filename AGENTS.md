@@ -165,7 +165,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   research|write,"round"}` opens an entry; `think`/`say` deltas carry
   that entry's id; `calls` announces the entry's batch; `call` settles
   ONE call (`{id, call, status, n/chars/result/text/preview/label/
-  action}`); `tasks` is the task card's AUTHORITATIVE snapshot;
+  action}` — the web_reader settlement rides it too: `chars` + `text`
+  carry the reading pane and the reader-cache archive; a reader read
+  NEVER emits its own event kind, the closed set has no `page` and a
+  stale producer crashes the stream by design); `tasks` is the task card's AUTHORITATIVE snapshot;
   `sources` the global [n] registry; `answer` deltas are the writer's
   OWN buffer (narration never mixes in); `ask` is the clarify gate AND
   the mid-research ask_user (same schema); `settle` declares the
@@ -261,8 +264,17 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
 - `src/features/<domain>/` — cohesive feature modules with colocated views,
   pure logic and hooks: `overlay/` (drawer, panels injected by app.tsx),
   `results/` (layout.ts detection, ResultsView, CategoryBlocks, CardList,
-  ResultRow, cards/, answers/, image/, grids, infobox/debug/suggestions),
-  `hotkeys.ts`, `calculator.ts`.
+  ResultRow, cards/, answers/, image/, grids, infobox/debug/suggestions,
+  aiOverview.ts — the AI Overview contract: context assembly, stream
+  splitting, citation meta), `hotkeys.ts`, `calculator.ts`.
+  PLACEMENT DOCTRINE (ZJBlog DESIGN.md §12): `components/` is cross-page
+  ONLY — a component with a single page consumer folds into that page's
+  file (AiModeSwitch lives in IndexPage.tsx); `features/<domain>/` owns
+  real domains; lib modules are lowercase topics; named exports only,
+  zero `export default`; no barrel files.  Legacy-compat shapes are
+  deleted with their era, not carried: the stored-thread `spawn_subtask`
+  tool name and the `"plan"` step kind are gone (old threads degrade to
+  web_search rows / silently drop those steps).
 - `src/pages/` — thin route composition roots (state + event handlers +
   layout wiring); page-private pieces sit next to the page
   (`preferences/` → PreferencesPage + `usePreferencesForm` + `tabs/`).
