@@ -7,6 +7,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { configureEmbeddings } from "@/lib/embed.ts";
 import { translateFor } from "@/lib/i18n.ts";
 import { extractBootPageData, extractPageData, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { buildSearchUrl, type SearchParams, searchParamEntries, urlThemeOverride } from "@/lib/searchParams.ts";
@@ -276,6 +277,10 @@ export function RouterProvider({
         setError(parsed.message);
         return;
       }
+      // every landing payload re-configures the thread embeddings: the
+      // capability rides the page-data globals, and the STREAMED takeover's
+      // boot payload carries none (the real one lands late)
+      configureEmbeddings(parsed.globals?.embedding ? { token: parsed.globals.embedding.tk } : null);
       setData(parsed);
       setLoading(false);
       document.title = pageTitle(parsed);

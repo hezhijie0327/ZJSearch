@@ -2,8 +2,10 @@
 
 import { createRoot } from "react-dom/client";
 import { App } from "@/app.tsx";
+import { configureEmbeddings } from "@/lib/embed.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
+import { configureEmbeddingDimensions } from "@/lib/threadStore.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 import "./styles/global.css";
 
@@ -51,6 +53,14 @@ async function bootstrap(): Promise<void> {
   }
   watchSystemTheme();
   const initialData = await bootData();
+
+  // the thread-embedding capability rides the page-data globals: handed to
+  // the thread store once, here at boot (absent = the history search hides)
+  const embeddingCap = initialData?.globals.embedding;
+  configureEmbeddings(embeddingCap ? { token: embeddingCap.tk, dimensions: embeddingCap.dimensions } : null);
+  if (embeddingCap?.dimensions) {
+    configureEmbeddingDimensions(embeddingCap.dimensions);
+  }
   // boot payloads of the streamed search page: handled before the app takes
   // over (the static boot skeleton is still on screen until this point)
   if (initialData && isRedirectPageData(initialData)) {

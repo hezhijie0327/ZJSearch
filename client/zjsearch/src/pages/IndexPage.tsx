@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { History, Lightbulb, SlidersHorizontal, X } from "lucide-react";
+import { Lightbulb, SlidersHorizontal, X } from "lucide-react";
 import { useState } from "react";
 import { AiModeSwitch } from "@/components/AiModeSwitch.tsx";
 import { BrandDot } from "@/components/Brand.tsx";
@@ -11,7 +11,6 @@ import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
 import { CategoryTabs, defaultFilterValues, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
-import { AiHistoryDrawer } from "@/features/results/aiSearch/AiHistoryDrawer.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -26,7 +25,7 @@ interface IndexData extends BasicPageData {
 }
 
 export function IndexPage({ data }: { data: IndexData }) {
-  const { navigate, search, loading } = useRouter();
+  const { search, loading } = useRouter();
   const globals = data.globals;
   const [query, setQuery] = useState("");
   // the AI mode choice on the hero is session-local state (initialized from
@@ -35,7 +34,6 @@ export function IndexPage({ data }: { data: IndexData }) {
   // server ships the ai_search capability (zjsearch.ai.search.enabled) --
   // without it the hero stays classic and ?ai=1 is ignored.
   const aiSearchCap = Boolean(globals.ai_search);
-  const [aiHistoryOpen, setAiHistoryOpen] = useState(false);
   const [aiMode, setAiMode] = useState(
     () => Boolean(globals.ai_search) && new URLSearchParams(window.location.search).get("ai") === "1",
   );
@@ -152,19 +150,6 @@ export function IndexPage({ data }: { data: IndexData }) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {aiSearchCap && aiMode ? (
-                <button
-                  aria-label={t("ai_history")}
-                  className="grid size-9 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  onClick={() => {
-                    setAiHistoryOpen(true);
-                  }}
-                  title={t("ai_history")}
-                  type="button"
-                >
-                  <History aria-hidden="true" className="size-4.5" />
-                </button>
-              ) : null}
               <SubmitCircle
                 disabled={!query.trim()}
                 label={t("search")}
@@ -178,16 +163,6 @@ export function IndexPage({ data }: { data: IndexData }) {
             </div>
           </div>
         </div>
-        <AiHistoryDrawer
-          currentId={undefined}
-          onClose={() => {
-            setAiHistoryOpen(false);
-          }}
-          onNavigate={(url) => {
-            navigate(url);
-          }}
-          open={aiHistoryOpen}
-        />
         {/* classic-only tabs + filters: forced closed in AI mode (an agent run
             has no categories/filters), animated by the shared Collapse */}
         <Collapse className={`w-full ${optionsOpen && !aiMode ? "mt-3" : ""}`} open={optionsOpen && !aiMode}>

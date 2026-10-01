@@ -23,6 +23,9 @@
     "not dead"
   ],
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pg_textsearch": "^0.0.10",
+    "@electric-sql/pglite-pgvector": "^0.0.9",
     "clsx": "^2.1.1",
     "katex": "^0.18.9",
     "lucide-react": "^1.48.0",
