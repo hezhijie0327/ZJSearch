@@ -2,10 +2,11 @@
 """AI Search: the tool specs and their argument parsing.
 
 Each entry the model sees (``web_search``, ``web_reader``,
-``ask_user``, ``plan``) is one spec function in the dialect-neutral
-llm shape plus the sanitizers that turn untrusted call arguments into
-executed / displayed values (Vane's researcher/actions split, Morphic's
-lib/tools -- schema, description and parsing live with the tool).
+``ask_user``, ``task_write``) is one spec function in the
+dialect-neutral llm shape plus the sanitizers that turn untrusted call
+arguments into executed / displayed values (Vane's researcher/actions
+split, Morphic's lib/tools -- schema, description and parsing live with
+the tool).
 """
 
 import json
@@ -19,8 +20,6 @@ TOOL_NAME = "web_search"
 PAGE_TOOL = "web_reader"
 
 ASK_TOOL = "ask_user"
-
-PLAN_TOOL = "plan"
 
 CALCULATOR_TOOL_NAME = "calculator"
 
@@ -155,20 +154,31 @@ def page_spec() -> dict[str, t.Any]:
 
 def ask_user_spec() -> dict[str, t.Any]:
     """The mid-research human-in-the-loop tool: the model may stop and ask
-    when it realizes -- only research can reveal this -- that the request
-    is genuinely ambiguous (an acronym naming several unrelated products,
-    a code that is also a model name, ...).  The run ends with the
-    questions; the answers travel back as ``clarifications``."""
+    instead of guessing -- when the request is genuinely ambiguous, when
+    the user's success criteria are unstated, or when the answer's stakes
+    make a wrong assumption expensive (forecasts, recommendations with
+    money/health/legal consequences).  The run ends with the questions;
+    the answers travel back as ``clarifications``.  The wire shape here
+    mirrors ``gates.sanitize_questions`` EXACTLY (single/multi + 2-4
+    options; every question carries the client's free-text line) -- a
+    type the sanitizer would downgrade must not be advertised."""
     return {
         "name": ASK_TOOL,
         "description": (
-            "Stop researching and ask the user to disambiguate the request."
-            "  Call this ONCE, as the ONLY call of its turn, when you realize"
-            " the request is genuinely ambiguous: an acronym, code or short"
-            " name that matches several unrelated products/domains, where"
-            " guessing wrong wastes the whole run.  Do NOT use it for broad"
-            " informational topics (cover their facets instead) and do not"
-            " use it after the user already confirmed a direction."
+            "Stop researching and ask the user for direction.  Do NOT plow"
+            " ahead on a guess: call this ONCE, as the ONLY call of its"
+            " turn, the moment you realize that -- whatever the research"
+            " returns -- the answer could miss what the user actually"
+            " wants.  Triggers: a genuinely ambiguous subject (an acronym,"
+            " code or short name matching several unrelated products); a"
+            " scope, target or success criterion only the user can state;"
+            " a high-stakes deliverable (a forecast, an investment,"
+            " purchase, health or legal question) whose assumptions would"
+            " change the answer.  Asking one sharp question beats a full"
+            " run on the wrong premise.  Do NOT use it for broad"
+            " informational topics (cover their facets instead), for"
+            " details live sources can settle, or after the user already"
+            " confirmed a direction."
         ),
         "parameters": {
             "type": "object",
@@ -182,34 +192,23 @@ def ask_user_spec() -> dict[str, t.Any]:
                             "q": {"type": "string", "description": "The question to the user."},
                             "type": {
                                 "type": "string",
-                                "enum": ["single", "multi", "yesno", "text"],
+                                "enum": ["single", "multi"],
                                 "description": (
-                                    "single = pick one option; multi = pick any;"
-                                    " yesno = Yes/No toggle (no options needed);"
-                                    " text = free-form input (no options needed)."
+                                    "single = pick one option; multi = pick any."
+                                    "  The user can always add free text on"
+                                    " every question -- a yes/no question is a"
+                                    ' single with options ["Yes", "No"].'
                                 ),
                             },
                             "options": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": (
-                                    "2-4 short concrete answers to choose from"
-                                    ' (for yesno: ["Yes", "No"]; omit for text).'
-                                ),
+                                "description": "2-4 short concrete answers to choose from.",
                             },
                         },
                         "required": ["q", "type"],
                     },
                     "description": "At most 3 questions.",
-                },
-                "importance": {
-                    "type": "string",
-                    "enum": ["critical", "helpful"],
-                    "description": (
-                        "critical = guessing wrong wastes the whole run"
-                        " (default); helpful = the answer would improve"
-                        " quality but the run can proceed without it."
-                    ),
                 },
             },
             "required": ["questions"],

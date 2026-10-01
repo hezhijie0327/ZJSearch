@@ -54,12 +54,18 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " community reception.  Cross-verify load-bearing claims against"
     " independent sources, but run only as many searches as the question"
     " needs.",
-    "goal": "Depth: GOAL -- treat the question as a TARGET the user wants"
-    " reached, not a casual question.  Work toward it iteratively: first"
-    " state what evidence would demonstrate the goal is met, then search for"
-    " it; after each round, explicitly check what is still missing and run"
-    " further rounds until the goal is demonstrably achieved (verify"
-    " load-bearing claims against independent sources).",
+    "goal": "Depth: GOAL -- the question is a TARGET the user wants"
+    " reached, and this mode is a LOOP, not a fixed number of rounds: first"
+    " state what evidence would demonstrate the goal is met (your"
+    " task_write ledger IS that checklist), then work toward it round by"
+    " round.  After each round, explicitly check what is still missing and"
+    " search for exactly that; switch tools freely (searches, page reads,"
+    " the calculator for every derived figure) until the ledger closes."
+    "  Do NOT hand off early: while the ledger has open items and you have"
+    " fresh angles left, keep researching -- only a ledger you cannot close"
+    " (the sources agree the evidence does not exist) or a stale run ends"
+    " the loop early.  Verify load-bearing claims against independent"
+    " sources.",
 }
 
 _DEPTH_SHAPE: dict[str, str] = {
@@ -237,8 +243,14 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         " rates, unit-less conversions of values you already have --"
         " never compute in your head and never copy a number you have"
         " not verified; a wrong figure in a cited answer is the worst"
-        " failure this agent can produce.  One expression per call;"
-        " substitute variables yourself before calling.\n</calculator>"
+        " failure this agent can produce.  This is NON-NEGOTIABLE for"
+        " financial and forecasting material: revenue multiples, YoY or"
+        " CAGR growth, margin and market-share math, per-share figures,"
+        " projections built from sourced assumptions -- every derived"
+        " number in an earnings or forecast answer is one calculator"
+        " call, and the answer may state an input the sources never"
+        " gave.  One expression per call; substitute variables yourself"
+        " before calling.\n</calculator>"
     )
     task_block = ""
     if task_tool:
@@ -257,15 +269,22 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if register_ask:
         ambiguity_escape = (
             "<ambiguity_escape>\n"
-            f"The {ASK_TOOL} tool is your ambiguity escape hatch --"
+            f"The {ASK_TOOL} tool is your human-in-the-loop escape hatch --"
             " available at ANY point during research, not just the start."
-            "  The moment you realize -- from the first round's results or"
-            " mid-research -- that the request is genuinely ambiguous (an"
-            " acronym matching several UNRELATED products, a code name, a"
-            " scope question only the user can answer), call it as the"
-            " only call of that turn and stop.  Do not burn rounds"
-            " researching a guess; do not use it for broad informational"
-            " topics; do not mix it with"
+            "  Do NOT plow ahead on a guess: the moment you realize -- from"
+            " the question itself, the first round's results or"
+            " mid-research -- that the run could miss what the user"
+            " actually wants, ask INSTEAD of researching the wrong thing."
+            "  That covers a genuinely ambiguous subject (an acronym"
+            " matching several UNRELATED products, a code name), a scope"
+            " or success criterion only the user can state, and any"
+            " high-stakes deliverable whose assumptions would change the"
+            " answer -- a forecast, an investment or purchase question, a"
+            " health or legal matter: guessing wrong there is the worst"
+            " outcome this agent can produce.  Call it as the only call of"
+            " that turn and stop.  Do not burn rounds on a guess; do not"
+            " ask what a quick search can settle; do not use it for broad"
+            " informational topics; do not mix it with"
             f" {TOOL_NAME} calls.\n</ambiguity_escape>"
         )
     depth = _DEPTH_RESEARCH.get(depth, _DEPTH_RESEARCH["balanced"])

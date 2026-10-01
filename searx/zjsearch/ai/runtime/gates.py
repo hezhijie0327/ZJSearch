@@ -153,9 +153,11 @@ def clarify_gate(
     """The pre-research human-in-loop gate: one small completion decides
     whether the run should ask the user for direction first (quality:
     only on a genuinely ambiguous request; goal: prefers asking when the
-    goal statement lacks a target).  Answers the sanitized question set,
-    or None on any failure or a ``no`` -- the run then researches
-    directly (fail-open: a broken gate must never block research)."""
+    goal statement lacks a target; BOTH: always on a high-stakes
+    deliverable whose assumptions change the answer).  Answers the
+    sanitized question set, or None on any failure or a ``no`` -- the run
+    then researches directly (fail-open: a broken gate must never block
+    research)."""
     posture = (
         " The request reads as a GOAL the user wants reached: prefer asking"
         " when the target, constraints or success criteria are unstated."
@@ -169,7 +171,12 @@ def clarify_gate(
             "content": (
                 "You are the clarification gate of a deep-research search"
                 " engine: decide whether the request needs the user's"
-                " direction BEFORE any research begins." + posture + " Broad"
+                " direction BEFORE any research begins." + posture + " One"
+                " class always justifies asking: a HIGH-STAKES deliverable"
+                " whose assumptions change the answer -- a forecast, an"
+                " investment, purchase, health or legal question -- where"
+                " the user's situation (timeline, risk appetite, existing"
+                " holdings) is unknowable from the question alone.  Broad"
                 " informational topics (\"searxng\", \"how do solar panels"
                 " work\") do NOT need clarification -- cover their facets"
                 " instead.  Ask at most 3 questions; each carries 2-4 short"

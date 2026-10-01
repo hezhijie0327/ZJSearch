@@ -120,6 +120,21 @@ def grounding_fallback(what: str) -> str:
     )
 
 
+def figures_rule() -> str:
+    """The number-honesty rule of the answer side: the researcher computes
+    every derived figure through the calculator tool, but the writer and
+    the overview have NO tools -- they must not silently do arithmetic
+    the material does not state."""
+    return (
+        "<figures>\nEvery figure in the answer comes from the material you"
+        " were given.  When a number the sources only imply is worth"
+        " showing (a difference, a share, a growth rate), derive it from"
+        " the cited inputs and keep the derivation visible in one clause"
+        " -- never present a computed number as if a source stated it,"
+        " and never invent a precision the inputs do not carry.\n</figures>"
+    )
+
+
 def reader_voice() -> str:
     """The anti-parroting rule: the answer is reader-facing prose, never a
     description of the machinery behind it.  Models that receive grounding
@@ -156,7 +171,7 @@ def answer_contract(
 ) -> list[str]:
     """The reader-facing answer spine BOTH features speak, in the
     cache-friendly order: the byte-stable blocks (role, identity, date,
-    language, citations, markdown, grounding, voice, opening) first, the
+    language, citations, figures, grounding, voice, opening) first, the
     caller's per-run blocks after.  ``shape`` (the search writer's tier
     output shape) and ``sources_note`` slot in at their fixed positions;
     the overview omits both.  Callers append their feature-specific
@@ -166,6 +181,7 @@ def answer_contract(
     if shape:
         lines.append(f"<shape>\n{shape}\n</shape>")
     lines.append(citation_rules())
+    lines.append(figures_rule())
     lines.append(grounding_fallback("sources"))
     if sources_note:
         lines.append(sources_note)

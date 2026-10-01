@@ -15,17 +15,19 @@ SEARCH_MODES = ("speed", "balanced", "quality", "goal")
 _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # speed: ONE focused round (Morphic's quick discipline); balanced: main
     # facets, optional gap-filler; quality: multi-round deep research with
-    # cross-verification; goal: the question is a target -- iterate in
-    # self-checked rounds until the goal is demonstrably met.
-    # max_rounds is a SAFETY ceiling, not the plan; the plan is PROGRESS:
-    # a round that adds no new information (only repeats or empty results)
-    # is stalled, and stall_rounds consecutive stalled rounds end the
-    # research.  Per-round call counts are the MODEL's call (uncapped);
-    # every engine request carries its own per-request timeout.
+    # cross-verification; goal: THE LOOP MODE -- the question is a target
+    # and the run iterates through its tools until the evidence ledger
+    # closes.  "Infinite" means the loop ends on COMPLETION, not on a
+    # small count: max_rounds is the runaway guard (the client-visible
+    # contract is "researches until the goal is met"), the REAL plan is
+    # PROGRESS -- a round that adds no new information (only repeats or
+    # empty results) is stalled, and stall_rounds consecutive stalled
+    # rounds end the research.  Per-round call counts are the MODEL's call
+    # (uncapped); every engine request carries its own per-request timeout.
     "speed": {"max_rounds": 1, "stall_rounds": 1},
     "balanced": {"max_rounds": 4, "stall_rounds": 2},
     "quality": {"max_rounds": 8, "stall_rounds": 2},
-    "goal": {"max_rounds": 16, "stall_rounds": 3},
+    "goal": {"max_rounds": 32, "stall_rounds": 3},
 }
 
 CLARIFY_MODES = ("quality", "goal")
