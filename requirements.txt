@@ -21,7 +21,16 @@ openai==3.20.0
 anthropic==1.9.0
 google-genai==2.25.0
 
+# zjsearch theme: the BM25 result reranker (searx/plugins/bm25_reranker.py)
+# -- Apache-2.0, numpy is its only runtime dependency
+bm25s==0.3.11
+
 # zjsearch theme: the web_crawler page reader's HTML -> Markdown converter
 # (searx/zjsearch/ai/capabilities/reader/) -- MIT, zero runtime deps; without it
 # the reader degrades to the built-in walker
 html-to-markdown==3.15.1
+
+# zjsearch theme: the MCP tool-server bridge (searx/zjsearch/ai/capabilities/mcp.py)
+# -- MIT; streamable-HTTP client over the shared network loop; without it the
+# mcp config degrades to silence
+mcp==2.2.0

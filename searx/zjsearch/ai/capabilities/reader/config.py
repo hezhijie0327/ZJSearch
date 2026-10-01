@@ -55,9 +55,11 @@ def enabled() -> bool:
 
 
 def configured() -> bool:
-    """True when the tool may register: ``enabled``, and ``base_url`` +
-    ``api_key`` both present."""
-    return enabled() and bool(base_url() and api_key(cfg()))
+    """True when the tool may register: ``enabled`` and ``base_url``
+    present.  The ``api_key`` is OPTIONAL -- a self-hosted Browserless on
+    the LAN runs auth-free (cloud deployments set the key or the
+    ``ZJSEARCH_READER_KEY`` env)."""
+    return enabled() and bool(base_url())
 
 
 def params() -> dict[str, t.Any]:

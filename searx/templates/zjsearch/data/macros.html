@@ -62,6 +62,9 @@ pipeline features without any Python changes. -#}
   {%- if zjs_ai.ai_search %}
   ,"ai_search": {"tk": {{ zjs_ai.ai_search.tk|tojson }}, "model": {{ zjs_ai.ai_search.model|tojson }} }
   {%- endif %}
+  {%- if zjs_ai.embedding %}
+  ,"embedding": {"tk": {{ zjs_ai.embedding.tk|tojson }}, "model": {{ zjs_ai.embedding.model|tojson }}, "dimensions": {{ zjs_ai.embedding.dimensions }} }
+  {%- endif %}
   {%- if ai_mode %}
   ,"ai_mode": true
   {%- endif %}

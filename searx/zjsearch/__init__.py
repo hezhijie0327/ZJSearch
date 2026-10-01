@@ -6,8 +6,8 @@ top-level ``searx.zjsearch_*`` modules:
 
 - :py:mod:`searx.zjsearch.stream` -- the streamed search pages (the boot
   shell flush + late page-data chunk).
-- :py:mod:`searx.zjsearch.ai` -- the AI endpoints (AI Overview, later AI
-  Search) on the shared :py:mod:`searx.zjsearch.ai.llm` transport layer.
+- :py:mod:`searx.zjsearch.ai` -- the AI endpoints (AI Overview, AI
+  Search) on the infra/framework/runtime stack.
 
 webapp.py keeps its single theme hook: it calls :py:func:`install` once at
 the end of the module, which chains the feature installs; nothing here is

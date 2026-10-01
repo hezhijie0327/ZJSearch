@@ -1,0 +1,460 @@
+# SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+"""AI Search: the ``POST /zjsearch/ai/search`` route.
+
+Thin by design (Vane's api.ts, Morphic's app/api/chat/route.ts): parse
+and authorize the request, run the pre-flight gates, assemble
+:py:func:`framework.loop.run` with its tools / executor / writer, and
+encode the timeline ops as NDJSON.  All the mechanics live in the
+sibling modules.  After the loop's ``settle``, only two LATE events may
+follow -- the related-questions fallback completion and the memory
+extraction -- both suppressed on an ``awaiting`` run.  A run that
+settles as an error BEFORE any content event becomes the plain-text 502
+(prime before streaming, so the status code is honest).
+"""
+
+import logging
+import math
+import re
+import typing as t
+
+import flask
+
+from searx.extended_types import sxng_request
+from searx.zjsearch.ai.capabilities import mcp, reader
+from searx.zjsearch.ai.capabilities.calculator import calculator_spec
+from searx.zjsearch.ai.capabilities.user_memory import extract_facts, parse_memories, user_memory_spec
+from searx.zjsearch.ai.capabilities.web_memory import parse_entries as parse_web_memory, web_memory_spec
+from searx.zjsearch.ai.framework import loop as engine
+from searx.zjsearch.ai.framework import wire
+from searx.zjsearch.ai.framework.fences import parse_fence_json
+from searx.zjsearch.ai.infra import config as llm_config
+from searx.zjsearch.ai.infra import http, jsongate
+from searx.zjsearch.ai.infra import sdk as sdk_registry
+from searx.zjsearch.ai.infra.embed import embed_texts
+from searx.zjsearch.ai.runtime.executor import Searches, round_progress
+from searx.zjsearch.ai.runtime.gates import (
+    clarify_gate,
+    related_questions,
+    research_gate,
+    sanitize_questions,
+    standalone_question,
+)
+from searx.zjsearch.ai.runtime.profile import CLARIFY_MODES, PLAN_MODES, budget, enabled, SEARCH_MODES
+from searx.zjsearch.ai.runtime.prompts import initial_messages, writer_messages
+from searx.zjsearch.ai.runtime.tools import (
+    ASK_TOOL,
+    ask_user_spec,
+    display_item,
+    page_spec,
+    task_write_spec,
+    tool_spec,
+)
+
+logger = logging.getLogger(__name__)
+
+_URL_RE = re.compile(r"https?://[^\s<>\"']+")
+
+_RERANK_ABOVE = 24000
+"""The feed size past which the writer's context overflow is likely (the
+cap sits at 40k): the relevance embedding runs only there -- a fitting
+feed keeps its chronological order and costs no embedding round trip."""
+
+_CONTENT_EVENTS = ("open", "think", "say", "answer", "calls", "call", "tasks", "sources", "ask", "gallery")
+"""The wire events that prove the upstream is alive: a ``settle`` before
+any of these is the 502 path (the stream died before its first token)."""
+
+
+def _cosine(vec_a: list[float], vec_b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(x * x for x in vec_a)) or 1.0
+    norm_b = math.sqrt(sum(x * x for x in vec_b)) or 1.0
+    return dot / (norm_a * norm_b)
+
+
+async def _relevance_order(question: str, feed: list[str]) -> list[int] | None:
+    """The feed blocks ranked by embedding cosine against the question --
+    the writer's fill order when the context would overflow (the cap then
+    keeps the MOST RELEVANT material instead of the newest).  ``None`` on
+    any skip: a fitting feed, the embedding feature off, an upstream
+    failure -- the chronological eviction stands, silently."""
+    blocks = [block for block in feed if block]
+    if len(blocks) < 2 or sum(len(block) for block in blocks) <= _RERANK_ABOVE:
+        return None
+    vectors = await embed_texts([question] + [block[:600] for block in blocks])
+    if not vectors or len(vectors) != len(blocks) + 1:
+        return None
+    probe = vectors[0]
+    order = sorted(range(len(blocks)), key=lambda i: -_cosine(vectors[i + 1], probe))
+    return order
+
+
+def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
+    """The mid-run ``ask_user`` tool arguments -> the ask event's payload
+    (the same sanitized shape the clarify gate emits); ``None`` when the
+    model asked an unusable question."""
+    value = jsongate.json_object_of(arguments) or {}
+    questions = sanitize_questions(value.get("questions"))
+    if not questions:
+        return None
+    return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
+
+
+def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
+    """AI Search: the researcher/writer split on the shared agent loop."""
+    cfg = llm_config.llm_cfg()
+    # every gate completion's token account lands here -- the settle's
+    # usage carries the sum under ``gates`` (the gates are real model
+    # calls and MUST NOT be dark matter in the run's account)
+    gate_usage: list[dict[str, t.Any]] = []
+    payload, q, _ctx = http.authorize(gate=enabled() and llm_config.configured(cfg))
+    # the client-owned thread identity (browser-stored conversation): logged
+    # for problem localization, never stored server-side -- the endpoint
+    # stays stateless
+    thread = str(payload.get("thread") or "").strip()[:64]
+    if thread:
+        logger.info("zjsearch_ai_search: thread %s", thread)
+    # follow-up thread: prior Q&A turns + the global [n] numbering base
+    raw_history = payload.get("history")
+    history: list[dict[str, str]] = []
+    if isinstance(raw_history, list):
+        for item in raw_history[:4]:
+            if isinstance(item, dict) and item.get("q") and item.get("a"):
+                history.append({"q": str(item["q"])[:300], "a": str(item["a"])[:2000]})
+    try:
+        sources_base = min(abs(int(payload.get("sources_base"))), 200)
+    except (TypeError, ValueError):
+        sources_base = 0
+    # the browser's research memory (the client recalls its PGlite source
+    # corpus before posting): WRITER-PHASE ONLY -- numbered after the live
+    # feed, never seeded into the researcher (ready-made material kills
+    # the live-search incentive).  The user-memory snapshot and the
+    # web-memory index (reader-cache heads) ride the same pre-send: the
+    # model searches them through their tools, saves flow back as events.
+    user_memories = parse_memories(payload.get("user_memories"))
+    web_memory_entries = parse_web_memory(payload.get("web_memory"))
+    past_sources: list[dict[str, str]] = []
+    raw_past = payload.get("history_sources")
+    if isinstance(raw_past, list):
+        for item in raw_past[:6]:
+            if isinstance(item, dict) and item.get("url"):
+                past_sources.append({"url": str(item["url"])[:500], "title": str(item.get("title") or "")[:200]})
+    mode = str(payload.get("mode") or "balanced").strip().lower()
+    if mode not in SEARCH_MODES:
+        mode = "balanced"
+    lang = http.answer_lang(payload)
+
+    raw_search_language = str(payload.get("search_language") or "").strip()
+    if raw_search_language.lower() in ("", "auto", "all"):
+        raw_search_language = ""
+    # the clarify round-trip: "ask" = the gate may fire (first run of a
+    # gated mode), "answered"/"skipped" = the user responded -- the run
+    # then researches with the confirmed direction (or without one)
+    clarify_state = str(payload.get("clarify_state") or "ask").strip().lower()
+    if clarify_state not in ("ask", "answered", "skipped"):
+        clarify_state = "ask"
+    clarifications = str(payload.get("clarifications") or "").strip()[:2000]
+    max_rounds = budget("max_rounds", mode, 2)
+    # the pre-flight gate (Vane's skipSearch, narrowed to our contract): a
+    # question carrying a URL always researches (the page read IS the
+    # research); everything else passes one small completion that skips
+    # research only for greetings, chat and writing tasks
+    research_needed = bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
+    # the clarify gate fires on the FIRST run of a gated mode only: a
+    # follow-up's history already disambiguates the direction
+    if research_needed and mode in CLARIFY_MODES and clarify_state == "ask" and not history:
+        gate = clarify_gate(cfg, q, lang, mode, gate_usage)
+        if gate:
+            stream = _Ndjson(_clarify_events(gate), cfg, q, lang, gate_usage)
+            return _respond(stream)
+    # the page reader rides only when the reader (zjsearch.reader) block is
+    # fully configured: an unconfigured reader simply leaves the tool
+    # unregistered
+    pages_on = reader.configured()
+    # the MCP bridge (zjsearch.mcp, streamable-HTTP servers): an
+    # unconfigured or package-less deployment registers nothing; a large
+    # surface switches to PROGRESSIVE DISCLOSURE (one discovery tool
+    # instead of every schema)
+    mcp_tools = mcp.tools_surface() if mcp.configured() and mcp.sdk_missing() is None else []
+    if not research_needed:
+        # the no-research run: the writer alone -- the zero-tool case of the
+        # shared loop (one streamed write turn whose prose IS the answer)
+        events = engine.run(cfg, writer_messages(q, lang, history, [], mode, None, False, sources_base, direct=True))
+        stream = _Ndjson(events, cfg, q, lang, gate_usage)
+        return _respond(stream)
+
+    # the structured tiers decompose the request through the living task
+    # list (the task card); every research run registers the mid-run
+    # ask_user escape hatch
+    register_tasks = mode in PLAN_MODES
+    research_q = (standalone_question(cfg, q, history, lang, gate_usage) if history else "") or q
+    state = Searches(
+        sxng_request.preferences,
+        list(sxng_request.user_plugins),
+        sources_base,
+        search_language=raw_search_language,
+        max_rounds=max_rounds,
+        user_memories=user_memories,
+        web_memory_entries=web_memory_entries,
+        lang=lang,
+        cfg=cfg,
+    )
+    past_ref: list[dict[str, t.Any]] = []
+
+    def assign_past_sources() -> list[dict[str, t.Any]]:
+        """Number the recalled past-research sources AFTER the live feed's
+        final [n] (idempotent: the pre-write sources event and the writer
+        prompt share one assignment)."""
+        if not past_sources:
+            return []
+        if not past_ref:
+            for i, item in enumerate(past_sources):
+                past_ref.append({**item, "n": state.next_n + i, "history": True})
+            state.next_n += len(past_sources)
+        return past_ref
+
+    async def write(halt: str | None) -> list[dict[str, t.Any]]:
+        return writer_messages(
+            research_q,
+            lang,
+            history,
+            state.feed,
+            mode,
+            halt,
+            state.round_no >= max_rounds,
+            sources_base,
+            galleries_on=bool(state.reg.gallery_pool),
+            past_sources=assign_past_sources(),
+            relevance=await _relevance_order(research_q, state.feed),
+        )
+
+    def gallery_validator(body: str) -> list[dict[str, t.Any]]:
+        """The zjs-images fence body -> validated gallery items: every URL
+        must be verbatim from the run's image registry (the writer's
+        prompt says never invent one; this is the enforcement)."""
+        value = parse_fence_json(body)
+        urls = value if isinstance(value, list) else []
+        items: list[dict[str, t.Any]] = []
+        for url in urls[:4]:
+            n = state.reg.gallery_pool.get(str(url or ""))
+            if n is not None:
+                items.append({"u": str(url), "n": n})
+        return items
+
+    events = engine.run(
+        cfg,
+        initial_messages(
+            research_q,
+            lang,
+            history,
+            sources_base,
+            mode,
+            max_rounds=max_rounds,
+            clarifications=clarifications if clarify_state == "answered" else "",
+            clarify_skipped=clarify_state == "skipped",
+            register_ask=True,
+            page_tool=pages_on,
+            task_tool=register_tasks,
+            user_memories=user_memories,
+        ),
+        tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec()]
+        + ([web_memory_spec()] if web_memory_entries else [])
+        + ([page_spec()] if pages_on else [])
+        + [ask_user_spec()]
+        + ([task_write_spec()] if register_tasks else [])
+        + mcp_tools,
+        executor=state.execute,
+        max_rounds=max_rounds,
+        round_progress=round_progress(state, budget("stall_rounds", mode, 2)),
+        ask_tool=ASK_TOOL,
+        ask_shape=_ask_shape,
+        display=lambda calls: [display_item(idx, call) for idx, call in enumerate(calls, 1)],
+        writer=write,
+        writer_sources=assign_past_sources,
+        gallery_validator=gallery_validator,
+    )
+    return _respond(_Ndjson(events, cfg, research_q, lang, gate_usage))
+
+
+def _respond(stream: "_Ndjson") -> flask.Response:
+    """Prime the stream (proving the upstream alive) and answer: a dead
+    upstream gets the plain-text 502 with its truncated reason."""
+    try:
+        stream.prime()
+    except _UpstreamDead as dead:
+        return http.upstream_error_response("error", str(dead))
+    return http.streaming_response(iter(stream), "application/x-ndjson")
+
+
+def _clarify_events(gate: dict[str, t.Any]) -> t.Iterator[dict[str, t.Any]]:
+    """The clarify-gate run: the ask event then the settle -- a run that
+    settles as ``awaiting`` (the user's answers travel on the next
+    request).  The SAME wire event set as every other run."""
+    yield {"e": "ask", **gate}
+    yield wire.settle("awaiting", halt="awaiting the user's direction")
+
+
+class _UpstreamDead(Exception):
+    """The run settled as an error before any content event: the route
+    maps this to the plain-text 502."""
+
+
+class _Ndjson:  # pylint: disable=too-few-public-methods
+    """The loop's timeline ops as NDJSON lines, with the LATE work after
+    the settle: the related-questions fallback completion (when the
+    writer skipped the in-stream fence) and the memory extraction -- both
+    suppressed on an ``awaiting`` run."""
+
+    def __init__(
+        self,
+        events: t.Iterator[dict[str, t.Any]],
+        cfg: dict[str, t.Any],
+        question: str,
+        lang: str,
+        gate_usage: list[dict[str, t.Any]],
+    ):
+        self.events = events
+        self.cfg = cfg
+        self.question = question
+        self.lang = lang
+        self.gate_usage = gate_usage
+        self.buffer: list[str] = []
+        self.rest: t.Iterator[str] | None = None
+        self.primed = False
+
+    def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
+        """The settle with the GATES' token account folded into its usage:
+        ``usage.gates = {input, output, calls}`` -- the client's meta row
+        renders the whole flow, gates included."""
+        usage = event.get("usage")
+        if self.gate_usage or isinstance(usage, dict):
+            usage = (
+                dict(usage)
+                if isinstance(usage, dict)
+                else {
+                    "input": 0,
+                    "output": 0,
+                    "thoughts": None,
+                    "cached": 0,
+                    "cache_write": 0,
+                }
+            )
+            usage["gates"] = {
+                "input": sum(int(g.get("input") or 0) for g in self.gate_usage),
+                "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
+                "calls": len(self.gate_usage),
+            }
+            event = {**event, "usage": usage}
+        return event
+
+    def prime(self) -> None:
+        """Pull events until the upstream proves alive (or dies): the
+        buffered lines replay first when the stream iterates."""
+        answer_parts: list[str] = []
+        awaiting = False
+        related_seen = False
+        for event in self.events:
+            kind = event.get("e")
+            if kind == "settle":
+                if str(event.get("status") or "") == "error":
+                    raise _UpstreamDead(str(event.get("halt") or "upstream returned an empty stream"))
+                self.buffer.append(wire.encode(self._merged_settle(event)))
+                self.rest = self._late("".join(answer_parts).strip(), awaiting, related_seen)
+                self.primed = True
+                return
+            if kind == "answer":
+                answer_parts.append(str(event.get("t") or ""))
+            elif kind == "related":
+                related_seen = True
+            elif kind == "ask":
+                awaiting = True
+            if kind in _CONTENT_EVENTS:
+                self.buffer.append(wire.encode(event))
+                self.rest = self._to_settle(answer_parts, awaiting, related_seen)
+                self.primed = True
+                return
+
+    def _to_settle(self, answer_parts: list[str], awaiting: bool, related_seen: bool) -> t.Iterator[str]:
+        """The events after the first content one, up to and including the
+        settle -- then the late work."""
+        settle_event: dict[str, t.Any] | None = None
+        for event in self.events:
+            kind = event.get("e")
+            if kind == "settle":
+                settle_event = event
+                break
+            if kind == "answer":
+                answer_parts.append(str(event.get("t") or ""))
+            if kind == "ask":
+                awaiting = True
+            if kind == "related":
+                related_seen = True
+            yield wire.encode(event)
+        if settle_event is None:
+            # the loop guarantees exactly one settle; a missing one is a
+            # protocol bug -- fail loudly rather than hang the client
+            raise _UpstreamDead("the run ended without a settle event")
+        yield wire.encode(self._merged_settle(settle_event))
+        yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)
+
+    def _late(self, answer: str, awaiting: bool, related_seen: bool) -> t.Iterator[str]:
+        """The LATE events after the settle: the related fallback and the
+        memory extraction (both suppressed on an awaiting run)."""
+        if awaiting or not answer:
+            return
+        if not related_seen:
+            # the post-settle fallback: the small completion generates the
+            # follow-up suggestions the writer's fence skipped (it can
+            # think for the better part of a minute -- that is why the
+            # fence is the fast path and this trails the settle)
+            try:
+                found = related_questions(self.cfg, self.question, answer, self.lang, self.gate_usage)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("zjsearch_ai_search: related fallback failed: %r", exc)
+                found = []
+            if found:
+                yield wire.encode({"e": "related", "items": found})
+        try:
+            facts = extract_facts(self.cfg, self.question, answer, self.gate_usage)
+            for fact in facts:
+                yield wire.encode({"e": "memory", "content": fact})
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch_ai_search: memory extraction failed: %r", exc)
+        if self.gate_usage:
+            # the trailing completions' spend: the absolute gates sum
+            # replaces the settle's bucket (idempotent -- the client sets
+            # it), so the WHOLE flow stays accounted
+            yield wire.encode({"e": "usage", "gates": self._gates_sum()})
+
+    def _gates_sum(self) -> dict[str, t.Any]:
+        return {
+            "input": sum(int(g.get("input") or 0) for g in self.gate_usage),
+            "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
+            "calls": len(self.gate_usage),
+        }
+
+    def __iter__(self) -> t.Iterator[str]:
+        if not self.primed:
+            self.prime()
+        yield from self.buffer
+        if self.rest is not None:
+            yield from self.rest
+
+
+def install(app: flask.Flask) -> None:
+    """Register the AI Search route; chained from the package install.
+    Stays off unless ``zjsearch.feature.ai_search.enabled`` and the shared
+    transport are fully configured."""
+    if not enabled():
+        return
+    if not llm_config.configured(llm_config.llm_cfg()):
+        logger.warning("zjsearch.feature.ai_search is enabled but the transport is missing -- AI search stays off")
+        return
+    package = sdk_registry.sdk_missing(llm_config.llm_cfg())
+    if package is not None:
+        logger.warning(
+            "zjsearch.feature.ai_search: the %r transport needs the %r package -- AI search stays off",
+            llm_config.endpoint(llm_config.llm_cfg())[0],
+            package,
+        )
+        return
+    app.add_url_rule("/zjsearch/ai/search", "zjsearch_ai_search", _search, methods=["POST"])

@@ -23,7 +23,7 @@ from searx.extended_types import sxng_request
 from searx.network.client import get_loop
 from searx.network.network import Network
 from searx.utils import gen_useragent
-from searx.zjsearch.ai import llm
+from searx.zjsearch.ai.infra import config as llm_config
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def _image_network() -> Network:
     choice); this one keeps the ``outgoing`` proxies / verify / Tor for
     remote endpoints and goes direct for loopback ones."""
     out = settings.get("outgoing", {})
-    remote = not llm.endpoint_is_local(str(llm.ai_cfg().get("base_url") or ""))
+    remote = not llm_config.endpoint_is_local(str(llm_config.llm_cfg().get("base_url") or ""))
     return Network(
         enable_http=True,
         verify=out.get("verify", True),
