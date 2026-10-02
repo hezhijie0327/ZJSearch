@@ -253,7 +253,7 @@ export function TagGraphView({
         node.y = Math.max(20, Math.min(LAYOUT_H - 20, node.y));
       }
       alpha = Math.max(0.12, alpha * 0.995);
-      if (!fitted && alpha <= 0.2) {
+      if (!fitted && alpha <= 0.45) {
         fitted = true;
         framesSinceFit = 0;
         fitToContent();
@@ -270,6 +270,15 @@ export function TagGraphView({
       const dpr = window.devicePixelRatio || 1;
       const cw = canvas.clientWidth || 700;
       const ch = canvas.clientHeight || 420;
+      // the buffer tracks CSS x dpr -- a fixed buffer only clears in its
+      // top-left corner and the stale remainder scales into every frame
+      // as ghost trails (shipped bug)
+      const bw = Math.round(cw * dpr);
+      const bh = Math.round(ch * dpr);
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh;
+      }
       const { panX, panY, zoom } = viewRef.current;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cw, ch);
@@ -508,10 +517,8 @@ export function TagGraphView({
         <div className="relative">
           <canvas
             className="block h-[420px] w-full touch-none"
-            height={840}
             ref={canvasRef}
             style={{ height: fullscreen ? "calc(100% - 45px)" : "420px", width: "100%" }}
-            width={2560}
           />
           {/* the locate panel: the content carrying the selected tag */}
           {selected ? (
