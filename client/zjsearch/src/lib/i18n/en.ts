@@ -380,6 +380,8 @@ export const EN = {
   ai_thinking: "Thinking",
   ai_figure: "Diagram",
   regenerate: "Regenerate",
+  download_md: "Download as Markdown",
+  print: "Print / Save as PDF",
   home: "Home",
   open_source: "Open source",
 

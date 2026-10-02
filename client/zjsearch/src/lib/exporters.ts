@@ -402,6 +402,30 @@ export function buildThreadMarkdown(threadId: string, title: string, runs: Markd
   return lines.join("\n");
 }
 
+/** One archived answer as markdown (the knowledge inspector's ⬇): the
+    same shape as a thread export's single run -- title, the answer, the
+    numbered source tail. */
+export function downloadAnswerMarkdown(
+  title: string,
+  markdown: string,
+  sources: Array<{ n: number; title: string; url: string }>,
+): void {
+  const safeTitle =
+    title
+      .replace(/[/\\:*?"<>|]+/g, "_")
+      .trim()
+      .slice(0, 64) || "overview";
+  const lines: string[] = [`# ${title}`, "", `_zjsearch · ${new Date().toLocaleString()}_`, ""];
+  lines.push(markdown.trim(), "");
+  if (sources.length > 0) {
+    lines.push("**Sources**", "");
+    for (const source of [...sources].sort((a, b) => a.n - b.n)) {
+      lines.push(`- [${source.n}] [${source.title || source.url}](${source.url})`);
+    }
+  }
+  downloadText(`zjsearch_${safeTitle}.md`, lines.join("\n"), EXPORT_MIME.md ?? "text/markdown");
+}
+
 /** Trigger a browser download for one generated text file. */
 function downloadText(filename: string, text: string, mime: string): void {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });

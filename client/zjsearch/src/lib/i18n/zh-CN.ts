@@ -378,6 +378,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_thinking: "思考过程",
   ai_figure: "图表",
   regenerate: "重新生成",
+  download_md: "下载 Markdown",
+  print: "打印 / 保存 PDF",
   home: "首页",
   open_source: "打开来源",
 

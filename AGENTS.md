@@ -845,10 +845,15 @@ section per question, the answer verbatim — gallery placeholders become
 their images' markdown figures — the run's sources at its foot) hosted on
 the last run's actions row.  PDF is the browser's own dialog, not a jsPDF
 dependency (CJK font embedding would torpedo the no-webfont budget): the
-📄 action mounts `PrintView`, which builds the print document (brand,
-question, rendered answer with the research box stripped, numbered sources
-at the tail; filename mirrors the MD export via `document.title`) and
-calls `window.print()` immediately.  `styles/print.css` is print-only by
+📄 action mounts `PrintView`, a thin wrapper over `lib/print.ts`'s
+`printDocument({title, fileTag, heading, source, sources})` -- the shared
+pipeline (wordmark, injected heading, cloned rendered content with chrome
+stripped, numbered sources at the tail, dark-mermaid light re-renders,
+filename via `document.title`) that the knowledge inspector's 📄 and the
+AI 概览 card's own 📄 reuse.  The 概览 card's actions row carries the same
+four icons as the thread (regenerate / copy / ⬇ `downloadAnswerMarkdown`
+/ 📄), and the knowledge inspector's header carries ⬇ 📄 left of the
+star -- one answer, one export shape (`exporters.downloadAnswerMarkdown`).  `styles/print.css` is print-only by
 construction (`@media print` + selectors that match nothing on screen) and
 PAPER IS ALWAYS LIGHT ON A PURE-WHITE GROUND: the color tokens are
 `@property`-registered, so `initial` restores the light palette from

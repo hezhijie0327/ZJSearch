@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   Database,
   ExternalLink,
+  FileDown,
+  FileText,
   Gauge,
   Layers,
   MemoryStick,
@@ -34,9 +36,11 @@ import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { readEmbedUsage } from "@/lib/embed.ts";
+import { downloadAnswerMarkdown } from "@/lib/exporters.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { KnowledgeItem, KnowledgeStats, MemoryRow, OverviewUsage, ThreadSummary } from "@/lib/knowledgeStore.ts";
+import { printDocument } from "@/lib/print.ts";
 import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 
 export function formatBytesLocal(bytes: number): string {
@@ -576,11 +580,54 @@ export function InspectorView({
         }));
   const usage: OverviewUsage | null =
     item.kind === "run" ? (extras?.usage ?? null) : ((item.meta?.usage as OverviewUsage | undefined) ?? null);
+  // the MD/PDF exports' source list (overview: the stored cited sources;
+  // research: the run's source_ref join)
+  const exportSources = sources.map((source) => ({
+    n: source.n,
+    netloc: source.host || source.url,
+    title: source.title || source.url,
+    url: source.url,
+  }));
+  const answerText = item.kind === "answer" ? item.body : (body ?? "");
+  const downloadMd = () => {
+    downloadAnswerMarkdown(item.title || item.url || t("knowledge_title"), answerText, exportSources);
+  };
+  const printCard = () => {
+    const card = bodyCardRef.current;
+    if (!card) {
+      return;
+    }
+    const heading = item.title || item.url || t("knowledge_title");
+    printDocument({ heading, source: card, sources: exportSources, title: heading });
+  };
+  const bodyCardRef = useRef<HTMLDivElement>(null);
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between gap-3">
         <BackRow onClick={onBack} />
         <div className="flex items-center gap-1">
+          {item.kind === "answer" || item.kind === "run" ? (
+            <>
+              <button
+                aria-label={t("download_md")}
+                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={downloadMd}
+                title={t("download_md")}
+                type="button"
+              >
+                <FileDown aria-hidden="true" className="size-4" />
+              </button>
+              <button
+                aria-label={t("print")}
+                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={printCard}
+                title={t("print")}
+                type="button"
+              >
+                <FileText aria-hidden="true" className="size-4" />
+              </button>
+            </>
+          ) : null}
           <RowActions
             onPin={(on) => onPin(item, on)}
             onRemove={() => onRemove(item)}
@@ -623,7 +670,7 @@ export function InspectorView({
         </div>
       </div>
       <Card>
-        <div className="px-5 py-4 sm:px-6">
+        <div className="px-5 py-4 sm:px-6" ref={bodyCardRef}>
           <p className="line-clamp-2 text-sm font-semibold text-ink" dir="auto">
             {item.title || item.url}
           </p>
