@@ -151,12 +151,11 @@ function SourceCard({ source }: { source: AiSearchSource }) {
                   </span>
                 ) : source.pastRefs ? (
                   <span
-                    aria-label={t("knowledge_source_refs", { n: String(source.pastRefs) })}
-                    className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-[11px] font-medium leading-none tabular-nums text-ink-3 ring-1 ring-line"
-                    role="img"
+                    className="inline-flex items-center gap-0.5"
                     title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
                   >
-                    ×{source.pastRefs}
+                    <History aria-hidden="true" className="size-3" />
+                    {source.pastRefs}×
                   </span>
                 ) : null}
               </span>
