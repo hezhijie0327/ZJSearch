@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Compass } from "lucide-react";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { Link, Shell } from "@/components/Shell.tsx";
 import { OverlayProvider } from "@/features/overlay/OverlayProvider.tsx";
-import { I18nContext, useT } from "@/lib/i18n.ts";
+import { setDateFormatLocale } from "@/lib/format.ts";
+import { I18nContext, themeLocaleTag, useT } from "@/lib/i18n.ts";
 import { RouterProvider, useRouter } from "@/lib/router.tsx";
 import type { ClientSettings } from "@/lib/settings.ts";
 import { SettingsContext } from "@/lib/settings.ts";
@@ -160,6 +161,11 @@ function renderOverlayPanel(data: AnyPageData, hint?: string) {
 
 export function App({ initialData, settings }: { initialData: AnyPageData | null; settings: ClientSettings }) {
   const locale = initialData?.globals.locale ?? "en";
+  // the dates speak the UI's language (formatDate's formatters rebuild
+  // once per change)
+  useEffect(() => {
+    setDateFormatLocale(themeLocaleTag(locale));
+  }, [locale]);
   return (
     <SettingsContext.Provider value={settings}>
       <I18nContext.Provider value={locale}>

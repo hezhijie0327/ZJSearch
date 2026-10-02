@@ -329,13 +329,6 @@ export function MemorySection({
 }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState("");
-  const addRef = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (adding) {
-      addRef.current?.focus();
-    }
-  }, [adding]);
   if (memories === null) {
     return null;
   }
@@ -353,50 +346,23 @@ export function MemorySection({
       <div className="mb-3 flex items-center">
         <button
           className="ms-auto flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-          onClick={() => {
-            setDraft("");
-            setAdding(true);
-          }}
+          onClick={() => setAdding(true)}
           type="button"
         >
           {t("knowledge_memory_add")}
         </button>
       </div>
       {adding ? (
-        <div className="mb-3 rounded-xl bg-surface-2/40 px-3 py-2.5">
-          <textarea
-            className="min-h-16 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none"
-            dir="auto"
-            maxLength={300}
-            onChange={(event) => setDraft(event.target.value)}
+        <div className="mb-3">
+          <MemoryComposer
+            onCancel={() => setAdding(false)}
+            onSubmit={(text) => {
+              onAdd(text);
+              setAdding(false);
+            }}
             placeholder={t("knowledge_memory_add")}
-            ref={addRef}
-            value={draft}
+            submitLabel={t("knowledge_memory_save")}
           />
-          <div className="mt-1 flex items-center justify-end gap-1">
-            <button
-              aria-label={t("ai_delete_cancel")}
-              className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-              onClick={() => setAdding(false)}
-              title={t("ai_delete_cancel")}
-              type="button"
-            >
-              <X aria-hidden="true" className="size-3.5" />
-            </button>
-            <button
-              aria-label={t("knowledge_memory_save")}
-              className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent disabled:opacity-40"
-              disabled={!draft.trim()}
-              onClick={() => {
-                onAdd(draft.trim());
-                setAdding(false);
-              }}
-              title={t("knowledge_memory_save")}
-              type="button"
-            >
-              <Check aria-hidden="true" className="size-3.5" />
-            </button>
-          </div>
         </div>
       ) : null}
       {memories.length === 0 ? (
@@ -429,6 +395,66 @@ export function MemorySection({
   );
 }
 
+/** The memory composer, shared by add + edit: a bordered card with a
+    borderless textarea and the theme's pill buttons (the confirm
+    dialog's button language -- icon-only toggles read as chrome, not
+    actions). */
+function MemoryComposer({
+  initial = "",
+  onCancel,
+  onSubmit,
+  placeholder,
+  submitLabel,
+}: {
+  initial?: string;
+  onCancel: () => void;
+  onSubmit: (text: string) => void;
+  placeholder?: string;
+  submitLabel: string;
+}) {
+  const t = useT();
+  const [draft, setDraft] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <textarea
+        className="min-h-20 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-3"
+        dir="auto"
+        maxLength={300}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder={placeholder}
+        ref={ref}
+        value={draft}
+      />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button
+          className="rounded-full px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          onClick={onCancel}
+          type="button"
+        >
+          {t("ai_delete_cancel")}
+        </button>
+        <button
+          className="rounded-full bg-accent-strong px-4 py-1.5 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover disabled:opacity-40"
+          disabled={!draft.trim()}
+          onClick={() => {
+            const text = draft.trim();
+            if (text) {
+              onSubmit(text);
+            }
+          }}
+          type="button"
+        >
+          {submitLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function MemoryCard({
   memory,
   onForget,
@@ -441,53 +467,63 @@ function MemoryCard({
   const t = useT();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const draftRef = useRef<HTMLTextAreaElement>(null);
+  const draftRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (editing) {
       draftRef.current?.focus();
+      draftRef.current?.select();
     }
   }, [editing]);
   if (editing) {
     return (
-      <div className="rounded-xl bg-surface-2/40 px-2 py-2.5">
-        <textarea
-          className="min-h-16 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none"
+      <div className="flex w-full items-center gap-1.5">
+        <input
+          className="h-7 min-w-0 flex-1 rounded-lg border border-accent bg-transparent px-2 text-[13px] text-ink outline-none"
           dir="auto"
           maxLength={300}
           onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            // the row is the editor: Enter saves, Escape cancels (and the
+            // drawer must not read either)
+            event.stopPropagation();
+            if (event.key === "Escape") {
+              setEditing(false);
+            }
+            if (event.key === "Enter" && draft.trim()) {
+              onSave(memory.id, draft);
+              setEditing(false);
+            }
+          }}
           ref={draftRef}
           value={draft}
         />
-        <div className="mt-1 flex items-center justify-end gap-1">
-          <button
-            aria-label={t("ai_delete_cancel")}
-            className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-            onClick={() => setEditing(false)}
-            title={t("ai_delete_cancel")}
-            type="button"
-          >
-            <X aria-hidden="true" className="size-3.5" />
-          </button>
-          <button
-            aria-label={t("knowledge_memory_save")}
-            className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent disabled:opacity-40"
-            disabled={!draft.trim()}
-            onClick={() => {
-              onSave(memory.id, draft);
-              setEditing(false);
-            }}
-            title={t("knowledge_memory_save")}
-            type="button"
-          >
-            <Check aria-hidden="true" className="size-3.5" />
-          </button>
-        </div>
+        <button
+          aria-label={t("knowledge_memory_save")}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-accent transition-colors hover:bg-surface-2 disabled:opacity-40"
+          disabled={!draft.trim()}
+          onClick={() => {
+            onSave(memory.id, draft);
+            setEditing(false);
+          }}
+          title={t("knowledge_memory_save")}
+          type="button"
+        >
+          <Check aria-hidden="true" className="size-4" />
+        </button>
+        <button
+          aria-label={t("ai_delete_cancel")}
+          className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2"
+          onClick={() => setEditing(false)}
+          title={t("ai_delete_cancel")}
+          type="button"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
       </div>
     );
   }
   return (
-    <div className="group flex items-start gap-2.5 rounded-xl px-2 py-2.5 transition-colors hover:bg-surface-2">
-      <MemoryStick aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
+    <div className="group flex items-start rounded-xl px-2 py-2.5 transition-colors hover:bg-surface-2">
       <p className="min-w-0 flex-1 break-words text-[13px] leading-relaxed text-ink" dir="auto">
         {memory.content}
       </p>

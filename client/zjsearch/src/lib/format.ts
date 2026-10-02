@@ -4,10 +4,22 @@
 
 const DAY_MS = 86_400_000;
 
-// the formatters are locale-less (runtime default) — build them once instead
-// of per result meta line (a full page renders ~100 meta lines)
-const relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-const absoluteFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
+// the formatters rebuild once per LOCALE CHANGE (not per call — a full
+// page renders ~100 meta lines); the i18n runtime pins the locale on
+// boot, so the dates speak the UI's language instead of the browser's
+let dateLocale: string | undefined;
+let relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+let absoluteFormat = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
+
+/** Called by the i18n runtime on boot + locale changes. */
+export function setDateFormatLocale(locale: string): void {
+  if (locale === dateLocale) {
+    return;
+  }
+  dateLocale = locale;
+  relativeFormat = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  absoluteFormat = new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric" });
+}
 
 /** Relative date for recent timestamps, locale date otherwise.
     Future timestamps (sloppy engine metadata) get the absolute date too. */
