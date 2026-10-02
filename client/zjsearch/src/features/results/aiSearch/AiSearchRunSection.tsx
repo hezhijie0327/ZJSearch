@@ -1028,7 +1028,7 @@ function AiSearchRunSectionImpl({
             narrow screens (the run hides the slot entirely when it can
             never get content: a settled no-source run) */}
         {run.sources.length > 0 || streaming ? (
-          <aside className="mt-5 w-full lg:sticky lg:top-4 lg:mt-0 lg:w-72 lg:shrink-0 xl:w-80">
+          <aside className="mt-5 w-full lg:sticky lg:top-4 lg:mt-0 lg:max-h-[calc(100vh-2rem)] lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-80">
             {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
             {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
             {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
