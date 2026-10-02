@@ -28,8 +28,10 @@
     - run_sources -- the (run, source) link with the run's global [n],
       the link kind and whether the settled answer cited it.
 
-    Boot: open (with both extensions registered), CREATE EXTENSION and
-    CREATE TABLE (idempotent).  A PRE-v2 database (the old blob-shaped
+    Boot: open (with the four extensions registered), CREATE EXTENSION
+    and CREATE TABLE (idempotent) -- all on the main thread against the
+    IndexedDB store; a worker/OPFS tier was built and removed, see the
+    comment in boot().  A PRE-v2 database (the old blob-shaped
     `threads.data` column) is dropped wholesale -- no migration: the
     store's identity is the browser's own research memory and the v1
     data never left the dev browsers.  Embedding columns are
@@ -83,17 +85,32 @@ export async function resetDatabase(): Promise<void> {
 }
 
 async function boot(): Promise<Pg> {
-  const [{ PGlite }, { vector }, { pg_textsearch }] = await Promise.all([
+  const [{ PGlite }, { vector }, { pg_textsearch }, { live }, { pg_trgm }] = await Promise.all([
     import("@electric-sql/pglite"),
     import("@electric-sql/pglite-pgvector"),
     import("@electric-sql/pglite-pg_textsearch"),
+    import("@electric-sql/pglite/live"),
+    import("@electric-sql/pglite/contrib/pg_trgm"),
   ]);
+  // The main-thread shape, deliberately: a PGlite WORKER (WASM off the
+  // main thread) was built and removed -- in the ZCode in-app webview
+  // the module-worker script request never completes after a reload
+  // (the boot wedged until a timeout, then silently fell back here
+  // anyway), and WebKit lingers the election Web Locks of dead pages.
+  // OPFS persistence was tried in the same round and removed for the
+  // same reason (its sync access handles HANG there instead of
+  // rejecting).  Both are documented in the boot history; re-introduce
+  // only with a verified environment matrix.
   const db = new PGlite({
     dataDir: "idb://zjs-ai",
-    extensions: { vector, pg_textsearch },
+    extensions: { vector, pg_textsearch, live, pg_trgm },
   });
   await db.query("CREATE EXTENSION IF NOT EXISTS vector");
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_textsearch");
+  // pg_trgm: the BM25 zero-signal fallback's word_similarity() (no GIN
+  // index yet -- the fallback seq-scans, and these tables are hundreds of
+  // rows, not millions; add gin_trgm_ops indexes when that changes)
+  await db.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
   // the legacy drop runs FIRST: a pre-v2 table can predate whole columns
   // (an era-1 threads without search_text) and would break the DDL below
   // before the detection ever runs
@@ -194,6 +211,19 @@ async function boot(): Promise<Pg> {
     last_ran double precision NOT NULL
   )`);
   await db.query("CREATE INDEX IF NOT EXISTS searches_bm25 ON searches USING bm25 (q) WITH (text_config = 'english')");
+  // the ANN indexes behind the semantic recall -- partial (rows with NULL
+  // embeddings stay out, and every recall query filters them anyway), so
+  // the `ORDER BY embedding <=> $1` shape plans onto the hnsw scan once
+  // the corpus grows past the exact scan's sweet spot
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS threads_hnsw ON threads USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+  );
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS sources_hnsw ON sources USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+  );
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS reader_hnsw ON reader_cache USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+  );
   return db;
 }
 
@@ -229,13 +259,42 @@ async function dropLegacyV1(db: Pg): Promise<void> {
 
 /** The keyword text behind a BM25 index: the CJK-aware pre-segmentation
     (each han character its own token, latin/digit runs stay words) --
-    shared by every searchable table.  Defined here (not lib/tokenize)
-    because pg.ts is the single bootstrapper and the store imports this
-    module anyway. */
+    shared by every searchable table.  Latin accents fold FIRST (café →
+    cafe) on both the write and the query side -- they pass through this
+    one function, so the two sides can never drift.  The fold lives here
+    and NOT in the SQL unaccent dictionary on purpose: pg_textsearch's
+    bm25 only accepts its built-in text search configurations (a custom
+    unaccent config fails CREATE INDEX with "text search configuration
+    does not exist", probed against pglite 0.5.8), and the segmentation
+    is JS anyway -- an SQL fold could never sit in front of it.
+    Defined here (not lib/tokenize) because pg.ts is the single
+    bootstrapper and the store imports this module anyway. */
 const SEGMENT_RE = /[a-z0-9_]+|[\u2e80-\u9fff\uf900-\ufaff\ufe30-\ufe4f]/g;
 
+/** NFD-decomposable accents strip with the combining marks; the map
+    catches what NFD leaves alone (compatibility forms and letters
+    without a canonical decomposition). */
+const FOLD_MAP: Record<string, string> = {
+  ß: "ss",
+  æ: "ae",
+  œ: "oe",
+  ø: "o",
+  đ: "d",
+  ł: "l",
+  ð: "d",
+  þ: "th",
+};
+const FOLD_MARKS = /[\u0300-\u036f]/g;
+
+function foldAccents(text: string): string {
+  return text
+    .replace(/[ßæœøđłðþ]/g, (ch) => FOLD_MAP[ch] ?? ch)
+    .normalize("NFD")
+    .replace(FOLD_MARKS, "");
+}
+
 export function segmentKeywords(...parts: string[]): string {
-  return (parts.filter(Boolean).join(" ").toLowerCase().match(SEGMENT_RE) ?? []).join(" ");
+  return (foldAccents(parts.filter(Boolean).join(" ").toLowerCase()).match(SEGMENT_RE) ?? []).join(" ");
 }
 
 function segmentOf(...parts: string[]): string {

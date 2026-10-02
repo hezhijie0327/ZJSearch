@@ -24,15 +24,17 @@ import {
   deleteSource,
   deleteThread,
   getReaderPage,
-  listMemories,
-  listReaderPages,
-  listRecentSources,
   listSearchHistory,
   listThreads,
   type RecallHit,
   recallSources,
+  type StoreSubscription,
   searchReaderPages,
   searchThreads,
+  subscribeMirror,
+  subscribeReaderPages,
+  subscribeRecentSources,
+  subscribeSearchHistory,
   type ThreadSearchMode,
   threadUrl,
 } from "@/lib/knowledgeStore.ts";
@@ -173,10 +175,25 @@ export function KnowledgeDrawer({
     if (open) {
       setQuery("");
       setHits(null);
-      setThreads(listThreads());
       setTab("threads");
     }
   }, [open]);
+  // the store's synchronous surfaces (threads + memories) push their own
+  // writes: the registration callback seeds the state (hydration-safe --
+  // late subscribers receive the filled mirror), a run settling BEHIND
+  // the open drawer, a memory extraction, a delete -- each lands here
+  useEffect(() => {
+    if (!open || closing) {
+      return;
+    }
+    const subscription = subscribeMirror((snapshot) => {
+      setThreads(snapshot.threads);
+      setMemories(snapshot.memories);
+    });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [open, closing]);
   // the threads tab: debounced keyword/semantic search
   useEffect(() => {
     if (!open || closing || tab !== "threads") {
@@ -200,17 +217,53 @@ export function KnowledgeDrawer({
       window.clearTimeout(timer);
     };
   }, [query, mode, open, closing, tab]);
-  // the sources tab: recent lists on entry, debounced search while typing
+  // the sources tab: a live recents listing when idle (the sync queue's
+  // writes arrive as they land), debounced search while typing
   useEffect(() => {
     if (!open || closing || tab !== "sources") {
       return;
     }
-    const load = () => {
-      const trimmed = query.trim();
-      void Promise.all([
-        trimmed ? recallSources(trimmed, 20) : listRecentSources(30),
-        trimmed ? searchReaderPages(trimmed, 12) : listReaderPages(20),
-      ])
+    if (!query.trim()) {
+      let alive = true;
+      const subs: StoreSubscription[] = [];
+      const own = (sub: StoreSubscription) => {
+        if (alive) {
+          subs.push(sub);
+        } else {
+          sub.unsubscribe();
+        }
+      };
+      subscribeRecentSources(30, (rows) => {
+        if (alive) {
+          setCorpusSources(rows);
+        }
+      })
+        .then(own)
+        .catch(() => {
+          if (alive) {
+            setCorpusSources([]);
+          }
+        });
+      subscribeReaderPages(20, (rows) => {
+        if (alive) {
+          setCorpusPages(rows);
+        }
+      })
+        .then(own)
+        .catch(() => {
+          if (alive) {
+            setCorpusPages([]);
+          }
+        });
+      return () => {
+        alive = false;
+        for (const sub of subs) {
+          sub.unsubscribe();
+        }
+      };
+    }
+    const timer = window.setTimeout(() => {
+      void Promise.all([recallSources(query.trim(), 20), searchReaderPages(query.trim(), 12)])
         .then(([sources, pages]) => {
           setCorpusSources(sources);
           setCorpusPages(pages.map((page) => ({ ...page, fetchedAt: Date.now() })));
@@ -219,30 +272,45 @@ export function KnowledgeDrawer({
           setCorpusSources([]);
           setCorpusPages([]);
         });
-    };
-    load();
-    const trimmed = query.trim();
-    if (!trimmed) {
-      return;
-    }
-    const timer = window.setTimeout(load, 300);
+    }, 300);
     return () => {
       window.clearTimeout(timer);
     };
   }, [query, open, closing, tab]);
-  // the memory tab: hydrated on entry, removals reflect immediately
-  useEffect(() => {
-    if (!open || closing || tab !== "memory") {
-      return;
-    }
-    setMemories(listMemories());
-  }, [open, closing, tab]);
-  // the search-history tab: recent on entry, debounced filter while typing
+  // the memory tab renders from the mirror subscription above (seeded on
+  // open, refreshed on every store write)
+  // the search-history tab: a live recents listing when idle, debounced
+  // filter while typing
   useEffect(() => {
     if (!open || closing || tab !== "searches") {
       return;
     }
-    const load = () => {
+    if (!query.trim()) {
+      let alive = true;
+      let live: StoreSubscription | null = null;
+      subscribeSearchHistory(30, (rows) => {
+        if (alive) {
+          setSearchHistory(rows);
+        }
+      })
+        .then((sub) => {
+          if (alive) {
+            live = sub;
+          } else {
+            sub.unsubscribe();
+          }
+        })
+        .catch(() => {
+          if (alive) {
+            setSearchHistory([]);
+          }
+        });
+      return () => {
+        alive = false;
+        live?.unsubscribe();
+      };
+    }
+    const timer = window.setTimeout(() => {
       listSearchHistory(query, 30)
         .then((rows) => {
           setSearchHistory(rows);
@@ -250,13 +318,7 @@ export function KnowledgeDrawer({
         .catch(() => {
           setSearchHistory([]);
         });
-    };
-    load();
-    const trimmed = query.trim();
-    if (!trimmed) {
-      return;
-    }
-    const timer = window.setTimeout(load, 300);
+    }, 300);
     return () => {
       window.clearTimeout(timer);
     };
@@ -264,10 +326,8 @@ export function KnowledgeDrawer({
   if (!render) {
     return null;
   }
-  const refresh = (): void => setThreads(listThreads());
   const remove = (id: string): void => {
-    deleteThread(id);
-    refresh();
+    deleteThread(id); // the mirror subscription re-renders the list
   };
   const navigate = (id: string): void => {
     if (id !== currentId) {
@@ -399,8 +459,7 @@ export function KnowledgeDrawer({
                   setPending({
                     label: memory.content,
                     run: () => {
-                      deleteMemory(memory.id);
-                      setMemories(listMemories());
+                      deleteMemory(memory.id); // the mirror subscription re-renders
                     },
                   });
                 }}

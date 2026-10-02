@@ -36,7 +36,16 @@
 
 import { citedSourceNumbers } from "@/lib/citations.ts";
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
-import { configurePgDimensions, linkSource, pg, pgQuery, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
+import {
+  configurePgDimensions,
+  linkSource,
+  type Pg,
+  pg,
+  pgQuery,
+  segmentKeywords,
+  toVectorLiteral,
+  urlHash,
+} from "@/lib/pg.ts";
 
 export { segmentKeywords, urlHash };
 
@@ -160,6 +169,10 @@ async function hydrate(): Promise<void> {
     memories.push({ id: row.id, content: row.content, updated: Number(row.updated) });
   }
   mirrorSort();
+  // a drawer opened while the boot was still hydrating the mirror (the
+  // worker boot widened that window) subscribed to an EMPTY snapshot --
+  // wake it now that the mirror is filled
+  emitMirror();
 }
 
 // ---------------------------------------------------- ordered persistence
@@ -307,6 +320,158 @@ function scheduleSync(): void {
     });
 }
 
+// ------------------------------------------------------------ live subscriptions
+
+/** One active subscription (a live query or a mirror listener). */
+export interface StoreSubscription {
+  unsubscribe(): void;
+}
+
+/** A store write pushed to the mirror subscribers: fresh snapshots of the
+    two SYNCHRONOUS surfaces (the SQL-backed ones subscribe via live
+    queries instead -- the database pushes those itself). */
+export interface StoreSnapshot {
+  threads: AiThreadMeta[];
+  memories: Array<{ id: string; content: string; updated: number }>;
+}
+
+type MirrorListener = (snapshot: StoreSnapshot) => void;
+const mirrorListeners = new Set<MirrorListener>();
+/** Every live query handed out -- resetAll cancels these before the
+    session closes (an unsubscribe after close is caught, but cancelling
+    first keeps the teardown honest). */
+const liveSubscriptions = new Set<StoreSubscription>();
+
+/** One live query over the session's PGlite: the live plugin wraps the
+    SQL in a temp view, tracks its base tables and re-runs the query on
+    every write to them -- the callback receives the full result set
+    (initial results included, immediately at registration). */
+async function liveQuery<T>(sql: string, params: unknown[], onUpdate: (rows: T[]) => void): Promise<StoreSubscription> {
+  const db = (await pg()) as Pg & { live: import("@electric-sql/pglite/live").LiveNamespace };
+  const handle = await db.live.query<T>(sql, params, (results) => onUpdate((results.rows ?? []) as T[]));
+  const subscription: StoreSubscription = {
+    unsubscribe: () => {
+      liveSubscriptions.delete(subscription);
+      handle.unsubscribe().catch(() => {
+        /* the session may already be gone (a reset won the race) */
+      });
+    },
+  };
+  liveSubscriptions.add(subscription);
+  return subscription;
+}
+
+function emitMirror(): void {
+  const snapshot: StoreSnapshot = { threads: [...index], memories: [...memories] };
+  for (const listener of mirrorListeners) {
+    try {
+      listener(snapshot);
+    } catch {
+      /* one bad listener never blocks the rest */
+    }
+  }
+}
+
+/** Subscribe to the store's SYNCHRONOUS writes (threads + memories --
+    the in-memory mirror is their source of truth, so a live SQL query
+    would lag them).  Live-query semantics: the listener fires ONCE at
+    registration with the current snapshot (so a subscriber never seeds
+    from a stale read) and once per write after that. */
+export function subscribeMirror(listener: MirrorListener): StoreSubscription {
+  mirrorListeners.add(listener);
+  listener({ threads: [...index], memories: [...memories] });
+  return {
+    unsubscribe: () => {
+      mirrorListeners.delete(listener);
+    },
+  };
+}
+
+function toRecallHit(row: {
+  url: string;
+  title: string;
+  host: string;
+  ref_count: number;
+  cited_count: number;
+}): RecallHit {
+  return {
+    url: row.url,
+    title: row.title,
+    host: row.host,
+    refCount: Number(row.ref_count) || 0,
+    citedCount: Number(row.cited_count) || 0,
+    score: 0,
+  };
+}
+
+/** The corpus' recent sources as a LIVE listing (the 来源 tab's default
+    view): the drawer re-renders as the sync queue lands rows -- no
+    staleness window between opening the drawer and a run settling. */
+export function subscribeRecentSources(
+  limit: number,
+  onUpdate: (hits: RecallHit[]) => void,
+): Promise<StoreSubscription> {
+  return liveQuery<Parameters<typeof toRecallHit>[0] & { last_seen: number }>(
+    "SELECT url, title, host, ref_count, cited_count, last_seen FROM sources ORDER BY last_seen DESC LIMIT $1",
+    [limit],
+    (rows) => onUpdate(rows.map((row) => ({ ...toRecallHit(row), score: Number(row.last_seen) || 0 }))),
+  );
+}
+
+/** The reader cache's recent pages as a LIVE listing. */
+export function subscribeReaderPages(
+  limit: number,
+  onUpdate: (pages: Array<{ url: string; title: string; chars: number; fetchedAt: number }>) => void,
+): Promise<StoreSubscription> {
+  return liveQuery<{ url: string; title: string; chars: number; fetched_at: number }>(
+    "SELECT url, title, chars, fetched_at FROM reader_cache ORDER BY fetched_at DESC LIMIT $1",
+    [limit],
+    (rows) =>
+      onUpdate(
+        rows.map((row) => ({
+          url: row.url,
+          title: row.title,
+          chars: Number(row.chars) || 0,
+          fetchedAt: Number(row.fetched_at) || 0,
+        })),
+      ),
+  );
+}
+
+/** The search history as a LIVE listing (the unfiltered default view). */
+export function subscribeSearchHistory(
+  limit: number,
+  onUpdate: (rows: SearchHistoryEntry[]) => void,
+): Promise<StoreSubscription> {
+  return liveQuery<SearchHistoryEntry>(
+    'SELECT q, category, results, times, last_ran AS "lastRan" FROM searches ORDER BY last_ran DESC LIMIT $1',
+    [limit],
+    (rows) =>
+      onUpdate(
+        rows.map((row) => ({
+          q: row.q,
+          category: row.category,
+          results: Number(row.results) || 0,
+          times: Number(row.times) || 1,
+          lastRan: Number(row.lastRan),
+        })),
+      ),
+  );
+}
+
+// ---------------------------------------------------------- trigram fallback
+
+/** The pg_trgm rescue behind a zero-signal result: BM25 needs one exact
+    token to match, so a typo'd query ("gihub") drops every row and the
+    honest empty state reads as lost data.  Each lexical search below
+    runs the same rescue when its BM25 pass found nothing: score the
+    query against the best window of the RAW (unsegmented) text column
+    via word_similarity(), gate at 0.3.  A seq scan is fine at browser
+    scale (hundreds of rows; no gin_trgm_ops index yet), and the rescue
+    only ever fires when lexical+semantic found nothing -- it widens
+    recall, it never re-ranks a real result. */
+const TRIGRAM_THRESHOLD = 0.3;
+
 // ------------------------------------------------------------ public API
 
 /** A fresh conversation identity (the url's uuid). */
@@ -357,6 +522,7 @@ export async function loadThread(id: string): Promise<StoredRun[] | null> {
         searchTexts.set(id, row.search_text);
       }
       mirrorSort();
+      emitMirror();
     }
   }
   return list;
@@ -380,6 +546,7 @@ export function saveThread(id: string, title: string, runs: StoredRun[], searchT
   }
   dirty.add(id);
   scheduleSync();
+  emitMirror();
 }
 
 /** The search mode of the history drawer: `keyword` = BM25 over the
@@ -448,17 +615,26 @@ export async function searchThreads(
     }));
   }
   // keyword: the BM25 index over the pre-segmented text -- a zero score
-  // means "no term matches" and drops the row
+  // means "no term matches" and drops the row; zero ROWS trigger the
+  // trigram rescue (a typo must not read as an empty history)
   const keywords = segmentKeywords(trimmed);
   if (!keywords) {
     return [];
   }
-  const rows = await pgQuery<{ id: string; title: string; created: number; updated: number; score: number }>(
+  let rows = await pgQuery<{ id: string; title: string; created: number; updated: number; score: number }>(
     `SELECT id, title, created, updated, (search_text <@> to_bm25query($1, 'threads_bm25')) AS score
      FROM threads WHERE (search_text <@> to_bm25query($1, 'threads_bm25')) <> 0
      ORDER BY score DESC LIMIT $2`,
     [keywords, limit],
   );
+  if (rows.length === 0 && trimmed.length >= 2) {
+    rows = await pgQuery<{ id: string; title: string; created: number; updated: number; score: number }>(
+      `SELECT id, title, created, updated, word_similarity($1, title) AS score
+       FROM threads WHERE word_similarity($1, title) >= ${TRIGRAM_THRESHOLD}
+       ORDER BY score DESC LIMIT $2`,
+      [trimmed, limit],
+    );
+  }
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
@@ -610,6 +786,16 @@ export async function recallSources(query: string, limit = 6): Promise<RecallHit
   };
   bump(keywordHits, 1.0);
   bump(semanticHits, 1.0);
+  if (scores.size === 0 && trimmed.length >= 2) {
+    // both passes empty -- the trigram rescue over the raw titles
+    const rescued = await pgQuery<SourceRow>(
+      `SELECT url, title, host, ref_count, cited_count, word_similarity($1, title) AS score
+       FROM sources WHERE word_similarity($1, title) >= ${TRIGRAM_THRESHOLD}
+       ORDER BY score DESC LIMIT $2`,
+      [trimmed, limit],
+    );
+    bump(rescued, 1.0);
+  }
   return [...scores.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -663,6 +849,10 @@ export function resetAll(): void {
   queue = queue
     .then(async () => {
       await ready;
+      // the live queries first: their teardown must not race the close
+      for (const subscription of [...liveSubscriptions]) {
+        subscription.unsubscribe();
+      }
       const { resetDatabase } = await import("@/lib/pg.ts");
       await resetDatabase();
     })
@@ -685,6 +875,7 @@ export function clearAllThreads(): void {
   sourceTotal = 0;
   memories.length = 0;
   dirty.clear();
+  emitMirror();
   queue = queue
     .then(async () => {
       await ready;
@@ -707,6 +898,7 @@ export function deleteThread(id: string): void {
   searchTexts.delete(id);
   embedded.delete(id);
   dirty.delete(id);
+  emitMirror();
   queue = queue
     .then(async () => {
       await ready;
@@ -749,6 +941,7 @@ export function saveMemory(content: string): void {
   const now = Date.now();
   const id = newMemoryId();
   memories.push({ id, content: text, updated: now });
+  emitMirror();
   queue = queue
     .then(async () => {
       await ready;
@@ -765,6 +958,7 @@ export function saveMemory(content: string): void {
 
 export function deleteMemory(id: string): void {
   memories = memories.filter((memory) => memory.id !== id);
+  emitMirror();
   queue = queue
     .then(async () => {
       await ready;
@@ -792,14 +986,7 @@ export async function listRecentSources(limit = 40): Promise<RecallHit[]> {
   }>("SELECT url, title, host, ref_count, cited_count, last_seen FROM sources ORDER BY last_seen DESC LIMIT $1", [
     limit,
   ]);
-  return rows.map((row) => ({
-    url: row.url,
-    title: row.title,
-    host: row.host,
-    refCount: Number(row.ref_count) || 0,
-    citedCount: Number(row.cited_count) || 0,
-    score: Number(row.last_seen) || 0,
-  }));
+  return rows.map((row) => ({ ...toRecallHit(row), score: Number(row.last_seen) || 0 }));
 }
 
 /** Hybrid (BM25 + pgvector, weighted RRF) search over the reader cache
@@ -860,6 +1047,15 @@ export async function searchReaderPages(
   };
   bump(keywordRows, 1.0);
   bump(semanticRows, 1.0);
+  if (scores.size === 0 && trimmed.length >= 2) {
+    const rescued = await pgQuery<Row>(
+      `SELECT url, title, chars, substr(markdown, 1, 1500) AS text, word_similarity($1, title) AS score
+       FROM reader_cache WHERE word_similarity($1, title) >= ${TRIGRAM_THRESHOLD}
+       ORDER BY score DESC LIMIT $2`,
+      [trimmed, limit],
+    );
+    bump(rescued, 1.0);
+  }
   return [...scores.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -956,22 +1152,37 @@ export interface SearchHistoryEntry {
   lastRan: number;
 }
 
-/** The search history (keyword-filtered, newest first).  Async (SQL). */
+/** The search history (keyword-filtered, newest first; a BM25 miss
+    rescues through pg_trgm's word_similarity over the raw queries).
+    The camelCase alias is QUOTED -- PGlite folds unquoted aliases to
+    lowercase and the row key would read `lastran`.  Async (SQL). */
 export async function listSearchHistory(query: string, limit = 30): Promise<SearchHistoryEntry[]> {
   await ready;
   const trimmed = query.trim();
   const keywords = segmentKeywords(trimmed);
-  const rows = keywords
-    ? await pgQuery<SearchHistoryEntry>(
-        `SELECT q, category, results, times, last_ran AS lastRan
-         FROM searches WHERE (q <@> to_bm25query($1, 'searches_bm25')) <> 0
-         ORDER BY last_ran DESC LIMIT $2`,
-        [keywords, limit],
-      )
-    : await pgQuery<SearchHistoryEntry>(
-        "SELECT q, category, results, times, last_ran AS lastRan FROM searches ORDER BY last_ran DESC LIMIT $1",
-        [limit],
+  let rows: SearchHistoryEntry[];
+  if (keywords) {
+    rows = await pgQuery<SearchHistoryEntry>(
+      `SELECT q, category, results, times, last_ran AS "lastRan"
+       FROM searches WHERE (q <@> to_bm25query($1, 'searches_bm25')) <> 0
+       ORDER BY last_ran DESC LIMIT $2`,
+      [keywords, limit],
+    );
+    if (rows.length === 0 && trimmed.length >= 2) {
+      rows = await pgQuery<SearchHistoryEntry>(
+        `SELECT q, category, results, times, last_ran AS "lastRan",
+                word_similarity($1, q) AS score
+         FROM searches WHERE word_similarity($1, q) >= ${TRIGRAM_THRESHOLD}
+         ORDER BY score DESC, last_ran DESC LIMIT $2`,
+        [trimmed, limit],
       );
+    }
+  } else {
+    rows = await pgQuery<SearchHistoryEntry>(
+      'SELECT q, category, results, times, last_ran AS "lastRan" FROM searches ORDER BY last_ran DESC LIMIT $1',
+      [limit],
+    );
+  }
   return rows.map((row) => ({
     q: row.q,
     category: row.category,
