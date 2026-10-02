@@ -203,7 +203,7 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
         // the page height never moves with the run's source count
         <div
           aria-label={t("ai_search_sources")}
-          className="mt-3 max-h-[17rem] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] lg:mt-2 lg:max-h-[25.5rem] lg:pe-1"
+          className="mt-3 grid grid-cols-2 gap-2 lg:mt-2 lg:flex lg:flex-col"
           role="region"
         >
           <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-col">
