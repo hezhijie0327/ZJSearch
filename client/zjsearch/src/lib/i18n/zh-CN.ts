@@ -263,7 +263,6 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_graph: "图谱",
   knowledge_graph_filter: "按此标签过滤",
   knowledge_graph_items: "含此标签的内容",
-  knowledge_graph_drag: "点击标签查看关联 · 双击过滤 · 滚轮缩放 · 拖拽平移",
   knowledge_graph_search: "搜索标签…",
   knowledge_graph_empty: "标签随研究积累后出现在这里。",
   knowledge_graph_hint: "点击标签即可过滤——它的邻居是下一跳。",
