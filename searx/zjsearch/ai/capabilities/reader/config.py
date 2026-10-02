@@ -64,9 +64,23 @@ def configured() -> bool:
 
 def params() -> dict[str, t.Any]:
     """The ``zjsearch.reader.params`` block -- the provider's OWN request
-    parameters (``blockAds``, ``launch``, ...), merged 1:1 over the
-    structural body fields (the openai-transport ``params`` pattern)."""
+    BODY properties (``gotoOptions``, ``waitForTimeout``,
+    ``rejectResourceTypes``, ...), merged 1:1 over the structural body
+    fields (the openai-transport ``params`` pattern).  Launch parameters
+    (Browserless' ``stealth`` / ``blockAds`` / ``launch``) do NOT belong
+    here -- they ride the URL query string, see :func:`query`."""
     raw = cfg().get("params")
+    return raw if isinstance(raw, dict) else {}
+
+
+def query() -> dict[str, t.Any]:
+    """The ``zjsearch.reader.query`` block -- the provider's LAUNCH
+    parameters, merged into the request URL's query string next to
+    ``token`` (Browserless v2: ``stealth`` / ``blockAds`` / ``launch`` /
+    ``proxy`` configure the BROWSER LAUNCH and ride the query string;
+    putting them in the body trips the schema's "must NOT have additional
+    properties")."""
+    raw = cfg().get("query")
     return raw if isinstance(raw, dict) else {}
 
 

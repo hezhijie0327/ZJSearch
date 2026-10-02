@@ -11,6 +11,7 @@ the model as the tool result (a dead end it is taught to move on from).
 import asyncio
 import concurrent.futures
 import ipaddress
+import json
 import logging
 import re
 import typing as t
@@ -27,6 +28,7 @@ from searx.zjsearch.ai.capabilities.reader.config import (
     base_url,
     cfg,
     params,
+    query,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,6 +97,64 @@ def _error_snippet(text: str) -> str:
     return plain[:200] or "no reason given"
 
 
+_PARAMS_400_WARNED = False
+"""One-time flag: the provider rejected the params block (its /content
+schema rejects properties this build does not know -- observed with
+blockAds/launch on a strict Browserless).  The degrade retry below must
+not warn per read."""
+
+
+def _query_params() -> dict[str, t.Any]:
+    """The request's query string: the token + the deployment's launch
+    parameters.  Scalar values pass through (``blockAds: true`` ->
+    ``blockAds=true``, lowercased per the manual's shape); a dict/list
+    value is the launch-JSON form (``launch: {stealth: true}`` ->
+    ``launch={"stealth": true}``, URL-encoded by the network layer)."""
+    out: dict[str, t.Any] = {"token": api_key(cfg())}
+    for key, value in query().items():
+        if isinstance(value, bool):
+            out[str(key)] = str(value).lower()
+        elif isinstance(value, (dict, list)):
+            out[str(key)] = json.dumps(value)
+        else:
+            out[str(key)] = value
+    return out
+
+
+def _post_render(body: dict[str, t.Any]) -> t.Any:
+    """One POST to the render endpoint: the shared-loop bridge (the page
+    reader's sync caller runs on a worker thread), no network-layer raise
+    -- status codes are THIS module's message to the model.  Connection
+    failures and the wall clock become PageReadError."""
+    future = asyncio.run_coroutine_threadsafe(
+        (get_network(READER_NETWORK) or get_network()).request(
+            "POST",
+            f"{base_url()}/content",
+            # the token + the deployment's LAUNCH parameters ride the query
+            # string (Browserless v2: stealth/blockAds/launch configure the
+            # browser launch -- in the body they trip the schema's
+            # "must NOT have additional properties")
+            params=_query_params(),
+            json=body,
+            headers={"Content-Type": "application/json"},
+            timeout=FETCH_TIMEOUT,
+            raise_for_httperror=False,
+        ),
+        get_loop(),
+    )
+    try:
+        return future.result(timeout=80.0)
+    except concurrent.futures.TimeoutError as exc:
+        # the wall-clock budget died waiting: cancel the coroutine so a
+        # hung endpoint cannot leak its connection on the shared loop
+        future.cancel()
+        raise PageReadError("page reader timed out") from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        # the network layer re-raises whatever its client dialect raised
+        # (curl_cffi / httpx connection failures) -- one line for the model
+        raise PageReadError(f"page reader unreachable: {type(exc).__name__}: {exc}") from exc
+
+
 def rendered_html(url: str) -> str:
     """The rendered HTML of one URL through the provider's render
     endpoint (Browserless v2 ``POST /content`` today; the instance's
@@ -110,32 +170,24 @@ def rendered_html(url: str) -> str:
         "waitForTimeout": SETTLE_MS,
         "rejectResourceTypes": list(REJECT_RESOURCE_TYPES),
     }
-    body.update(params())
-    future = asyncio.run_coroutine_threadsafe(
-        (get_network(READER_NETWORK) or get_network()).request(
-            "POST",
-            f"{base_url()}/content",
-            params={"token": api_key(cfg())},
-            json=body,
-            headers={"Content-Type": "application/json"},
-            timeout=FETCH_TIMEOUT,
-            # status codes are THIS module's message to the model (a 4xx/5xx
-            # body carries the actual reason) -- no network-layer raise
-            raise_for_httperror=False,
-        ),
-        get_loop(),
-    )
-    try:
-        response = future.result(timeout=80.0)
-    except concurrent.futures.TimeoutError as exc:
-        # the wall-clock budget died waiting: cancel the coroutine so a
-        # hung endpoint cannot leak its connection on the shared loop
-        future.cancel()
-        raise PageReadError("page reader timed out") from exc
-    except Exception as exc:  # pylint: disable=broad-except
-        # the network layer re-raises whatever its client dialect raised
-        # (curl_cffi / httpx connection failures) -- one line for the model
-        raise PageReadError(f"page reader unreachable: {type(exc).__name__}: {exc}") from exc
+    params_block = params()
+    body.update(params_block)
+    response = _post_render(body)
+    if response.status_code == 400 and params_block:
+        # the provider's schema rejected a params property (builds differ
+        # -- blockAds/launch on a strict Browserless answer "must NOT have
+        # additional properties"): degrade ONCE to the structural body --
+        # every read failing would blind the whole web_reader tool, the
+        # extras are optimisations, not requirements
+        global _PARAMS_400_WARNED  # pylint: disable=global-statement
+        if not _PARAMS_400_WARNED:
+            _PARAMS_400_WARNED = True
+            logger.warning(
+                "zjsearch reader: the provider rejected the params block"
+                " (HTTP 400) -- retrying reads with the structural body only;"
+                " check zjsearch.reader.params against this provider build"
+            )
+        response = _post_render({k: v for k, v in body.items() if k not in params_block})
     if response.status_code != 200:
         raise PageReadError(f"page reader HTTP {response.status_code}: {_error_snippet(response.text)}")
     return response.text

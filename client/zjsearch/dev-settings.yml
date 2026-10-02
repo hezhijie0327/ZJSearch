@@ -338,7 +338,19 @@ zjsearch:
     # api_key: ""                # or the ZJSEARCH_READER_KEY env
     # max_chars: 20000           # UNSET = NO cap -- the whole readable
     #                            # text goes to the model; set to cap
-    # -- params: the provider's OWN request parameters, pass-through 1:1
+    # -- query: the provider's LAUNCH parameters -- they ride the POST
+    # -- URL's query string next to token (Browserless v2's stealth /
+    # -- blockAds / launch configure the BROWSER LAUNCH; in the BODY they
+    # -- trip the schema: "must NOT have additional properties")
+    query:
+      blockAds: true
+      # launch: the launch-JSON form -- dict/list values serialize to
+      # launch={"stealth":true} automatically.  NOTE: THIS build answers
+      # HTTP 500 on stealth launches (the self-hosted chromium lacks the
+      # plugin) -- keep off unless your provider supports it.
+      # launch:
+      #   stealth: true
+    # -- params: the provider's OWN request BODY properties, pass-through 1:1
     # -- into the render body.  EVERY structural field is overridable
     # -- here (gotoOptions / waitForTimeout / rejectResourceTypes too --
     # -- a key replaces the WHOLE value); url stays the tool's argument.
@@ -350,9 +362,6 @@ zjsearch:
     #   rejectResourceTypes: [image, media, font]   # default also
     #     rejects stylesheet (it gates the load event) -- drop entries
     #     to re-enable a type on a site that misbehaves without it
-    params:
-      # ad-block render -- promo noise never reaches the extraction
-      blockAds: true
-      # stealth launch -- lower bot-walls on protected pages
-      launch:
-        stealth: true
+    # params:
+    #   blockAds: true        # WRONG SHAPE for launch params -- they go
+    #                          # in `query` above
