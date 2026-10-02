@@ -246,6 +246,7 @@ export const EN = {
   knowledge_usage_cache_write: "Cache write",
   knowledge_admin_usage_title: "AI usage",
   knowledge_usage_calls: "Calls",
+  knowledge_usage_embedding: "Embedding",
   knowledge_admin_embed_usage: "Embedding totals",
   knowledge_memory_add: "Add memory",
   knowledge_memory_save: "Save",

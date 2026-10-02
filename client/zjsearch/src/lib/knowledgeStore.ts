@@ -951,7 +951,7 @@ export async function itemsByTag(tag: string, limit = 20): Promise<KnowledgeItem
   const rows = await pgQuery<Record<string, unknown>>(
     `SELECT ${ITEM_COLUMNS} FROM knowledge
      WHERE kind IN ('run', 'answer', 'source', 'document', 'memory')
-       AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(tags) AS t WHERE t = $1)
+       AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(tags) = 'array' THEN tags ELSE '[]'::jsonb END) AS t WHERE t = $1)
      ORDER BY updated DESC LIMIT $2`,
     [tag, limit],
   );
