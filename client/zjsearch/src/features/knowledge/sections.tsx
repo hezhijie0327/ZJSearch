@@ -443,7 +443,16 @@ export function Inspector({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
             {!isDocument ? (
-              <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
+              item.body ? (
+                <>
+                  <pre className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink-2">
+                    {item.body}
+                  </pre>
+                  <p className="mt-3 text-xs text-ink-3">{t("knowledge_inspector_not_read")}</p>
+                </>
+              ) : (
+                <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
+              )
             ) : body === null ? (
               <p className="text-[13px] text-ink-3">…</p>
             ) : body === "" ? (

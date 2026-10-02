@@ -113,6 +113,9 @@ export interface AiSearchSource {
   category?: string;
   /** web_reader read this page in full (the card's read-in-full badge) */
   crawled?: boolean;
+  /** the result's snippet from the SearXNG result payload -- the source's
+      knowledge-projection body (uncrawled sources stay searchable) */
+  content?: string;
   /** recalled from the browser's research memory (the writer-phase
       injection) -- the card's history badge; NOT re-verified this run */
   history?: boolean;
@@ -552,6 +555,7 @@ export function applyEvent(
           img: String(item.img ?? "") || undefined,
           category: String(item.category ?? "") || undefined,
           crawled: Boolean(item.crawled),
+          content: String(item.content ?? "") || undefined,
           history: Boolean(item.history),
           // the cross-session badge: how many PAST runs referenced this
           // url, captured at the pre-run recall (never the run's own

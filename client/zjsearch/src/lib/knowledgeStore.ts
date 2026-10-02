@@ -232,6 +232,8 @@ export interface RunSnapshot {
     favicon?: string;
     img?: string;
     category?: string;
+    /** the SearXNG result snippet -- an uncrawled source's searchable body */
+    content?: string;
   }>;
   tasks?: Array<{ title?: string; status?: string }>;
   /** the user's answered clarify text ("" = skipped) */
@@ -393,12 +395,14 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       if ((inserted ?? []).length === 0) {
         continue; // this run already counted this source
       }
+      const snippet = String(source.content ?? "").slice(0, 500);
       const sourceTags = JSON.stringify([]);
       await pgQuery(
-        `INSERT INTO knowledge (id, kind, url_hash, url, host, title, meta, refs, cited, tags, search_text, created, updated, occurred_at)
-         VALUES ($1, 'source', $2, $3, $4, $5, '{}'::jsonb, 1, $6, $7::jsonb, $8, $9, $9, $9)
-         ON CONFLICT (id) DO UPDATE SET refs = knowledge.refs + 1, cited = knowledge.cited + $6,
+        `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, refs, cited, tags, search_text, created, updated, occurred_at)
+         VALUES ($1, 'source', $2, $3, $4, $5, $6, '{}'::jsonb, 1, $7, $8::jsonb, $9, $10, $10, $10)
+         ON CONFLICT (id) DO UPDATE SET refs = knowledge.refs + 1, cited = knowledge.cited + $7,
            title = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title ELSE knowledge.title END,
+           body = CASE WHEN EXCLUDED.body <> '' THEN EXCLUDED.body ELSE knowledge.body END,
            meta = CASE WHEN EXCLUDED.meta <> '{}'::jsonb THEN EXCLUDED.meta ELSE knowledge.meta END,
            updated = EXCLUDED.updated`,
         [
@@ -407,9 +411,10 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           String(source.url),
           host,
           title.slice(0, 300),
+          snippet,
           cited ? 1 : 0,
           sourceTags,
-          segmentKeywords(title, host).slice(0, 4000),
+          segmentKeywords(title, host, snippet).slice(0, 4000),
           now,
         ],
       );

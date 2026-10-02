@@ -115,6 +115,7 @@ def build_search_feed(
                         "netloc": netloc,
                         "favicon": str(item.get("favicon") or ""),
                         "img": img,
+                        "content": str(item.get("content_text") or "")[:500],
                         "pretty_url": str(item.get("pretty_url") or ""),
                         "published_date": str(item.get("published_date") or ""),
                     }
@@ -135,6 +136,7 @@ def build_search_feed(
                 "favicon": str(item.get("favicon") or ""),
                 "img": img,
                 "category": str(item.get("category") or ""),
+                "content": str(item.get("content_text") or "")[:500],
                 "pretty_url": str(item.get("pretty_url") or ""),
                 "published_date": str(item.get("published_date") or ""),
             }
