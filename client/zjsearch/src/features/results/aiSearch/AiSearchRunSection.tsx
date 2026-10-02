@@ -121,33 +121,14 @@ function CallContent({ call }: { call: AiSearchCall }) {
   const t = useT();
   const copyToast = useCopyToast();
   const text = call.text ?? "";
-  const long = text.length > 900;
-  const [full, setFull] = useState(false);
+  // NO progressive disclosure: the pane is the row's point and it scrolls
+  // INTERNALLY (max-h-96) -- a preview-then-expand second fold is friction
+  // the internal scroll already solves
   return (
     <div className="group relative mt-1">
-      <div
-        className={`relative ${READ_PANE} ${
-          full ? "max-h-96 overflow-y-auto overscroll-contain" : long ? "max-h-40 overflow-hidden" : ""
-        }`}
-        dir="auto"
-      >
+      <div className={`relative ${READ_PANE} max-h-96 overflow-y-auto overscroll-contain`} dir="auto">
         {text}
-        {!full && long ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 rounded-b-lg bg-gradient-to-t from-surface-2/50 to-transparent" />
-        ) : null}
       </div>
-      {!full && long ? (
-        <button
-          className="mt-1 inline-flex items-center gap-1 text-xs text-accent transition-colors hover:text-accent-hover"
-          onClick={() => {
-            setFull(true);
-          }}
-          type="button"
-        >
-          <ChevronDown aria-hidden="true" className="size-3" />
-          {t("ai_content_expand")}
-        </button>
-      ) : null}
       <div className="absolute end-2 top-2 flex gap-0.5">
         {call.url ? (
           <a

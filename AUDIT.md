@@ -405,6 +405,44 @@ rules and the shared-token inventory from AGENTS.md, covering:
    asserts over `spine.build_messages` / `runtime.prompts.initial_messages`
    / the tool spec in `runtime/tools.py`.
 
+## 7.1 Round record — 2026-10 (post-multimodal-deferred full sweep)
+
+Scope: the AI-stack additions (ranking cascade, learnings, continue,
+schema v4, reader contract) + a real-user UI pass over every AI/knowledge
+surface. Highlights that must not regress (the full fix list is in git:
+`e4299d9` backend, the frontend polish commit the same day):
+
+- **Reader launch parameters ride the QUERY string** (Browserless v2
+  manual): body launch params 400'd EVERY read ("must NOT have
+  additional properties" — not a timeout; read the log line, not the
+  vibe). Regression: one URL-question AI run — the reader rows must
+  settle with char counts, zero 400s.
+- **Dedup keys describe the search AS EXECUTED** (`-site:` prefix,
+  category + time_range ride): regression — empty `time_range:` search
+  then the unfiltered retry must BOTH run (the second must not settle
+  duplicate).
+- **The client live-fold accepts LATE events after the settle**
+  (related/memory/tags/usage) — memory saves were silently lost live.
+  Regression: a researched run's 记忆 tab gains the extracted facts
+  WITHOUT a reload.
+- **THINK vs CONTENT**: reasoning streams render on READ_PANE's boxed
+  ground. Regression: visual — the timeline's think block is visibly
+  boxed vs the plain answer.
+- **The clarify modal carries the full dialog contract** (focus trap +
+  Escape = skip + fading scrim). Regression: keyboard-only — Tab stays
+  in the card, Escape resumes the run.
+- **web_reader rows never fold** (the pane is scroll-capped); failed
+  tool rows wear CircleAlert (X = dismiss only); regenerate is
+  RefreshCw on BOTH answer surfaces.
+- **Model-usage card**: LLM row + ONE merged row (嵌入输入/嵌入调用/
+  重排输入/重排调用, 嵌入 first); score endpoints are input-only so the
+  label is 输入, never "Tokens".
+- Audit-methodology additions: settle-path checks (startRun's
+  streaming row + the stale-run sweep), wire-LATE-event coverage, the
+  gallery-whitelist-mirrors-feed invariant, and the icon-language sweep
+  (same concept = same icon; X = dismiss only; sizes on the 12/14/18/20
+  tiers).
+
 ## 8. Known environment traps
 
 - `pnpm run audit` needs a Chromium browser (`ChromeNotInstalledError`) —

@@ -599,6 +599,20 @@ Type scale — one size per text role:
 Weights: `font-extrabold` brand only, `font-semibold` headings,
 `font-medium` emphasis/selected states; body stays regular.
 
+THINK vs CONTENT (the AI timeline's one visual rule): machine-produced
+material — reasoning streams, web_reader reading panes, MCP payloads,
+raw-args debug — sits on the boxed machine-voice ground (`READ_PANE` /
+`HOVER_CHIP` in `lib/styles.ts`: surface-2/50 rounded, 12px ink-3/ink-2);
+the ANSWER sits on the plain ground at 14px `text-ink`.  A settled
+web_reader row renders its pane UNCONDITIONALLY (scroll-capped at
+max-h-40 — the fold was friction, the content is the row's point).
+In-card action ghosts are the 28px/14px `CHIP_BTN` tier (`ICON_BTN`'s
+36px stays chrome-level); hover-revealed corner chips must ALSO reveal
+on `focus-within` (keyboard users tab to invisible controls otherwise).
+Every modal carries the full dialog contract (`useDialogFocus` +
+`aria-modal` + Escape semantics + a fading scrim) — the clarify card
+blocks the run and learned this the hard way.
+
 Motion & disclosure:
 
 - JS-toggled collapse/expand goes through `components/Collapse.tsx`
@@ -961,14 +975,31 @@ tools freely (searches, page reads, the calculator).
 FAILURE IS RETRYABLE: the dedup registry marks queries/pages at
 COMPLETION, never at plan time — a query whose engines errored and a
 page whose read failed stay re-runnable (an executed query — empty or
-not — is honestly remembered; only an errored one is not).  An
-unproductive round (gathered work, zero new sources) appends a
-change-the-angle note to the round's tool results BEFORE the stall
-detector fires — Jina's diary discipline: `stall_rounds: 2` modes get
-one warning then the halt, goal's 3 get two.  Pure bookkeeping rounds
-(plan writes, learnings, memory saves) are NEITHER progress NOR stall.
-The researcher never sees the stall halt itself — that note (`STALL_NOTE`)
-stays the writer's honesty context.
+not — is honestly remembered; only an errored one is not).  The search
+dedup key describes the search AS EXECUTED: excludes wear their
+`-site:` operator (a role swap is a different search) and
+category/time_range ride along — the prompt's own recovery recipe
+("a filtered search came back empty: retry without the filter") must
+never settle as a duplicate.  An unproductive round (gathered work,
+zero new sources) appends a change-the-angle note to the round's tool
+results BEFORE the stall detector fires — Jina's diary discipline:
+`stall_rounds: 2` modes get one warning then the halt, goal's 3 get
+two.  Pure bookkeeping rounds (plan writes, learnings, memory saves)
+are NEITHER progress NOR stall.  The researcher never sees the stall
+halt itself — that note (`STALL_NOTE`) stays the writer's honesty
+context.  A settlement generator guards everything after its future
+resolves: one malformed result degrades THAT call to an error row, the
+round's remaining calls still settle.
+
+THE READER'S PROVIDER CONTRACT (Browserless v2 manual): LAUNCH
+parameters (`stealth`/`blockAds`/`launch`) ride the POST URL's query
+string — `zjsearch.reader.query` (dict/list values serialize to the
+launch-JSON form, `launch={"stealth":true}`) — while BODY properties
+(`gotoOptions`/`waitForTimeout`/`rejectResourceTypes`) belong to
+`zjsearch.reader.params`; launch params in the body trip the schema's
+"must NOT have additional properties" (which 400'd EVERY read once).
+On a 400 the reader retries once without the NON-structural params
+extras and lets a still-400 fail loudly.
 
 THE FINDINGS LEDGER (`learnings` tool, dzhng's learnings as a
 first-class surface): the researcher records what the sources
@@ -991,6 +1022,11 @@ a server session — `startRun` persists the run row from run start, the
 numbering continues (`sources_base`), and the failed run's findings
 travel as the confirmed `<clarified>` direction — the researcher
 resumes the gaps instead of restarting.  The server stays stateless.
+A stale-run sweep (2h silent + "streaming", once per session at the
+first directory read) corrects rows whose tab died mid-research; the
+client live-fold accepts the wire's LATE events (related/memory/tags/
+usage) AFTER the settle — memory saves persist live, tags park before
+settleRun; everything else post-settle stays dropped.
 
 ## The human-in-the-loop doctrine (ask_user / clarify)
 
