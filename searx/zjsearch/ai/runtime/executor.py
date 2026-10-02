@@ -293,7 +293,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # -- settle the row honestly instead of letting it fall
                 # through to the web_search branch's empty-query error
                 feeds[wire_id - 1] = (
-                    "error: the ask_user tool must be the ONLY call of its turn" " -- ask again alone in the next turn."
+                    "error: the ask_user tool must be the ONLY call of its turn -- ask again alone in the next turn."
                 )
                 yield ("call", {"call": wire_id, "status": "error", "q": ""})
                 continue

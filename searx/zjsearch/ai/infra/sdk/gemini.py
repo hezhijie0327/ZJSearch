@@ -287,10 +287,12 @@ class GeminiSdk:
         )
         return str(getattr(response, "text", "") or ""), usage_meta
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
         """One embeddings batch in input order (the column width rides the
         ``params.output_dimensionality`` key -- infra.embed owns the width
-        resolution)."""
+        resolution).  The SDK's embed_content response carries NO token
+        usage -- only the enterprise ``billable_character_count``, passed
+        through when present."""
         from google.genai import types  # pylint: disable=import-outside-toplevel
 
         client = clients.gemini_client(self.cfg, self.base, family=self.family)
@@ -304,7 +306,9 @@ class GeminiSdk:
             config=types.EmbedContentConfig(**conf),
         )
         # batch embed_content returns the embeddings in input order
-        return [list(item.values or []) for item in response.embeddings or []]
+        chars = getattr(getattr(response, "metadata", None), "billable_character_count", None)
+        meta = {"chars": chars} if chars else None
+        return [list(item.values or []) for item in response.embeddings or []], meta
 
 
 def factory(  # pylint: disable=unused-argument

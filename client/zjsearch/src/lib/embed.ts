@@ -46,7 +46,11 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
     return null;
   }
   try {
-    const result = await fetchJson<{ embeddings?: number[][] }>("/zjsearch/ai/embed", {
+    const result = await fetchJson<{
+      embeddings?: number[][];
+      model?: string;
+      usage?: { input?: number; chars?: number } | null;
+    }>("/zjsearch/ai/embed", {
       body: JSON.stringify({ tk: config.token, texts }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -55,8 +59,56 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
     if (!Array.isArray(embeddings) || embeddings.length !== texts.length) {
       return null;
     }
+    recordEmbedUsage(result.model ?? "", result.usage);
     return embeddings;
   } catch {
     return null;
   }
+}
+
+// ── the embedding usage totals (localStorage: the calls never land in the
+// knowledge table, so there is nothing to aggregate from the store) ──
+export interface EmbedUsageTotals {
+  model: string;
+  input: number;
+  chars: number;
+  calls: number;
+}
+
+const EMBED_USAGE_KEY = "zjs-embed-usage";
+
+function recordEmbedUsage(model: string, usage: { input?: number; chars?: number } | null | undefined): void {
+  if (!usage || (!usage.input && !usage.chars)) {
+    return;
+  }
+  try {
+    const prev = readEmbedUsage();
+    const next: EmbedUsageTotals = {
+      model: model || prev.model,
+      input: prev.input + (usage.input ?? 0),
+      chars: prev.chars + (usage.chars ?? 0),
+      calls: prev.calls + 1,
+    };
+    localStorage.setItem(EMBED_USAGE_KEY, JSON.stringify(next));
+  } catch {
+    /* storage unavailable -- the stats are best-effort */
+  }
+}
+
+export function readEmbedUsage(): EmbedUsageTotals {
+  try {
+    const raw = localStorage.getItem(EMBED_USAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<EmbedUsageTotals>;
+      return {
+        model: String(parsed.model ?? ""),
+        input: Number(parsed.input) || 0,
+        chars: Number(parsed.chars) || 0,
+        calls: Number(parsed.calls) || 0,
+      };
+    }
+  } catch {
+    /* fall through to the zero totals */
+  }
+  return { model: "", input: 0, chars: 0, calls: 0 };
 }

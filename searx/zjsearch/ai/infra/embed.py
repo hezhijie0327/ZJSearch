@@ -128,16 +128,18 @@ def cosine(vec_a: list[float], vec_b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-async def _embed(texts: list[str]) -> list[list[float]]:
+async def _embed(texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
     """One batch through the family's SDK surface, bound to the embedding
     key (resolved into ``api_key`` -- the factories' env fallback is the
-    CHAT transport's key) and the ``embedding`` cache family."""
+    CHAT transport's key) and the ``embedding`` cache family.  The SDK's
+    usage meta rides along when the upstream reports any (openai's
+    ``prompt_tokens``; gemini's enterprise character count)."""
     block = cfg()
     bound = {**block, "api_key": embedding_key(block)}
     return await resolve(bound, family="embedding").embed(texts)
 
 
-async def embed_texts(texts: list[str]) -> list[list[float]] | None:
+async def embed_texts(texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None] | None:
     """The SERVER-side embedding call (the configured SDK, the shared
     loop): ``None`` when the feature is off/unconfigured or the upstream
     fails -- every consumer (the writer's context ranking) degrades
@@ -152,9 +154,12 @@ async def embed_texts(texts: list[str]) -> list[list[float]] | None:
         return None
 
 
-def run_batch(texts: list[str], timeout: float | None = None) -> tuple[list[list[float]], str] | None:
+def run_batch(
+    texts: list[str], timeout: float | None = None
+) -> tuple[list[list[float]], str, dict[str, t.Any] | None] | None:
     """The browser-proxy workhorse: one batch on the shared loop, ``(vectors,
-    model)`` out; ``None`` when the upstream fails (the route answers 502).
+    model, usage)`` out; ``None`` when the upstream fails (the route
+    answers 502).
     ``timeout`` bounds the wait for latency-sensitive callers (the
     overview's context ordering) -- ``None`` waits unbounded, the proxy's
     own contract.  The route owns gating and validation -- this is
@@ -163,10 +168,10 @@ def run_batch(texts: list[str], timeout: float | None = None) -> tuple[list[list
     (asyncio.run per request would strand them on a dead loop from call
     two on)."""
     try:
-        vectors = asyncio.run_coroutine_threadsafe(
+        vectors, usage = asyncio.run_coroutine_threadsafe(
             _embed([str(text)[:MAX_TEXT_CHARS] for text in texts]), get_loop()
         ).result(timeout)
-        return vectors, str(cfg().get("model"))
+        return vectors, str(cfg().get("model")), usage
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_embedding: upstream failed: %s", exc)
         return None

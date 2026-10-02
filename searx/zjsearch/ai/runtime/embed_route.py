@@ -34,8 +34,8 @@ def _embed_view() -> flask.Response:
     result = embed.run_batch([str(text) for text in texts])
     if result is None:
         return flask.jsonify({"error": "embedding upstream failed"}), 502
-    vectors, model = result
-    return flask.jsonify({"embeddings": vectors, "model": model})
+    vectors, model, usage = result
+    return flask.jsonify({"embeddings": vectors, "model": model, "usage": usage})
 
 
 def capability() -> dict[str, t.Any] | None:

@@ -74,8 +74,11 @@ async def _relevance_order(question: str, feed: list[str]) -> list[int] | None:
     blocks = [block for block in feed if block]
     if len(blocks) < 2 or sum(len(block) for block in blocks) <= _RERANK_ABOVE:
         return None
-    vectors = await embed_texts([question] + [block[:600] for block in blocks])
-    if not vectors or len(vectors) != len(blocks) + 1:
+    result = await embed_texts([question] + [block[:600] for block in blocks])
+    if not result:
+        return None
+    vectors = result[0]
+    if len(vectors) != len(blocks) + 1:
         return None
     probe = vectors[0]
     order = sorted(range(len(blocks)), key=lambda i: -_cosine(vectors[i + 1], probe))

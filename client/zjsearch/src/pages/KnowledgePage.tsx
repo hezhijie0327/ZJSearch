@@ -47,6 +47,7 @@ import {
   searchKnowledge,
   subscribeMemories,
   subscribeThreads,
+  type ThreadAnswer,
   type ThreadSummary,
   threadUrl,
   toggleItemPin,
@@ -216,6 +217,10 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   const [view, setView] = useState<"library" | KnowledgeItem>("library");
   const inspected = view === "library" ? null : view;
   const [inspectedBody, setInspectedBody] = useState<string | null>(null);
+  const [inspectedExtras, setInspectedExtras] = useState<{
+    sources: ThreadAnswer["sources"];
+    usage: ThreadAnswer["usage"];
+  } | null>(null);
   useEffect(() => {
     if (inspected?.kind === "document") {
       let cancelled = false;
@@ -226,25 +231,33 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
         .catch(() => {
           if (!cancelled) setInspectedBody("");
         });
+      setInspectedExtras(null);
       return () => {
         cancelled = true;
       };
     }
     if (inspected?.kind === "run") {
-      // the thread's full answer, reassembled from the evt log
+      // the thread's full answer + cited sources + token usage,
+      // reassembled from the evt log
       let cancelled = false;
       loadThreadAnswer(inspected.threadId ?? "")
-        .then((answer) => {
-          if (!cancelled) setInspectedBody(answer);
+        .then((result) => {
+          if (cancelled) return;
+          setInspectedBody(result.answer);
+          setInspectedExtras({ sources: result.sources, usage: result.usage });
         })
         .catch(() => {
-          if (!cancelled) setInspectedBody("");
+          if (!cancelled) {
+            setInspectedBody("");
+            setInspectedExtras(null);
+          }
         });
       return () => {
         cancelled = true;
       };
     }
     setInspectedBody(null);
+    setInspectedExtras(null);
     return undefined;
   }, [inspected]);
 
@@ -291,6 +304,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       host: null,
       id: `thread:${threadId}`,
       kind: "run",
+      meta: {},
       n: null,
       pinned: false,
       refs: 0,
@@ -377,6 +391,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
         {inspected ? (
           <InspectorView
             body={inspectedBody}
+            extras={inspectedExtras}
             item={inspected}
             onBack={() => setView("library")}
             onOpenThread={navigateThread}

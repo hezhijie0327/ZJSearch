@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   Database,
   ExternalLink,
+  Gauge,
   Layers,
   MemoryStick,
   MessageCircleQuestion,
@@ -28,9 +29,10 @@ import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
+import { readEmbedUsage } from "@/lib/embed.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import type { KnowledgeItem, KnowledgeStats, MemoryRow, ThreadSummary } from "@/lib/knowledgeStore.ts";
+import type { KnowledgeItem, KnowledgeStats, MemoryRow, OverviewUsage, ThreadSummary } from "@/lib/knowledgeStore.ts";
 import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 
 export function formatBytesLocal(bytes: number): string {
@@ -538,6 +540,7 @@ function MemoryCard({
     would be captured by the panel's click-capture into a fallback). */
 export function InspectorView({
   body,
+  extras,
   item,
   onBack,
   onOpenThread,
@@ -545,6 +548,11 @@ export function InspectorView({
   onRemove,
 }: {
   body: string | null;
+  /** run items: the loaded answer's cited sources + token usage */
+  extras: {
+    sources: Array<{ n: number; url: string; title: string; host: string; favicon: string }>;
+    usage: OverviewUsage | null;
+  } | null;
   item: KnowledgeItem;
   onBack: () => void;
   onOpenThread: (id: string) => void;
@@ -553,6 +561,17 @@ export function InspectorView({
 }) {
   const t = useT();
   const isDocument = item.kind === "document";
+  const sources: Array<{ n: number; url: string; title: string; host: string }> =
+    item.kind === "run"
+      ? (extras?.sources ?? [])
+      : ((item.meta?.sources as Array<{ n: number; url: string; title: string }> | undefined) ?? []).map((source) => ({
+          n: source.n,
+          url: source.url,
+          title: source.title,
+          host: "",
+        }));
+  const usage: OverviewUsage | null =
+    item.kind === "run" ? (extras?.usage ?? null) : ((item.meta?.usage as OverviewUsage | undefined) ?? null);
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between gap-3">
@@ -604,6 +623,31 @@ export function InspectorView({
           <p className="line-clamp-2 text-sm font-semibold text-ink" dir="auto">
             {item.title || item.url}
           </p>
+          {usage && (usage.input || usage.output) ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {usage.model ? <span className={CHIP}>{usage.model}</span> : null}
+              {usage.input ? (
+                <span className={CHIP}>
+                  {t("knowledge_usage_input")} {usage.input.toLocaleString()}
+                </span>
+              ) : null}
+              {usage.output ? (
+                <span className={CHIP}>
+                  {t("knowledge_usage_output")} {usage.output.toLocaleString()}
+                </span>
+              ) : null}
+              {usage.thoughts ? (
+                <span className={CHIP}>
+                  {t("knowledge_usage_thoughts")} {usage.thoughts.toLocaleString()}
+                </span>
+              ) : null}
+              {usage.cached ? (
+                <span className={CHIP}>
+                  {t("knowledge_usage_cached")} {usage.cached.toLocaleString()}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="mt-3 text-[13px] leading-relaxed text-ink-2">
             {item.kind === "answer" ? (
               <InspectorMarkdown text={item.body} />
@@ -632,6 +676,29 @@ export function InspectorView({
           </div>
         </div>
       </Card>
+      {sources.length > 0 ? (
+        <Card>
+          <SectionLabel label={t("knowledge_inspector_sources")} />
+          {sources.map((source) => (
+            <a
+              className="group flex items-baseline gap-2 px-5 py-2.5 transition-colors hover:bg-surface-2/40 sm:px-6"
+              href={source.url}
+              key={`${source.n}:${source.url}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <span className="shrink-0 font-mono text-xs text-accent">[{source.n}]</span>
+              <span
+                className="min-w-0 flex-1 truncate text-[13px] text-ink-2 transition-colors group-hover:text-ink"
+                dir="auto"
+              >
+                {source.title || source.url}
+              </span>
+              {source.host ? <span className="shrink-0 text-xs text-ink-3">{source.host}</span> : null}
+            </a>
+          ))}
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -751,6 +818,47 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
             ))}
           </dl>
         </div>
+        {stats?.usage ? (
+          <Card>
+            <div className="px-5 py-5 sm:px-6">
+              <div className="flex items-center gap-2">
+                <Gauge aria-hidden="true" className="size-4.5 text-ink-3" />
+                <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_usage_title")}</h2>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(
+                  [
+                    ["knowledge_usage_input", stats.usage.input],
+                    ["knowledge_usage_output", stats.usage.output],
+                    ["knowledge_usage_thoughts", stats.usage.thoughts],
+                    ["knowledge_usage_cached", stats.usage.cached],
+                  ] as const
+                ).map(([label, value]) => (
+                  <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={label}>
+                    <dt className="text-xs text-ink-3">{t(label)}</dt>
+                    <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{value.toLocaleString()}</dd>
+                  </div>
+                ))}
+              </dl>
+              {(() => {
+                const embed = readEmbedUsage();
+                if (!embed.calls) {
+                  return null;
+                }
+                const parts = [
+                  embed.model,
+                  `${t("knowledge_usage_input")} ${embed.input.toLocaleString()}`,
+                  `${t("knowledge_usage_calls")} ${embed.calls.toLocaleString()}`,
+                ].filter(Boolean);
+                return (
+                  <p className="mt-3 text-xs text-ink-3">
+                    {t("knowledge_admin_embed_usage")} · {parts.join(" · ")}
+                  </p>
+                );
+              })()}
+            </div>
+          </Card>
+        ) : null}
         <div className="space-y-3 px-5 py-5 sm:px-6">
           <button
             className="flex w-full items-center justify-between rounded-xl border border-danger/40 px-4 py-3 text-start text-[13px] text-danger transition-colors hover:bg-danger/5"

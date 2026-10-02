@@ -26,7 +26,6 @@ import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
-import { saveOverview } from "@/lib/knowledgeStore.ts";
 import { CODE_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
@@ -183,15 +182,6 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
         if (!controller.signal.aborted) {
           setText(accumulated);
           setPhase("done");
-          // the overview archives itself into the browser-local knowledge
-          // base: the 答案 kind IS this store (the knowledge page's bridge
-          // to the classic search page).  think + the meta sentinel strip
-          // out; an empty answer (error/stop) writes nothing.
-          const stripped = extractRunMeta(accumulated);
-          const visible = splitAnswerStream(stripped.text).answer;
-          if (visible.trim()) {
-            saveOverview({ markdown: visible, model: stripped.meta?.model ?? null, query: q });
-          }
         }
       })
       .catch((err: unknown) => {

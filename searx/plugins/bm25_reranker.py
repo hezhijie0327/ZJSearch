@@ -73,9 +73,7 @@ class SXNGPlugin(Plugin):
         self.info = PluginInfo(
             id=self.id,
             name=gettext("BM25 Reranker"),
-            description=gettext(
-                "Reranks search results using BM25 text relevance scoring with RRF fusion."
-            ),
+            description=gettext("Reranks search results using BM25 text relevance scoring with RRF fusion."),
             preference_section="general",
         )
 

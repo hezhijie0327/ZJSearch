@@ -363,10 +363,11 @@ class OpenaiSdk:
             return str(response.choices[0].message.content), usage_meta
         return "", usage_meta
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
         """One embeddings-API batch in input order (the embedding column
         width rides the ``params.dimensions`` key -- infra.embed owns the
-        width resolution)."""
+        width resolution).  The API's ``usage.prompt_tokens`` rides along
+        when the upstream reports it (the embeddings用量 stats)."""
         cfg = self.cfg
         client = clients.openai_client(cfg, self.base, family=self.family)
         call: dict[str, t.Any] = {
@@ -380,7 +381,9 @@ class OpenaiSdk:
         response = await client.embeddings.create(**call)
         # the API returns data in input order, but sort by index to be sure
         ordered = sorted(response.data, key=lambda item: item.index)
-        return [item.embedding for item in ordered]
+        reported = getattr(response, "usage", None)
+        meta = {"input": reported.prompt_tokens} if reported is not None and reported.prompt_tokens else None
+        return [item.embedding for item in ordered], meta
 
 
 def factory(cfg: dict[str, t.Any], base: str, kind: str, family: str = "openai") -> OpenaiSdk:

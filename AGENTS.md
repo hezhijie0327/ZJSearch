@@ -1052,6 +1052,14 @@ loses the event -- shipped bug).
   write for the session).  No migration, by decision.
 - ENV keys: `ZJSEARCH_AI_KEY` / `ZJSEARCH_EMBEDDING_KEY` /
   `ZJSEARCH_READER_KEY` (api_key stays "" in dev-settings.yml).
+- USAGE STATS: the admin panel sums the runs' + overviews'
+  `meta.usage` (input/output/thoughts/cached) from the knowledge table;
+  the inspector shows the same per card.  The EMBEDDING calls never land
+  in the table -- the route passes the SDK's usage through (openai:
+  `prompt_tokens`; gemini has NO token usage for embed_content, only the
+  enterprise `billable_character_count`, passed when present) and the
+  client accumulates it in localStorage (`zjs-embed-usage`), shown under
+  the AI usage card.
 - WhiteNoise serves the bundle bytes captured at INSTANCE START: after
   every build, RESTART the dev instance or the browser keeps executing
   the stale bundle (this masked three real bugs during the knowledge

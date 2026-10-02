@@ -670,9 +670,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     // (the 答案 kind) together with the sources it actually cites -- they
     // join the 来源 corpus ref-counted per query
     if (answer.trim()) {
+      const { meta: runMeta } = extractRunMeta(aiAnswer.text);
       saveOverview({
         markdown: answer,
-        model: extractRunMeta(aiAnswer.text).meta?.model ?? null,
+        model: runMeta?.model ?? null,
         query: data.q,
         sources: aiMeta.map((meta, index) => ({
           domain: meta.domain,
@@ -681,6 +682,13 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           title: meta.t,
           url: meta.u,
         })),
+        usage: {
+          cached: runMeta?.usage?.cached ?? null,
+          input: runMeta?.usage?.input ?? null,
+          model: runMeta?.model ?? null,
+          output: runMeta?.usage?.output ?? null,
+          thoughts: runMeta?.usage?.thoughts ?? null,
+        },
       });
     }
   }, [aiAnswer.phase, aiAnswer.text, aiMeta, data.q]);

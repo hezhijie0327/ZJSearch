@@ -89,6 +89,8 @@ export interface KnowledgeItem {
   refs: number;
   cited: number;
   updated: number;
+  /** the row's raw meta (PGlite hands jsonb back already-parsed) */
+  meta: Record<string, unknown>;
 }
 
 function rowToItem(row: Record<string, unknown>): KnowledgeItem {
@@ -102,6 +104,7 @@ function rowToItem(row: Record<string, unknown>): KnowledgeItem {
     /* malformed jsonb stays empty */
   }
   return {
+    meta: (row.meta ?? {}) as Record<string, unknown>,
     id: String(row.id),
     kind: String(row.kind) as KnowledgeKind,
     threadId: row.thread_id ? String(row.thread_id) : null,
@@ -283,13 +286,26 @@ function deriveTags(run: RunSnapshot): string[] {
     source) + the canonical source row ref/cited-counted, exactly the
     settleRun identity pattern -- a regenerate re-runs the upserts but the
     DO NOTHING guards keep the counters honest. */
+export interface OverviewUsage {
+  model?: string | null;
+  input?: number | null;
+  output?: number | null;
+  thoughts?: number | null;
+  cached?: number | null;
+}
+
 export function saveOverview(input: {
   query: string;
   markdown: string;
   model?: string | null;
+  usage?: OverviewUsage | null;
   sources?: Array<{ n: number; url: string; title: string; favicon?: string; domain?: string }>;
 }): void {
   const now = Date.now();
+  // the streaming client synthesizes a trailing meta sentinel into its raw
+  // text; saveOverview receives the already-stripped markdown, but strip
+  // again here -- a truncated sentinel tail would render as garbage
+  const markdown = (input.markdown.split("<<<zjs-meta:")[0] ?? "").trim();
   const raw = new Set<string>();
   for (const token of segmentKeywords(input.query).split(" ")) {
     if (token.length >= 2) {
@@ -306,8 +322,13 @@ export function saveOverview(input: {
       [
         `ovw:${urlHash(input.query)}`,
         input.query.slice(0, 300),
-        input.markdown.slice(0, 60000),
-        JSON.stringify({ mode: "overview", model: input.model ?? null }),
+        markdown.slice(0, 60000),
+        JSON.stringify({
+          mode: "overview",
+          model: input.model ?? null,
+          usage: input.usage ?? null,
+          sources: input.sources ?? [],
+        }),
         JSON.stringify(tags),
         segmentKeywords(input.query, input.markdown).slice(0, 8000),
         now,
@@ -1124,6 +1145,34 @@ export interface KnowledgeStats {
   events: number;
   approxBytes: number;
   embedModel: string | null;
+  /** the stored runs' + overviews' token usage, summed (null = nothing
+      recorded yet) */
+  usage: { input: number; output: number; thoughts: number; cached: number } | null;
+}
+
+/** The stored runs' + overviews' token usage, summed over their meta.
+    Null when nothing recorded -- the admin cards hide the section. */
+async function usageTotals(): Promise<{ input: number; output: number; thoughts: number; cached: number } | null> {
+  await pg();
+  const rows = await pgQuery<{ input: string; output: string; thoughts: string; cached: string; any: string }>(
+    `SELECT
+       COALESCE(sum((meta->'usage'->>'input')::bigint), 0) AS input,
+       COALESCE(sum((meta->'usage'->>'output')::bigint), 0) AS output,
+       COALESCE(sum(COALESCE((meta->'usage'->>'thoughts')::bigint, 0)), 0) AS thoughts,
+       COALESCE(sum(COALESCE((meta->'usage'->>'cached')::bigint, 0)), 0) AS cached,
+       count(*) AS any
+     FROM knowledge WHERE kind IN ('run', 'answer') AND meta->'usage' IS NOT NULL`,
+  );
+  const row = rows?.[0];
+  if (!row || Number(row.any) === 0) {
+    return null;
+  }
+  return {
+    input: Number(row.input) || 0,
+    output: Number(row.output) || 0,
+    thoughts: Number(row.thoughts) || 0,
+    cached: Number(row.cached) || 0,
+  };
 }
 
 export async function knowledgeStats(): Promise<KnowledgeStats> {
@@ -1148,6 +1197,7 @@ export async function knowledgeStats(): Promise<KnowledgeStats> {
     events: pick("evt"),
     approxBytes: Number((sizeRows ?? [])[0]?.bytes ?? 0),
     embedModel: (sizeRows ?? [])[0]?.model ?? null,
+    usage: await usageTotals(),
   };
 }
 
@@ -1159,10 +1209,19 @@ export function toggleThreadPin(threadId: string, on: boolean): void {
   });
 }
 
+export interface ThreadAnswer {
+  answer: string;
+  /** the run's cited sources in citation order (the inspector's 引用来源) */
+  sources: Array<{ n: number; url: string; title: string; host: string; favicon: string }>;
+  /** the run's token usage (the run row's meta) */
+  usage: OverviewUsage | null;
+}
+
 /** A thread's latest run answer, reassembled from the evt log (the run
-    rows only carry a 600-char head for the directory preview).  Gallery
-    placeholders strip -- the inspector renders plain markdown. */
-export async function loadThreadAnswer(threadId: string): Promise<string> {
+    rows only carry a 600-char head for the directory preview), with the
+    run's cited sources and token usage.  Gallery placeholders strip --
+    the inspector renders plain markdown. */
+export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> {
   await pg();
   const rows = await pgQuery<{ answer: string }>(
     `SELECT COALESCE(string_agg(meta->>'t', '' ORDER BY n), '') AS answer
@@ -1171,7 +1230,42 @@ export async function loadThreadAnswer(threadId: string): Promise<string> {
        AND run_id = (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1)`,
     [threadId],
   );
-  return String(rows?.[0]?.answer ?? "").replace(/\{\{zjs-gallery:\d+\}\}/g, "");
+  const sources = await pgQuery<{ n: number; url: string; title: string; host: string; favicon: string | null }>(
+    `SELECT n, url, title, host, COALESCE(meta->>'favicon', '') AS favicon
+     FROM knowledge
+     WHERE kind = 'source_ref' AND thread_id = $1
+       AND run_id = (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1)
+     ORDER BY n`,
+    [threadId],
+  );
+  const usageRows = await pgQuery<{ meta: Record<string, unknown> }>(
+    "SELECT meta FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1",
+    [threadId],
+  );
+  const runMeta = (usageRows?.[0]?.meta ?? {}) as {
+    model?: string;
+    usage?: { input?: number; output?: number; thoughts?: number | null; cached?: number };
+  };
+  const usage = runMeta.usage
+    ? {
+        model: runMeta.model ?? null,
+        input: runMeta.usage.input ?? null,
+        output: runMeta.usage.output ?? null,
+        thoughts: runMeta.usage.thoughts ?? null,
+        cached: runMeta.usage.cached ?? null,
+      }
+    : null;
+  return {
+    answer: String(rows?.[0]?.answer ?? "").replace(/\{\{zjs-gallery:\d+\}\}/g, ""),
+    sources: (sources ?? []).map((row) => ({
+      n: Number(row.n) || 0,
+      url: String(row.url ?? ""),
+      title: String(row.title ?? ""),
+      host: String(row.host ?? ""),
+      favicon: String(row.favicon ?? ""),
+    })),
+    usage,
+  };
 }
 
 /** Pin/unpin ANY projection row (the row's own id -- threads pin as a

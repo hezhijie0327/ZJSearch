@@ -159,6 +159,12 @@ async function boot(): Promise<Pg> {
   // archive): the old per-run projections were pure duplicates of the evt
   // replay -- sweep them once per boot, idempotent and cheap
   await db.query("DELETE FROM knowledge WHERE kind = 'answer' AND id LIKE 'ans:%'");
+  // overviews saved before the meta-sentinel strip carry the raw
+  // `<<<zjs-meta:{...}>>>` tail -- truncate at the marker (data fix, not
+  // DDL: the pg_textsearch tuples stay intact)
+  await db.query(
+    "UPDATE knowledge SET body = substring(body FROM 1 FOR position('<<<zjs-meta:' IN body) - 1) WHERE kind = 'answer' AND position('<<<zjs-meta:' IN body) > 0",
+  );
   return db;
 }
 
