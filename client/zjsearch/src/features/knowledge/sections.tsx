@@ -685,9 +685,12 @@ export function InspectorView({
       </div>
       <Card>
         <div className="px-5 py-4 sm:px-6" ref={bodyCardRef}>
-          <p className="line-clamp-2 text-sm font-semibold text-ink" dir="auto">
+          {/* the item's question/title is this reading pane's PAGE HEADING --
+              the AI thread page's own h2 language (text-2xl medium), not a
+              caption; the detail view never clamps it away */}
+          <h2 className="break-words font-medium leading-tight text-ink text-2xl" dir="auto">
             {item.title || item.url}
-          </p>
+          </h2>
           <div className="text-[13px] leading-relaxed text-ink-2">
             {item.kind === "answer" ? (
               <InspectorMarkdown text={item.body} />
