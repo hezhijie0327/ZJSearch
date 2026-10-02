@@ -846,7 +846,77 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
       ]
     : [];
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
+      {(() => {
+        const embed = readEmbedUsage();
+        if (!stats?.usage && !embed.calls) {
+          return null;
+        }
+        // 思考 only reports on SDKs that break reasoning out (openai's
+        // reasoning_tokens; the anthropic protocol folds it into output
+        // and reports nothing) -- a misleading 0 hides itself
+        const llmTiles = stats?.usage
+          ? (
+              [
+                ["knowledge_usage_input", stats.usage.input, ArrowUp],
+                ["knowledge_usage_output", stats.usage.output, ArrowDown],
+                ["knowledge_usage_thoughts", stats.usage.thoughts, Brain],
+                ["knowledge_usage_cached", stats.usage.cached, Database],
+                ["knowledge_usage_cache_write", stats.usage.cache_write, DatabaseZap],
+              ] as const
+            ).filter(([, value]) => value !== 0)
+          : [];
+        return (
+          <Card>
+            <div className="px-5 py-5 sm:px-6">
+              <div className="flex items-center gap-2">
+                <Gauge aria-hidden="true" className="size-4.5 text-ink-3" />
+                <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_usage_title")}</h2>
+              </div>
+              {llmTiles.length > 0 ? (
+                <>
+                  <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_group_llm")}</p>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {llmTiles.map(([label, value, Icon]) => (
+                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={label}>
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <Icon aria-hidden="true" className="size-3" />
+                          {t(label)}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{value.toLocaleString()}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : null}
+              {embed.calls ? (
+                <>
+                  <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <ArrowUp aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_input")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.input.toLocaleString()}</dd>
+                    </div>
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <Repeat aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_calls")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.calls.toLocaleString()}</dd>
+                    </div>
+                  </dl>
+                </>
+              ) : null}
+              {llmTiles.length === 0 && !embed.calls ? (
+                <p className="mt-4 text-[13px] text-ink-3">{t("knowledge_usage_empty")}</p>
+              ) : null}
+            </div>
+          </Card>
+        );
+      })()}
       <Card>
         <div className="px-5 py-5 sm:px-6">
           <div className="flex items-center gap-2">
@@ -862,77 +932,6 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
             ))}
           </dl>
         </div>
-        {(() => {
-          const embed = readEmbedUsage();
-          if (!stats?.usage && !embed.calls) {
-            return null;
-          }
-          // 思考 only reports on SDKs that break reasoning out (openai's
-          // reasoning_tokens; the anthropic protocol folds it into output
-          // and reports nothing) -- a misleading 0 hides itself
-          const llmTiles = stats?.usage
-            ? (
-                [
-                  ["knowledge_usage_input", stats.usage.input, ArrowUp],
-                  ["knowledge_usage_output", stats.usage.output, ArrowDown],
-                  ["knowledge_usage_thoughts", stats.usage.thoughts, Brain],
-                  ["knowledge_usage_cached", stats.usage.cached, Database],
-                  ["knowledge_usage_cache_write", stats.usage.cache_write, DatabaseZap],
-                ] as const
-              ).filter(([label, value]) => !(label === "knowledge_usage_thoughts" && value === 0))
-            : [];
-          return (
-            <Card>
-              <div className="px-5 py-5 sm:px-6">
-                <div className="flex items-center gap-2">
-                  <Gauge aria-hidden="true" className="size-4.5 text-ink-3" />
-                  <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_usage_title")}</h2>
-                </div>
-                {llmTiles.length > 0 ? (
-                  <>
-                    <p className="mt-4 text-xs font-medium text-ink-3">LLM</p>
-                    <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                      {llmTiles.map(([label, value, Icon]) => (
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={label}>
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <Icon aria-hidden="true" className="size-3" />
-                            {t(label)}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{value.toLocaleString()}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </>
-                ) : null}
-                {embed.calls ? (
-                  <>
-                    <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
-                    <dl className="mt-2 grid grid-cols-2 gap-2">
-                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                        <dt className="flex items-center gap-1 text-xs text-ink-3">
-                          <ArrowUp aria-hidden="true" className="size-3" />
-                          {t("knowledge_usage_input")}
-                        </dt>
-                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                          {embed.input.toLocaleString()}
-                        </dd>
-                      </div>
-                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                        <dt className="flex items-center gap-1 text-xs text-ink-3">
-                          <Repeat aria-hidden="true" className="size-3" />
-                          {t("knowledge_usage_calls")}
-                        </dt>
-                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                          {embed.calls.toLocaleString()}
-                        </dd>
-                      </div>
-                    </dl>
-                  </>
-                ) : null}
-              </div>
-            </Card>
-          );
-        })()}
         <div className="space-y-3 px-5 py-5 sm:px-6">
           <button
             className="flex w-full items-center justify-between rounded-xl border border-danger/40 px-4 py-3 text-start text-[13px] text-danger transition-colors hover:bg-danger/5"

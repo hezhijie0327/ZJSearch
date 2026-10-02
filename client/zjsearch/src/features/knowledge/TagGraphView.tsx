@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -63,7 +63,6 @@ export function TagGraphView({
   const t = useT();
   const [graph, setGraph] = useState<TagGraph | null>(null);
   const [error, setError] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<KnowledgeItem[] | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -475,27 +474,9 @@ export function TagGraphView({
   }, [graph, tagAt, toLayout, select]);
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-2xl border border-line bg-surface ${fullscreen ? "fixed inset-4 z-50" : ""}`}
-    >
-      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-surface">
+      <div className="border-b border-line px-4 py-2.5">
         <p className="text-xs text-ink-3">{t("knowledge_graph_drag")}</p>
-        <button
-          aria-label={t("knowledge_graph")}
-          className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-          onClick={() => {
-            setFullscreen((prev) => !prev);
-            // the canvas resizes after the toggle: re-fit once it has
-            window.setTimeout(() => fitRef.current(), 80);
-          }}
-          type="button"
-        >
-          {fullscreen ? (
-            <Minimize2 aria-hidden="true" className="size-4" />
-          ) : (
-            <Maximize2 aria-hidden="true" className="size-4" />
-          )}
-        </button>
       </div>
       {error ? (
         <p className="px-4 py-10 text-center text-sm text-ink-3">{t("knowledge_graph_empty")}</p>
@@ -512,7 +493,7 @@ export function TagGraphView({
           <canvas
             className="block h-[420px] w-full touch-none"
             ref={canvasRef}
-            style={{ height: fullscreen ? "calc(100% - 45px)" : "420px", width: "100%" }}
+            style={{ height: "420px", width: "100%" }}
           />
           {/* the locate panel: the content carrying the selected tag */}
           {selected ? (
