@@ -11,6 +11,7 @@ import {
   Database,
   ExternalLink,
   Globe,
+  Layers,
   MemoryStick,
   MessageCircleQuestion,
   Search,
@@ -453,6 +454,72 @@ export function Inspector({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------- kind items
+
+/** One kind's directory listing (the filter chips' non-search view):
+    answers / sources / documents as rows.  Sources and documents open
+    the inspector; answers navigate to their thread. */
+export function KindItemRows({
+  items,
+  onOpenInspector,
+  onOpenThread,
+}: {
+  items: KnowledgeItem[];
+  onOpenInspector: (item: KnowledgeItem) => void;
+  onOpenThread: (id: string) => void;
+}) {
+  const t = useT();
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center px-2 py-20 text-center">
+        <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
+          <Layers aria-hidden="true" className="size-7" />
+        </span>
+        <p className="mt-4 text-sm text-ink-2">{t("knowledge_kind_empty")}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+      {items.map((item, index) => {
+        const opens = item.kind === "source" || item.kind === "document";
+        return (
+          <button
+            className={`flex w-full flex-col gap-1 px-4 py-3 text-start transition-colors hover:bg-surface-2 ${
+              index !== items.length - 1 ? "border-b border-line" : ""
+            }`}
+            key={item.id}
+            onClick={() => {
+              if (opens) {
+                onOpenInspector(item);
+                return;
+              }
+              if (item.threadId) {
+                onOpenThread(item.threadId);
+              }
+            }}
+            type="button"
+          >
+            <span className="line-clamp-2 text-[15px] font-medium leading-snug text-ink">
+              {item.title || item.body.slice(0, 90) || item.url}
+            </span>
+            <span className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
+              <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
+              {item.host ? <span className={CHIP}>{item.host}</span> : null}
+              {item.cited > 0 ? (
+                <span className={CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
+              ) : null}
+              {item.refs > 0 ? (
+                <span className={CHIP}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
+              ) : null}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

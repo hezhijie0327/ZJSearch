@@ -9,6 +9,7 @@ import {
   Dropdown,
   formatBytesLocal,
   Inspector,
+  KindItemRows,
   MemorySection,
   SearchResults,
   ThreadRows,
@@ -22,6 +23,7 @@ import {
   type KnowledgeItem,
   type KnowledgeStats,
   knowledgeStats,
+  listKind,
   loadDocument,
   type MemoryRow,
   resetAll,
@@ -81,6 +83,7 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
   // ── search (debounced cross-kind hybrid) ─────────────────────────────
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
+  const searching = debounced !== "";
   const [results, setResults] = useState<KnowledgeItem[] | null>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(query.trim()), 300);
@@ -137,9 +140,15 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
 
   // ── stats (mount + focus + after directory/memories changes) ─────────
   const [stats, setStats] = useState<KnowledgeStats | null>(null);
+  const threadsLen = threads?.length ?? -1;
+  const memoriesLen = memories?.length ?? -1;
   useEffect(() => {
-    // the stats re-read on mount and on window focus (a sync may have
-    // landed); directory changes re-mount the effect's siblings anyway
+    // the stats re-read on mount, when the directory/memories change
+    // shape (a new run, a new fact) and on window focus (a sync may have
+    // landed); the lens reads keep the deps honest
+    if (threadsLen < -1 || memoriesLen < -1) {
+      return;
+    }
     const refresh = () => {
       void knowledgeStats()
         .then((value) => setStats(value))
@@ -149,7 +158,28 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
     const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, []);
+  }, [threadsLen, memoriesLen]);
+
+  // ── the kind directory (a filter chip's own listing, non-search) ────
+  const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
+  const kindListing = !searching && (kind === "answer" || kind === "source" || kind === "document");
+  useEffect(() => {
+    if (!kindListing || threadsLen < -1) {
+      setKindItems(null);
+      return;
+    }
+    let cancelled = false;
+    listKind(kind, 40)
+      .then((rows) => {
+        if (!cancelled) setKindItems(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setKindItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, kindListing, threadsLen]);
 
   // ── the inspector (a source/document hit's reading pane) ─────────────
   const [inspected, setInspected] = useState<KnowledgeItem | null>(null);
@@ -206,7 +236,6 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
     return groups;
   }, [results, kind, pinnedOnly, since]);
 
-  const searching = debounced !== "";
   const memoryList = useMemo(() => {
     const rows = memories ?? [];
     if (!debounced) return rows;
@@ -368,6 +397,16 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
             />
           ) : searching ? (
             <SearchResults groups={searchByKind} onOpen={setInspected} onOpenThread={navigateThread} />
+          ) : kindListing ? (
+            kindItems === null ? (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <span className="zjs-skeleton block h-16 rounded-xl" key={i} />
+                ))}
+              </div>
+            ) : (
+              <KindItemRows items={kindItems} onOpenInspector={setInspected} onOpenThread={navigateThread} />
+            )
           ) : (
             <ThreadRows
               onOpen={navigateThread}

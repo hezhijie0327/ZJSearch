@@ -252,23 +252,16 @@ export interface RunSnapshot {
   }>;
 }
 
-/** The mechanical tag layer: query tokens + hosts + mode + the model's
-    own task titles -- zero cost, always present; the normalization pass
-    (scheduleTagNormalize) later folds these into concept tags. */
+/** The mechanical tag layer: query tokens + the model's own task titles
+    -- zero cost, always present; the normalization pass
+    (scheduleTagNormalize) later folds these into concept tags.  Hosts
+    and the mode name are deliberately NOT tags: they turned the tag
+    graph into a host cloud (shipped and reverted within a day). */
 function deriveTags(run: RunSnapshot): string[] {
   const raw = new Set<string>();
   for (const token of segmentKeywords(run.q).split(" ")) {
     if (token.length >= 2) {
       raw.add(token);
-    }
-  }
-  if (run.mode) {
-    raw.add(run.mode);
-  }
-  for (const source of run.sources ?? []) {
-    const host = String(source.netloc ?? source.host ?? "");
-    if (host) {
-      raw.add(host);
     }
   }
   for (const task of run.tasks ?? []) {
@@ -400,7 +393,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       if ((inserted ?? []).length === 0) {
         continue; // this run already counted this source
       }
-      const sourceTags = JSON.stringify([host].filter(Boolean));
+      const sourceTags = JSON.stringify([]);
       await pgQuery(
         `INSERT INTO knowledge (id, kind, url_hash, url, host, title, meta, refs, cited, tags, search_text, created, updated, occurred_at)
          VALUES ($1, 'source', $2, $3, $4, $5, '{}'::jsonb, 1, $6, $7::jsonb, $8, $9, $9, $9)
@@ -823,6 +816,17 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
   }));
 }
 
+/** One kind's rows, newest first -- the filter chips' non-search listing
+    (answers / sources / documents as their own directories). */
+export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[]> {
+  await pg();
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY updated DESC LIMIT $2`,
+    [kind, limit],
+  );
+  return (rows ?? []).map(rowToItem);
+}
+
 /** Cross-kind hybrid search (the knowledge page's search box). */
 export async function searchKnowledge(
   query: string,
@@ -976,7 +980,7 @@ export async function graphSnapshot(limit = 40): Promise<TagGraph> {
   await pg();
   const nodeRows = await pgQuery<{ tag: string; uses: number }>(
     `SELECT t AS tag, count(*) AS uses FROM knowledge, jsonb_array_elements_text(tags) AS t
-     WHERE kind IN ('source', 'answer', 'document', 'memory', 'run')
+     WHERE kind IN ('source', 'answer', 'document', 'memory', 'run') AND position('.' IN t) = 0
      GROUP BY t ORDER BY uses DESC LIMIT $1`,
     [limit],
   );
@@ -989,6 +993,7 @@ export async function graphSnapshot(limit = 40): Promise<TagGraph> {
     `SELECT a.t AS a, b.t AS b, count(*) AS w
      FROM knowledge k, jsonb_array_elements_text(k.tags) AS a(t), jsonb_array_elements_text(k.tags) AS b(t)
      WHERE k.kind IN ('source', 'answer', 'document', 'memory', 'run')
+       AND position('.' IN a.t) = 0 AND position('.' IN b.t) = 0
        AND a.t < b.t AND a.t = ANY($1::text[]) AND b.t = ANY($1::text[])
      GROUP BY a.t, b.t ORDER BY w DESC LIMIT 160`,
     [names],

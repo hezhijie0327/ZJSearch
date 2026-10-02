@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useT } from "@/lib/i18n.ts";
 import { graphSnapshot, type TagGraph } from "@/lib/knowledgeStore.ts";
@@ -34,6 +34,7 @@ export function TagGraphView({ onSelectTag }: { onSelectTag: (tag: string) => vo
   const [graph, setGraph] = useState<TagGraph | null>(null);
   const [error, setError] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const simRef = useRef<SimNode[]>([]);
   const edgesRef = useRef<TagGraph["edges"]>([]);
@@ -228,8 +229,9 @@ export function TagGraphView({ onSelectTag }: { onSelectTag: (tag: string) => vo
   };
 
   const onSelect = (tag: string) => {
-    onSelectTag(tag);
-    selectedRef.current = selectedRef.current === tag ? null : tag;
+    const next = selectedRef.current === tag ? null : tag;
+    selectedRef.current = next;
+    setSelected(next);
     const neighbors = new Set<string>([tag]);
     for (const edge of edgesRef.current) {
       if (edge.a === selectedRef.current) neighbors.add(edge.b);
@@ -271,20 +273,69 @@ export function TagGraphView({ onSelectTag }: { onSelectTag: (tag: string) => vo
       ) : graph.nodes.length === 0 ? (
         <p className="px-4 py-16 text-center text-sm text-ink-3">{t("knowledge_graph_empty")}</p>
       ) : (
-        <canvas
-          className="block h-[360px] w-full cursor-pointer"
-          height={720}
-          onClick={(event) => {
-            const tag = tagAt(event.clientX, event.clientY);
-            if (tag) onSelect(tag);
-          }}
-          onMouseMove={(event) => {
-            hoverRef.current = tagAt(event.clientX, event.clientY);
-          }}
-          ref={canvasRef}
-          style={{ height: fullscreen ? "calc(100% - 45px)" : "360px", width: "100%" }}
-          width={1280}
-        />
+        <>
+          {selected ? (
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-4 py-2.5">
+              <span className="rounded-full bg-accent-soft px-3 py-1 text-[13px] font-medium text-accent">
+                {selected}
+              </span>
+              <button
+                className="rounded-full bg-accent-strong px-3 py-1 text-[13px] font-medium text-accent-contrast transition-opacity hover:opacity-90"
+                onClick={() => onSelectTag(selected)}
+                type="button"
+              >
+                {t("knowledge_graph_filter")}
+              </button>
+              {graph.edges
+                .filter((edge) => edge.a === selected || edge.b === selected)
+                .slice(0, 8)
+                .map((edge) => {
+                  const neighbor = edge.a === selected ? edge.b : edge.a;
+                  return (
+                    <button
+                      className="rounded-full border border-line px-3 py-1 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                      key={neighbor}
+                      onClick={() => onSelect(neighbor)}
+                      type="button"
+                    >
+                      {neighbor}
+                    </button>
+                  );
+                })}
+              <button
+                aria-label={t("close")}
+                className="ms-auto rounded-md p-1 text-ink-3 transition-colors hover:text-ink"
+                onClick={() => onSelect(selected)}
+                type="button"
+              >
+                <X aria-hidden="true" className="size-4" />
+              </button>
+            </div>
+          ) : null}
+          <canvas
+            className="block h-[360px] w-full"
+            height={720}
+            onClick={(event) => {
+              const tag = tagAt(event.clientX, event.clientY);
+              if (tag) onSelect(tag);
+            }}
+            onDoubleClick={(event) => {
+              const tag = tagAt(event.clientX, event.clientY);
+              if (tag) onSelectTag(tag);
+            }}
+            onMouseMove={(event) => {
+              const tag = tagAt(event.clientX, event.clientY);
+              hoverRef.current = tag;
+              const target = canvasRef.current;
+              if (target) {
+                target.style.cursor = tag ? "pointer" : "default";
+              }
+            }}
+            ref={canvasRef}
+            style={{ height: fullscreen ? "calc(100% - 45px)" : "360px", width: "100%" }}
+            width={1280}
+          />
+        </>
       )}
     </div>
   );
