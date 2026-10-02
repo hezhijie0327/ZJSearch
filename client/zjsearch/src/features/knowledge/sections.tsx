@@ -7,13 +7,15 @@
     Page-private to KnowledgePage -- nothing here exports beyond it. */
 
 import {
+  Check,
   ChevronDown,
+  ChevronLeft,
   Database,
   ExternalLink,
-  Globe,
   Layers,
   MemoryStick,
   MessageCircleQuestion,
+  Pencil,
   Search,
   Sparkles,
   Star,
@@ -22,17 +24,14 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
+import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import {
-  type KnowledgeItem,
-  type KnowledgeStats,
-  type MemoryRow,
-  type ThreadSummary,
-  threadUrl,
-} from "@/lib/knowledgeStore.ts";
+import type { KnowledgeItem, KnowledgeStats, MemoryRow, ThreadSummary } from "@/lib/knowledgeStore.ts";
+import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 
 export function formatBytesLocal(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -40,7 +39,30 @@ export function formatBytesLocal(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const CHIP = "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
+/** The knowledge meta chip (the OUTLINE variant of lib CHIP: bordered, not
+    filled -- row meta and hero stats share it). */
+export const CHIP = "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
+
+/** The in-panel views' back row: focus lands here on view swap (the
+    imperative focus-on-mount pattern -- no autoFocus attribute). */
+function BackRow({ onClick }: { onClick: () => void }) {
+  const t = useT();
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return (
+    <button
+      className="inline-flex items-center gap-1 text-[13px] text-ink-3 transition-colors hover:text-ink"
+      onClick={onClick}
+      ref={ref}
+      type="button"
+    >
+      <ChevronLeft aria-hidden="true" className="size-4" />
+      {t("knowledge_back")}
+    </button>
+  );
+}
 
 // ------------------------------------------------------------------ rows
 
@@ -48,15 +70,19 @@ const CHIP = "inline-flex min-h-6 items-center gap-1 rounded-full border border-
     menu (pin / delete).  Clicking a row navigates to the AI thread page
     -- the detail view lives THERE, not here. */
 export function ThreadRows({
-  threads,
+  onHome,
   onOpen,
   onPin,
   onRemove,
+  threads,
 }: {
   threads: ThreadSummary[];
-  onOpen: (id: string) => void;
+  onOpen: (thread: ThreadSummary) => void;
   onPin: (thread: ThreadSummary, on: boolean) => void;
   onRemove: (thread: ThreadSummary) => void;
+  /** panel context: the empty state's home pill must leave the drawer, an
+      anchor would be captured into a fallback panel */
+  onHome?: () => void;
 }) {
   const t = useT();
   if (threads.length === 0) {
@@ -67,28 +93,36 @@ export function ThreadRows({
         </span>
         <p className="mt-4 text-sm font-medium text-ink">{t("knowledge_empty")}</p>
         <p className="mt-1 text-[13px] text-ink-3">{t("knowledge_empty_hint")}</p>
-        <Link
-          className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
-          href="/"
-        >
-          {t("back_to_search")}
-        </Link>
+        {onHome ? (
+          <button
+            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+            onClick={onHome}
+            type="button"
+          >
+            {t("back_to_search")}
+          </button>
+        ) : (
+          <Link
+            className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+            href="/"
+          >
+            {t("back_to_search")}
+          </Link>
+        )}
       </div>
     );
   }
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-      {threads.map((thread, index) => (
+    <Card>
+      {threads.map((thread) => (
         <div
-          className={`group flex flex-col gap-1.5 px-4 py-3 transition-colors hover:bg-surface-2 ${
-            index !== threads.length - 1 ? "border-b border-line" : ""
-          }`}
+          className="group flex flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
           key={thread.id}
         >
           <div className="flex items-start justify-between gap-3">
             <button
               className="min-w-0 flex-1 text-start text-[15px] font-medium leading-snug text-ink transition-colors hover:text-accent"
-              onClick={() => onOpen(thread.id)}
+              onClick={() => onOpen(thread)}
               title={thread.title}
               type="button"
             >
@@ -97,16 +131,13 @@ export function ThreadRows({
                 {thread.title || t("ai_search")}
               </span>
             </button>
-            <RowMenu
-              items={[
-                {
-                  label: t(thread.pinned ? "knowledge_menu_unpin" : "knowledge_menu_pin"),
-                  onSelect: () => onPin(thread, !thread.pinned),
-                },
-                { label: t("knowledge_menu_delete"), danger: true, onSelect: () => onRemove(thread) },
-              ]}
-            />
+            <RowActions onPin={(on) => onPin(thread, on)} onRemove={() => onRemove(thread)} pinned={thread.pinned} />
           </div>
+          {thread.preview ? (
+            <p className="line-clamp-2 text-[13px] leading-relaxed text-ink-3" dir="auto">
+              {thread.preview}
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
             <span className="shrink-0">{formatDate(new Date(thread.updated).toISOString())}</span>
             <span className={CHIP}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
@@ -116,52 +147,57 @@ export function ThreadRows({
           </div>
         </div>
       ))}
-    </div>
+    </Card>
   );
 }
 
-/** The morphic pattern: a hover menu with a confirm-backed destructive
-    action (the parent owns the confirm dialog). */
-function RowMenu({ items }: { items: Array<{ label: string; danger?: boolean; onSelect: () => void }> }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [open]);
+/** The row's two flat actions -- star (pin) + trash (confirm-backed
+    delete; the parent owns the confirm dialog).  Hover-revealed in list
+    rows, always visible in the inspector (reveal={false}).  Clicks stop
+    propagation: the whole row around them is a click target. */
+function RowActions({
+  onPin,
+  onRemove,
+  pinned,
+  reveal = true,
+}: {
+  onPin?: (on: boolean) => void;
+  onRemove: () => void;
+  pinned?: boolean;
+  reveal?: boolean;
+}) {
+  const t = useT();
   return (
-    <div className="relative shrink-0" ref={ref}>
+    <div
+      className={`flex shrink-0 items-center gap-0.5 ${reveal ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100" : ""}`}
+    >
+      {onPin ? (
+        <button
+          aria-label={t(pinned ? "knowledge_menu_unpin" : "knowledge_menu_pin")}
+          aria-pressed={pinned}
+          className={`grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 ${
+            pinned ? "fill-current text-accent" : "text-ink-3 hover:text-ink"
+          }`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPin(!pinned);
+          }}
+          type="button"
+        >
+          <Star aria-hidden="true" className="size-4" />
+        </button>
+      ) : null}
       <button
-        aria-label={items[0]?.label}
-        className="grid size-8 place-items-center rounded-full text-ink-3 opacity-0 transition-opacity hover:bg-surface-2 hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
-        onClick={() => setOpen((prev) => !prev)}
+        aria-label={t("knowledge_menu_delete")}
+        className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
         type="button"
       >
-        <ChevronDown className="size-4" />
+        <Trash2 aria-hidden="true" className="size-4" />
       </button>
-      {open ? (
-        <div className="absolute end-0 top-9 z-20 w-36 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-          {items.map((item) => (
-            <button
-              className={`block w-full px-3 py-2 text-start text-[13px] transition-colors hover:bg-surface-2 ${
-                item.danger ? "text-danger" : "text-ink"
-              }`}
-              key={item.label}
-              onClick={() => {
-                setOpen(false);
-                item.onSelect();
-              }}
-              type="button"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -196,10 +232,14 @@ export function SearchResults({
   groups,
   onOpen,
   onOpenThread,
+  onPin,
+  onRemove,
 }: {
   groups: Map<string, KnowledgeItem[]>;
   onOpen: (item: KnowledgeItem) => void;
-  onOpenThread: (id: string) => void;
+  onOpenThread: (item: KnowledgeItem) => void;
+  onPin: (item: KnowledgeItem, on: boolean) => void;
+  onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
   if (groups.size === 0) {
@@ -217,26 +257,22 @@ export function SearchResults({
       {[...groups.entries()].map(([kind, items]) => {
         const labelKey = KIND_LABEL_KEYS[kind] ?? "knowledge_kind_source";
         return (
-          <div key={kind}>
-            <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-ink-3">
-              <Globe aria-hidden="true" className="size-3.5" />
-              {t(labelKey)}
-              <span className="text-ink-3/60">{items.length}</span>
-            </p>
-            <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-              {items.map((item, index) => (
+          <Card key={kind}>
+            <SectionLabel label={`${t(labelKey)} · ${items.length}`} />
+            {items.map((item) => (
+              <div
+                className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
+                key={item.id}
+              >
                 <button
-                  className={`flex w-full flex-col gap-1 px-4 py-3 text-start transition-colors hover:bg-surface-2 ${
-                    index !== items.length - 1 ? "border-b border-line" : ""
-                  }`}
-                  key={item.id}
+                  className="min-w-0 flex-1 text-start"
                   onClick={() => {
-                    if (item.kind === "source" || item.kind === "document") {
+                    if (item.kind === "source" || item.kind === "document" || item.kind === "answer") {
                       onOpen(item);
                       return;
                     }
                     if (item.threadId) {
-                      onOpenThread(item.threadId);
+                      onOpenThread(item);
                     }
                   }}
                   type="button"
@@ -244,7 +280,7 @@ export function SearchResults({
                   <span className="line-clamp-2 text-[15px] font-medium leading-snug text-ink">
                     {item.title || item.body.slice(0, 80) || item.url}
                   </span>
-                  <span className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                  <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                     <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
                     {item.host ? <span className={CHIP}>{item.host}</span> : null}
                     {item.cited > 0 ? (
@@ -255,9 +291,10 @@ export function SearchResults({
                     ) : null}
                   </span>
                 </button>
-              ))}
-            </div>
-          </div>
+                <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
+              </div>
+            ))}
+          </Card>
         );
       })}
     </div>
@@ -270,28 +307,30 @@ export function SearchResults({
     one card per durable fact (content + forget). */
 export function MemorySection({
   memories,
+  onAdd,
   onForget,
+  onSave,
   onView,
   view,
 }: {
   memories: MemoryRow[];
+  onAdd: (content: string) => void;
   onForget: (id: string) => void;
+  onSave: (id: string, content: string) => void;
   onView: (view: "timeline" | "cards") => void;
   view: "timeline" | "cards";
 }) {
   const t = useT();
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const addRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (adding) {
+      addRef.current?.focus();
+    }
+  }, [adding]);
   if (memories === null) {
     return null;
-  }
-  if (memories.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center px-2 py-20 text-center">
-        <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
-          <MemoryStick aria-hidden="true" className="size-7" />
-        </span>
-        <p className="mt-4 text-sm text-ink-2">{t("knowledge_memory_empty")}</p>
-      </div>
-    );
   }
   // group by day for the timeline view (LobeHub's GroupedVirtuoso shape,
   // minus the virtualization -- browser-local scale is hundreds of rows)
@@ -305,23 +344,75 @@ export function MemorySection({
   return (
     <div>
       <div className="mb-3 flex items-center gap-1.5">
-        {(["timeline", "cards"] as const).map((mode) => (
-          <button
-            aria-pressed={view === mode}
-            className={`rounded-full px-3 py-1.5 text-[13px] transition-colors ${
-              view === mode
-                ? "bg-accent-soft font-medium text-accent"
-                : "border border-line text-ink-3 hover:bg-surface-2 hover:text-ink"
-            }`}
-            key={mode}
-            onClick={() => onView(mode)}
-            type="button"
-          >
-            {mode === "timeline" ? t("knowledge_memory_timeline") : t("knowledge_memory_cards")}
-          </button>
-        ))}
+        <div className="flex w-fit gap-1 rounded-xl border border-line bg-surface p-1">
+          {(["timeline", "cards"] as const).map((mode) => (
+            <button
+              aria-pressed={view === mode}
+              className={`${SEGMENT_SM} ${view === mode ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
+              key={mode}
+              onClick={() => onView(mode)}
+              type="button"
+            >
+              {mode === "timeline" ? t("knowledge_memory_timeline") : t("knowledge_memory_cards")}
+            </button>
+          ))}
+        </div>
+        <button
+          className="ms-auto flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          onClick={() => {
+            setDraft("");
+            setAdding(true);
+          }}
+          type="button"
+        >
+          {t("knowledge_memory_add")}
+        </button>
       </div>
-      {view === "timeline" ? (
+      {adding ? (
+        <div className="mb-3 rounded-xl bg-surface-2/40 px-3 py-2.5">
+          <textarea
+            className="min-h-16 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none"
+            dir="auto"
+            maxLength={300}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={t("knowledge_memory_add")}
+            ref={addRef}
+            value={draft}
+          />
+          <div className="mt-1 flex items-center justify-end gap-1">
+            <button
+              aria-label={t("ai_delete_cancel")}
+              className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={() => setAdding(false)}
+              title={t("ai_delete_cancel")}
+              type="button"
+            >
+              <X aria-hidden="true" className="size-3.5" />
+            </button>
+            <button
+              aria-label={t("knowledge_memory_save")}
+              className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent disabled:opacity-40"
+              disabled={!draft.trim()}
+              onClick={() => {
+                onAdd(draft.trim());
+                setAdding(false);
+              }}
+              title={t("knowledge_memory_save")}
+              type="button"
+            >
+              <Check aria-hidden="true" className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {memories.length === 0 ? (
+        <div className="flex flex-col items-center justify-center px-2 py-16 text-center">
+          <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
+            <MemoryStick aria-hidden="true" className="size-7" />
+          </span>
+          <p className="mt-4 text-sm text-ink-2">{t("knowledge_memory_empty")}</p>
+        </div>
+      ) : view === "timeline" ? (
         <div className="relative ps-5">
           <span aria-hidden="true" className="absolute inset-block-0 start-2 w-px bg-line" />
           {[...groups.entries()].map(([day, rows]) => (
@@ -334,7 +425,7 @@ export function MemorySection({
                 {day}
               </p>
               {rows.map((memory) => (
-                <MemoryCard key={memory.id} memory={memory} onForget={onForget} />
+                <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
               ))}
             </div>
           ))}
@@ -342,7 +433,7 @@ export function MemorySection({
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">
           {memories.map((memory) => (
-            <MemoryCard key={memory.id} memory={memory} onForget={onForget} />
+            <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
           ))}
         </div>
       )}
@@ -350,104 +441,182 @@ export function MemorySection({
   );
 }
 
-function MemoryCard({ memory, onForget }: { memory: MemoryRow; onForget: (id: string) => void }) {
+function MemoryCard({
+  memory,
+  onForget,
+  onSave,
+}: {
+  memory: MemoryRow;
+  onForget: (id: string) => void;
+  onSave: (id: string, content: string) => void;
+}) {
   const t = useT();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const draftRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (editing) {
+      draftRef.current?.focus();
+    }
+  }, [editing]);
+  if (editing) {
+    return (
+      <div className="rounded-xl bg-surface-2/40 px-2 py-2.5">
+        <textarea
+          className="min-h-16 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none"
+          dir="auto"
+          maxLength={300}
+          onChange={(event) => setDraft(event.target.value)}
+          ref={draftRef}
+          value={draft}
+        />
+        <div className="mt-1 flex items-center justify-end gap-1">
+          <button
+            aria-label={t("ai_delete_cancel")}
+            className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+            onClick={() => setEditing(false)}
+            title={t("ai_delete_cancel")}
+            type="button"
+          >
+            <X aria-hidden="true" className="size-3.5" />
+          </button>
+          <button
+            aria-label={t("knowledge_memory_save")}
+            className="grid size-7 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent disabled:opacity-40"
+            disabled={!draft.trim()}
+            onClick={() => {
+              onSave(memory.id, draft);
+              setEditing(false);
+            }}
+            title={t("knowledge_memory_save")}
+            type="button"
+          >
+            <Check aria-hidden="true" className="size-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="group flex items-start gap-2.5 rounded-xl px-2 py-2.5 transition-colors hover:bg-surface-2">
       <MemoryStick aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
       <p className="min-w-0 flex-1 break-words text-[13px] leading-relaxed text-ink" dir="auto">
         {memory.content}
       </p>
-      <button
-        aria-label={t("knowledge_memory_forget")}
-        className="shrink-0 rounded-md p-1 text-ink-3 opacity-0 transition-opacity hover:bg-surface-2 hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
-        onClick={() => onForget(memory.id)}
-        title={t("knowledge_memory_forget")}
-        type="button"
-      >
-        <Trash2 aria-hidden="true" className="size-3.5" />
-      </button>
+      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <button
+          aria-label={t("knowledge_memory_edit")}
+          className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          onClick={() => {
+            setDraft(memory.content);
+            setEditing(true);
+          }}
+          title={t("knowledge_memory_edit")}
+          type="button"
+        >
+          <Pencil aria-hidden="true" className="size-3.5" />
+        </button>
+        <button
+          aria-label={t("knowledge_memory_forget")}
+          className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+          onClick={() => onForget(memory.id)}
+          title={t("knowledge_memory_forget")}
+          type="button"
+        >
+          <Trash2 aria-hidden="true" className="size-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
 
 // -------------------------------------------------------------- inspector
 
-/** The morphic inspector: a source/document hit's reading pane -- an
-    end-anchored panel on the desktop, a full sheet on the narrow view. */
-export function Inspector({
+/** The morphic inspector as an IN-PANEL view: the knowledge panel
+    navigates to the reading pane and back -- it never stacks a second
+    drawer.  The thread action is a button (an anchor to the thread page
+    would be captured by the panel's click-capture into a fallback). */
+export function InspectorView({
   body,
   item,
-  onClose,
+  onBack,
+  onOpenThread,
+  onPin,
+  onRemove,
 }: {
   body: string | null;
   item: KnowledgeItem;
-  onClose: () => void;
+  onBack: () => void;
   onOpenThread: (id: string) => void;
+  onPin: (item: KnowledgeItem, on: boolean) => void;
+  onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
-  const ref = useDialogFocus<HTMLDivElement>(true);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   const isDocument = item.kind === "document";
-  const markdown = isDocument ? (body ?? "") : "";
   return (
-    <div aria-hidden="false">
-      <div aria-label={t("knowledge_title")} className="fixed inset-0 z-50 animate-fade-in" ref={ref} role="dialog">
-        <button
-          aria-label={t("close")}
-          className="absolute inset-0 cursor-default bg-black/60"
-          onClick={onClose}
-          type="button"
-        />
-        <div className="absolute inset-y-0 end-0 flex w-full flex-col bg-bg shadow-pop animate-slide-in-right sm:max-w-2xl">
-          <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{item.title || item.url}</p>
-            <div className="flex items-center gap-1">
-              {item.url ? (
-                <a
-                  aria-label={t("open_in_new_tab")}
-                  className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  href={item.url}
-                  rel="noreferrer"
-                  target="_blank"
-                  title={t("open_in_new_tab")}
-                >
-                  <ExternalLink aria-hidden="true" className="size-4" />
-                </a>
-              ) : null}
-              {item.threadId ? (
-                <Link
-                  ariaLabel={t("knowledge_kind_run")}
-                  className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  href={threadUrl(item.threadId)}
-                  title={t("knowledge_kind_run")}
-                >
-                  <MessageCircleQuestion aria-hidden="true" className="size-4" />
-                </Link>
-              ) : null}
+    <div className="space-y-4 animate-fade-in">
+      <div className="flex items-center justify-between gap-3">
+        <BackRow onClick={onBack} />
+        <div className="flex items-center gap-1">
+          <RowActions
+            onPin={(on) => onPin(item, on)}
+            onRemove={() => onRemove(item)}
+            pinned={item.pinned}
+            reveal={false}
+          />
+          {item.url ? (
+            <a
+              aria-label={t("open_in_new_tab")}
+              className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              href={item.url}
+              rel="noreferrer"
+              target="_blank"
+              title={t("open_in_new_tab")}
+            >
+              <ExternalLink aria-hidden="true" className="size-4" />
+            </a>
+          ) : null}
+          {item.threadId ? (
+            item.kind === "run" ? (
               <button
-                aria-label={t("close")}
-                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                onClick={onClose}
+                className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={() => onOpenThread(item.threadId ?? "")}
                 type="button"
               >
-                <X aria-hidden="true" className="size-4" />
+                {t("knowledge_open_research")}
               </button>
-            </div>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">
-            {!isDocument ? (
+            ) : (
+              <button
+                aria-label={t("knowledge_open_research")}
+                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={() => onOpenThread(item.threadId ?? "")}
+                title={t("knowledge_open_research")}
+                type="button"
+              >
+                <MessageCircleQuestion aria-hidden="true" className="size-4" />
+              </button>
+            )
+          ) : null}
+        </div>
+      </div>
+      <Card>
+        <div className="px-5 py-4 sm:px-6">
+          <p className="line-clamp-2 text-sm font-semibold text-ink" dir="auto">
+            {item.title || item.url}
+          </p>
+          <div className="mt-3 text-[13px] leading-relaxed text-ink-2">
+            {item.kind === "answer" ? (
+              <InspectorMarkdown text={item.body} />
+            ) : item.kind === "run" ? (
+              body ? (
+                <InspectorMarkdown text={body} />
+              ) : (
+                <p className="text-[13px] text-ink-3">…</p>
+              )
+            ) : !isDocument ? (
               item.body ? (
                 <>
-                  <pre className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink-2">
-                    {item.body}
-                  </pre>
+                  <pre className="whitespace-pre-wrap break-words">{item.body}</pre>
                   <p className="mt-3 text-xs text-ink-3">{t("knowledge_inspector_not_read")}</p>
                 </>
               ) : (
@@ -458,11 +627,11 @@ export function Inspector({
             ) : body === "" ? (
               <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
             ) : (
-              <pre className="whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink-2">{markdown}</pre>
+              <InspectorMarkdown text={body} />
             )}
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -474,15 +643,19 @@ export function Inspector({
     the inspector; answers navigate to their thread. */
 export function KindItemRows({
   items,
+  label,
   onOpenInspector,
   onOpenThread,
-  showKind = false,
+  onPin,
+  onRemove,
 }: {
   items: KnowledgeItem[];
   onOpenInspector: (item: KnowledgeItem) => void;
-  onOpenThread: (id: string) => void;
-  /** the mixed "全部" feed labels every row with its kind */
-  showKind?: boolean;
+  onOpenThread: (item: KnowledgeItem) => void;
+  onPin: (item: KnowledgeItem, on: boolean) => void;
+  onRemove: (item: KnowledgeItem) => void;
+  /** optional section band above the rows */
+  label?: string;
 }) {
   const t = useT();
   if (items.length === 0) {
@@ -496,75 +669,58 @@ export function KindItemRows({
     );
   }
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-      {items.map((item, index) => {
-        const opens = item.kind === "source" || item.kind === "document";
+    <Card>
+      {label ? <SectionLabel label={label} /> : null}
+      {items.map((item) => {
+        const opens = item.kind === "source" || item.kind === "document" || item.kind === "answer";
         return (
-          <button
-            className={`flex w-full flex-col gap-1 px-4 py-3 text-start transition-colors hover:bg-surface-2 ${
-              index !== items.length - 1 ? "border-b border-line" : ""
-            }`}
+          <div
+            className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
             key={item.id}
-            onClick={() => {
-              if (opens) {
-                onOpenInspector(item);
-                return;
-              }
-              if (item.threadId) {
-                onOpenThread(item.threadId);
-              }
-            }}
-            type="button"
           >
-            <span className="line-clamp-2 text-[15px] font-medium leading-snug text-ink">
-              {item.title || item.body.slice(0, 90) || item.url}
-            </span>
-            <span className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
-              <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
-              {showKind ? (
-                <span className={CHIP}>{t(KIND_LABEL_KEYS[item.kind] ?? "knowledge_kind_source")}</span>
-              ) : null}
-              {item.host ? <span className={CHIP}>{item.host}</span> : null}
-              {item.cited > 0 ? (
-                <span className={CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
-              ) : null}
-              {item.refs > 0 ? (
-                <span className={CHIP}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
-              ) : null}
-            </span>
-          </button>
+            <button
+              className="min-w-0 flex-1 text-start"
+              onClick={() => {
+                if (opens) {
+                  onOpenInspector(item);
+                  return;
+                }
+                if (item.threadId) {
+                  onOpenThread(item);
+                }
+              }}
+              type="button"
+            >
+              <span className="line-clamp-2 text-[15px] font-medium leading-snug text-ink">
+                {item.title || item.body.slice(0, 90) || item.url}
+              </span>
+              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
+                {item.host ? <span className={CHIP}>{item.host}</span> : null}
+                {item.cited > 0 ? (
+                  <span className={CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
+                ) : null}
+                {item.refs > 0 ? (
+                  <span className={CHIP}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
+                ) : null}
+              </span>
+            </button>
+            <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
+          </div>
         );
       })}
-    </div>
+    </Card>
   );
 }
 
 // ------------------------------------------------------------------ admin
 
-/** The admin drawer: the old preferences PgliteTab's duties moved into
-    the knowledge page -- per-kind row counts, the storage estimate, the
-    embedding model, and the two destructive actions behind confirm
-    dialogs the parent owns. */
-export function AdminPanel({
-  onClose,
-  onClear,
-  onReset,
-  stats,
-}: {
-  onClose: () => void;
-  onClear: () => void;
-  onReset: () => void;
-  stats: KnowledgeStats | null;
-}) {
+/** The admin surface as an IN-PANEL view (the panel navigates, no second
+    drawer): per-kind row counts, the storage estimate, the embedding
+    model, and the two destructive actions behind confirm dialogs the
+    parent owns. */
+export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; onReset: () => void }) {
   const t = useT();
-  const ref = useDialogFocus<HTMLDivElement>(true);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
   const rows: Array<{ label: string; value: string }> = stats
     ? [
         { label: t("knowledge_admin_threads"), value: String(stats.threads) },
@@ -574,65 +730,39 @@ export function AdminPanel({
         { label: t("knowledge_admin_documents"), value: String(stats.documents) },
         { label: t("knowledge_admin_memories"), value: String(stats.memories) },
         { label: t("knowledge_admin_events"), value: String(stats.events) },
-        { label: t("knowledge_stat_size", { size: formatBytesLocal(stats.approxBytes) }), value: "" },
+        { label: t("knowledge_admin_size"), value: formatBytesLocal(stats.approxBytes) },
         { label: t("knowledge_admin_embed"), value: stats.embedModel ?? "—" },
       ]
     : [];
   return (
-    <div aria-hidden="false">
-      <div aria-label={t("knowledge_admin_title")} className="fixed inset-0 z-50 animate-fade-in" role="dialog">
-        <button
-          aria-label={t("close")}
-          className="absolute inset-0 cursor-default bg-black/60"
-          onClick={onClose}
-          type="button"
-        />
-        <div className="absolute inset-y-0 end-0 flex w-full flex-col bg-bg shadow-pop animate-slide-in-right sm:max-w-md">
-          <div className="flex items-center justify-between border-b border-line px-5 py-3">
-            <div className="flex items-center gap-2">
-              <Database aria-hidden="true" className="size-4.5 text-ink-3" />
-              <h2 className="text-base font-semibold text-ink">{t("knowledge_admin_title")}</h2>
-            </div>
-            <button
-              aria-label={t("close")}
-              className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-              onClick={onClose}
-              type="button"
-            >
-              <X aria-hidden="true" className="size-4.5" />
-            </button>
+    <div className="space-y-4 animate-fade-in">
+      <Card>
+        <div className="px-5 py-5 sm:px-6">
+          <div className="flex items-center gap-2">
+            <Database aria-hidden="true" className="size-4.5 text-ink-3" />
+            <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_title")}</h2>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-5" ref={ref}>
-            <dl className="grid grid-cols-2 gap-2">
-              {rows.map((row) => (
-                <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={row.label}>
-                  <dt className="text-xs text-ink-3">{row.label}</dt>
-                  <dd className="mt-0.5 truncate text-sm font-medium text-ink">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <div className="mt-6 space-y-3 border-t border-line pt-5">
-              <button
-                className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-start text-[13px] text-ink transition-colors hover:bg-surface-2"
-                onClick={onClear}
-                type="button"
-              >
-                {t("knowledge_admin_clear")}
-                <Trash2 aria-hidden="true" className="size-4 text-ink-3" />
-              </button>
-              <button
-                className="flex w-full items-center justify-between rounded-xl border border-danger/40 px-4 py-3 text-start text-[13px] text-danger transition-colors hover:bg-danger/5"
-                onClick={onReset}
-                type="button"
-              >
-                {t("knowledge_admin_reset")}
-                <Trash2 aria-hidden="true" className="size-4" />
-              </button>
-              <p className="text-xs leading-relaxed text-ink-3">{t("knowledge_admin_reset_desc")}</p>
-            </div>
-          </div>
+          <dl className="mt-4 grid grid-cols-2 gap-2">
+            {rows.map((row) => (
+              <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={row.label}>
+                <dt className="text-xs text-ink-3">{row.label}</dt>
+                <dd className="mt-0.5 truncate text-sm font-medium text-ink">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-      </div>
+        <div className="space-y-3 px-5 py-5 sm:px-6">
+          <button
+            className="flex w-full items-center justify-between rounded-xl border border-danger/40 px-4 py-3 text-start text-[13px] text-danger transition-colors hover:bg-danger/5"
+            onClick={onReset}
+            type="button"
+          >
+            {t("knowledge_admin_reset")}
+            <Trash2 aria-hidden="true" className="size-4" />
+          </button>
+          <p className="text-xs leading-relaxed text-ink-3">{t("knowledge_admin_reset_desc")}</p>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -664,12 +794,19 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-surface p-5" ref={ref}>
+      <div
+        aria-label={title}
+        aria-modal="true"
+        className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-surface p-5"
+        ref={ref}
+        role="dialog"
+      >
         <h3 className="text-base font-semibold text-ink">{title}</h3>
         <p className="mt-2 break-words text-sm leading-relaxed text-ink-2">{message}</p>
         <div className="mt-4 flex items-center justify-end gap-2">
           <button
             className="rounded-full px-4 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+            data-dialog-close=""
             onClick={cancel}
             type="button"
           >

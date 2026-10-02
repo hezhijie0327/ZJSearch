@@ -152,6 +152,9 @@ function renderOverlayPanel(data: AnyPageData, hint?: string) {
   if (isInfoPageData(data)) {
     return <InfoPage data={data} embedded initialPagename={hint} />;
   }
+  if (isKnowledgePageData(data)) {
+    return <KnowledgePage data={data} embedded />;
+  }
   return null;
 }
 

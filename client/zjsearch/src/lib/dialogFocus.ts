@@ -16,6 +16,11 @@ import { useEffect, useRef } from "react";
  * provider (the overlay drawer): pass e.g. `open !== null` so the effect
  * re-runs when the dialog actually appears — the ref alone cannot trigger
  * the effect, it only receives the element during the same commit.
+ *
+ * Nesting: a dialog rendered INSIDE another one (the knowledge panel's
+ * inspector / admin / confirm over the overlay drawer) traps and closes
+ * on its own — the outer trap and the outer Escape stand down while the
+ * focus lives in the deeper `[role="dialog"]`.
  */
 export function useDialogFocus<T extends HTMLElement>(active = true): RefObject<T | null> {
   const ref = useRef<T>(null);
@@ -29,6 +34,14 @@ export function useDialogFocus<T extends HTMLElement>(active = true): RefObject<
     (close ?? dialog)?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || !dialog) {
+        return;
+      }
+      // a nested dialog owns the keyboard while the focus sits inside it
+      // (the knowledge panel's inspector over the drawer): the deeper
+      // trap wraps within itself, this one stands down
+      const owner =
+        document.activeElement instanceof Element ? document.activeElement.closest('[role="dialog"]') : null;
+      if (owner && owner !== dialog) {
         return;
       }
       const focusables = Array.from(

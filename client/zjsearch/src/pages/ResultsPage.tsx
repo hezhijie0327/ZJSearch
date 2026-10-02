@@ -17,6 +17,7 @@ import {
   aiSourceMeta,
   buildAiContext,
   collectAiImages,
+  extractRunMeta,
   splitAnswerStream,
 } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
@@ -41,7 +42,7 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { type Translate, themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
-import { recallPages, threadUrl } from "@/lib/knowledgeStore.ts";
+import { recallPages, saveOverview, threadUrl } from "@/lib/knowledgeStore.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
@@ -660,15 +661,29 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     // [n] beyond the numbered results (the infobox trails the context as a
     // bare chip) must not mark a phantom row: clamp to the meta length
     const limit = aiMeta.length;
+    const cited = new Set(citedSourceNumbers(answer).filter((n) => n <= limit));
     setAiMarks({
       href: hrefRef.current,
-      indices: new Set(
-        citedSourceNumbers(answer)
-          .filter((n) => n <= limit)
-          .map((n) => n - 1),
-      ),
+      indices: new Set([...cited].map((n) => n - 1)),
     });
-  }, [aiAnswer.phase, aiAnswer.text, aiMeta.length]);
+    // the overview archives itself into the browser-local knowledge base
+    // (the 答案 kind) together with the sources it actually cites -- they
+    // join the 来源 corpus ref-counted per query
+    if (answer.trim()) {
+      saveOverview({
+        markdown: answer,
+        model: extractRunMeta(aiAnswer.text).meta?.model ?? null,
+        query: data.q,
+        sources: aiMeta.map((meta, index) => ({
+          domain: meta.domain,
+          favicon: meta.favicon,
+          n: index + 1,
+          title: meta.t,
+          url: meta.u,
+        })),
+      });
+    }
+  }, [aiAnswer.phase, aiAnswer.text, aiMeta, data.q]);
 
   // (re-)apply the frames from the set — idempotent, so it doubles as the
   // re-marker for cards whose DOM was recreated while folded

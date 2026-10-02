@@ -4,7 +4,7 @@
     ONE event-sourced PGlite table (`knowledge`, schema v3 in pg.ts) --
     the server owns nothing.  The AI run's every wire event lands as a
     kind='evt' row (finest grain, storage-only), and the queryable
-    surfaces are projections written at settle: run / answer / source /
+    surfaces are projections written at settle: run / answer (the AI\n    Overview archive -- run answers replay from the evt log) / source /
     source_ref / document / memory / call / task / clarify.  The tag
     graph is not a table: tags are a jsonb column, co-occurrence within a
     row is an edge, aggregated on demand.
@@ -275,6 +275,95 @@ function deriveTags(run: RunSnapshot): string[] {
   return [...raw].slice(0, 12);
 }
 
+/** The classic page's AI Overview archives itself here at settle: the
+    答案 kind IS this store (run answers replay from the evt log instead --
+    they duplicated the thread's 研究 row).  The id is the query's hash, so
+    re-asking the same query refreshes the row.  The sources the overview
+    actually cites join the 来源 corpus: one source_ref per (query,
+    source) + the canonical source row ref/cited-counted, exactly the
+    settleRun identity pattern -- a regenerate re-runs the upserts but the
+    DO NOTHING guards keep the counters honest. */
+export function saveOverview(input: {
+  query: string;
+  markdown: string;
+  model?: string | null;
+  sources?: Array<{ n: number; url: string; title: string; favicon?: string; domain?: string }>;
+}): void {
+  const now = Date.now();
+  const raw = new Set<string>();
+  for (const token of segmentKeywords(input.query).split(" ")) {
+    if (token.length >= 2) {
+      raw.add(token);
+    }
+  }
+  const tags = [...raw].slice(0, 12);
+  void enqueue(async () => {
+    await pgQuery(
+      `INSERT INTO knowledge (id, kind, title, body, status, meta, tags, search_text, created, updated, occurred_at)
+       VALUES ($1, 'answer', $2, $3, 'done', $4::jsonb, $5::jsonb, $6, $7, $8, $8)
+       ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, meta = EXCLUDED.meta,
+         tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
+      [
+        `ovw:${urlHash(input.query)}`,
+        input.query.slice(0, 300),
+        input.markdown.slice(0, 60000),
+        JSON.stringify({ mode: "overview", model: input.model ?? null }),
+        JSON.stringify(tags),
+        segmentKeywords(input.query, input.markdown).slice(0, 8000),
+        now,
+        now,
+      ],
+    );
+    const cited = citedNumbers(input.markdown);
+    const queryHash = urlHash(input.query);
+    for (const source of input.sources ?? []) {
+      if (!source.url || !cited.has(source.n)) {
+        continue;
+      }
+      const hash = urlHash(source.url);
+      const inserted = await pgQuery<{ url_hash: string }>(
+        `INSERT INTO knowledge (id, kind, url_hash, url, host, title, n, meta, status, search_text, created, updated, occurred_at)
+         VALUES ($1, 'source_ref', $2, $3, $4, $5, $6, $7::jsonb, 'done', $8, $9, $9, $9)
+         ON CONFLICT (id) DO NOTHING RETURNING url_hash`,
+        [
+          `ref:ovw:${queryHash}:${hash}`,
+          hash,
+          String(source.url),
+          String(source.domain ?? ""),
+          String(source.title ?? "").slice(0, 300),
+          source.n,
+          JSON.stringify({ favicon: source.favicon ?? null, overview: true }),
+          segmentKeywords(String(source.title ?? ""), String(source.domain ?? "")).slice(0, 4000),
+          now,
+        ],
+      );
+      if ((inserted ?? []).length === 0) {
+        continue; // this query already counted this source
+      }
+      const meta = source.favicon ? { favicon: source.favicon } : {};
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, refs, cited, tags, search_text, created, updated, occurred_at)
+         VALUES ($1, 'source', $2, $3, $4, $5, '', $6::jsonb, 1, 1, '{}'::jsonb, $7, $8, $8, $8)
+         ON CONFLICT (id) DO UPDATE SET refs = knowledge.refs + 1, cited = knowledge.cited + 1,
+           title = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title ELSE knowledge.title END,
+           meta = CASE WHEN EXCLUDED.meta <> '{}'::jsonb THEN EXCLUDED.meta ELSE knowledge.meta END,
+           updated = EXCLUDED.updated`,
+        [
+          `src:${hash}`,
+          hash,
+          String(source.url),
+          String(source.domain ?? ""),
+          String(source.title ?? "").slice(0, 300),
+          JSON.stringify(meta),
+          segmentKeywords(String(source.title ?? ""), String(source.domain ?? "")).slice(0, 4000),
+          now,
+        ],
+      );
+    }
+    void embedPending();
+  }).catch(() => {});
+}
+
 /** One settled run: flush its events, then write every projection.  The
     hook's settle checkpoint calls this (fire-and-forget); a re-settle of
     the same runId is idempotent (projection ids are deterministic, the
@@ -308,6 +397,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           halted: run.halted ?? null,
           stopped: run.stopped ?? false,
           sources: (run.sources ?? []).length,
+          answer: String(run.answer ?? "").slice(0, 600),
         }),
         JSON.stringify(tags),
         segmentKeywords(run.q),
@@ -315,28 +405,6 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         now,
       ],
     );
-    // the answer document
-    const answer = String(run.answer ?? "");
-    if (answer) {
-      await pgQuery(
-        `INSERT INTO knowledge (id, kind, thread_id, run_id, title, body, status, meta, tags, search_text, created, updated, occurred_at)
-         VALUES ($1, 'answer', $2, $3, $4, $5, $6, '{}'::jsonb, $7::jsonb, $8, $9, $10, $10)
-         ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, status = EXCLUDED.status,
-           tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
-        [
-          `ans:${runId}`,
-          threadId,
-          runId,
-          run.q.slice(0, 300),
-          answer.slice(0, 60000),
-          run.status || "done",
-          JSON.stringify(tags),
-          segmentKeywords(run.q, answer).slice(0, 8000),
-          Number(run.startedAt ?? now) || now,
-          now,
-        ],
-      );
-    }
     // the task card + the clarify archive
     if ((run.tasks ?? []).length > 0) {
       await pgQuery(
@@ -526,6 +594,23 @@ function newMemoryId(): string {
   return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Rewrite one durable fact's text (the memory card's edit icon).  The
+    live subscription re-fires and the card re-renders. */
+export function updateMemory(id: string, content: string): void {
+  const text = content.trim().slice(0, 300);
+  if (!text) {
+    return;
+  }
+  void enqueue(async () => {
+    await pgQuery("UPDATE knowledge SET body = $1, search_text = $2, updated = $3 WHERE id = $4 AND kind = 'memory'", [
+      text,
+      segmentKeywords(text).slice(0, 2000),
+      Date.now(),
+      id,
+    ]);
+  });
+}
+
 /** Persist one durable fact (the wire `memory` event lands here).  An
     EXACT duplicate content is a no-op.  Fire-and-forget. */
 export function saveMemory(content: string): void {
@@ -536,8 +621,8 @@ export function saveMemory(content: string): void {
   void enqueue(async () => {
     const now = Date.now();
     await pgQuery(
-      `INSERT INTO knowledge (id, kind, body, status, search_text, created, updated, occurred_at)
-       SELECT $1, 'memory', $2, 'done', $3, $4, $4, $4
+      `INSERT INTO knowledge (id, kind, body, status, tags, search_text, created, updated, occurred_at)
+       SELECT $1, 'memory', $2, 'done', '[]'::jsonb, $3, $4, $4, $4
        WHERE NOT EXISTS (SELECT 1 FROM knowledge WHERE kind = 'memory' AND body = $2)`,
       [`mem:${newMemoryId()}`, text, segmentKeywords(text).slice(0, 300), now],
     );
@@ -794,6 +879,9 @@ export interface ThreadSummary {
   sources: number;
   updated: number;
   pinned: boolean;
+  /** the latest run's answer head -- the row shows the result, the
+      thread page is the detail */
+  preview: string;
 }
 
 /** The thread directory: the run rows grouped by thread. */
@@ -805,7 +893,8 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
             count(*) AS runs,
             COALESCE(sum((meta->>'sources')::int), 0) AS sources,
             max(updated) AS updated,
-            max(pinned) AS pinned
+            max(pinned) AS pinned,
+            (SELECT substring(meta->>'answer' FROM 1 FOR 400) FROM knowledge WHERE thread_id = k.thread_id AND kind = 'run' ORDER BY n DESC LIMIT 1) AS preview
      FROM knowledge k WHERE k.kind = 'run' AND k.thread_id IS NOT NULL
      GROUP BY k.thread_id
      ORDER BY max(pinned) DESC, max(updated) DESC LIMIT $1 OFFSET $2`,
@@ -818,6 +907,7 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
     sources: Number(row.sources) || 0,
     updated: Number(row.updated) || 0,
     pinned: Number(row.pinned) === 1,
+    preview: String(row.preview ?? ""),
   }));
 }
 
@@ -826,21 +916,8 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
 export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[]> {
   await pg();
   const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY updated DESC LIMIT $2`,
+    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY pinned DESC, updated DESC LIMIT $2`,
     [kind, limit],
-  );
-  return (rows ?? []).map(rowToItem);
-}
-
-/** The "全部" feed: the newest rows across the meaningful kinds (the evt
-    log and the internal source_ref edges excluded). */
-export async function listAll(limit = 40): Promise<KnowledgeItem[]> {
-  await pg();
-  const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT ${ITEM_COLUMNS} FROM knowledge
-     WHERE kind IN ('run', 'answer', 'source', 'document', 'memory')
-     ORDER BY updated DESC LIMIT $1`,
-    [limit],
   );
   return (rows ?? []).map(rowToItem);
 }
@@ -1010,7 +1087,7 @@ export interface TagGraph {
 export async function graphSnapshot(limit = 40): Promise<TagGraph> {
   await pg();
   const nodeRows = await pgQuery<{ tag: string; uses: number }>(
-    `SELECT t AS tag, count(*) AS uses FROM knowledge, jsonb_array_elements_text(tags) AS t
+    `SELECT t AS tag, count(*) AS uses FROM knowledge, jsonb_array_elements_text(CASE WHEN jsonb_typeof(tags) = 'array' THEN tags ELSE '[]'::jsonb END) AS t
      WHERE kind IN ('source', 'answer', 'document', 'memory', 'run') AND position('.' IN t) = 0
      GROUP BY t ORDER BY uses DESC LIMIT $1`,
     [limit],
@@ -1022,7 +1099,7 @@ export async function graphSnapshot(limit = 40): Promise<TagGraph> {
   const names = nodes.map((node) => node.tag);
   const edgeRows = await pgQuery<{ a: string; b: string; w: number }>(
     `SELECT a.t AS a, b.t AS b, count(*) AS w
-     FROM knowledge k, jsonb_array_elements_text(k.tags) AS a(t), jsonb_array_elements_text(k.tags) AS b(t)
+     FROM knowledge k, jsonb_array_elements_text(CASE WHEN jsonb_typeof(k.tags) = 'array' THEN k.tags ELSE '[]'::jsonb END) AS a(t), jsonb_array_elements_text(CASE WHEN jsonb_typeof(k.tags) = 'array' THEN k.tags ELSE '[]'::jsonb END) AS b(t)
      WHERE k.kind IN ('source', 'answer', 'document', 'memory', 'run')
        AND position('.' IN a.t) = 0 AND position('.' IN b.t) = 0
        AND a.t < b.t AND a.t = ANY($1::text[]) AND b.t = ANY($1::text[])
@@ -1082,6 +1159,55 @@ export function toggleThreadPin(threadId: string, on: boolean): void {
   });
 }
 
+/** A thread's latest run answer, reassembled from the evt log (the run
+    rows only carry a 600-char head for the directory preview).  Gallery
+    placeholders strip -- the inspector renders plain markdown. */
+export async function loadThreadAnswer(threadId: string): Promise<string> {
+  await pg();
+  const rows = await pgQuery<{ answer: string }>(
+    `SELECT COALESCE(string_agg(meta->>'t', '' ORDER BY n), '') AS answer
+     FROM knowledge
+     WHERE kind = 'evt' AND thread_id = $1 AND meta->>'e' = 'answer'
+       AND run_id = (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1)`,
+    [threadId],
+  );
+  return String(rows?.[0]?.answer ?? "").replace(/\{\{zjs-gallery:\d+\}\}/g, "");
+}
+
+/** Pin/unpin ANY projection row (the row's own id -- threads pin as a
+    group through toggleThreadPin, every other kind pins itself). */
+export function toggleItemPin(id: string, on: boolean): void {
+  void enqueue(async () => {
+    await pgQuery("UPDATE knowledge SET pinned = $1 WHERE id = $2", [on ? 1 : 0, id]);
+  });
+}
+
+/** Delete one projection row by id.  An overview takes its (query,
+    source) ref rows with it and steps the cited sources' counters back
+    down; other kinds are a single DELETE (sources go through
+    deleteSource, which cascades by url_hash). */
+export function deleteItem(id: string): void {
+  void enqueue(async () => {
+    if (id.startsWith("ovw:")) {
+      const queryHash = id.slice(4);
+      const refs = await pgQuery<{ url_hash: string }>(
+        "SELECT url_hash FROM knowledge WHERE kind = 'source_ref' AND id LIKE 'ref:ovw:' || $1 || ':%'",
+        [queryHash],
+      );
+      for (const row of refs ?? []) {
+        await pgQuery(
+          "UPDATE knowledge SET refs = GREATEST(refs - 1, 0), cited = GREATEST(cited - 1, 0) WHERE kind = 'source' AND url_hash = $1",
+          [row.url_hash],
+        );
+      }
+      await pgQuery("DELETE FROM knowledge WHERE kind = 'source_ref' AND id LIKE 'ref:ovw:' || $1 || ':%'", [
+        queryHash,
+      ]);
+    }
+    await pgQuery("DELETE FROM knowledge WHERE id = $1", [id]);
+  });
+}
+
 /** A thread's everything: events, projections, provenance -- one DELETE. */
 export function deleteThread(threadId: string): void {
   void enqueue(async () => {
@@ -1095,14 +1221,6 @@ export function deleteSource(url: string): void {
   const hash = urlHash(url);
   void enqueue(async () => {
     await pgQuery("DELETE FROM knowledge WHERE url_hash = $1 AND kind IN ('source', 'source_ref', 'document')", [hash]);
-  });
-}
-
-/** Remove every study row (the admin panel's "clear studies"): the table
-    survives, the contents go. */
-export function clearAllStudies(): void {
-  void enqueue(async () => {
-    await pgQuery("DELETE FROM knowledge");
   });
 }
 
@@ -1145,7 +1263,8 @@ export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): 
             count(*) AS runs,
             COALESCE(sum((meta->>'sources')::int), 0) AS sources,
             max(updated) AS updated,
-            max(pinned) AS pinned
+            max(pinned) AS pinned,
+            (SELECT substring(meta->>'answer' FROM 1 FOR 400) FROM knowledge WHERE thread_id = k.thread_id AND kind = 'run' ORDER BY n DESC LIMIT 1) AS preview
      FROM knowledge k WHERE k.kind = 'run' AND k.thread_id IS NOT NULL
      GROUP BY k.thread_id
      ORDER BY max(pinned) DESC, max(updated) DESC LIMIT 40`,
@@ -1159,6 +1278,7 @@ export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): 
           sources: Number(row.sources) || 0,
           updated: Number(row.updated) || 0,
           pinned: Number(row.pinned) === 1,
+          preview: String(row.preview ?? ""),
         })),
       ),
   );

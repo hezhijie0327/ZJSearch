@@ -259,7 +259,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `t("key")` — unknown keys are compile errors. `t(key, params)` interpolates
   `{name}` placeholders (the DESIGN.md §10 family API). Adding a language = one new
   catalog file + one entry in `CATALOGS` / `themeLocaleTag()`.
-- About/Stats/Preferences open as slide-in drawers
+- Knowledge/About/Stats/Preferences open as slide-in drawers
   (`src/features/overlay/OverlayProvider.tsx`); the panel fetches page-data and
   renders the same page components with `embedded`/`hideTopNav` props. Which
   payload opens as which page is injected by `app.tsx` (`renderPage`) — the
@@ -647,6 +647,11 @@ Motion & disclosure:
 
 Shared style & logic tokens (import, never re-type):
 
+- `components/SettingParts.tsx` is the PANEL FURNITURE shared by every
+  slide-in panel (preferences, knowledge, stats): `Card` (rounded-2xl
+  divide-y sectioned card), `SectionLabel` (the gray band header inside a
+  Card) and `SettingRow`/`IconTile` (icon-square + title/description +
+  right control) -- tune panel styling THERE, never per page.
 - `lib/styles.ts`: `CHIP` (transition-colors baked in), `MONO_CHIP`,
   `CHIP_HOVER` (`hover:text-ink`), `CODE_CHIP` (square code token),
   `SEGMENT` / `SEGMENT_ACTIVE` / `SEGMENT_IDLE` (segmented-control rows:
@@ -962,10 +967,22 @@ into ONE event-sourced table (`knowledge`, DDL in `src/lib/pg.ts`).
 Every wire event of an AI run lands as a `kind='evt'` row (finest
 grain, storage-only: `search_text` stays empty so the log never enters
 the retrieval indexes), and the queryable surfaces are PROJECTIONS
-written at settle: `run` / `answer` / `source` (canonical url identity
+written at settle: `run` (its meta carries a 600-char answer head --
+  the thread rows' inline preview) / `source` (canonical url identity
 + ref/cited counters) / `source_ref` (the (run, source) join AS a kind)
 / `document` (web_reader full texts) / `memory` / `call` (the agent's
-search words -- the exploration trail) / `task` / `clarify`.  Replay
+search words -- the exploration trail) / `task` / `clarify`.
+`answer` is the AI OVERVIEW archive: the classic search page's overview
+saves itself at settle (`saveOverview` from ResultsPage's settle effect
+-- the knowledge base's bridge to the classic page; id = query hash,
+re-asking refreshes) and the 答案 tab reads it.  The sources the
+overview actually CITES join the 来源 corpus (`ref:ovw:*` source_ref per
+(query, source) + the canonical source row, the settleRun identity
+pattern -- only cited [n], never the whole context).  Run answers are
+deliberately NOT projected -- they only duplicated the thread's 研究
+row; they replay from the evt log like every other wire event.
+Answer-kind rows open the inspector (there is no thread page behind an
+overview).  Replay
 and retrieval are separate executions of ONE reducer:
 `applyEvent` (useAiSearch, exported) folds a live stream in the hook
 and folds `loadThreadEvents` rows in `resume` -- a stored run and a
@@ -1002,17 +1019,29 @@ loses the event -- shipped bug).
   into search_text; the GRAPH is a query, not a table --
   `graphSnapshot` aggregates nodes (tag uses) and co-occurrence edges
   on demand.
-- PAGE: `/zjsearch/knowledge` (runtime/knowledge_page.py renders the
-  slim shell; `KnowledgePage` + `features/knowledge/`) -- Vane's
-  Library shape (hero stats, thread rows; the detail lives on the AI
-  thread page), morphic's interactions (row menu, confirm dialogs,
-  inspector reading pane for document hits), LobeHub's memory surface
-  (timeline/cards + tag chips), the cross-kind hybrid search, the
-  `TagGraphView` (hand-rolled force layout on canvas -- no graph
-  dependency), and the AdminPanel (per-kind stats, clear studies, the
-  database reset -- the old preferences PgliteTab's duties; that tab is
-  gone).  The header LibraryBig button navigates here; the old
-  KnowledgeDrawer is deleted.
+- PANEL: the header LibraryBig button opens `/zjsearch/knowledge` as a
+  slide-in panel, the same way as about / stats / preferences
+  (`renderOverlayPanel` in app.tsx renders `KnowledgePage embedded`; the
+  standalone page URL stays for deep links).  The panel NAVIGATES, it
+  never stacks: admin (manage/stats/reset) and the inspector reading
+  pane are IN-PANEL VIEWS swapped through one `view` state (each with a
+  back row that takes the focus on swap) -- a second drawer inside the
+  drawer was tried and removed as off-design.  The one real nested
+  dialog is the ConfirmDialog (centered modal): the drawer's Escape
+  (OverlayProvider) and Tab trap (useDialogFocus) stand down while the
+  focus sits in the deeper `[role=dialog]` -- Escape closes it first, a
+  second Escape closes the drawer.  Opening a thread CLOSES the panel
+  and SPA-navigates the main view (a thread is a work surface, not a
+  panel page).  Vane's Library shape (hero stats, thread rows; the
+  detail lives on the AI thread page), morphic's interactions (flat
+  row actions -- star/trash icons on every row kind and in the
+  inspector, confirm-backed deletes, inspector reading pane for
+  document hits), LobeHub's memory surface (timeline/cards + tag
+  chips, per-card edit), the cross-kind
+  hybrid search, the `TagGraphView` (hand-rolled force layout on canvas
+  -- no graph dependency), and the AdminPanel's duties (per-kind stats,
+  clear studies, the database reset -- the old preferences PgliteTab's
+  duties; that tab is gone).  The old KnowledgeDrawer is deleted.
 - CLASSIC SEARCH HISTORY IS GONE: the `searches` table, the
   ResultsPage recording effect and every read path were removed (the
   knowledge base is AI-runs-only).  `recordClassicResults`' corpus

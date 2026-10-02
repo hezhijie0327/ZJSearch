@@ -155,6 +155,10 @@ async function boot(): Promise<Pg> {
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_thread ON knowledge (thread_id, kind)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_run ON knowledge (run_id, n)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_url ON knowledge (url_hash)");
+  // the answer kind changed semantics (run answers -> the AI Overview
+  // archive): the old per-run projections were pure duplicates of the evt
+  // replay -- sweep them once per boot, idempotent and cheap
+  await db.query("DELETE FROM knowledge WHERE kind = 'answer' AND id LIKE 'ans:%'");
   return db;
 }
 

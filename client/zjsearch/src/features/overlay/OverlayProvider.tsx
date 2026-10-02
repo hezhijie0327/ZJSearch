@@ -142,11 +142,25 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
     };
   }, [state]);
 
-  const onKeyDown = useCallback((event: globalThis.KeyboardEvent) => {
-    if (event.key === "Escape") {
+  const onKeyDown = useCallback(
+    (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      // a nested dialog (the knowledge panel's inspector / admin / confirm)
+      // owns this Escape: useDialogFocus parked the focus inside it, its own
+      // handler closes it and the drawer stays
+      const active = document.activeElement;
+      if (active instanceof Element) {
+        const owner = active.closest('[role="dialog"]');
+        if (owner && owner !== dialogRef.current) {
+          return;
+        }
+      }
       setState(null);
-    }
-  }, []);
+    },
+    [dialogRef],
+  );
 
   useEffect(() => {
     if (!state) {
@@ -250,10 +264,11 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
   );
 }
 
-/** The overlay panels' load ghost (preferences / about / stats share one
-    shape): heading, section-tab pills, then setting rows of a label + a
-    control -- panel chrome, not six anonymous bars.  Generic on purpose:
-    one fallback serves every panel payload and the lazy page chunks. */
+/** The overlay panels' load ghost (preferences / about / stats / knowledge
+    share one shape): heading, section-tab pills, then setting rows of a
+    label + a control -- panel chrome, not six anonymous bars.  Generic on
+    purpose: one fallback serves every panel payload and the lazy page
+    chunks. */
 const PanelSkeleton = () => (
   <div aria-busy="true" className="space-y-5 p-6">
     <span className="zjs-skeleton block h-6 w-44" />

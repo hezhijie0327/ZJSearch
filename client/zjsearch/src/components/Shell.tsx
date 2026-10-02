@@ -65,21 +65,32 @@ function ProgressBar({ active }: { active: boolean }) {
   );
 }
 
-/** The knowledge base is a PAGE (the browser-local research memory is a
-    global destination, not an overlay): the button SPA-navigates to it. */
+/** The knowledge base opens as a slide-in panel like its header neighbours
+    (about / stats / preferences): browsing the browser-local research
+    memory must not throw the current page away.  The standalone page keeps
+    existing for deep links. */
 function KnowledgeButton({ globals }: { globals: GlobalData }) {
   const t = useT();
+  const { openOverlay } = useOverlay();
   if (!globals.ai_search && !globals.ai) {
     return null;
   }
   return (
-    <Link ariaLabel={t("knowledge_open")} className={ICON_BTN} href="/zjsearch/knowledge" title={t("knowledge_open")}>
+    <button
+      aria-label={t("knowledge_open")}
+      className={ICON_BTN}
+      onClick={() => {
+        openOverlay("/zjsearch/knowledge", t("knowledge_open"));
+      }}
+      title={t("knowledge_open")}
+      type="button"
+    >
       <LibraryBig className="size-4.5" />
-    </Link>
+    </button>
   );
 }
 
-/** Right-side icon group: History / About / Stats / Preferences open as
+/** Right-side icon group: knowledge / about / stats / preferences open as
     slide-in panels (URL unchanged); theme style lives in the preferences
     panel. */
 export function HeaderActions({ globals }: { globals: GlobalData }) {

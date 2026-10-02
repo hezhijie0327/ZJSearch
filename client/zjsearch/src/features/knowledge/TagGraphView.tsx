@@ -159,7 +159,6 @@ export function TagGraphView({
     }
 
     let alpha = 1;
-    let fitted = false;
     let framesSinceFit = 0;
     const fitToContent = () => {
       // center + zoom on the nodes' bounding box (the settled graph is
@@ -238,13 +237,6 @@ export function TagGraphView({
         if (node.pinned) {
           continue;
         }
-        if (!fitted) {
-          // the pull toward the layout's center only runs BEFORE the
-          // content fit -- afterwards it fights the fit and drags the
-          // cluster back off-frame (shipped bug)
-          node.vx += (LAYOUT_W / 2 - node.x) * 0.002 * alpha;
-          node.vy += (LAYOUT_H / 2 - node.y) * 0.002 * alpha;
-        }
         node.vx *= 0.82;
         node.vy *= 0.82;
         node.x += Math.max(-8, Math.min(8, node.vx));
@@ -253,11 +245,7 @@ export function TagGraphView({
         node.y = Math.max(20, Math.min(LAYOUT_H - 20, node.y));
       }
       alpha = Math.max(0.12, alpha * 0.995);
-      if (!fitted && alpha <= 0.45) {
-        fitted = true;
-        framesSinceFit = 0;
-        fitToContent();
-      } else if (fitted && !anyPinned) {
+      if (!anyPinned) {
         framesSinceFit += 1;
         if (framesSinceFit > 90) {
           framesSinceFit = 0;
@@ -327,6 +315,12 @@ export function TagGraphView({
       }
     };
 
+    // settle the seed headless: the first visible frame is already
+    // near-equilibrium (no clump-then-spread on entry)
+    for (let i = 0; i < 80; i++) {
+      step();
+    }
+    fitToContent();
     let last = performance.now();
     const loop = (time: number) => {
       if (time - last > 28) {

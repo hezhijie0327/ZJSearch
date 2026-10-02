@@ -3,6 +3,7 @@
 import { ChartColumn, ChevronLeft } from "lucide-react";
 import { useMemo } from "react";
 import { Meter } from "@/components/Meter.tsx";
+import { SectionLabel } from "@/components/SettingParts.tsx";
 import { Link, Shell } from "@/components/Shell.tsx";
 import { SortHeader } from "@/components/SortHeader.tsx";
 import { round1 } from "@/lib/format.ts";
@@ -162,76 +163,79 @@ export function StatsPage({ data, embedded = false }: { data: StatsPageData; emb
         {engines.length === 0 ? (
           <p className="text-sm text-ink-2">{t("no_data_available")}</p>
         ) : (
-          <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
-            <table className="w-full min-w-[680px] text-left text-sm">
-              <thead className="bg-surface-2 text-xs text-ink-3">
-                <tr>
-                  <th
-                    aria-sort={sort.key === "name" ? (sort.asc ? "ascending" : "descending") : undefined}
-                    className="px-4 py-2.5 font-medium"
-                  >
-                    <SortHeader columnKey="name" label={t("engine_name")} onCycle={cycleSort} sort={sort} />
-                  </th>
-                  <th
-                    aria-sort={sort.key === "score" ? (sort.asc ? "ascending" : "descending") : undefined}
-                    className="px-4 py-2.5 font-medium"
-                  >
-                    <SortHeader columnKey="score" label={t("scores")} onCycle={cycleSort} sort={sort} />
-                  </th>
-                  <th
-                    aria-sort={sort.key === "result_count" ? (sort.asc ? "ascending" : "descending") : undefined}
-                    className="px-4 py-2.5 font-medium"
-                  >
-                    <SortHeader columnKey="result_count" label={t("result_count")} onCycle={cycleSort} sort={sort} />
-                  </th>
-                  <th
-                    aria-sort={sort.key === "time" ? (sort.asc ? "ascending" : "descending") : undefined}
-                    className="px-4 py-2.5 font-medium"
-                  >
-                    <SortHeader columnKey="time" label={t("response_time")} onCycle={cycleSort} sort={sort} />
-                  </th>
-                  <th
-                    aria-sort={sort.key === "reliability" ? (sort.asc ? "ascending" : "descending") : undefined}
-                    className="px-4 py-2.5 font-medium"
-                  >
-                    <SortHeader columnKey="reliability" label={t("reliability")} onCycle={cycleSort} sort={sort} />
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {engines.map((engine) => (
-                  <tr className="border-t border-line hover:bg-surface-2/50" key={engine.name}>
-                    <td className="px-4 py-2.5">
-                      <Link
-                        className="font-medium text-ink hover:text-accent"
-                        href={`/stats?engine=${encodeURIComponent(engine.name)}`}
-                      >
-                        {engine.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-ink-2">
-                      {engine.score_per_result !== null ? round1(engine.score_per_result) : "–"}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      {engine.result_count ? (
-                        <div className="flex items-center gap-2">
-                          <span className="w-10 text-ink-2">{engine.result_count}</span>
-                          <Meter max={data.max_result_count} value={engine.result_count} />
-                        </div>
-                      ) : (
-                        <span className="text-ink-3">–</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <TimeCell engine={engine} maxTime={data.max_time} />
-                    </td>
-                    <td className={`px-4 py-2.5 font-medium ${reliabilityColor(engine.reliability)}`}>
-                      {engine.reliability ?? "–"}
-                    </td>
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface animate-fade-up">
+            <SectionLabel label={t("stats_engines_n", { n: String(engines.length) })} />
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="bg-surface-2 text-xs text-ink-3">
+                  <tr>
+                    <th
+                      aria-sort={sort.key === "name" ? (sort.asc ? "ascending" : "descending") : undefined}
+                      className="px-4 py-3 font-medium"
+                    >
+                      <SortHeader columnKey="name" label={t("engine_name")} onCycle={cycleSort} sort={sort} />
+                    </th>
+                    <th
+                      aria-sort={sort.key === "score" ? (sort.asc ? "ascending" : "descending") : undefined}
+                      className="px-4 py-3 font-medium"
+                    >
+                      <SortHeader columnKey="score" label={t("scores")} onCycle={cycleSort} sort={sort} />
+                    </th>
+                    <th
+                      aria-sort={sort.key === "result_count" ? (sort.asc ? "ascending" : "descending") : undefined}
+                      className="px-4 py-3 font-medium"
+                    >
+                      <SortHeader columnKey="result_count" label={t("result_count")} onCycle={cycleSort} sort={sort} />
+                    </th>
+                    <th
+                      aria-sort={sort.key === "time" ? (sort.asc ? "ascending" : "descending") : undefined}
+                      className="px-4 py-3 font-medium"
+                    >
+                      <SortHeader columnKey="time" label={t("response_time")} onCycle={cycleSort} sort={sort} />
+                    </th>
+                    <th
+                      aria-sort={sort.key === "reliability" ? (sort.asc ? "ascending" : "descending") : undefined}
+                      className="px-4 py-3 font-medium"
+                    >
+                      <SortHeader columnKey="reliability" label={t("reliability")} onCycle={cycleSort} sort={sort} />
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {engines.map((engine) => (
+                    <tr className="border-t border-line hover:bg-surface-2/40" key={engine.name}>
+                      <td className="px-4 py-3">
+                        <Link
+                          className="font-medium text-ink hover:text-accent"
+                          href={`/stats?engine=${encodeURIComponent(engine.name)}`}
+                        >
+                          {engine.name}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-ink-2">
+                        {engine.score_per_result !== null ? round1(engine.score_per_result) : "–"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {engine.result_count ? (
+                          <div className="flex items-center gap-2">
+                            <span className="w-10 text-ink-2">{engine.result_count}</span>
+                            <Meter max={data.max_result_count} value={engine.result_count} />
+                          </div>
+                        ) : (
+                          <span className="text-ink-3">–</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <TimeCell engine={engine} maxTime={data.max_time} />
+                      </td>
+                      <td className={`px-4 py-3 font-medium ${reliabilityColor(engine.reliability)}`}>
+                        {engine.reliability ?? "–"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
