@@ -304,8 +304,6 @@ export const EN = {
   ai_search_view_more: "View {n} more",
   ai_source_crawled: "Read in full",
   ai_source_history: "Recalled from your past research (not re-verified this run)",
-  ai_thread_export: "Export this conversation as Markdown",
-  ai_thread_exported: "Conversation exported",
   print_page: "Print / Save as PDF",
   ai_search_results: "({n})",
   ai_search_row_interrupted: "interrupted",
@@ -339,7 +337,6 @@ export const EN = {
 
   ai_usage_cache_write_title: "Cache-write tokens",
   open_in_new_tab: "Open page",
-  ai_pdf_download: "Download as PDF",
   ai_pdf_working: "Generating PDF…",
   knowledge_open: "Knowledge",
   knowledge_thread_aria: "AI conversation",

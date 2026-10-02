@@ -9,11 +9,9 @@ import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
-import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
-import { flashToast } from "@/lib/toast.ts";
 import type { AiThreadPageData } from "@/lib/types.ts";
 
 /** The standalone AI conversation page (`/zjsearch/ai/thread/<uuid>`):
@@ -130,15 +128,6 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                 live={index === aiSearch.runs.length - 1 && aiSearch.phase === "streaming"}
                 onCite={() => {
                   return undefined;
-                }}
-                onExportThread={() => {
-                  downloadThreadMarkdown(
-                    aiSearch.threadId || data.thread,
-                    aiSearch.runs[0]?.q ?? "",
-                    aiSearch.runs,
-                    globals.instance_name,
-                  );
-                  flashToast(t("ai_thread_exported"), { tone: "ok", timeoutMs: 2000 });
                 }}
                 onFallback={onRunFallback}
                 onRegenerate={() => {

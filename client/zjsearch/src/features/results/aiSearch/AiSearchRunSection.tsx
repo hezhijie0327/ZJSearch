@@ -14,8 +14,6 @@ import {
   Compass,
   Copy,
   CornerDownRight,
-  FileDown,
-  FileText,
   Globe,
   Lightbulb,
   ListTodo,
@@ -30,14 +28,13 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Collapse } from "@/components/Collapse.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
-import { PrintView } from "@/features/results/aiSearch/PrintView.tsx";
 import type {
   AiAskQuestion,
   AiSearchCall,
@@ -761,7 +758,6 @@ function AiSearchRunSectionImpl({
   onCite,
   onRegenerate,
   onFallback,
-  onExportThread,
   onRelated,
   onStop,
   onSubmitClarify,
@@ -775,9 +771,6 @@ function AiSearchRunSectionImpl({
   sourceMeta: AiSourceMeta[];
   onCite?: (index: number) => void;
   onRegenerate?: () => void;
-  /** download the WHOLE thread as a Markdown document (the last run's
-      actions row hosts it -- end of the conversation, where users look) */
-  onExportThread?: () => void;
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
@@ -788,12 +781,6 @@ function AiSearchRunSectionImpl({
   const t = useT();
   const copyToast = useCopyToast();
   const [researchForced, setResearchForced] = useState<boolean | null>(null);
-  const [printOpen, setPrintOpen] = useState(false);
-  // stable: PrintView's build pipeline runs in an effect keyed on its props —
-  // a fresh closure per render would cancel and restart it forever
-  const closePrint = useCallback(() => {
-    setPrintOpen(false);
-  }, []);
   const streaming = run.status === "streaming" && live;
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
   // the process timeline is the record of how the report was made: OPEN
@@ -952,32 +939,8 @@ function AiSearchRunSectionImpl({
               >
                 <Copy className="size-4" />
               </button>
-              {onExportThread ? (
-                <button
-                  aria-label={t("ai_thread_export")}
-                  className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  onClick={onExportThread}
-                  title={t("ai_thread_export")}
-                  type="button"
-                >
-                  <FileDown className="size-4" />
-                </button>
-              ) : null}
-              <button
-                aria-label={t("ai_pdf_download")}
-                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                onClick={() => {
-                  setPrintOpen(true);
-                }}
-                title={t("ai_pdf_download")}
-                type="button"
-              >
-                <FileText className="size-4" />
-              </button>
             </div>
           ) : null}
-          {printOpen ? <PrintView onClose={closePrint} run={run} /> : null}
-
           {/* the run's meta line at the END of the output (lobehub's
               message footer): model + tokens + transport outcome */}
           {!streaming && !failed ? (

@@ -305,8 +305,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_search_view_more: "查看全部 {n} 条",
   ai_source_crawled: "已读全文",
   ai_source_history: "召回自你的历史研究(本次未重新验证)",
-  ai_thread_export: "将此会话导出为 Markdown",
-  ai_thread_exported: "会话已导出",
   print_page: "打印 / 存为 PDF",
   ai_search_results: "（{n}）",
   ai_search_row_interrupted: "已中断",
@@ -340,7 +338,6 @@ export const ZH_CN: Record<StringKey, string> = {
 
   ai_usage_cache_write_title: "缓存写入词元",
   open_in_new_tab: "打开网页",
-  ai_pdf_download: "下载 PDF",
   ai_pdf_working: "正在生成 PDF…",
   knowledge_open: "知识库",
   knowledge_thread_aria: "AI 会话",
