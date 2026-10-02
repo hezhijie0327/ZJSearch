@@ -107,6 +107,11 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # consecutive-round count of rounds without any
         self.round_new_hits = 0
         self.stalled_rounds = 0
+        # whether the CURRENT round queued real gathering work (searches,
+        # page reads, MCP calls, past-research lookups) -- a round of pure
+        # bookkeeping (plan writes, learnings, memory saves) is neither
+        # progress nor stall for the detector
+        self.round_gathered = False
         # the rerank model's account (zjsearch.rerank): one entry per
         # endpoint call + its prompt tokens -- the settle folds it into
         # ``usage.rerank`` and the knowledge base's model stats sum it
@@ -153,18 +158,24 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         Every stage fails open into the previous order (rank.py); the
         rerank model's token usage joins the run's account (the settle
         carries it as ``usage.rerank``)."""
-        order = bm25_order(query, raw)
-        if order is None:
+        try:
+            order = bm25_order(query, raw)
+            if order is None:
+                return raw
+            head = order[:RERANK_HEAD]
+            if len(head) >= 2:
+                sub_order, tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head])
+                if tokens:
+                    self.rerank_usage["calls"] += 1
+                    self.rerank_usage["tokens"] += tokens
+                if sub_order is not None:
+                    order = [head[i] for i in sub_order] + order[RERANK_HEAD:]
+            return [raw[i] for i in order]
+        except Exception:  # pylint: disable=broad-except
+            # one odd result shape must never take the round's remaining
+            # settlements down with it -- the engine order stands
+            logger.exception("zjsearch_ai_search: ranking cascade failed -- keeping the engine order")
             return raw
-        head = order[:RERANK_HEAD]
-        if len(head) >= 2:
-            sub_order, tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head])
-            if tokens:
-                self.rerank_usage["calls"] += 1
-                self.rerank_usage["tokens"] += tokens
-            if sub_order is not None:
-                order = [head[i] for i in sub_order] + order[RERANK_HEAD:]
-        return [raw[i] for i in order]
 
     def _finish(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
         self,
@@ -172,6 +183,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         idx: int,
         query: str,
         category: str,
+        dedup_key: str,
         fut: "concurrent.futures.Future[list[t.Any]]",
         started: float,
         feeds: list[str | None],
@@ -184,6 +196,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             feeds[idx - 1] = "error: the search failed"
             yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms})
             return
+        # the dedup mark lands on COMPLETION, never at plan time: a query
+        # whose engines errored stays retryable (an executed query -- empty
+        # or not -- is honestly remembered; its outcome is in the feed)
+        self.reg.note_query(dedup_key, query)
         raw = self._ranked(query, raw)
         items = serialize_results(raw, query)
         if items:
@@ -230,6 +246,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             yield ("call", {"call": idx, "status": "error", "url": url, "ms": ms})
             return
         norm = reader.normalize_url(url)
+        # the read's dedup mark lands on COMPLETION, never at plan time: a
+        # page whose read failed stays retryable
+        self.reg.note_read(norm)
         known_n = self.reg.known(norm)
         if known_n is not None:
             n = known_n
@@ -301,15 +320,18 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         of the call within this round.  Exact-duplicate queries and
         already-read pages settle instantly as ``duplicate`` -- they never
         hit the engines or the browser again; their feed tells the model
-        to move on.  The round's tool results also carry the budget /
-        context-pressure notes: that is how the MODEL learns it is nearing
-        the ceiling (the static system prompt only states it once)."""
+        to move on (the dedup marks are taken at COMPLETION: a failed
+        search or read stays retryable).  The round's tool results also
+        carry the budget / context-pressure / progress notes: that is how
+        the MODEL learns where the run stands (the static system prompt
+        only states the policy once)."""
         self.round_no += 1
         rnd = self.round_no
         self.round_new_hits = 0
         feeds: list[str | None] = [None] * len(calls)
-        search_jobs: list[tuple[int, str, str, str, list[str], list[str]]] = []
+        search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
         page_jobs: list[tuple[int, str]] = []
+        gathered = False
         for wire_id, call in enumerate(calls, 1):
             tool_name = str(call.get("name") or "")
             if tool_name == ASK_TOOL:
@@ -348,6 +370,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             if tool_name == past_research_cap.PAST_RESEARCH_TOOL:
                 query = past_research_cap.parse_query(call)
                 matches = past_research_cap.rank(self.past_research_entries, query)
+                gathered = True
                 if matches:
                     events: list[dict[str, t.Any]] = []
                     blocks: list[str] = []
@@ -418,10 +441,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             if tool_name == mcp.SEARCH_TOOL:
                 # progressive disclosure: the discovery tool returns the
                 # matched tools' full schemas (a text result like any other)
+                gathered = True
                 feeds[wire_id - 1] = mcp.search_mcp_tools(str(self._raw_json(call).get("query") or ""))
                 yield ("call", {"call": wire_id, "status": "ok", "preview": ""})
                 continue
             if tool_name.startswith("mcp_"):
+                gathered = True
                 feed = mcp.call_mcp_tool_sync(tool_name, self._raw_json(call))
                 feeds[wire_id - 1] = feed
                 # progressive disclosure: the row's preview is the head of
@@ -439,6 +464,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     yield ("call", event)
                 if page_url:
                     page_jobs.append((wire_id, page_url))
+                    gathered = True
                     # the early active-mark: the subtask this url shape
                     # points at is being researched (the done-marking with
                     # the real title runs at settlement)
@@ -451,7 +477,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 yield ("call", event)
             if job:
                 search_jobs.append(job)
+                gathered = True
                 self.coverage.track(job[1])
+        self.round_gathered = gathered
         # the pool is deliberately NOT in a with-block: when the consumer
         # disappears (client disconnect / stop) the generator closes right
         # here -- a with-exit would wait for the still-running work and
@@ -462,6 +490,18 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             yield from self._dispatch(pool, rnd, search_jobs, page_jobs, feeds)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
+        # Jina's failure-becomes-information: an unproductive round tells
+        # the model WHY, one round before the stall detector would end the
+        # research -- the next turn can change course (stall_rounds=2 modes
+        # get one warning; goal's 3 get two)
+        if self.round_gathered and self.round_new_hits == 0:
+            self._append_note(
+                feeds,
+                "(progress note: this round produced NO new sources -- every"
+                " query was a repeat, empty or failed.  Change the angle:"
+                " different keywords, another facet, another category -- or"
+                " stop researching and let the writer answer.)",
+            )
         # the model-facing budget note rides the round's tool results: the
         # next turn reads it with the results it describes (Vane injects
         # the iteration counter into the system prompt every turn -- this
@@ -491,8 +531,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         """One ``web_search`` call's pre-pool plan: (feed, settle event,
         pool job) -- an empty query errors here, an exact repeat of an
         earlier round's query (site filters included) settles as a
-        duplicate, a fresh query is queued and remembered for the
-        dedup."""
+        duplicate, a fresh query is queued; the dedup mark itself is taken
+        at completion (a failed search stays retryable)."""
         query, category, time_range, include, exclude = parse_call(call)
         if not query:
             return "error: empty query", {"call": wire_id, "status": "error", "n": 0, "ms": 0}, None
@@ -500,19 +540,19 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         if dedup_key in self.reg.ran:
             return (
                 "duplicate: this exact query already ran in an earlier"
-                " round and its results are already in the conversation"
-                " -- do not repeat it; search a DIFFERENT facet or write"
-                " the answer from the sources you have.",
+                " round and its outcome is already in the conversation"
+                " (possibly empty) -- do not repeat it; search a DIFFERENT"
+                " facet or write the answer from the sources you have.",
                 {"call": wire_id, "status": "duplicate", "n": 0, "ms": 0},
                 None,
             )
-        self.reg.note_query(dedup_key, query)
-        return "", None, (wire_id, query, category, time_range, include, exclude)
+        return "", None, (wire_id, query, category, time_range, include, exclude, dedup_key)
 
     def _page_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, str | None]:
         """One ``web_reader`` call's pre-pool plan: (feed, settle event,
         url-to-read) -- errors and duplicates settle here, a fresh url is
-        queued and remembered."""
+        queued; the read's dedup mark is taken at completion (a failed
+        read stays retryable)."""
         raw_url = parse_page_call(call)
         url = reader.normalize_url(raw_url)
         if not raw_url:
@@ -554,12 +594,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
-        search_jobs: list[tuple[int, str, str, str, list[str], list[str]]],
+        search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
         page_jobs: list[tuple[int, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
-        for wire_id, query, category, time_range, include, exclude in search_jobs:
+        for wire_id, query, category, time_range, include, exclude, dedup_key in search_jobs:
             # the worker needs a request context of its own: SearchWithPlugins
             # stores the request proxy and search() copies the context again
             # for each of its engine threads (mirrors the webapp view thread)
@@ -567,7 +607,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             futures[pool.submit(worker, query, category, time_range, include, exclude)] = (
                 "search",
                 wire_id,
-                (query, category, time.monotonic()),
+                (query, category, dedup_key, time.monotonic()),
             )
         for wire_id, url in page_jobs:
             futures[pool.submit(self._read_one, url)] = ("page", wire_id, (url, time.monotonic()))
@@ -581,8 +621,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             for fut in done:
                 kind, wire_id, args = pending.pop(fut)
                 if kind == "search":
-                    query, category, started = args
-                    yield from self._finish(rnd, wire_id, query, category, fut, started, feeds)
+                    query, category, dedup_key, started = args
+                    yield from self._finish(rnd, wire_id, query, category, dedup_key, fut, started, feeds)
                 else:
                     url, started = args
                     yield from self._finish_page(rnd, wire_id, url, fut, started, feeds)
@@ -593,9 +633,13 @@ def round_progress(state: Searches, stall_rounds: int) -> t.Callable[[int], str 
     after each executed round.  A round is PRODUCTIVE when at least one
     fresh query returned results; ``stall_rounds`` consecutive
     unproductive rounds end the research (the returned message explains
-    the staleness to the model).  Productive research is UNLIMITED."""
+    the staleness to the model).  Productive research is UNLIMITED; a
+    round of pure bookkeeping (plan writes, memory saves) is neither
+    progress nor stall."""
 
     def verdict(_round_no: int) -> str | None:
+        if not state.round_gathered:
+            return None
         if state.round_new_hits > 0:
             state.stalled_rounds = 0
             return None

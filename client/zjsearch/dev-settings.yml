@@ -307,6 +307,21 @@ zjsearch:
     #   task_type: RETRIEVAL_DOCUMENT    # RETRIEVAL_QUERY for the searches
     #   output_dimensionality: 768       # the pgvector column width
     #   # auto_truncate: true            # Vertex only
+  # ── the rerank model (AI search's feed ranking cascade, stage 2):
+  #    the Cohere-shaped /rerank endpoint (bigmodel / Jina / SiliconFlow
+  #    all speak it) re-scores each search's top-20 against the query.
+  #    Unconfigured or disabled = the cascade stops at BM25.  The key may
+  #    travel via the ZJSEARCH_RERANK_KEY env.
+  rerank:
+    enabled: true
+    base_url: "https://open.bigmodel.cn/api/paas/v4"   # {base_url}/rerank
+    api_key: ""                    # or the ZJSEARCH_RERANK_KEY env (the
+                                   # key stays out of the repository)
+    model: "rerank"
+    # extra_headers / extra_body ride EVERY rerank request 1:1 (a gateway
+    # header, a provider-private field like return_documents):
+    # extra_body:
+    #   return_documents: false
   # ── MCP tool servers (streamable HTTP only) -- the model's tools gain
   #    everything these servers expose, namespaced mcp_<server>_<tool>.
   #    header carries whatever auth the server wants.  KEYS LIVE HERE AND
