@@ -1130,9 +1130,10 @@ loses the event -- shipped bug).
 - USAGE STATS: the admin panel sums the runs' + overviews'
   `meta.usage` (input/output/thoughts/cached) from the knowledge table;
   the inspector shows the same per card.  `usage.rerank` (the ranking
-  cascade's endpoint spend: calls + prompt tokens, a separate bucket --
-  it is NOT LLM tokens) sums into the 模型统计 card's 重排序 group and
-  rides AiRunFooter per run.  The EMBEDDING calls never land
+  cascade's endpoint spend: calls + prompt tokens — score endpoints are
+  input-only, so prompt_tokens IS the total; shown as 重排输入/重排调用)
+  shares ONE row with the embedding totals (嵌入 first) on the 模型统计
+  card and rides AiRunFooter per run.  The EMBEDDING calls never land
   in the table -- the route passes the SDK's usage through (openai:
   `prompt_tokens`; gemini has NO token usage for embed_content, only the
   enterprise `billable_character_count`, passed when present) and the

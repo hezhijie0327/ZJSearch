@@ -905,53 +905,59 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   </dl>
                 </>
               ) : null}
-              {stats?.usage?.rerank ? (
-                <>
-                  <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
-                  <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <ArrowUp aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_tokens")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                        {stats.usage.rerank.tokens.toLocaleString()}
-                      </dd>
-                    </div>
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <Repeat aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_calls")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                        {stats.usage.rerank.calls.toLocaleString()}
-                      </dd>
-                    </div>
-                  </dl>
-                </>
+              {embed.calls || stats?.usage?.rerank ? (
+                // 嵌入 and 重排序: two stats each (input tokens + calls) --
+                // ONE shared row, 嵌入 first; both score input-only, so the
+                // endpoint's prompt_tokens IS its total ("Tokens" would
+                // imply an output half that does not exist)
+                <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {embed.calls ? (
+                    <>
+                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <ArrowUp aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_embed_input")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {embed.input.toLocaleString()}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <Repeat aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_embed_calls")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {embed.calls.toLocaleString()}
+                        </dd>
+                      </div>
+                    </>
+                  ) : null}
+                  {stats?.usage?.rerank ? (
+                    <>
+                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <ArrowUp aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_rerank_input")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {stats.usage.rerank.tokens.toLocaleString()}
+                        </dd>
+                      </div>
+                      <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <Repeat aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_rerank_calls")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {stats.usage.rerank.calls.toLocaleString()}
+                        </dd>
+                      </div>
+                    </>
+                  ) : null}
+                </dl>
               ) : null}
-              {embed.calls ? (
-                <>
-                  <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
-                  <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <ArrowUp aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_input")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.input.toLocaleString()}</dd>
-                    </div>
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <Repeat aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_calls")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.calls.toLocaleString()}</dd>
-                    </div>
-                  </dl>
-                </>
-              ) : null}
-              {llmTiles.length === 0 && !embed.calls ? (
+              {llmTiles.length === 0 && !embed.calls && !stats?.usage?.rerank ? (
                 <p className="mt-4 text-[13px] text-ink-3">{t("knowledge_usage_empty")}</p>
               ) : null}
             </div>
