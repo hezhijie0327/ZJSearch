@@ -152,7 +152,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     four depth modes = budget/decomposition/output-shape differences on
     ONE loop; the executor splits into `registry` ([n]/dedup/gallery
     whitelist), `coverage` (the task card's bidirectional-containment
-    tracker), `feed` (the writer's compact [n] block builder) and the
+    tracker), `feed` (the writer's compact [n] block builder), `rank`
+    (the web_search RANKING CASCADE: engine order → BM25 via the classic
+    page's bm25_reranker tokenizer/RRF → the `zjsearch.rerank` endpoint
+    re-scoring the head-20 — Bocha's cascade; every stage fails open,
+    rerank rides searx's curl_cffi network layer with a
+    `zjsearch-rerank` network escape hatch, and its prompt tokens
+    accumulate into the settle's `usage.rerank` bucket) and the
     Searches facade) and the AI OVERVIEW (`runtime/overview.py` — the
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
@@ -169,7 +175,9 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   carry the reading pane and the reader-cache archive; a reader read
   NEVER emits its own event kind, the closed set has no `page` and a
   stale producer crashes the stream by design); `tasks` is the task card's AUTHORITATIVE snapshot;
-  `sources` the global [n] registry; `answer` deltas are the writer's
+  `learnings` is the FINDINGS LEDGER's authoritative snapshot (the researcher's
+  own distillation of what the sources established — same
+  snapshot-replace semantics as `tasks`); `sources` the global [n] registry; `answer` deltas are the writer's
   OWN buffer (narration never mixes in); `ask` is the clarify gate AND
   the mid-research ask_user (same schema); `settle` declares the
   terminal state (`status: done|awaiting|error` + finish/usage/model/
@@ -949,6 +957,33 @@ plan (override: `zjsearch.feature.ai_search.max_rounds`); the prompt
 tells the researcher to keep working open ledger items and to switch
 tools freely (searches, page reads, the calculator).
 
+## Failure becomes information (the stall policy + the findings ledger)
+
+FAILURE IS RETRYABLE: the dedup registry marks queries/pages at
+COMPLETION, never at plan time — a query whose engines errored and a
+page whose read failed stay re-runnable (an executed query — empty or
+not — is honestly remembered; only an errored one is not).  An
+unproductive round (gathered work, zero new sources) appends a
+change-the-angle note to the round's tool results BEFORE the stall
+detector fires — Jina's diary discipline: `stall_rounds: 2` modes get
+one warning then the halt, goal's 3 get two.  Pure bookkeeping rounds
+(plan writes, learnings, memory saves) are NEITHER progress NOR stall.
+The researcher never sees the stall halt itself — that note (`STALL_NOTE`)
+stays the writer's honesty context.
+
+THE FINDINGS LEDGER (`learnings` tool, dzhng's learnings as a
+first-class surface): the researcher records what the sources
+ESTABLISHED (1-6 self-contained [n]-cited facts per call, deduped into
+the run's ledger); the wire `learnings` event is the authoritative
+snapshot, the writer receives the same list as a `<findings>` block
+beside the raw sources (support, never substitute — the citation
+contract still binds), and the client renders a findings card under the
+research-plan card (plan above, evidence below).  Plans/next steps
+belong to `task_write`, narration to the step notes — the prompt says
+so.  Ranking (rank.py) is deliberately NOT a tool: ranking fixes the
+order of things about to be SHOWN (before the reveal, mechanical,
+Bocha/Jina-style); tools give access to things the model cannot see.
+
 ## The human-in-the-loop doctrine (ask_user / clarify)
 
 The agent must NOT plow ahead on a guess: the `<ambiguity_escape>`
@@ -967,12 +1002,12 @@ sanitizer would downgrade must not be offered to the model).
 
 ## Knowledge base (知识库 -- the event-sourced browser-local research memory)
 
-The PGlite store IS the theme's research memory; schema v3 collapses it
-into ONE event-sourced table (`knowledge`, DDL in `src/lib/pg.ts`).
-Every wire event of an AI run lands as a `kind='evt'` row (finest
-grain, storage-only: `search_text` stays empty so the log never enters
-the retrieval indexes), and the queryable surfaces are PROJECTIONS
-written at settle: `run` (its meta carries a 600-char answer head --
+The PGlite store IS the theme's research memory; schema v4 splits the
+wire log into its OWN table (`run_event`, PK (run_id, n), DDL in
+`src/lib/pg.ts`) and keeps the queryable surfaces as PROJECTIONS in ONE
+`knowledge` table -- every scan, aggregate and work queue costs
+O(projections), never O(projections + events).  Projections written at
+settle: `run` (its meta carries a 600-char answer head --
   the thread rows' inline preview) / `source` (canonical url identity
 + ref/cited counters) / `source_ref` (the (run, source) join AS a kind)
 / `document` (web_reader full texts) / `memory` / `call` (the agent's
@@ -985,7 +1020,7 @@ overview actually CITES join the 来源 corpus (`ref:ovw:*` source_ref per
 (query, source) + the canonical source row, the settleRun identity
 pattern -- only cited [n], never the whole context).  Run answers are
 deliberately NOT projected -- they only duplicated the thread's 研究
-row; they replay from the evt log like every other wire event.
+row; they replay from the event log like every other wire event.
 Answer-kind rows open the inspector (there is no thread page behind an
 overview).  Replay
 and retrieval are separate executions of ONE reducer:
@@ -999,13 +1034,23 @@ columns back ALREADY-PARSED: decoding must type-dispatch, not
 loses the event -- shipped bug).
 
 - STORE: `src/lib/knowledgeStore.ts` is the facade -- `appendRunEvents`
-  (buffered ~1.5s, crash window = one batch), `settleRun`
-  (flush + projections + deriveTags + embed pass + tag normalization),
-  the live subscriptions (PGlite `live` plugin), and the read APIs.
+  (buffered ~1.5s; the flush is ONE multi-row INSERT into run_event --
+  atomic, a crashed tab has the batch or not), `settleRun` (ONE
+  transaction: flush + projections + `thread_head`; then the embed pass
+  + tag normalization trail outside it), the live subscriptions (PGlite
+  `live` plugin), and the read APIs.
   There is deliberately NO in-memory mirror anymore: every surface
   reads the same table the writes land in.  The ordered write queue
   warns on failure (fire-and-forget callers would swallow a broken
   write into "the feature is broken").
+- THREAD_HEAD: the thread directory is a settle-maintained projection
+  (`thread_head`: title = the FIRST run's question, preview = the
+  latest run's answer head, runs/sources counters, updated, pinned).
+  The v3 GROUP BY + correlated-subqueries aggregate re-fired on EVERY
+  evt flush; the projection is a 40-row indexed listing whose live
+  subscription re-fires at settles/pins/deletes only.  Counters advance
+  only on the run row's FIRST insert (`RETURNING (xmax = 0)` -- a
+  re-settle stays idempotent and only refreshes preview/recency).
 - RECALL: `recallCorpus` (writer-phase corpus) and `recallPages`
   (past_research index) fuse TWO dimensions -- hybrid BM25+vector RRF
   (trigram rescue on zero signal) and the TAG GRAPH (query matched
@@ -1051,15 +1096,27 @@ loses the event -- shipped bug).
   ResultsPage recording effect and every read path were removed (the
   knowledge base is AI-runs-only).  `recordClassicResults`' corpus
   feed died with it -- the sources corpus grows from AI runs only.
-- BOOT: schema v3 drops any legacy v2 table (CASCADE -- the old
-  live-query views/bm25 internals can hold dependencies a plain drop
-  trips over; a wedged legacy drop once silently failed EVERY store
-  write for the session).  No migration, by decision.
+- BOOT: schema v4's upgrade is IN PLACE (the v3 evt rows copy into
+  run_event with one idempotent INSERT..SELECT -- crash-resumable --
+  then leave `knowledge`; the dead `parent_id` column drops).  Legacy
+  v2 tables still die wholesale (CASCADE -- the old live-query
+  views/bm25 internals can hold dependencies a plain drop trips over; a
+  wedged legacy drop once silently failed EVERY store write for the
+  session).  Relational furniture v4 puts to work: a GIN index on tags
+  (`graphRecall`/`itemsByTag` ride `?`/`?|`), partial indexes for the
+  two work queues (the idle probes were full scans that found nothing,
+  twice per settle), and a GiST trgm index serving the rescue as a KNN
+  `title <-> query` ordering (gist_trgm_ops missing in a pglite build
+  degrades the rescue to its rare seq scan).
 - ENV keys: `ZJSEARCH_AI_KEY` / `ZJSEARCH_EMBEDDING_KEY` /
-  `ZJSEARCH_READER_KEY` (api_key stays "" in dev-settings.yml).
+  `ZJSEARCH_READER_KEY` / `ZJSEARCH_RERANK_KEY` (api_key stays "" in
+  dev-settings.yml -- the rerank key NEVER lives in the file).
 - USAGE STATS: the admin panel sums the runs' + overviews'
   `meta.usage` (input/output/thoughts/cached) from the knowledge table;
-  the inspector shows the same per card.  The EMBEDDING calls never land
+  the inspector shows the same per card.  `usage.rerank` (the ranking
+  cascade's endpoint spend: calls + prompt tokens, a separate bucket --
+  it is NOT LLM tokens) sums into the 模型统计 card's 重排序 group and
+  rides AiRunFooter per run.  The EMBEDDING calls never land
   in the table -- the route passes the SDK's usage through (openai:
   `prompt_tokens`; gemini has NO token usage for embed_content, only the
   enterprise `billable_character_count`, passed when present) and the
