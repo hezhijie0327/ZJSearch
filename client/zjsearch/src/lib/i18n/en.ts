@@ -253,6 +253,8 @@ export const EN = {
   knowledge_kind_empty: "Nothing of this kind yet.",
   knowledge_graph: "Graph",
   knowledge_graph_filter: "Filter by this tag",
+  knowledge_graph_items: "Content with this tag",
+  knowledge_graph_drag: "Drag to pan · wheel to zoom · drag a tag to move it · double-click to filter",
   knowledge_graph_list: "List",
   knowledge_graph_empty: "Tags appear as studies accumulate.",
   knowledge_graph_hint: "Click a tag to filter -- its neighbors are the next hop.",

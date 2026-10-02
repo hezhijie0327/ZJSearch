@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Database, LibraryBig, Network, Search, Star, X } from "lucide-react";
+import { Database, LibraryBig, Network, Search, Sparkles, Star, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Shell } from "@/components/Shell.tsx";
+import { Link, Shell } from "@/components/Shell.tsx";
 import {
   AdminPanel,
   ConfirmDialog,
@@ -23,6 +23,7 @@ import {
   type KnowledgeItem,
   type KnowledgeStats,
   knowledgeStats,
+  listAll,
   listKind,
   loadDocument,
   type MemoryRow,
@@ -159,6 +160,25 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [threadsLen, memoriesLen]);
+
+  // ── the "all" feed (newest items across the meaningful kinds) ────────
+  const [feed, setFeed] = useState<KnowledgeItem[] | null>(null);
+  useEffect(() => {
+    if (kind !== "all" || searching) {
+      return;
+    }
+    let cancelled = false;
+    listAll(40)
+      .then((rows) => {
+        if (!cancelled) setFeed(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setFeed([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, searching]);
 
   // ── the kind directory (a filter chip's own listing, non-search) ────
   const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
@@ -390,6 +410,8 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
             />
           ) : graphOpen ? (
             <TagGraphView
+              onOpenInspector={setInspected}
+              onOpenThread={navigateThread}
               onSelectTag={(tag) => {
                 setQuery(tag);
                 setGraphOpen(false);
@@ -397,6 +419,30 @@ export function KnowledgePage({ data }: { data: KnowledgePageData }) {
             />
           ) : searching ? (
             <SearchResults groups={searchByKind} onOpen={setInspected} onOpenThread={navigateThread} />
+          ) : kind === "all" ? (
+            feed === null ? (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <span className="zjs-skeleton block h-16 rounded-xl" key={i} />
+                ))}
+              </div>
+            ) : feed.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-2 py-20 text-center">
+                <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
+                  <Sparkles aria-hidden="true" className="size-7" />
+                </span>
+                <p className="mt-4 text-sm font-medium text-ink">{t("knowledge_empty")}</p>
+                <p className="mt-1 text-[13px] text-ink-3">{t("knowledge_empty_hint")}</p>
+                <Link
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+                  href="/"
+                >
+                  {t("back_to_search")}
+                </Link>
+              </div>
+            ) : (
+              <KindItemRows items={feed} onOpenInspector={setInspected} onOpenThread={navigateThread} showKind />
+            )
           ) : kindListing ? (
             kindItems === null ? (
               <div className="space-y-2">

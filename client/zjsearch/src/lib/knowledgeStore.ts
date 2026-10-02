@@ -827,6 +827,32 @@ export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[
   return (rows ?? []).map(rowToItem);
 }
 
+/** The "全部" feed: the newest rows across the meaningful kinds (the evt
+    log and the internal source_ref edges excluded). */
+export async function listAll(limit = 40): Promise<KnowledgeItem[]> {
+  await pg();
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT ${ITEM_COLUMNS} FROM knowledge
+     WHERE kind IN ('run', 'answer', 'source', 'document', 'memory')
+     ORDER BY updated DESC LIMIT $1`,
+    [limit],
+  );
+  return (rows ?? []).map(rowToItem);
+}
+
+/** The items carrying one tag (the graph's locate-to-content panel). */
+export async function itemsByTag(tag: string, limit = 20): Promise<KnowledgeItem[]> {
+  await pg();
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT ${ITEM_COLUMNS} FROM knowledge
+     WHERE kind IN ('run', 'answer', 'source', 'document', 'memory')
+       AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(tags) AS t WHERE t = $1)
+     ORDER BY updated DESC LIMIT $2`,
+    [tag, limit],
+  );
+  return (rows ?? []).map(rowToItem);
+}
+
 /** Cross-kind hybrid search (the knowledge page's search box). */
 export async function searchKnowledge(
   query: string,

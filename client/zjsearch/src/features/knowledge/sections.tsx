@@ -467,10 +467,13 @@ export function KindItemRows({
   items,
   onOpenInspector,
   onOpenThread,
+  showKind = false,
 }: {
   items: KnowledgeItem[];
   onOpenInspector: (item: KnowledgeItem) => void;
   onOpenThread: (id: string) => void;
+  /** the mixed "全部" feed labels every row with its kind */
+  showKind?: boolean;
 }) {
   const t = useT();
   if (items.length === 0) {
@@ -509,6 +512,9 @@ export function KindItemRows({
             </span>
             <span className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
               <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
+              {showKind ? (
+                <span className={CHIP}>{t(KIND_LABEL_KEYS[item.kind] ?? "knowledge_kind_source")}</span>
+              ) : null}
               {item.host ? <span className={CHIP}>{item.host}</span> : null}
               {item.cited > 0 ? (
                 <span className={CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
