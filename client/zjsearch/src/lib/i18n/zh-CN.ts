@@ -245,6 +245,7 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_usage_output: "输出",
   knowledge_usage_thoughts: "思考",
   knowledge_usage_cached: "缓存命中",
+  knowledge_usage_cache_write: "缓存写入",
   knowledge_admin_usage_title: "AI 用量",
   knowledge_usage_calls: "调用",
   knowledge_admin_embed_usage: "嵌入累计",

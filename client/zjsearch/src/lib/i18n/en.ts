@@ -243,6 +243,7 @@ export const EN = {
   knowledge_usage_output: "Output",
   knowledge_usage_thoughts: "Thoughts",
   knowledge_usage_cached: "Cached",
+  knowledge_usage_cache_write: "Cache write",
   knowledge_admin_usage_title: "AI usage",
   knowledge_usage_calls: "Calls",
   knowledge_admin_embed_usage: "Embedding totals",

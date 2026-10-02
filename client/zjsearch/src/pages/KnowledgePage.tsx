@@ -447,37 +447,35 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             {/* ── toolbar: the time/pinned filters, list kinds only ── */}
             {listTab ? (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <>
-                  <Dropdown label={timeLabel}>
-                    {(["any", "week", "month"] as TimeFilter[]).map((option) => (
-                      <button
-                        className="block w-full px-3 py-2 text-start text-[13px] text-ink transition-colors hover:bg-surface-2"
-                        key={option}
-                        onClick={() => setTime(option)}
-                        type="button"
-                      >
-                        {option === "any"
-                          ? t("knowledge_time_any")
-                          : option === "week"
-                            ? t("knowledge_time_week")
-                            : t("knowledge_time_month")}
-                      </button>
-                    ))}
-                  </Dropdown>
-                  <button
-                    aria-pressed={pinnedOnly}
-                    className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] transition-colors ${
-                      pinnedOnly
-                        ? "bg-accent-soft font-medium text-accent"
-                        : "border border-line text-ink-3 hover:bg-surface-2 hover:text-ink"
-                    }`}
-                    onClick={() => setPinnedOnly((prev) => !prev)}
-                    type="button"
-                  >
-                    <Star aria-hidden="true" className="size-3.5" />
-                    {t("knowledge_pinned_only")}
-                  </button>
-                </>
+                <Dropdown label={timeLabel}>
+                  {(["any", "week", "month"] as TimeFilter[]).map((option) => (
+                    <button
+                      className="block w-full px-3 py-2 text-start text-[13px] text-ink transition-colors hover:bg-surface-2"
+                      key={option}
+                      onClick={() => setTime(option)}
+                      type="button"
+                    >
+                      {option === "any"
+                        ? t("knowledge_time_any")
+                        : option === "week"
+                          ? t("knowledge_time_week")
+                          : t("knowledge_time_month")}
+                    </button>
+                  ))}
+                </Dropdown>
+                <button
+                  aria-pressed={pinnedOnly}
+                  className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] transition-colors ${
+                    pinnedOnly
+                      ? "bg-accent-soft font-medium text-accent"
+                      : "border border-line text-ink-3 hover:bg-surface-2 hover:text-ink"
+                  }`}
+                  onClick={() => setPinnedOnly((prev) => !prev)}
+                  type="button"
+                >
+                  <Star aria-hidden="true" className="size-3.5" />
+                  {t("knowledge_pinned_only")}
+                </button>
               </div>
             ) : null}
 

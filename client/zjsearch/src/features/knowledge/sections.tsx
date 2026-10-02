@@ -7,6 +7,7 @@
     Page-private to KnowledgePage -- nothing here exports beyond it. */
 
 import {
+  ArrowUp,
   Binary,
   Check,
   ChevronDown,
@@ -18,6 +19,7 @@ import {
   MemoryStick,
   MessageCircleQuestion,
   Pencil,
+  Repeat,
   Search,
   Sparkles,
   Star,
@@ -625,23 +627,7 @@ export function InspectorView({
           <p className="line-clamp-2 text-sm font-semibold text-ink" dir="auto">
             {item.title || item.url}
           </p>
-          {/* the SAME meta line the thread page's answer card ends with */}
-          <AiRunFooter
-            finish={usage?.finish ?? null}
-            model={usage?.model ?? null}
-            usage={
-              usage
-                ? ({
-                    cache_write: 0,
-                    cached: usage.cached ?? 0,
-                    input: usage.input ?? 0,
-                    output: usage.output ?? 0,
-                    thoughts: usage.thoughts ?? null,
-                  } satisfies AiUsage)
-                : null
-            }
-          />
-          <div className="mt-3 text-[13px] leading-relaxed text-ink-2">
+          <div className="text-[13px] leading-relaxed text-ink-2">
             {item.kind === "answer" ? (
               <InspectorMarkdown text={item.body} />
             ) : item.kind === "run" ? (
@@ -667,6 +653,23 @@ export function InspectorView({
               <InspectorMarkdown text={body} />
             )}
           </div>
+          {/* the SAME meta line the thread page's answer card ends with --
+              pinned to the card's foot */}
+          <AiRunFooter
+            finish={usage?.finish ?? null}
+            model={usage?.model ?? null}
+            usage={
+              usage
+                ? ({
+                    cache_write: usage.cache_write ?? 0,
+                    cached: usage.cached ?? 0,
+                    input: usage.input ?? 0,
+                    output: usage.output ?? 0,
+                    thoughts: usage.thoughts ?? null,
+                  } satisfies AiUsage)
+                : null
+            }
+          />
         </div>
       </Card>
       {sources.length > 0 ? (
@@ -791,7 +794,6 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
         { label: t("knowledge_admin_memories"), value: String(stats.memories) },
         { label: t("knowledge_admin_events"), value: String(stats.events) },
         { label: t("knowledge_admin_size"), value: formatBytesLocal(stats.approxBytes) },
-        { label: t("knowledge_admin_embed"), value: stats.embedModel ?? "—" },
       ]
     : [];
   return (
@@ -818,13 +820,14 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                 <Gauge aria-hidden="true" className="size-4.5 text-ink-3" />
                 <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_usage_title")}</h2>
               </div>
-              <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
                 {(
                   [
                     ["knowledge_usage_input", stats.usage.input],
                     ["knowledge_usage_output", stats.usage.output],
                     ["knowledge_usage_thoughts", stats.usage.thoughts],
                     ["knowledge_usage_cached", stats.usage.cached],
+                    ["knowledge_usage_cache_write", stats.usage.cache_write],
                   ] as const
                 ).map(([label, value]) => (
                   <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={label}>
@@ -848,17 +851,19 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   <Binary aria-hidden="true" className="size-4.5 text-ink-3" />
                   <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_embed_usage")}</h2>
                 </div>
-                <dl className="mt-4 grid grid-cols-3 gap-2">
+                <dl className="mt-4 grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                    <dt className="text-xs text-ink-3">{t("knowledge_admin_embed")}</dt>
-                    <dd className="mt-0.5 truncate text-sm font-medium text-ink">{embed.model || "—"}</dd>
-                  </div>
-                  <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                    <dt className="text-xs text-ink-3">{t("knowledge_usage_input")}</dt>
+                    <dt className="flex items-center gap-1 text-xs text-ink-3">
+                      <ArrowUp aria-hidden="true" className="size-3" />
+                      {t("knowledge_usage_input")}
+                    </dt>
                     <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.input.toLocaleString()}</dd>
                   </div>
                   <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                    <dt className="text-xs text-ink-3">{t("knowledge_usage_calls")}</dt>
+                    <dt className="flex items-center gap-1 text-xs text-ink-3">
+                      <Repeat aria-hidden="true" className="size-3" />
+                      {t("knowledge_usage_calls")}
+                    </dt>
                     <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.calls.toLocaleString()}</dd>
                   </div>
                 </dl>

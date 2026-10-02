@@ -293,6 +293,7 @@ export interface OverviewUsage {
   output?: number | null;
   thoughts?: number | null;
   cached?: number | null;
+  cache_write?: number | null;
 }
 
 export function saveOverview(input: {
@@ -1148,19 +1149,33 @@ export interface KnowledgeStats {
   embedModel: string | null;
   /** the stored runs' + overviews' token usage, summed (null = nothing
       recorded yet) */
-  usage: { input: number; output: number; thoughts: number; cached: number } | null;
+  usage: { input: number; output: number; thoughts: number; cached: number; cache_write: number } | null;
 }
 
 /** The stored runs' + overviews' token usage, summed over their meta.
     Null when nothing recorded -- the admin cards hide the section. */
-async function usageTotals(): Promise<{ input: number; output: number; thoughts: number; cached: number } | null> {
+async function usageTotals(): Promise<{
+  input: number;
+  output: number;
+  thoughts: number;
+  cached: number;
+  cache_write: number;
+} | null> {
   await pg();
-  const rows = await pgQuery<{ input: string; output: string; thoughts: string; cached: string; any: string }>(
+  const rows = await pgQuery<{
+    input: string;
+    output: string;
+    thoughts: string;
+    cached: string;
+    cache_write: string;
+    any: string;
+  }>(
     `SELECT
        COALESCE(sum((meta->'usage'->>'input')::bigint), 0) AS input,
        COALESCE(sum((meta->'usage'->>'output')::bigint), 0) AS output,
        COALESCE(sum(COALESCE((meta->'usage'->>'thoughts')::bigint, 0)), 0) AS thoughts,
        COALESCE(sum(COALESCE((meta->'usage'->>'cached')::bigint, 0)), 0) AS cached,
+       COALESCE(sum(COALESCE((meta->'usage'->>'cache_write')::bigint, 0)), 0) AS cache_write,
        count(*) AS any
      FROM knowledge WHERE kind IN ('run', 'answer') AND meta->'usage' IS NOT NULL`,
   );
@@ -1173,6 +1188,7 @@ async function usageTotals(): Promise<{ input: number; output: number; thoughts:
     output: Number(row.output) || 0,
     thoughts: Number(row.thoughts) || 0,
     cached: Number(row.cached) || 0,
+    cache_write: Number(row.cache_write) || 0,
   };
 }
 
