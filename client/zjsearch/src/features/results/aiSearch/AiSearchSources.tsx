@@ -87,7 +87,7 @@ function SourceCard({ source }: { source: AiSearchSource }) {
             ) : null}
           </div>
           <a
-            className="mt-1 line-clamp-2 block text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
+            className="mt-1 line-clamp-2 block min-h-12 text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
             dir="auto"
             href={source.url}
             onClick={(event) => event.stopPropagation()}
@@ -99,6 +99,7 @@ function SourceCard({ source }: { source: AiSearchSource }) {
           {/* the snippet's toggle stays off the card's link */}
           {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
           <div
+            className="min-h-[4.5rem]"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
               if (event.key === "Enter") {

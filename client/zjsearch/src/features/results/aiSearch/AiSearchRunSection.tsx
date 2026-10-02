@@ -14,8 +14,6 @@ import {
   Compass,
   Copy,
   CornerDownRight,
-  FileDown,
-  FileText,
   Globe,
   Lightbulb,
   ListTodo,
@@ -23,6 +21,7 @@ import {
   MessageCircleQuestion,
   Minus,
   NotebookPen,
+  Play,
   Plug,
   Repeat2,
   RotateCw,
@@ -44,10 +43,11 @@ import type {
   AiSearchSource,
   AiSearchStep,
 } from "@/features/results/aiSearch/useAiSearch.ts";
+import { Snippet } from "@/features/results/cardParts.tsx";
 import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useT } from "@/lib/i18n.ts";
-import { printDocument } from "@/lib/print.ts";
+import { escapeHtml } from "@/lib/print.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /**
@@ -208,9 +208,11 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
 
 /** The findings ledger (the learnings tool writes it; the writer received
     the same list as <findings>): the evidence trail under the plan card --
-    what the sources ESTABLISHED, one clamped fact per row, growing live
-    as the run records.  The plan card above says what the run intends;
-    this card says what it already has. */
+    what the sources ESTABLISHED, growing live as the run records.  Each
+    fact renders through the SAME measured clamp+expand as a source card's
+    snippet (the 查看更多 language) -- nothing is folded away unreadable.
+    The plan card above says what the run intends; this card says what it
+    already has. */
 function FindingsCard({ learnings }: { learnings: string[] }) {
   const t = useT();
   if (learnings.length === 0) {
@@ -225,11 +227,11 @@ function FindingsCard({ learnings }: { learnings: string[] }) {
       </div>
       <ul className="mt-3 space-y-1.5">
         {learnings.map((fact, index) => (
-          <li className="flex items-start gap-2 text-xs" key={`${index}-${fact}`}>
-            <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-accent/70" />
-            <span className="line-clamp-2 min-w-0 flex-1 break-words text-ink-2" dir="auto">
-              {fact}
-            </span>
+          <li className="flex items-start gap-2" key={`${index}-${fact}`}>
+            <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
+            <div className="min-w-0 flex-1">
+              <Snippet contentHtml={escapeHtml(fact)} />
+            </div>
           </li>
         ))}
       </ul>
@@ -799,8 +801,8 @@ function AiSearchRunSectionImpl({
   live,
   sourceMeta,
   onCite,
-  onExportThread,
   onRegenerate,
+  onContinue,
   onFallback,
   onRelated,
   onStop,
@@ -815,9 +817,9 @@ function AiSearchRunSectionImpl({
   sourceMeta: AiSourceMeta[];
   onCite?: (index: number) => void;
   onRegenerate?: () => void;
-  /** download the WHOLE thread as a Markdown document (the last run's
-      actions row hosts it -- end of the conversation, where users look) */
-  onExportThread?: () => void;
+  /** continue an INTERRUPTED research as a new run in the same thread
+      (the failed box's primary action when research gathered material) */
+  onContinue?: () => void;
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
@@ -965,7 +967,9 @@ function AiSearchRunSectionImpl({
           {!streaming && isLast && run.answer ? (
             <div className="flex items-center gap-1">
               {/* [retry | copy] -- twin ghost circles: the fill is HOVER
-                  feedback only (a persistent disc reads as a selected state) */}
+                  feedback only (a persistent disc reads as a selected state).
+                  Downloads (MD/PDF) live in the knowledge base's inspector
+                  ONLY -- the answer surfaces stay read-and-ask. */}
               <button
                 aria-label={t("regenerate")}
                 className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
@@ -986,41 +990,6 @@ function AiSearchRunSectionImpl({
               >
                 <Copy className="size-4" />
               </button>
-              {onExportThread ? (
-                <button
-                  aria-label={t("ai_thread_export")}
-                  className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                  onClick={onExportThread}
-                  title={t("ai_thread_export")}
-                  type="button"
-                >
-                  <FileDown className="size-4" />
-                </button>
-              ) : null}
-              <button
-                aria-label={t("ai_pdf_download")}
-                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                onClick={() => {
-                  const source = document.getElementById(`ai-run-${run.runNo}`);
-                  if (!source) {
-                    return;
-                  }
-                  printDocument({
-                    title: run.q || "thread",
-                    fileTag: (/\/ai\/thread\/([\w-]+)/.exec(window.location.pathname)?.[1] ?? "").slice(0, 8),
-                    source,
-                    sources: run.sources.slice(0, 30).map((item, index) => ({
-                      n: item.n || index + 1,
-                      title: item.title || item.url,
-                      netloc: item.netloc || item.url,
-                    })),
-                  });
-                }}
-                title={t("ai_pdf_download")}
-                type="button"
-              >
-                <FileText className="size-4" />
-              </button>
             </div>
           ) : null}
           {/* the run's meta line at the END of the output (lobehub's
@@ -1038,12 +1007,30 @@ function AiSearchRunSectionImpl({
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* an INTERRUPTED research keeps its ledger: 继续 starts a
+                    new run in the same thread -- numbering and findings
+                    travel, the researcher resumes the gaps (the primary
+                    action whenever this run actually gathered material) */}
+                {onContinue && !run.answer.trim() && totalCalls > 0 ? (
+                  <button
+                    className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                    onClick={onContinue}
+                    type="button"
+                  >
+                    <Play aria-hidden="true" className="size-3.5" />
+                    {t("ai_continue_research")}
+                  </button>
+                ) : null}
                 {/* a transient failure (gateway hiccup, rate limit, a
                     wrong model id that has since been fixed) is worth one
                     click to re-run -- the retry re-asks the SAME question
                     as a fresh run */}
                 <button
-                  className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] transition-colors ${
+                    onContinue && !run.answer.trim() && totalCalls > 0
+                      ? "border border-line text-ink-2 hover:text-ink"
+                      : "border border-accent-strong/40 bg-accent-soft font-medium text-accent hover:text-accent-hover"
+                  }`}
                   onClick={onRegenerate}
                   type="button"
                 >

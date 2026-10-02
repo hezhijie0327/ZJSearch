@@ -148,11 +148,13 @@
 
 /* ── the dedicated print view: while body.zjs-print-view is set, ONLY the
    report sheet prints — the app underneath disappears.  Paper is always
-   LIGHT: the registered-token force above whitens even a dark user's
-   sheet (token-driven components recolor through their variables; the
-   mermaid diagrams — the one component family with colors BAKED into the
-   DOM — re-render light via the same body-class marker, see
-   PrintView/MermaidBlock).  The sheet's own face is the
+   LIGHT and the sheet's GROUND is always PURE WHITE (never the light
+   theme's warm off-white --bg: against the white @page margins it reads
+   as a yellow smudge; that warm tone is why the dark force above pins
+   --bg to #ffffff too).  Token-driven components recolor through their
+   variables; the mermaid diagrams — the one component family with colors
+   BAKED into the DOM — re-render light via the same body-class marker,
+   see PrintView/MermaidBlock.  The sheet's own face is the
    .zjs-print-sheet report theme below. ── */
 #zjs-print-view-root {
   display: none;
@@ -165,7 +167,7 @@
 
   #zjs-print-view-root {
     display: block !important;
-    background: var(--bg);
+    background: #ffffff !important;
     color: var(--ink);
     min-height: 100vh;
     padding: 40px;

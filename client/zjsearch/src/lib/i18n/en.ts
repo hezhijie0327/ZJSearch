@@ -193,6 +193,7 @@ export const EN = {
   ai_task_missed: "not covered",
   ai_task_row: "Write research plan",
   ai_task_writing: "Drafting…",
+  ai_continue_research: "Continue research",
   ai_findings_card: "Findings",
   ai_learnings_row: "Record findings",
   ai_learnings_running: "Recording…",
@@ -231,7 +232,7 @@ export const EN = {
   knowledge_admin_size: "Storage",
   knowledge_admin_reset: "Reset the database",
   knowledge_admin_reset_desc:
-    "Drops every knowledge table in this browser -- the schema is recreated empty on next use.",
+    "Drops every knowledge table in this browser and clears the embedding usage totals -- the schema is recreated empty on next use.",
   knowledge_admin_reset_confirm: "Really drop everything?",
   knowledge_admin_reset_done: "Database reset",
   knowledge_empty: "No studies yet.",

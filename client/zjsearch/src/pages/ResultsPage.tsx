@@ -40,14 +40,12 @@ import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
 import { citedSourceNumbers } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
-import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { type Translate, themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { recallPages, saveOverview, threadUrl } from "@/lib/knowledgeStore.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
 import { useHasPlugin, useSettings } from "@/lib/settings.ts";
-import { flashToast } from "@/lib/toast.ts";
 import type { ResultItem, SearchPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
@@ -489,12 +487,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       flashTimer.current = null;
     }, 1900);
   }, []);
-  const onRunExportThread = useCallback(() => {
+  const onRunContinue = useCallback(() => {
     const view = aiViewStateRef.current;
-    const runs = aiSearchRef.current;
-    downloadThreadMarkdown(runs.threadId, runs.runs[0]?.q ?? "", runs.runs, view.data.globals.instance_name);
-    flashToast(t("ai_thread_exported"), { tone: "ok", timeoutMs: 2000 });
-  }, [t]);
+    aiSearchRef.current.continue(view.aiLang, view.researchMode, view.filterValues.search_language);
+  }, []);
   const onRunFallback = useCallback(() => {
     search(buildParamsRef.current({ ai: false }), { replace: true });
   }, [search]);
@@ -837,7 +833,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onCite={(n) => {
                         return onRunCite(index, n);
                       }}
-                      onExportThread={onRunExportThread}
+                      onContinue={onRunContinue}
                       onFallback={onRunFallback}
                       onRegenerate={onRunRegenerate}
                       onRelated={onRunRelated}

@@ -847,26 +847,25 @@ theme-only fields like title_html are dropped) and answers in the msgspec
 `zjsearch/opensearch_response_rss.xml` line by line.  CSV keeps the upstream
 columns but fills the answer rows gracefully (the server CSV crashes on
 answers: `parsed_url` is null there).  MARKDOWN is the one client-only
-export (no server format endpoint): an MD chip after the server formats,
-plus `downloadThreadMarkdown` — the AI conversation export (one `## `
-section per question, the answer verbatim — gallery placeholders become
-their images' markdown figures — the run's sources at its foot) hosted on
-the last run's actions row.  PDF is the browser's own dialog, not a jsPDF
+export (no server format endpoint): an MD chip after the server formats.
+DOWNLOADS LIVE IN THE KNOWLEDGE BASE ONLY: the AI Overview card and the
+AI Search thread/actions rows carry regenerate + copy and NOTHING else —
+⬇ (Markdown) and 📄 (PDF) live on the knowledge page's records (the
+inspector's header, `exporters.downloadAnswerMarkdown` /
+`downloadThreadMarkdown`).  PDF is the browser's own dialog, not a jsPDF
 dependency (CJK font embedding would torpedo the no-webfont budget): the
 📄 action mounts `PrintView`, a thin wrapper over `lib/print.ts`'s
 `printDocument({title, fileTag, heading, source, sources})` -- the shared
 pipeline (wordmark, injected heading, cloned rendered content with chrome
 stripped, numbered sources at the tail, dark-mermaid light re-renders,
-filename via `document.title`) that the knowledge inspector's 📄 and the
-AI 概览 card's own 📄 reuse.  The 概览 card's actions row carries the same
-four icons as the thread (regenerate / copy / ⬇ `downloadAnswerMarkdown`
-/ 📄), and the knowledge inspector's header carries ⬇ 📄 left of the
-star -- one answer, one export shape (`exporters.downloadAnswerMarkdown`).  `styles/print.css` is print-only by
+filename via `document.title`).  `styles/print.css` is print-only by
 construction (`@media print` + selectors that match nothing on screen) and
 PAPER IS ALWAYS LIGHT ON A PURE-WHITE GROUND: the color tokens are
 `@property`-registered, so `initial` restores the light palette from
-tokens.css (one source of truth, `--bg` pinned `#ffffff` as the paper
-exception); `.zjs-print-hide` marks the chrome that must never print,
+tokens.css (one source of truth), `--bg` is pinned `#ffffff` in the dark
+force AND the print-view root paints pure `#ffffff` — never the light
+theme's warm off-white (against the white @page margins it reads as a
+yellow sheet); `.zjs-print-hide` marks the chrome that must never print,
 clamps expand, Collapse panels print open, reading measures widen.  The
 one component with colors BAKED into the DOM is mermaid: blocks carry
 `data-zjs-mermaid` and PrintView renders its own NEUTRAL copies
@@ -978,11 +977,20 @@ the run's ledger); the wire `learnings` event is the authoritative
 snapshot, the writer receives the same list as a `<findings>` block
 beside the raw sources (support, never substitute — the citation
 contract still binds), and the client renders a findings card under the
-research-plan card (plan above, evidence below).  Plans/next steps
+research-plan card (plan above, evidence below; each fact expands
+through the source cards' measured 查看更多 clamp).  Plans/next steps
 belong to `task_write`, narration to the step notes — the prompt says
 so.  Ranking (rank.py) is deliberately NOT a tool: ranking fixes the
 order of things about to be SHOWN (before the reveal, mechanical,
 Bocha/Jina-style); tools give access to things the model cannot see.
+
+CONTINUE (断点继续): an interrupted research is a STORAGE question, not
+a server session — `startRun` persists the run row from run start, the
+1.5s evt flush keeps the log current, and the failed box's 继续 button
+(`useAiSearch.continue`) starts a NEW run in the same thread: the [n]
+numbering continues (`sources_base`), and the failed run's findings
+travel as the confirmed `<clarified>` direction — the researcher
+resumes the gaps instead of restarting.  The server stays stateless.
 
 ## The human-in-the-loop doctrine (ask_user / clarify)
 
@@ -1035,10 +1043,12 @@ loses the event -- shipped bug).
 
 - STORE: `src/lib/knowledgeStore.ts` is the facade -- `appendRunEvents`
   (buffered ~1.5s; the flush is ONE multi-row INSERT into run_event --
-  atomic, a crashed tab has the batch or not), `settleRun` (ONE
-  transaction: flush + projections + `thread_head`; then the embed pass
-  + tag normalization trail outside it), the live subscriptions (PGlite
-  `live` plugin), and the read APIs.
+  atomic, a crashed tab has the batch or not), `startRun` (the run row +
+  the thread's directory entry land AT RUN START, status "streaming" --
+  a killed run stays visible and replayable; the continue path's
+  storage), `settleRun` (ONE transaction: flush + projections +
+  `thread_head`; then the embed pass + tag normalization trail outside
+  it), the live subscriptions (PGlite `live` plugin), and the read APIs.
   There is deliberately NO in-memory mirror anymore: every surface
   reads the same table the writes land in.  The ordered write queue
   warns on failure (fire-and-forget callers would swallow a broken
@@ -1108,6 +1118,12 @@ loses the event -- shipped bug).
   twice per settle), and a GiST trgm index serving the rescue as a KNN
   `title <-> query` ordering (gist_trgm_ops missing in a pglite build
   degrades the rescue to its rare seq scan).
+  RESET drops the three tables CASCADE and re-runs the schema DDL ON THE
+  SAME LIVE CONNECTION (`createSchema`) — the old close-and-reopen dance
+  raced PGlite's IndexedDB flush (a reopened database served the
+  pre-drop state back: "the reset did nothing") and wedged the live
+  subscriptions; the reset also clears the localStorage embedding-usage
+  totals (`zjs-embed-usage` — a reset that leaves them reads broken).
 - ENV keys: `ZJSEARCH_AI_KEY` / `ZJSEARCH_EMBEDDING_KEY` /
   `ZJSEARCH_READER_KEY` / `ZJSEARCH_RERANK_KEY` (api_key stays "" in
   dev-settings.yml -- the rerank key NEVER lives in the file).

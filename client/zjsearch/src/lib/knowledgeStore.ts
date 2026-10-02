@@ -405,13 +405,55 @@ export function saveOverview(input: {
   }).catch(() => {});
 }
 
+/** Run-start persistence: the run's head row lands (status "streaming")
+    and the thread joins the directory THE MOMENT research begins -- a
+    crashed tab or a dead network leaves a resumable event log behind a
+    visible run row (the continue path's storage).  settleRun later
+    UPDATES the same row and recomputes the thread-head counters from the
+    projections, so the early write can never double-count. */
+export function startRun(threadId: string, run: { runNo: number; q: string; mode?: string; startedAt?: number }): void {
+  const runId = `${threadId}:${run.runNo}`;
+  void enqueue(async () => {
+    await pgTransaction(async (tx) => {
+      const now = Date.now();
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, thread_id, run_id, n, title, status, meta, tags, search_text, created, updated, occurred_at)
+         VALUES ($1, 'run', $2, $3, $4, $5, 'streaming', $6::jsonb, '[]'::jsonb, $7, $8, $8, $8)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          `run:${runId}`,
+          threadId,
+          runId,
+          run.runNo,
+          run.q.slice(0, 300),
+          JSON.stringify({ mode: run.mode ?? "", sources: 0, answer: "" }),
+          segmentKeywords(run.q),
+          Number(run.startedAt ?? now) || now,
+        ],
+        tx,
+      );
+      await pgQuery(
+        `INSERT INTO thread_head (thread_id, title, preview, runs, sources, updated, pinned)
+         VALUES ($1, $2, '',
+           (SELECT count(*) FROM knowledge kr WHERE kr.thread_id = $1 AND kr.kind = 'run'),
+           (SELECT count(*) FROM knowledge ks WHERE ks.thread_id = $1 AND ks.kind = 'source_ref'),
+           $3, 0)
+         ON CONFLICT (thread_id) DO UPDATE SET runs = EXCLUDED.runs, sources = EXCLUDED.sources,
+           updated = EXCLUDED.updated`,
+        [threadId, run.q.slice(0, 300), now],
+        tx,
+      );
+    });
+  });
+}
+
 /** One settled run: flush its events, then write every projection -- ONE
     transaction, so a crashed settle never leaves half a run (the flush
     batch and the projections commit together).  The hook's settle
     checkpoint calls this (fire-and-forget); a re-settle of the same runId
     is idempotent (projection ids are deterministic, the source counters
-    only move on first-insert of each ref row, and the thread head's
-    counters only advance on the run row's FIRST insert). */
+    only move on first-insert of each ref row, and the thread-head
+    counters RECOMPUTE from the projections). */
 export function settleRun(threadId: string, run: RunSnapshot): void {
   const runId = `${threadId}:${run.runNo}`;
   void enqueue(async () => {
@@ -421,14 +463,13 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       const citedSet = citedNumbers(String(run.answer ?? ""));
       // the extractor's concept tags win; the mechanical layer is the fallback
       const tags = run.tags?.length ? run.tags : deriveTags(run);
-      // the run's head row -- RETURNING (xmax = 0) distinguishes a fresh
-      // INSERT from a re-settle's UPDATE
-      const headRows = await pgQuery<{ inserted: boolean }>(
+      // the run's head row (startRun may have pre-inserted it as
+      // "streaming" -- this upsert settles it)
+      await pgQuery(
         `INSERT INTO knowledge (id, kind, thread_id, run_id, n, title, status, meta, tags, search_text, created, updated, occurred_at)
          VALUES ($1, 'run', $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $11)
          ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status,
-           meta = EXCLUDED.meta, tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated
-         RETURNING (xmax = 0) AS inserted`,
+           meta = EXCLUDED.meta, tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
         [
           `run:${runId}`,
           threadId,
@@ -453,26 +494,21 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         ],
         tx,
       );
-      // the thread head (the directory's whole listing -- no aggregate): a
-      // fresh run advances the counters, a re-settle only refreshes the
-      // preview/recency; the title stays the FIRST run's question
-      if (headRows?.[0]?.inserted === true) {
-        await pgQuery(
-          `INSERT INTO thread_head (thread_id, title, preview, runs, sources, updated, pinned)
-           VALUES ($1, $2, $3, 1, $4, $5, 0)
-           ON CONFLICT (thread_id) DO UPDATE SET preview = EXCLUDED.preview,
-             runs = thread_head.runs + 1, sources = thread_head.sources + EXCLUDED.sources,
-             updated = EXCLUDED.updated`,
-          [threadId, run.q.slice(0, 300), String(run.answer ?? "").slice(0, 400), (run.sources ?? []).length, now],
-          tx,
-        );
-      } else {
-        await pgQuery(
-          "UPDATE thread_head SET preview = $2, updated = $3 WHERE thread_id = $1",
-          [threadId, String(run.answer ?? "").slice(0, 400), now],
-          tx,
-        );
-      }
+      // the thread head (the directory's whole listing -- no aggregate):
+      // the counters RECOMPUTE from the projections (indexed, cheap,
+      // idempotent -- a re-settle or a startRun-pre-inserted row can
+      // never double-count); the title stays the FIRST run's question
+      await pgQuery(
+        `INSERT INTO thread_head (thread_id, title, preview, runs, sources, updated, pinned)
+         VALUES ($1, $2, $3,
+           (SELECT count(*) FROM knowledge kr WHERE kr.thread_id = $1 AND kr.kind = 'run'),
+           (SELECT count(*) FROM knowledge ks WHERE ks.thread_id = $1 AND ks.kind = 'source_ref'),
+           $4, 0)
+         ON CONFLICT (thread_id) DO UPDATE SET preview = EXCLUDED.preview,
+           runs = EXCLUDED.runs, sources = EXCLUDED.sources, updated = EXCLUDED.updated`,
+        [threadId, run.q.slice(0, 300), String(run.answer ?? "").slice(0, 400), now],
+        tx,
+      );
       // the task card + the clarify archive
       if ((run.tasks ?? []).length > 0) {
         await pgQuery(
@@ -1411,12 +1447,19 @@ export function deleteSource(url: string): void {
   });
 }
 
-/** The nuclear option: drop the table itself (schema recreated on next
-    boot). */
+/** The nuclear option: drop the tables themselves (schema recreated on
+    next boot).  The knowledge base's localStorage siblings die with it --
+    the embedding usage totals (zjs-embed-usage) are part of the same
+    account; a "reset" that leaves them behind reads as a broken reset. */
 export function resetAll(): void {
   void enqueue(async () => {
     const { resetDatabase } = await import("@/lib/pg.ts");
     await resetDatabase();
+    try {
+      window.localStorage.removeItem("zjs-embed-usage");
+    } catch {
+      /* storage unavailable -- the DB reset still happened */
+    }
   });
 }
 

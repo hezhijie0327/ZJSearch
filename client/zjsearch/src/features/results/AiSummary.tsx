@@ -4,7 +4,7 @@
 // enough to ride the results stylesheet; the woff2 fonts load on demand)
 import "katex/dist/katex.min.css";
 
-import { ArrowUpRight, Brain, ChevronDown, Copy, FileDown, FileText, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowUpRight, Brain, ChevronDown, Copy, RefreshCw, Sparkles } from "lucide-react";
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
@@ -24,10 +24,8 @@ import {
 import { AnswerGallery, renderWithGalleries } from "@/features/results/aiSearch/AnswerGallery.tsx";
 import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
-import { downloadAnswerMarkdown } from "@/lib/exporters.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
-import { printDocument } from "@/lib/print.ts";
 import { CODE_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
@@ -815,49 +813,8 @@ export function AiAnswerCard({
               <RefreshCw className="size-3.5" />
             </button>
             {state.phase === "done" && hasAnswer ? <CopyChip value={answer.trim()} /> : null}
-            {state.phase === "done" && hasAnswer ? (
-              <>
-                <button
-                  aria-label={t("download_md")}
-                  className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-2 transition-colors hover:text-ink"
-                  onClick={() => {
-                    downloadAnswerMarkdown(
-                      state.query || t("ai_answer"),
-                      answer,
-                      sourceMeta.map((meta, index) => ({ n: index + 1, title: meta.t, url: meta.u })),
-                    );
-                  }}
-                  title={t("download_md")}
-                  type="button"
-                >
-                  <FileDown className="size-3.5" />
-                </button>
-                <button
-                  aria-label={t("print")}
-                  className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-2 transition-colors hover:text-ink"
-                  onClick={() => {
-                    const card = document.getElementById("ai-answer-card");
-                    if (!card) {
-                      return;
-                    }
-                    printDocument({
-                      title: state.query || t("ai_answer"),
-                      heading: state.query,
-                      source: card,
-                      sources: sourceMeta.map((meta, index) => ({
-                        n: index + 1,
-                        title: meta.t,
-                        netloc: meta.u,
-                      })),
-                    });
-                  }}
-                  title={t("print")}
-                  type="button"
-                >
-                  <FileText className="size-3.5" />
-                </button>
-              </>
-            ) : null}
+            {/* downloads (MD/PDF) live in the knowledge base's inspector
+                ONLY -- the answer surfaces stay read-and-ask */}
           </div>
         ) : null}
       </div>

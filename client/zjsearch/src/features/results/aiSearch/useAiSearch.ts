@@ -12,6 +12,7 @@ import {
   recallPages,
   saveMemory,
   settleRun,
+  startRun,
 } from "@/lib/knowledgeStore.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
@@ -237,6 +238,9 @@ export interface AiSearchState extends Core {
   submitClarify(text: string | null, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   /** re-run the last run IN PLACE (the failed box's retry / regenerate) */
   retry(lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
+  /** continue an INTERRUPTED research as a new run in the same thread
+      (the failed box's 继续 -- the ledger travels, numbering continues) */
+  continue(lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   /** restore a stored thread; false when the id is unknown */
   resume(threadId: string): Promise<boolean>;
   stop(): void;
@@ -824,6 +828,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     const threadId = threadIdRef.current;
     entryIndexRef.current = new Map();
     const signal = controller.signal;
+    // run-start persistence: the run row + the thread's directory entry
+    // land NOW, not at settle -- a crashed tab or a dead network leaves a
+    // visible, replayable run behind (the continue path's storage);
+    // settleRun updates the same row, so this never double-counts
+    startRun(threadId, { runNo, q, mode, startedAt: Date.now() });
     void (async () => {
       // the browser recalls its knowledge BEFORE the POST, on TWO
       // dimensions: the corpus (sources + past answers, WRITER-phase only)
@@ -981,6 +990,44 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     );
   };
 
+  /** Continue an INTERRUPTED research (the failed box's 继续 button): a
+      NEW run in the same thread that inherits the ledger -- the global
+      [n] numbering continues after the gathered sources, and the failed
+      run's findings travel as the confirmed direction (the <clarified>
+      block), so the researcher resumes the gaps instead of restarting. */
+  const continueRun = (lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
+    if (core.phase !== "done" && core.phase !== "error") {
+      return;
+    }
+    const last = core.runs[core.runs.length - 1];
+    if (!last || last.answer) {
+      return; // a run that produced an answer has nothing to continue
+    }
+    const runNo = core.runs.length + 1;
+    const findings = (last.learnings ?? []).map((fact) => `- ${fact}`).join("\n");
+    const text =
+      `这是对上一轮被中断调研的继续(同一问题,不要从头开始):「${last.q}」。` +
+      `中断前已确立的研究发现:\n${findings || "(暂无记录)"}\n` +
+      `从中断处继续:覆盖尚未研究的面,不要重复已搜索过的角度。`.slice(0, 2000);
+    appendRunEvents(`${threadIdRef.current}:${runNo}`, [
+      { e: "client.start", q: last.q, runNo, mode, startedAt: Date.now(), continued: true },
+    ]);
+    beginRun(
+      last.q,
+      lang,
+      core.runs.map((run) => ({ q: run.q, a: run.answer })),
+      core.sources.length,
+      mode,
+      searchLanguage,
+      runNo,
+      {
+        state: "answered",
+        text,
+      },
+    );
+    setCore((prev) => ({ ...prev, phase: "streaming", runs: [...prev.runs, emptyRun(runNo, last.q, mode)] }));
+  };
+
   const stop = () => {
     abortRef.current?.abort();
     const last = core.runs[core.runs.length - 1];
@@ -1025,7 +1072,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     return true;
   };
 
-  return { ...core, start, followup, submitClarify, resume, retry, stop, reset };
+  return { ...core, start, followup, submitClarify, resume, retry, continue: continueRun, stop, reset };
 }
 
 function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearchRun {

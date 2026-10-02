@@ -65,18 +65,20 @@ export function pg(): Promise<Pg> {
   return pgPromise;
 }
 
-/** The FULL reset (the knowledge page's nuclear option): drop the tables,
-    close the session and forget the boot promise -- the next ``pg()``
-    call re-runs the boot DDL on a fresh empty database.  The physical
-    IndexedDB file stays (PGlite owns it); only the schema's contents are
-    destroyed. */
+/** The FULL reset (the knowledge page's nuclear option): drop the tables
+    and re-run the schema DDL ON THE SAME LIVE CONNECTION -- the old
+    close-and-reopen dance raced PGlite's IndexedDB flush (a re-opened
+    database could serve the pre-drop state back, reads as "the reset did
+    nothing"), and a closed shared handle wedged every live subscription.
+    CASCADE for the pg_textsearch/hnsw internals (the legacy-drop lesson).
+    The physical IndexedDB file stays (PGlite owns it); only the schema's
+    contents are destroyed. */
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
-  await db.query("DROP TABLE IF EXISTS knowledge");
-  await db.query("DROP TABLE IF EXISTS run_event");
-  await db.query("DROP TABLE IF EXISTS thread_head");
-  await db.close();
-  pgPromise = null;
+  await db.query("DROP TABLE IF EXISTS knowledge CASCADE");
+  await db.query("DROP TABLE IF EXISTS run_event CASCADE");
+  await db.query("DROP TABLE IF EXISTS thread_head CASCADE");
+  await createSchema(db);
 }
 
 const LEGACY_TABLES = ["run_sources", "runs", "threads", "sources", "reader_cache", "memories", "searches"] as const;
@@ -115,6 +117,14 @@ async function boot(): Promise<Pg> {
       console.warn(`zjsearch pg: legacy table ${String(name)} could not be dropped`, err);
     }
   }
+  await createSchema(db);
+  return db;
+}
+
+/** The schema DDL + the idempotent data repairs: boot runs it once, the
+    full reset re-runs it on the spot (the re-runnable migration/backfill
+    guards make a fresh drop + recreate exact). */
+async function createSchema(db: Pg): Promise<void> {
   // the width comes from the SAME capability the embed calls use --
   // whatever the boot payload carried, the column matches the vectors
   const dims = embeddingDimensions() ?? pgDimensions;
@@ -168,15 +178,43 @@ async function boot(): Promise<Pg> {
     // the v3 -> v4 upgrade, IN PLACE: the evt rows move to their own
     // table (DO NOTHING keeps a crash-resumed re-run idempotent), the
     // projections table loses them and v3's dead column; nothing replays,
-    // nothing drops
+    // nothing drops.  Failure-safe: a thrown copy leaves the data in
+    // place and the next boot resumes (the DELETE only runs after a
+    // clean copy).
+    try {
+      await db.query(
+        `INSERT INTO run_event (run_id, n, thread_id, occurred_at, data)
+         SELECT run_id, n, thread_id, occurred_at, meta FROM knowledge
+         WHERE kind = 'evt' AND run_id IS NOT NULL AND n IS NOT NULL
+         ON CONFLICT DO NOTHING`,
+      );
+      await db.query("DELETE FROM knowledge WHERE kind = 'evt'");
+      await db.query("ALTER TABLE knowledge DROP COLUMN IF EXISTS parent_id");
+    } catch (err) {
+      console.warn("zjsearch pg: v3->v4 event-log migration failed -- will retry next boot", err);
+    }
+  }
+  // the thread directory backfill -- EVERY boot, idempotent: threads that
+  // predate thread_head (the v3 era, or a run row written by anything
+  // other than settleRun) join the directory here.  settleRun stays the
+  // owner of live counters (DO NOTHING never clobbers them).
+  try {
     await db.query(
-      `INSERT INTO run_event (run_id, n, thread_id, occurred_at, data)
-       SELECT run_id, n, thread_id, occurred_at, meta FROM knowledge
-       WHERE kind = 'evt' AND run_id IS NOT NULL AND n IS NOT NULL
-       ON CONFLICT DO NOTHING`,
+      `INSERT INTO thread_head (thread_id, title, preview, runs, sources, updated, pinned)
+       SELECT k.thread_id,
+              (SELECT k2.title FROM knowledge k2 WHERE k2.thread_id = k.thread_id AND k2.kind = 'run' ORDER BY k2.n LIMIT 1),
+              COALESCE((SELECT substring(k3.meta->>'answer' FROM 1 FOR 400) FROM knowledge k3
+                        WHERE k3.thread_id = k.thread_id AND k3.kind = 'run' ORDER BY k3.n DESC LIMIT 1), ''),
+              count(*),
+              COALESCE(sum((k.meta->>'sources')::int), 0),
+              max(k.updated),
+              max(k.pinned)
+       FROM knowledge k WHERE k.kind = 'run' AND k.thread_id IS NOT NULL
+       GROUP BY k.thread_id
+       ON CONFLICT (thread_id) DO NOTHING`,
     );
-    await db.query("DELETE FROM knowledge WHERE kind = 'evt'");
-    await db.query("ALTER TABLE knowledge DROP COLUMN IF EXISTS parent_id");
+  } catch (err) {
+    console.warn("zjsearch pg: thread_head backfill failed", err);
   }
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
@@ -220,7 +258,6 @@ async function boot(): Promise<Pg> {
   await db.query(
     "UPDATE knowledge SET body = substring(body FROM 1 FOR position('<<<zjs-meta:' IN body) - 1) WHERE kind = 'answer' AND position('<<<zjs-meta:' IN body) > 0",
   );
-  return db;
 }
 
 /** The keyword text behind a BM25 index: the CJK-aware pre-segmentation
