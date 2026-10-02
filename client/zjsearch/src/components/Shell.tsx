@@ -2,7 +2,7 @@
 
 import { ChartColumn, Info, LibraryBig, SlidersHorizontal } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { BrandDot } from "@/components/Brand.tsx";
 import { siteConfig } from "@/config/site.ts";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
@@ -65,93 +65,17 @@ function ProgressBar({ active }: { active: boolean }) {
   );
 }
 
-/** The knowledge-base drawer, lazy-loaded (it lives in the results feature
-    tree) and hosted here: the browser-local corpus is a GLOBAL affordance
-    now that PGlite backs it -- not an AI-page strip button. */
-const LazyKnowledgeDrawer = lazy(() =>
-  import("@/features/results/aiSearch/KnowledgeDrawer.tsx").then((m) => ({ default: m.KnowledgeDrawer })),
-);
-
-/** The knowledge drawer's load ghost (Suspense fallback): the drawer's
-    chunk rides the results feature tree, so a FIRST open on a cold page
-    fetches it over the wire -- fallback=null read as a dead click (bare
-    backdrop, empty sheet).  The ghost mirrors the real sheet's chrome:
-    backdrop, end-anchored panel, header, tab pills, search box, list
-    rows (the .zjs-skeleton shimmer primitive). */
-function DrawerGhost() {
-  return (
-    <div aria-hidden="true">
-      <div className="fixed inset-0 z-50 animate-fade-in bg-black/60" />
-      <div className="absolute inset-y-0 end-0 flex w-full max-w-3xl flex-col bg-bg shadow-pop animate-slide-in-right">
-        <div className="flex items-center justify-between border-b border-line px-5 py-3">
-          <div className="flex items-center gap-2">
-            <span className="zjs-skeleton size-4.5 rounded-md" />
-            <span className="zjs-skeleton h-5 w-20" />
-          </div>
-          <span className="zjs-skeleton size-9 rounded-full" />
-        </div>
-        <div className="flex items-center gap-1 border-b border-line px-3 py-2">
-          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
-          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
-          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
-          <span className="zjs-skeleton h-8 w-16 rounded-lg" />
-        </div>
-        <div className="border-b border-line px-3 py-2.5">
-          <span className="zjs-skeleton block h-8 w-full rounded-lg" />
-        </div>
-        <div aria-busy="true" className="flex flex-1 flex-col gap-2 overflow-hidden p-3">
-          {Array.from({ length: 8 }, (_, i) => (
-            <span className="zjs-skeleton h-14 rounded-xl" key={i} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
+/** The knowledge base is a PAGE (the browser-local research memory is a
+    global destination, not an overlay): the button SPA-navigates to it. */
 function KnowledgeButton({ globals }: { globals: GlobalData }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
-  // the thread on screen (its drawer row renders highlighted), derived
-  // from the URL at render
-  const currentId = /\/ai\/thread\/([\w-]+)/.exec(window.location.pathname)?.[1];
   if (!globals.ai_search && !globals.ai) {
     return null;
   }
   return (
-    <>
-      <button
-        aria-label={t("knowledge_open")}
-        className={ICON_BTN}
-        onClick={() => {
-          setOpen(true);
-        }}
-        title={t("knowledge_open")}
-        type="button"
-      >
-        <LibraryBig className="size-4.5" />
-      </button>
-      {open ? (
-        <Suspense fallback={<DrawerGhost />}>
-          <LazyKnowledgeDrawer
-            currentId={currentId}
-            initialMode={
-              (globals.ai_search as { history_mode?: "hybrid" | "keyword" | "semantic" } | undefined)?.history_mode ??
-              "keyword"
-            }
-            onClose={() => {
-              setOpen(false);
-            }}
-            onNavigate={(url) => {
-              window.history.pushState({}, "", url);
-              window.dispatchEvent(new PopStateEvent("popstate"));
-              setOpen(false);
-            }}
-            open
-          />
-        </Suspense>
-      ) : null}
-    </>
+    <Link ariaLabel={t("knowledge_open")} className={ICON_BTN} href="/zjsearch/knowledge" title={t("knowledge_open")}>
+      <LibraryBig className="size-4.5" />
+    </Link>
   );
 }
 

@@ -1,1193 +1,1165 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-/** The knowledge store (知识库): the browser's local RAG + memory layer
-    over PGlite -- the server owns nothing.  An AI session is identified
-    by the uuid in its url (`/zjsearch/ai/thread/<id>`) and survives a
-    reload; storage is browser-local by design (never syncs across
-    devices).
+/** The knowledge store (知识库): the browser's local research memory over
+    ONE event-sourced PGlite table (`knowledge`, schema v3 in pg.ts) --
+    the server owns nothing.  The AI run's every wire event lands as a
+    kind='evt' row (finest grain, storage-only), and the queryable
+    surfaces are projections written at settle: run / answer / source /
+    source_ref / document / memory / call / task / clarify.  The tag
+    graph is not a table: tags are a jsonb column, co-occurrence within a
+    row is an edge, aggregated on demand.
 
-    The store is the facade over pg.ts's tables: threads (the
-    directory), runs (one row per question, its `data` jsonb the replay
-    blob the UI rehydrates from), sources (the GLOBAL url-identity
-    research corpus with ref/cited counters), run_sources (the links),
-    reader_cache (archived web_reader full-texts), memories (durable
-    user facts) and searches (the classic search history).  The AI
-    Search run recalls from this corpus before every POST
-    (history_sources / past_research / user_memories); the knowledge
-    drawer displays it.
-    Every write updates the in-memory mirror first and persists the
-    dirty threads through SQL on an ordered queue; reads stay
-    SYNCHRONOUS on purpose -- the call sites render from the mirror
-    directly.  Only the searches are async (real SQL).
+    Write paths (all behind the ordered queue):
+    - appendRunEvents -- the live stream buffers events, flushed in
+      debounced batches (crash window <= the debounce);
+    - settleRun -- one run settled: flush its events, write the
+      projections, derive the mechanical tags, kick the embed pass and
+      the debounced tag normalization;
+    - archiveDocument / saveMemory -- standalone facts.
 
-    Search columns: the thread aggregates its runs' Q&A text (the
-    history drawer ranks by it); every run row and every source row
-    carries its own search_text (BM25 usable today); embeddings ride the
-    server's /zjsearch/ai/embed route -- thread aggregates at settle,
-    sources batched per sync (a NULL embedding keeps the row, just out
-    of the semantic search until its text changes).
+    Read paths are SQL + live subscriptions -- there is deliberately NO
+    in-memory mirror anymore: every surface (the knowledge page, the
+    recall, the admin panel) reads the same table the writes land in.
+    Recall fuses TWO dimensions: hybrid lexical+vector RRF, and the tag
+    graph (vocabulary match -> shared-tag rows -> one-hop expansion).
 
-    The research corpus has ONE design red line: recalled sources may
-    reach the WRITER phase or the UI only, never the researcher's
-    ready-made feed -- reference material handed to the researcher kills
-    the live-search incentive (verified early in the AI Search design).
-    Database failure = the memory stays in RAM for the session; there is
-    deliberately no fallback storage. */
+    Database failure = the call site degrades (empty list / no-op); there
+    is deliberately no fallback storage. */
 
-import { citedSourceNumbers } from "@/lib/citations.ts";
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
-import {
-  configurePgDimensions,
-  linkSource,
-  type Pg,
-  pg,
-  pgQuery,
-  segmentKeywords,
-  toVectorLiteral,
-  urlHash,
-} from "@/lib/pg.ts";
+import { configurePgDimensions, type Pg, pg, pgQuery, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
 
 export { segmentKeywords, urlHash };
 
-export interface AiThreadMeta {
+// ------------------------------------------------------------- capability
+
+let aiToken: string | null = null;
+let embedModel: string | null = null;
+
+/** The AI Search capability token (tag normalization is an AI route) and
+    the embedding model name (recorded on every embedded row).  Called
+    wherever the embedding capability is configured (boot + landing). */
+export function configureKnowledge(tokens: { aiToken?: string; embedModel?: string }): void {
+  if (tokens.aiToken !== undefined) {
+    aiToken = tokens.aiToken;
+  }
+  if (tokens.embedModel !== undefined) {
+    embedModel = tokens.embedModel;
+  }
+}
+
+// ------------------------------------------------------------------- rows
+
+/** The thread's shareable address (browser-local: another device or
+    browser gets the empty state, never someone else's conversation). */
+export function threadUrl(id: string): string {
+  return `/zjsearch/ai/thread/${id}`;
+}
+
+export type KnowledgeKind =
+  | "evt"
+  | "run"
+  | "answer"
+  | "source"
+  | "source_ref"
+  | "document"
+  | "memory"
+  | "call"
+  | "task"
+  | "clarify"
+  | "overview";
+
+const SEARCHABLE_KINDS = ["answer", "source", "document", "memory", "call", "task", "clarify", "overview", "run"];
+
+/** One knowledge row as the UI consumes it (evt rows never surface). */
+export interface KnowledgeItem {
   id: string;
-  /** first question of the thread -- the history list's label */
+  kind: KnowledgeKind;
+  threadId: string | null;
+  runId: string | null;
+  url: string | null;
+  urlHash: string | null;
+  host: string | null;
   title: string;
-  created: number;
+  body: string;
+  tags: string[];
+  status: string;
+  n: number | null;
+  pinned: boolean;
+  refs: number;
+  cited: number;
   updated: number;
 }
 
-/** One semantic-search hit: the thread meta plus its cosine similarity
-    (1 = identical, 0 = unrelated -- pgvector's `<=>` is cosine DISTANCE). */
-export interface AiThreadHit extends AiThreadMeta {
-  score: number;
+function rowToItem(row: Record<string, unknown>): KnowledgeItem {
+  let tags: string[] = [];
+  try {
+    const parsed = typeof row.tags === "string" ? JSON.parse(row.tags) : row.tags;
+    if (Array.isArray(parsed)) {
+      tags = parsed.map(String);
+    }
+  } catch {
+    /* malformed jsonb stays empty */
+  }
+  return {
+    id: String(row.id),
+    kind: String(row.kind) as KnowledgeKind,
+    threadId: row.thread_id ? String(row.thread_id) : null,
+    runId: row.run_id ? String(row.run_id) : null,
+    url: row.url ? String(row.url) : null,
+    urlHash: row.url_hash ? String(row.url_hash) : null,
+    host: row.host ? String(row.host) : null,
+    title: String(row.title ?? ""),
+    body: String(row.body ?? ""),
+    tags,
+    status: String(row.status ?? "done"),
+    n: row.n === null || row.n === undefined ? null : Number(row.n),
+    pinned: Number(row.pinned) === 1,
+    refs: Number(row.refs) || 0,
+    cited: Number(row.cited) || 0,
+    updated: Number(row.updated) || 0,
+  };
 }
 
-/** One recalled source of the research corpus (the writer-phase history
-    injection ranks by these). */
-export interface RecallHit {
-  url: string;
-  title: string;
-  host: string;
-  /** how many runs referenced the source / how many settled answers
-      cited it -- the verification signal the recall weights by */
-  refCount: number;
-  citedCount: number;
-  score: number;
+const ITEM_COLUMNS =
+  "id, kind, thread_id, run_id, url, url_hash, host, title, body, tags, meta, status, n, pinned, refs, cited, updated";
+
+// ------------------------------------------------------------ ordered queue
+
+let queue: Promise<void> = Promise.resolve();
+
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task);
+  // the queue is the store's write path: a failed task must surface in
+  // the console (the fire-and-forget callers would otherwise swallow it
+  // and the data loss would read as "the feature is broken")
+  queue = run.then(
+    () => undefined,
+    (err: unknown) => {
+      console.warn("zjsearch knowledge store: write failed", err);
+    },
+  );
+  return run;
 }
 
-/** The structural view of one stored run (the feature owns the typed
-    shape -- AiSearchRun satisfies it; the store reads only these
-    fields). */
-export interface StoredRun {
-  runNo?: number;
-  q?: string;
-  status?: string;
+// ------------------------------------------------------- run event stream
+
+/** Per-run wire-sequence counters and the unflushed event buffer. */
+const seqCounters = new Map<string, number>();
+const evtBuffers = new Map<string, Array<{ n: number; event: unknown; at: number }>>();
+let evtFlushTimer: number | null = null;
+
+function threadIdOf(runId: string): string {
+  const cut = runId.lastIndexOf(":");
+  return cut > 0 ? runId.slice(0, cut) : runId;
+}
+
+/** Buffer one wire event (or client event) of a live run.  The store owns
+    the sequence: callers hand the event in arrival order, the store
+    numbers it.  Flushes in debounced batches -- a crashed tab loses at
+    most one batch. */
+export function appendRunEvents(runId: string, events: unknown[]): void {
+  if (events.length === 0) {
+    return;
+  }
+  let seq = seqCounters.get(runId) ?? 0;
+  const buffer = evtBuffers.get(runId) ?? [];
+  for (const event of events) {
+    seq += 1;
+    buffer.push({ n: seq, event, at: Date.now() });
+  }
+  seqCounters.set(runId, seq);
+  evtBuffers.set(runId, buffer);
+  if (evtFlushTimer === null) {
+    evtFlushTimer = window.setTimeout(() => {
+      evtFlushTimer = null;
+      void flushRunEvents();
+    }, 1500);
+  }
+}
+
+/** The raw flush body -- MUST run inside a queue task (settleRun calls
+    it directly; awaiting the enqueuing wrapper from within a task would
+    deadlock the queue on itself). */
+async function flushRunEventsBody(runId?: string): Promise<void> {
+  const batches = runId ? [runId] : [...evtBuffers.keys()];
+  for (const id of batches) {
+    const buffer = evtBuffers.get(id);
+    if (!buffer || buffer.length === 0) {
+      continue;
+    }
+    evtBuffers.delete(id);
+    const threadId = threadIdOf(id);
+    for (const entry of buffer) {
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, run_id, thread_id, n, meta, occurred_at, created, updated)
+         VALUES ($1, 'evt', $2, $3, $4, $5::jsonb, $6, $6, $6) ON CONFLICT (id) DO NOTHING`,
+        [`${id}#${String(entry.n).padStart(4, "0")}`, id, threadId, entry.n, JSON.stringify(entry.event), entry.at],
+      );
+    }
+  }
+}
+
+function flushRunEvents(runId?: string): Promise<void> {
+  return enqueue(() => flushRunEventsBody(runId));
+}
+
+// ---------------------------------------------------------- run projection
+
+/** The structural shape the store reads off a settled run.  The feature
+    owns the typed shape (AiSearchRun satisfies it); the store never
+    imports the feature. */
+export interface RunSnapshot {
+  runNo: number;
+  q: string;
+  status: string;
   mode?: string;
   error?: string | null;
   answer?: string;
   startedAt?: number;
   endedAt?: number | null;
+  stopped?: boolean;
+  finish?: string | null;
+  model?: string | null;
   usage?: unknown;
-  sources?: unknown[];
+  halted?: unknown;
+  sources?: Array<{
+    n?: number;
+    url?: string;
+    title?: string;
+    netloc?: string;
+    host?: string;
+    favicon?: string;
+    img?: string;
+    category?: string;
+  }>;
+  tasks?: Array<{ title?: string; status?: string }>;
+  /** the user's answered clarify text ("" = skipped) */
+  clarify?: string | null;
+  tags?: string[];
+  steps?: Array<{
+    kind: string;
+    round?: number;
+    calls?: Array<{
+      id?: number;
+      tool?: string;
+      q?: string;
+      url?: string;
+      status?: string;
+      chars?: number;
+      text?: string;
+    }>;
+  }>;
 }
 
-// ---------------------------------------------------------------- mirror
-
-let index: AiThreadMeta[] = [];
-/** threadId -> the run replay blobs, in thread order (loadThread
-    reassembles the payload from these). */
-const runBlobs = new Map<string, StoredRun[]>();
-/** threadId -> the text the thread's search index and embedding are
-    computed from (every question + answer prose). */
-const searchTexts = new Map<string, string>();
-const embedded = new Map<string, { text: string; vector: number[] | null }>();
-/** url_hash -> the indexed text (re-embedding keys off its change). */
-const sourceTexts = new Map<string, string>();
-const sourceVectors = new Map<string, number[] | null>();
-/** url_hash -> the indexed text of the reader cache (the semantic
-    recall's embedding pass mirrors the sources one). */
-const readerTexts = new Map<string, string>();
-const readerVectors = new Map<string, number[] | null>();
-/** url_hash -> ref_count (the cross-session badge's synchronous
-    lookup); refreshed at hydrate and after each sync. */
-const sourceRefs = new Map<string, number>();
-/** the registry's distinct-source count (threadStats, synchronous). */
-let sourceTotal = 0;
-/** the threads whose mirror state the next sync must persist. */
-const dirty = new Set<string>();
-
-function mirrorSort(): void {
-  index.sort((a, b) => b.updated - a.updated);
-}
-
-function runIdOf(threadId: string, run: StoredRun, seq: number): string {
-  return `${threadId}:${run.runNo ?? seq}`;
-}
-
-// ------------------------------------------------------------ hydration
-
-const ready: Promise<void> = hydrate();
-
-async function hydrate(): Promise<void> {
-  const threads = await pgQuery<{ id: string; title: string; created: number; updated: number; search_text: string }>(
-    "SELECT id, title, created, updated, search_text FROM threads ORDER BY updated DESC",
-  );
-  for (const row of threads) {
-    if (row.search_text) {
-      searchTexts.set(row.id, row.search_text);
-    }
-    index.push({ id: row.id, title: row.title, created: Number(row.created), updated: Number(row.updated) });
-  }
-  const runs = await pgQuery<{ thread_id: string; data: unknown }>(
-    "SELECT thread_id, data FROM runs ORDER BY thread_id, seq",
-  );
-  for (const row of runs) {
-    const list = runBlobs.get(row.thread_id) ?? [];
-    list.push(row.data as StoredRun);
-    runBlobs.set(row.thread_id, list);
-  }
-  const sources = await pgQuery<{ url_hash: string; search_text: string }>("SELECT url_hash, search_text FROM sources");
-  for (const row of sources) {
-    sourceTexts.set(row.url_hash, row.search_text);
-  }
-  sourceTotal = sources.length;
-  const refs = await pgQuery<{ url_hash: string; ref_count: number }>("SELECT url_hash, ref_count FROM sources");
-  for (const row of refs) {
-    sourceRefs.set(row.url_hash, Number(row.ref_count) || 0);
-  }
-  const readers = await pgQuery<{ url_hash: string; search_text: string }>(
-    "SELECT url_hash, search_text FROM reader_cache",
-  );
-  for (const row of readers) {
-    readerTexts.set(row.url_hash, row.search_text);
-  }
-  const stored = await pgQuery<{ id: string; content: string; updated: number }>(
-    "SELECT id, content, updated FROM memories ORDER BY created",
-  );
-  for (const row of stored) {
-    memories.push({ id: row.id, content: row.content, updated: Number(row.updated) });
-  }
-  mirrorSort();
-  // a drawer opened while the boot was still hydrating the mirror (the
-  // worker boot widened that window) subscribed to an EMPTY snapshot --
-  // wake it now that the mirror is filled
-  emitMirror();
-}
-
-// ---------------------------------------------------- ordered persistence
-
-let queue: Promise<void> = Promise.resolve();
-
-/** The embedding batches: one /zjsearch/ai/embed call per chunk (the
-    route caps at 16 texts). */
-async function embedBatch(texts: string[]): Promise<(number[] | null)[]> {
-  const out: (number[] | null)[] = [];
-  for (let i = 0; i < texts.length; i += 16) {
-    const vectors = await embedTexts(texts.slice(i, i + 16));
-    if (!vectors) {
-      out.push(...texts.slice(i, i + 16).map(() => null));
-    } else {
-      out.push(...vectors);
+/** The mechanical tag layer: query tokens + hosts + mode + the model's
+    own task titles -- zero cost, always present; the normalization pass
+    (scheduleTagNormalize) later folds these into concept tags. */
+function deriveTags(run: RunSnapshot): string[] {
+  const raw = new Set<string>();
+  for (const token of segmentKeywords(run.q).split(" ")) {
+    if (token.length >= 2) {
+      raw.add(token);
     }
   }
-  return out;
+  if (run.mode) {
+    raw.add(run.mode);
+  }
+  for (const source of run.sources ?? []) {
+    const host = String(source.netloc ?? source.host ?? "");
+    if (host) {
+      raw.add(host);
+    }
+  }
+  for (const task of run.tasks ?? []) {
+    const title = String(task.title ?? "").trim();
+    if (title && title.length <= 30) {
+      raw.add(title);
+    }
+  }
+  return [...raw].slice(0, 12);
 }
 
-/** Persist the dirty threads behind the queue: the thread row (with its
-    re-embedded aggregate), its run rows (the replay blobs + BM25 text),
-    the source links (upserting the global registry and its counters)
-    and one batched source embedding pass.  A NULL vector result
-    persists the row unembedded -- it joins the semantic search when its
-    text changes again.  Best-effort: a failed pass is logged and the
-    mirror stays authoritative (the next save retries the thread). */
-function scheduleSync(): void {
-  if (dirty.size === 0) {
-    return;
-  }
-  const batch = [...dirty];
-  dirty.clear();
-  queue = queue
-    .then(async () => {
-      await ready;
-      const db = await pg();
-      for (const id of batch) {
-        const meta = index.find((item) => item.id === id);
-        if (!meta) {
-          continue; // deleted while queued
+/** One settled run: flush its events, then write every projection.  The
+    hook's settle checkpoint calls this (fire-and-forget); a re-settle of
+    the same runId is idempotent (projection ids are deterministic, the
+    source counters only move on first-insert of each ref row). */
+export function settleRun(threadId: string, run: RunSnapshot): void {
+  const runId = `${threadId}:${run.runNo}`;
+  void enqueue(async () => {
+    await flushRunEventsBody(runId);
+    const now = Date.now();
+    const citedSet = citedNumbers(String(run.answer ?? ""));
+    // the extractor's concept tags win; the mechanical layer is the fallback
+    const tags = run.tags?.length ? run.tags : deriveTags(run);
+    // the run's head row
+    await pgQuery(
+      `INSERT INTO knowledge (id, kind, thread_id, run_id, n, title, status, meta, tags, search_text, created, updated, occurred_at)
+       VALUES ($1, 'run', $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11, $11)
+       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, status = EXCLUDED.status,
+         meta = EXCLUDED.meta, tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
+      [
+        `run:${runId}`,
+        threadId,
+        runId,
+        run.runNo,
+        run.q.slice(0, 300),
+        run.status || "done",
+        JSON.stringify({
+          mode: run.mode ?? "",
+          model: run.model ?? null,
+          finish: run.finish ?? null,
+          usage: run.usage ?? null,
+          halted: run.halted ?? null,
+          stopped: run.stopped ?? false,
+          sources: (run.sources ?? []).length,
+        }),
+        JSON.stringify(tags),
+        segmentKeywords(run.q),
+        Number(run.startedAt ?? now) || now,
+        now,
+      ],
+    );
+    // the answer document
+    const answer = String(run.answer ?? "");
+    if (answer) {
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, thread_id, run_id, title, body, status, meta, tags, search_text, created, updated, occurred_at)
+         VALUES ($1, 'answer', $2, $3, $4, $5, $6, '{}'::jsonb, $7::jsonb, $8, $9, $10, $10)
+         ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, status = EXCLUDED.status,
+           tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
+        [
+          `ans:${runId}`,
+          threadId,
+          runId,
+          run.q.slice(0, 300),
+          answer.slice(0, 60000),
+          run.status || "done",
+          JSON.stringify(tags),
+          segmentKeywords(run.q, answer).slice(0, 8000),
+          Number(run.startedAt ?? now) || now,
+          now,
+        ],
+      );
+    }
+    // the task card + the clarify archive
+    if ((run.tasks ?? []).length > 0) {
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, thread_id, run_id, title, meta, status, search_text, created, updated, occurred_at)
+         VALUES ($1, 'task', $2, $3, $4, $5::jsonb, $6, $7, $8, $8, $8)
+         ON CONFLICT (id) DO UPDATE SET meta = EXCLUDED.meta, status = EXCLUDED.status, updated = EXCLUDED.updated`,
+        [
+          `task:${runId}`,
+          threadId,
+          runId,
+          run.q.slice(0, 300),
+          JSON.stringify({ items: run.tasks ?? [] }),
+          "done",
+          segmentKeywords(run.q, ...(run.tasks ?? []).map((task) => String(task.title ?? ""))).slice(0, 4000),
+          now,
+        ],
+      );
+    }
+    if (run.clarify !== undefined && run.clarify !== null && run.clarify !== "") {
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, thread_id, run_id, body, meta, search_text, created, updated, occurred_at)
+         VALUES ($1, 'clarify', $2, $3, $4, '{}'::jsonb, $5, $6, $6, $6)
+         ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, updated = EXCLUDED.updated`,
+        [`cla:${runId}`, threadId, runId, run.clarify.slice(0, 4000), segmentKeywords(run.clarify).slice(0, 4000), now],
+      );
+    }
+    // the sources: one canonical identity row + one ref row per (run, source)
+    for (const source of run.sources ?? []) {
+      if (!source.url) {
+        continue;
+      }
+      const hash = urlHash(String(source.url));
+      const host = String(source.netloc ?? source.host ?? "");
+      const title = String(source.title ?? "");
+      const n = Number(source.n ?? 0) || 0;
+      const cited = citedSet.has(n);
+      const inserted = await pgQuery<{ url_hash: string; meta: string }>(
+        `INSERT INTO knowledge (id, kind, thread_id, run_id, url_hash, url, host, title, n, meta, status, search_text, created, updated, occurred_at)
+         VALUES ($1, 'source_ref', $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $12, $12)
+         ON CONFLICT (id) DO NOTHING RETURNING url_hash, meta`,
+        [
+          `ref:${runId}:${hash}`,
+          threadId,
+          runId,
+          hash,
+          String(source.url),
+          host,
+          title.slice(0, 300),
+          n,
+          JSON.stringify({ cited, favicon: source.favicon ?? null }),
+          "done",
+          segmentKeywords(title, host).slice(0, 4000),
+          now,
+        ],
+      );
+      if ((inserted ?? []).length === 0) {
+        continue; // this run already counted this source
+      }
+      const sourceTags = JSON.stringify([host].filter(Boolean));
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, url_hash, url, host, title, meta, refs, cited, tags, search_text, created, updated, occurred_at)
+         VALUES ($1, 'source', $2, $3, $4, $5, '{}'::jsonb, 1, $6, $7::jsonb, $8, $9, $9, $9)
+         ON CONFLICT (id) DO UPDATE SET refs = knowledge.refs + 1, cited = knowledge.cited + $6,
+           title = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title ELSE knowledge.title END,
+           meta = CASE WHEN EXCLUDED.meta <> '{}'::jsonb THEN EXCLUDED.meta ELSE knowledge.meta END,
+           updated = EXCLUDED.updated`,
+        [
+          `src:${hash}`,
+          hash,
+          String(source.url),
+          host,
+          title.slice(0, 300),
+          cited ? 1 : 0,
+          sourceTags,
+          segmentKeywords(title, host).slice(0, 4000),
+          now,
+        ],
+      );
+    }
+    // the retrieval-worthy tool calls (web_search queries, reader reads)
+    for (const step of run.steps ?? []) {
+      if (step.kind !== "calls") {
+        continue;
+      }
+      for (const call of step.calls ?? []) {
+        const tool = String(call.tool ?? "");
+        if (!["web_search", "web_reader", "calculator"].includes(tool)) {
+          continue;
         }
-        // the thread aggregate: the caller's Q&A prose when provided,
-        // else the title -- never a payload's JSON form
-        const aggregate = (searchTexts.get(id) ?? meta.title).slice(0, 8000);
-        const cached = embedded.get(id);
-        if (!cached || cached.text !== aggregate) {
-          const vectors = await embedBatch([`${meta.title}\n${aggregate}`]);
-          embedded.set(id, { text: aggregate, vector: vectors[0] ?? null });
+        const callId = String(call.id ?? "");
+        if (!callId) {
+          continue;
         }
-        const vector = embedded.get(id)?.vector ?? null;
+        const query = String(call.q ?? "");
+        const head = String(call.text ?? "").slice(0, 1500);
         await pgQuery(
-          `INSERT INTO threads (id, title, created, updated, search_text, embedding)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, created = EXCLUDED.created,
-             updated = EXCLUDED.updated, search_text = EXCLUDED.search_text, embedding = EXCLUDED.embedding`,
+          `INSERT INTO knowledge (id, kind, thread_id, run_id, n, url_hash, url, title, body, meta, status, search_text, created, updated, occurred_at)
+           VALUES ($1, 'call', $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, $12, $12)
+           ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, body = EXCLUDED.body, updated = EXCLUDED.updated`,
           [
-            id,
-            meta.title,
-            meta.created,
-            meta.updated,
-            segmentKeywords(aggregate).slice(0, 8000),
-            vector === null ? null : toVectorLiteral(vector),
+            `call:${runId}:${callId}`,
+            threadId,
+            runId,
+            step.round ?? null,
+            call.url ? urlHash(call.url) : null,
+            call.url ? String(call.url) : null,
+            (query || String(call.url ?? "")).slice(0, 300),
+            tool === "web_reader" ? head : String(call.text ?? "").slice(0, 2000),
+            JSON.stringify({ tool, name: callId, chars: Number(call.chars ?? 0) || null }),
+            String(call.status ?? "ok"),
+            segmentKeywords(query || call.url || "").slice(0, 2000),
+            now,
           ],
         );
-        // the runs: the replay blob plus the query columns; the cited
-        // [n] set is parsed from the settled answer here -- the single
-        // place the (run, source, cited) fact is bookkept
-        const runs = runBlobs.get(id) ?? [];
-        for (const [seq, run] of runs.entries()) {
-          const rid = runIdOf(id, run, seq + 1);
-          const cited = new Set(citedSourceNumbers(String(run.answer ?? "")));
-          await pgQuery(
-            `INSERT INTO runs (id, thread_id, seq, q, mode, status, error, created, settled, usage, data, search_text)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12)
-             ON CONFLICT (id) DO UPDATE SET q = EXCLUDED.q, mode = EXCLUDED.mode, status = EXCLUDED.status,
-               error = EXCLUDED.error, created = EXCLUDED.created, settled = EXCLUDED.settled,
-               usage = EXCLUDED.usage, data = EXCLUDED.data, search_text = EXCLUDED.search_text`,
-            [
-              rid,
-              id,
-              seq + 1,
-              String(run.q ?? ""),
-              String(run.mode ?? ""),
-              String(run.status ?? "done"),
-              run.error ?? null,
-              Number(run.startedAt ?? meta.created) || meta.updated,
-              Number(run.endedAt ?? 0) || null,
-              JSON.stringify(run.usage ?? null),
-              JSON.stringify(run),
-              segmentKeywords(String(run.q ?? ""), String(run.answer ?? "")).slice(0, 8000),
-            ],
-          );
-          const seenAt = Number(run.endedAt ?? 0) || meta.updated;
-          for (const source of Array.isArray(run.sources) ? (run.sources as Array<Record<string, unknown>>) : []) {
-            if (!source?.url) {
-              continue;
-            }
-            await linkSource(db, rid, source, seenAt, cited.has(Number(source.n ?? 0)));
-          }
-        }
       }
-      // the embedding passes: sources AND reader pages whose indexed
-      // text is new get vectors (the semantic half of both recalls)
-      if (embeddingsConfigured()) {
-        const freshSources = [...sourceTexts.keys()].filter((hash) => !sourceVectors.has(hash));
-        if (freshSources.length > 0) {
-          const vectors = await embedBatch(freshSources.map((hash) => sourceTexts.get(hash) ?? ""));
-          freshSources.forEach((hash, i) => {
-            const vector = vectors[i] ?? null;
-            sourceVectors.set(hash, vector);
-            if (vector) {
-              void pgQuery("UPDATE sources SET embedding = $1::vector WHERE url_hash = $2", [
-                toVectorLiteral(vector),
-                hash,
-              ]);
-            }
-          });
-        }
-        const freshReaders = [...readerTexts.keys()].filter((hash) => !readerVectors.has(hash));
-        if (freshReaders.length > 0) {
-          const vectors = await embedBatch(freshReaders.map((hash) => readerTexts.get(hash) ?? ""));
-          freshReaders.forEach((hash, i) => {
-            const vector = vectors[i] ?? null;
-            readerVectors.set(hash, vector);
-            if (vector) {
-              void pgQuery("UPDATE reader_cache SET embedding = $1::vector WHERE url_hash = $2", [
-                toVectorLiteral(vector),
-                hash,
-              ]);
-            }
-          });
-        }
-      }
-      sourceTotal = Number((await pgQuery<{ n: string }>("SELECT count(*) AS n FROM sources"))[0]?.n ?? sourceTotal);
-      for (const row of await pgQuery<{ url_hash: string; ref_count: number }>(
-        "SELECT url_hash, ref_count FROM sources",
-      )) {
-        sourceRefs.set(row.url_hash, Number(row.ref_count) || 0);
-      }
-    })
-    .catch((err: unknown) => {
-      console.warn("zjsearch thread store: sync failed", err);
-    });
+    }
+    void embedPending();
+    scheduleTagNormalize();
+  });
 }
 
-// ------------------------------------------------------------ live subscriptions
-
-/** One active subscription (a live query or a mirror listener). */
-export interface StoreSubscription {
-  unsubscribe(): void;
-}
-
-/** A store write pushed to the mirror subscribers: fresh snapshots of the
-    two SYNCHRONOUS surfaces (the SQL-backed ones subscribe via live
-    queries instead -- the database pushes those itself). */
-export interface StoreSnapshot {
-  threads: AiThreadMeta[];
-  memories: Array<{ id: string; content: string; updated: number }>;
-}
-
-type MirrorListener = (snapshot: StoreSnapshot) => void;
-const mirrorListeners = new Set<MirrorListener>();
-/** Every live query handed out -- resetAll cancels these before the
-    session closes (an unsubscribe after close is caught, but cancelling
-    first keeps the teardown honest). */
-const liveSubscriptions = new Set<StoreSubscription>();
-
-/** One live query over the session's PGlite: the live plugin wraps the
-    SQL in a temp view, tracks its base tables and re-runs the query on
-    every write to them -- the callback receives the full result set
-    (initial results included, immediately at registration). */
-async function liveQuery<T>(sql: string, params: unknown[], onUpdate: (rows: T[]) => void): Promise<StoreSubscription> {
-  const db = (await pg()) as Pg & { live: import("@electric-sql/pglite/live").LiveNamespace };
-  const handle = await db.live.query<T>(sql, params, (results) => onUpdate((results.rows ?? []) as T[]));
-  const subscription: StoreSubscription = {
-    unsubscribe: () => {
-      liveSubscriptions.delete(subscription);
-      handle.unsubscribe().catch(() => {
-        /* the session may already be gone (a reset won the race) */
-      });
-    },
-  };
-  liveSubscriptions.add(subscription);
-  return subscription;
-}
-
-function emitMirror(): void {
-  const snapshot: StoreSnapshot = { threads: [...index], memories: [...memories] };
-  for (const listener of mirrorListeners) {
-    try {
-      listener(snapshot);
-    } catch {
-      /* one bad listener never blocks the rest */
+/** The cited [n] set of an answer -- the (run, source, cited) fact's
+    single bookkeeping point (moved from the old store's sync). */
+function citedNumbers(answer: string): Set<number> {
+  const cited = new Set<number>();
+  for (const match of answer.matchAll(/\[(\d+(?:\s*[,，]\s*\d+)*)\]/g)) {
+    const group = match[1];
+    if (!group) {
+      continue;
+    }
+    for (const part of group.split(/\s*[,，]\s*/)) {
+      cited.add(Number(part));
     }
   }
+  return cited;
 }
 
-/** Subscribe to the store's SYNCHRONOUS writes (threads + memories --
-    the in-memory mirror is their source of truth, so a live SQL query
-    would lag them).  Live-query semantics: the listener fires ONCE at
-    registration with the current snapshot (so a subscriber never seeds
-    from a stale read) and once per write after that. */
-export function subscribeMirror(listener: MirrorListener): StoreSubscription {
-  mirrorListeners.add(listener);
-  listener({ threads: [...index], memories: [...memories] });
-  return {
-    unsubscribe: () => {
-      mirrorListeners.delete(listener);
-    },
-  };
-}
-
-function toRecallHit(row: {
-  url: string;
-  title: string;
-  host: string;
-  ref_count: number;
-  cited_count: number;
-}): RecallHit {
-  return {
-    url: row.url,
-    title: row.title,
-    host: row.host,
-    refCount: Number(row.ref_count) || 0,
-    citedCount: Number(row.cited_count) || 0,
-    score: 0,
-  };
-}
-
-/** The corpus' recent sources as a LIVE listing (the 来源 tab's default
-    view): the drawer re-renders as the sync queue lands rows -- no
-    staleness window between opening the drawer and a run settling. */
-export function subscribeRecentSources(
-  limit: number,
-  onUpdate: (hits: RecallHit[]) => void,
-): Promise<StoreSubscription> {
-  return liveQuery<Parameters<typeof toRecallHit>[0] & { last_seen: number }>(
-    "SELECT url, title, host, ref_count, cited_count, last_seen FROM sources ORDER BY last_seen DESC LIMIT $1",
-    [limit],
-    (rows) => onUpdate(rows.map((row) => ({ ...toRecallHit(row), score: Number(row.last_seen) || 0 }))),
-  );
-}
-
-/** The reader cache's recent pages as a LIVE listing. */
-export function subscribeReaderPages(
-  limit: number,
-  onUpdate: (pages: Array<{ url: string; title: string; chars: number; fetchedAt: number }>) => void,
-): Promise<StoreSubscription> {
-  return liveQuery<{ url: string; title: string; chars: number; fetched_at: number }>(
-    "SELECT url, title, chars, fetched_at FROM reader_cache ORDER BY fetched_at DESC LIMIT $1",
-    [limit],
-    (rows) =>
-      onUpdate(
-        rows.map((row) => ({
-          url: row.url,
-          title: row.title,
-          chars: Number(row.chars) || 0,
-          fetchedAt: Number(row.fetched_at) || 0,
-        })),
-      ),
-  );
-}
-
-/** The search history as a LIVE listing (the unfiltered default view). */
-export function subscribeSearchHistory(
-  limit: number,
-  onUpdate: (rows: SearchHistoryEntry[]) => void,
-): Promise<StoreSubscription> {
-  return liveQuery<SearchHistoryEntry>(
-    'SELECT q, category, results, times, last_ran AS "lastRan" FROM searches ORDER BY last_ran DESC LIMIT $1',
-    [limit],
-    (rows) =>
-      onUpdate(
-        rows.map((row) => ({
-          q: row.q,
-          category: row.category,
-          results: Number(row.results) || 0,
-          times: Number(row.times) || 1,
-          lastRan: Number(row.lastRan),
-        })),
-      ),
-  );
-}
-
-// ---------------------------------------------------------- trigram fallback
-
-/** The pg_trgm rescue behind a zero-signal result: BM25 needs one exact
-    token to match, so a typo'd query ("gihub") drops every row and the
-    honest empty state reads as lost data.  Each lexical search below
-    runs the same rescue when its BM25 pass found nothing: score the
-    query against the best window of the RAW (unsegmented) text column
-    via word_similarity(), gate at 0.3.  A seq scan is fine at browser
-    scale (hundreds of rows; no gin_trgm_ops index yet), and the rescue
-    only ever fires when lexical+semantic found nothing -- it widens
-    recall, it never re-ranks a real result. */
-const TRIGRAM_THRESHOLD = 0.3;
-
-// ------------------------------------------------------------ public API
-
-/** A fresh conversation identity (the url's uuid). */
-export function newThreadId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-4${Math.random().toString(16).slice(2, 11)}`;
-}
-
-/** The thread's shareable address (browser-local: another device or browser
-    gets the empty state, never someone else's conversation). */
-export function threadUrl(id: string): string {
-  return `/zjsearch/ai/thread/${id}`;
-}
-
-export function listThreads(): AiThreadMeta[] {
-  return index;
-}
-
-/** The thread's stored run replay blobs (useAiSearch resumes from
-    them); null when the id is unknown. */
-export async function loadThread(id: string): Promise<StoredRun[] | null> {
-  // the in-memory mirror first (same-tab writes are here immediately);
-  // a MISS falls back to PGlite -- a thread saved by ANOTHER TAB (or by a
-  // page instance whose sync landed after this tab's boot hydration) is
-  // still openable
-  const mirrored = runBlobs.get(id);
-  if (mirrored && mirrored.length > 0) {
-    return mirrored;
-  }
-  await ready;
-  const rows = await pgQuery<{ data: unknown }>("SELECT data FROM runs WHERE thread_id = $1 ORDER BY seq", [id]);
-  if (rows.length === 0) {
-    return null;
-  }
-  const list = rows.map((row) => row.data as StoredRun);
-  runBlobs.set(id, list);
-  // hydrate the drawer's index meta so the thread also lists locally
-  if (!index.some((item) => item.id === id)) {
-    const metas = await pgQuery<{ title: string; created: number; updated: number; search_text: string }>(
-      "SELECT title, created, updated, search_text FROM threads WHERE id = $1",
-      [id],
-    );
-    const row = metas[0];
-    if (row) {
-      index.unshift({ id, title: row.title, created: Number(row.created), updated: Number(row.updated) });
-      if (row.search_text) {
-        searchTexts.set(id, row.search_text);
-      }
-      mirrorSort();
-      emitMirror();
-    }
-  }
-  return list;
-}
-
-/** Persist one thread: the runs array is split into run rows (the replay
-    blobs), the sources into the global registry.  The mirror updates
-    synchronously (call sites see the write immediately), the SQL sync
-    is queued behind hydration.  `searchText` is the text the thread's
-    embedding is computed from -- callers pass their question + answer
-    prose; without it only the title is embedded. */
-export function saveThread(id: string, title: string, runs: StoredRun[], searchText?: string): void {
-  const now = Date.now();
-  const created = Number(runs[0]?.startedAt ?? now);
-  index = index.filter((item) => item.id !== id);
-  index.unshift({ id, title: title.slice(0, 200), created, updated: now });
-  mirrorSort();
-  runBlobs.set(id, runs);
-  if (searchText !== undefined) {
-    searchTexts.set(id, searchText.slice(0, 8000));
-  }
-  dirty.add(id);
-  scheduleSync();
-  emitMirror();
-}
-
-/** The search mode of the history drawer: `keyword` = BM25 over the
-    pre-segmented text (free, offline, the DEFAULT), `semantic` =
-    pgvector cosine over the embedding-model vectors (paraphrase recall,
-    needs zjsearch.embedding). */
-export type ThreadSearchMode = "keyword" | "semantic" | "hybrid";
-
-/** Search the threads.  `keyword` runs a BM25 query (pg_textsearch,
-    `search_text <@> to_bm25query(...)`, zero-matching rows score 0 and
-    drop out); `semantic` ranks by pgvector cosine against the thread's
-    embedding (one /zjsearch/ai/embed call for the query).  Async (real
-    SQL); resolves empty while the store is empty. */
-export async function searchThreads(
-  query: string,
-  mode: ThreadSearchMode = "keyword",
-  limit = 8,
-): Promise<AiThreadHit[]> {
-  const trimmed = query.trim();
-  if (!trimmed || index.length === 0) {
-    return [];
-  }
-  await ready;
-  if (mode === "hybrid") {
-    // both rankings, then weighted RRF (equal footing): BM25 covers the
-    // exact terms, the vectors cover the paraphrases
-    const [keywordHits, semanticHits] = await Promise.all([
-      searchThreads(query, "keyword", limit),
-      searchThreads(query, "semantic", limit),
-    ]);
-    const scores = new Map<string, { hit: AiThreadHit; score: number }>();
-    for (const [ranking, weight] of [
-      [keywordHits, 1.0],
-      [semanticHits, 1.0],
-    ] as const) {
-      ranking.forEach((hit, rank) => {
-        const score = weight / (60 + rank + 1);
-        const entry = scores.get(hit.id);
-        scores.set(hit.id, { hit: { ...hit, score }, score: (entry?.score ?? 0) + score });
-      });
-    }
-    return [...scores.values()]
-      .sort((a, b) => b.score - a.score)
-      .map((entry) => entry.hit)
-      .slice(0, limit);
-  }
-  if (mode === "semantic") {
-    if (!embeddingsConfigured()) {
-      return [];
-    }
-    const queryVector = (await embedTexts([trimmed]))?.[0];
-    if (!queryVector) {
-      return [];
-    }
-    const rows = await pgQuery<{ id: string; title: string; created: number; updated: number; score: number }>(
-      `SELECT id, title, created, updated, 1 - (embedding <=> $1::vector) AS score
-       FROM threads WHERE embedding IS NOT NULL ORDER BY embedding <=> $1::vector LIMIT $2`,
-      [toVectorLiteral(queryVector), limit],
-    );
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      created: Number(row.created),
-      updated: Number(row.updated),
-      score: Number(row.score),
-    }));
-  }
-  // keyword: the BM25 index over the pre-segmented text -- a zero score
-  // means "no term matches" and drops the row; zero ROWS trigger the
-  // trigram rescue (a typo must not read as an empty history)
-  const keywords = segmentKeywords(trimmed);
-  if (!keywords) {
-    return [];
-  }
-  let rows = await pgQuery<{ id: string; title: string; created: number; updated: number; score: number }>(
-    `SELECT id, title, created, updated, (search_text <@> to_bm25query($1, 'threads_bm25')) AS score
-     FROM threads WHERE (search_text <@> to_bm25query($1, 'threads_bm25')) <> 0
-     ORDER BY score DESC LIMIT $2`,
-    [keywords, limit],
-  );
-  if (rows.length === 0 && trimmed.length >= 2) {
-    rows = await pgQuery<{ id: string; title: string; created: number; updated: number; score: number }>(
-      `SELECT id, title, created, updated, word_similarity($1, title) AS score
-       FROM threads WHERE word_similarity($1, title) >= ${TRIGRAM_THRESHOLD}
-       ORDER BY score DESC LIMIT $2`,
-      [trimmed, limit],
-    );
-  }
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    created: Number(row.created),
-    updated: Number(row.updated),
-    score: Number(row.score),
-  }));
-}
-
-/** Recall from the research corpus: the global sources registry ranked
-    by the query (hybrid -- BM25 over title+host, pgvector cosine over
-    the embedded titles, weighted RRF plus a cited-count bump).  This
-    feeds the WRITER-phase history injection ONLY (the red line: never
-    the researcher's feed).  Async; resolves empty while the corpus is
-    empty. */
-
-/** Archive ONE web_reader page's extracted markdown into the browser's
-    reader cache (the url-identity full-text store the memory tools
-    recall from).  Fire-and-forget: a failed archive never blocks the
-    run (the reading pane already showed the text). */
-export function archiveReaderPage(url: string, title: string, markdown: string): void {
+/** Archive ONE web_reader page's full text as a document row
+    (fire-and-forget; the reading pane already showed the text). */
+export function archiveDocument(url: string, title: string, markdown: string): void {
   if (!url || !markdown) {
     return;
   }
-  queue = queue
-    .then(async () => {
-      await ready;
-      const hash = urlHash(url);
-      readerTexts.set(hash, segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000));
-      readerVectors.delete(hash);
-      await pgQuery(
-        `INSERT INTO reader_cache (url_hash, url, title, markdown, chars, fetched_at, search_text)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (url_hash) DO UPDATE SET title = EXCLUDED.title,
-           markdown = EXCLUDED.markdown, chars = EXCLUDED.chars,
-           fetched_at = EXCLUDED.fetched_at, search_text = EXCLUDED.search_text`,
-        [
-          hash,
-          url,
-          title.slice(0, 300),
-          markdown.slice(0, 60000),
-          markdown.length,
-          Date.now(),
-          segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000),
-        ],
-      );
-    })
-    .catch(() => {
-      /* best-effort */
-    });
-}
-
-/** One archived page's full markdown (the corpus tab's reading
-    pane); ``null`` when the url was never archived.  Async (real SQL). */
-export async function getReaderPage(
-  url: string,
-): Promise<{ url: string; title: string; markdown: string; chars: number } | null> {
-  await ready;
-  const rows = await pgQuery<{ url: string; title: string; markdown: string; chars: number }>(
-    "SELECT url, title, markdown, chars FROM reader_cache WHERE url_hash = $1",
-    [urlHash(url)],
-  );
-  const row = rows[0];
-  if (!row) {
-    return null;
-  }
-  return { url: row.url, title: row.title, markdown: row.markdown, chars: Number(row.chars) || 0 };
-}
-
-/** The reader cache's recent pages (url/title/when) -- the memory
-    surface's listing reads this; async (real SQL). */
-export async function listReaderPages(
-  limit = 50,
-): Promise<Array<{ url: string; title: string; chars: number; fetchedAt: number }>> {
-  await ready;
-  const rows = await pgQuery<{ url: string; title: string; chars: number; fetched_at: number }>(
-    "SELECT url, title, chars, fetched_at FROM reader_cache ORDER BY fetched_at DESC LIMIT $1",
-    [limit],
-  );
-  return rows.map((row) => ({
-    url: row.url,
-    title: row.title,
-    chars: Number(row.chars) || 0,
-    fetchedAt: Number(row.fetched_at),
-  }));
-}
-
-export async function recallSources(query: string, limit = 6): Promise<RecallHit[]> {
-  const trimmed = query.trim();
-  if (!trimmed || sourceTotal === 0) {
-    return [];
-  }
-  await ready;
-  const keywords = segmentKeywords(trimmed);
-  const semanticReady = embeddingsConfigured();
-  if (!keywords && !semanticReady) {
-    return [];
-  }
-  interface SourceRow {
-    url: string;
-    title: string;
-    host: string;
-    ref_count: number;
-    cited_count: number;
-    score: number;
-  }
-  const [keywordHits, semanticHits] = await Promise.all([
-    keywords
-      ? pgQuery<SourceRow>(
-          `SELECT url, title, host, ref_count, cited_count,
-                  (search_text <@> to_bm25query($1, 'sources_bm25')) AS score
-           FROM sources WHERE (search_text <@> to_bm25query($1, 'sources_bm25')) <> 0
-           ORDER BY score DESC LIMIT $2`,
-          [keywords, limit * 2],
-        )
-      : Promise.resolve([] as SourceRow[]),
-    semanticReady
-      ? (async () => {
-          const queryVector = (await embedTexts([trimmed]))?.[0];
-          if (!queryVector) {
-            return [] as SourceRow[];
-          }
-          return pgQuery<SourceRow>(
-            `SELECT url, title, host, ref_count, cited_count,
-                    1 - (embedding <=> $1::vector) AS score
-             FROM sources WHERE embedding IS NOT NULL ORDER BY embedding <=> $1::vector LIMIT $2`,
-            [toVectorLiteral(queryVector), limit * 2],
-          );
-        })()
-      : Promise.resolve([] as SourceRow[]),
-  ]);
-  // weighted RRF with a verification bump: the fusion ranks, then a
-  // source cited by past answers rises above a merely-referenced one
-  const scores = new Map<string, { hit: RecallHit; score: number }>();
-  const bump = (rows: SourceRow[], weight: number) => {
-    rows.forEach((row, rank) => {
-      const rrf = weight / (60 + rank + 1);
-      const hit: RecallHit = {
-        url: row.url,
-        title: row.title,
-        host: row.host,
-        refCount: Number(row.ref_count) || 0,
-        citedCount: Number(row.cited_count) || 0,
-        score: rrf,
-      };
-      const entry = scores.get(row.url);
-      scores.set(row.url, { hit, score: (entry?.score ?? 0) + rrf + hit.citedCount * 0.01 });
-    });
-  };
-  bump(keywordHits, 1.0);
-  bump(semanticHits, 1.0);
-  if (scores.size === 0 && trimmed.length >= 2) {
-    // both passes empty -- the trigram rescue over the raw titles
-    const rescued = await pgQuery<SourceRow>(
-      `SELECT url, title, host, ref_count, cited_count, word_similarity($1, title) AS score
-       FROM sources WHERE word_similarity($1, title) >= ${TRIGRAM_THRESHOLD}
-       ORDER BY score DESC LIMIT $2`,
-      [trimmed, limit],
-    );
-    bump(rescued, 1.0);
-  }
-  return [...scores.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((entry) => entry.hit);
-}
-
-/** Browser-local usage stats for the preferences surface: thread count,
-    total runs, the distinct-source count and the approximate storage
-    footprint (JSON text sizes + embeddings -- the honest client-side
-    estimate; PGlite's on-disk size also carries its own WAL/overhead). */
-export function threadStats(): {
-  runs: number;
-  threads: number;
-  sources: number;
-  memories: number;
-  approxBytes: number;
-} {
-  let runs = 0;
-  let approxBytes = 0;
-  for (const [id, blobs] of runBlobs) {
-    runs += blobs.length;
-    for (const blob of blobs) {
-      approxBytes += JSON.stringify(blob ?? null).length;
+  void enqueue(async () => {
+    const now = Date.now();
+    const hash = urlHash(url);
+    let host = "";
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      /* non-url strings keep the empty host */
     }
-    approxBytes += searchTexts.get(id)?.length ?? 0;
-  }
-  for (const vector of embedded.values()) {
-    approxBytes += (vector.vector?.length ?? 0) * 8;
-  }
-  for (const vector of sourceVectors.values()) {
-    approxBytes += (vector?.length ?? 0) * 8;
-  }
-  let memoryBytes = 0;
-  for (const memory of memories) {
-    memoryBytes += memory.content.length;
-  }
-  return {
-    approxBytes: approxBytes + memoryBytes,
-    runs,
-    threads: index.length,
-    sources: sourceTotal,
-    memories: memories.length,
-  };
+    await pgQuery(
+      `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, status, tags, search_text, created, updated, occurred_at)
+       VALUES ($1, 'document', $2, $3, $4, $5, $6, $7::jsonb, 'done', $8::jsonb, $9, $10, $10, $10)
+       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body,
+         meta = EXCLUDED.meta, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
+      [
+        `doc:${hash}`,
+        hash,
+        url,
+        host,
+        title.slice(0, 300),
+        markdown.slice(0, 60000),
+        JSON.stringify({ chars: markdown.length, fetchedAt: now }),
+        JSON.stringify([host].filter(Boolean)),
+        segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000),
+        now,
+      ],
+    );
+    void embedPending();
+  });
 }
 
-/** The FULL database reset: the mirrors empty AND the database itself
-    drops (every table, schema recreated on the next boot) -- the
-    preferences surface's nuclear option. */
-export function resetAll(): void {
-  clearAllThreads();
-  queue = queue
-    .then(async () => {
-      await ready;
-      // the live queries first: their teardown must not race the close
-      for (const subscription of [...liveSubscriptions]) {
-        subscription.unsubscribe();
-      }
-      const { resetDatabase } = await import("@/lib/pg.ts");
-      await resetDatabase();
-    })
-    .catch(() => {
-      /* best-effort */
-    });
+// ---------------------------------------------------------------- memories
+
+export interface MemoryRow {
+  id: string;
+  content: string;
+  updated: number;
 }
-
-/** Remove EVERY stored thread (the preferences surface's reset).  The
-    in-memory mirror empties immediately and the SQL sync clears the
-    tables behind the queue (the source registry too -- it exists only
-    for the threads' sake). */
-export function clearAllThreads(): void {
-  index = [];
-  runBlobs.clear();
-  searchTexts.clear();
-  embedded.clear();
-  sourceTexts.clear();
-  sourceVectors.clear();
-  sourceTotal = 0;
-  memories.length = 0;
-  dirty.clear();
-  emitMirror();
-  queue = queue
-    .then(async () => {
-      await ready;
-      await pgQuery("DELETE FROM run_sources");
-      await pgQuery("DELETE FROM runs");
-      await pgQuery("DELETE FROM threads");
-      await pgQuery("DELETE FROM sources");
-      await pgQuery("DELETE FROM reader_cache");
-      await pgQuery("DELETE FROM memories");
-      await pgQuery("DELETE FROM searches");
-    })
-    .catch(() => {
-      /* best-effort */
-    });
-}
-
-export function deleteThread(id: string): void {
-  index = index.filter((item) => item.id !== id);
-  runBlobs.delete(id);
-  searchTexts.delete(id);
-  embedded.delete(id);
-  dirty.delete(id);
-  emitMirror();
-  queue = queue
-    .then(async () => {
-      await ready;
-      await pgQuery("DELETE FROM run_sources WHERE run_id IN (SELECT id FROM runs WHERE thread_id = $1)", [id]);
-      await pgQuery("DELETE FROM runs WHERE thread_id = $1", [id]);
-      await pgQuery("DELETE FROM threads WHERE id = $1", [id]);
-    })
-    .catch(() => {
-      /* best-effort */
-    });
-}
-
-/** Called once at boot with the embedding capability's width -- the
-    pgvector columns are created at this dimension. */
-export function configureEmbeddingDimensions(dims: number): void {
-  configurePgDimensions(dims);
-}
-
-// ------------------------------------------------------------ user memory
-
-/** The stored durable facts about the user (single flat layer -- our
-    scenario needs location/preference/standing facts, not LobeHub's
-    five-layer taxonomy).  Small by design (the run pre-sends them all);
-    the mirror is hydrated once and read synchronously. */
-let memories: Array<{ id: string; content: string; updated: number }> = [];
 
 function newMemoryId(): string {
   return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Persist one fact (the user_memory tool's save path -- the wire event
-    lands here).  An EXACT duplicate content is a no-op; a near-duplicate
-    is the model's business (the tool description tells it to search
-    first).  Fire-and-forget through the ordered queue. */
+/** Persist one durable fact (the wire `memory` event lands here).  An
+    EXACT duplicate content is a no-op.  Fire-and-forget. */
 export function saveMemory(content: string): void {
   const text = content.trim().slice(0, 300);
-  if (!text || memories.some((memory) => memory.content === text)) {
+  if (!text) {
     return;
   }
-  const now = Date.now();
-  const id = newMemoryId();
-  memories.push({ id, content: text, updated: now });
-  emitMirror();
-  queue = queue
-    .then(async () => {
-      await ready;
+  void enqueue(async () => {
+    const now = Date.now();
+    await pgQuery(
+      `INSERT INTO knowledge (id, kind, body, status, search_text, created, updated, occurred_at)
+       SELECT $1, 'memory', $2, 'done', $3, $4, $4, $4
+       WHERE NOT EXISTS (SELECT 1 FROM knowledge WHERE kind = 'memory' AND body = $2)`,
+      [`mem:${newMemoryId()}`, text, segmentKeywords(text).slice(0, 300), now],
+    );
+    void embedPending();
+  });
+}
+
+export async function loadMemories(): Promise<MemoryRow[]> {
+  const rows = await pgQuery<{ id: string; body: string; updated: number }>(
+    "SELECT id, body, updated FROM knowledge WHERE kind = 'memory' ORDER BY created",
+  );
+  return (rows ?? []).map((row) => ({ id: row.id, content: row.body, updated: Number(row.updated) || 0 }));
+}
+
+export function forgetMemory(id: string): void {
+  void enqueue(async () => {
+    await pgQuery("DELETE FROM knowledge WHERE id = $1 AND kind = 'memory'", [id]);
+  });
+}
+
+// -------------------------------------------------------------- embed pass
+
+let embedRunning = false;
+
+/** Embed the rows whose search_text is non-empty but whose embedding is
+    still missing (projections land unembedded when the capability is
+    off; they join the semantic search the next time this pass runs with
+    the capability on).  One /zjsearch/ai/embed call per 16 texts. */
+async function embedPending(): Promise<void> {
+  if (embedRunning || !embeddingsConfigured()) {
+    return;
+  }
+  embedRunning = true;
+  try {
+    const rows = await pgQuery<{ id: string; search_text: string }>(
+      `SELECT id, search_text FROM knowledge
+       WHERE embed_model IS NULL AND search_text <> '' AND kind NOT IN ('evt', 'source_ref') LIMIT 16`,
+    );
+    for (let i = 0; i < (rows ?? []).length; i += 16) {
+      const batch = (rows ?? []).slice(i, i + 16);
+      const vectors = await embedTexts(batch.map((row) => row.search_text.slice(0, 4000)));
+      if (!vectors) {
+        return; // capability gone mid-pass: rows stay pending
+      }
+      for (let j = 0; j < batch.length; j++) {
+        const vector = vectors[j];
+        const target = batch[j];
+        if (!vector || !target) {
+          continue;
+        }
+        await pgQuery(
+          "UPDATE knowledge SET embedding = $1::vector, embed_model = $2 WHERE id = $3 AND embed_model IS NULL",
+          [toVectorLiteral(vector), embedModel ?? "unknown", target.id],
+        );
+      }
+    }
+  } catch {
+    /* best-effort: rows stay pending */
+  } finally {
+    embedRunning = false;
+  }
+}
+
+// ---------------------------------------------------------- tag normalize
+
+let normalizeTimer: number | null = null;
+
+/** The normalization pass: fold each row's raw tags into concept tags via
+    ONE small structured completion per batch (POST /zjsearch/ai/tags).
+    Debounced after settles; a row normalizes once (meta.tnormed); a
+    failure keeps the raw tags. */
+function scheduleTagNormalize(): void {
+  if (normalizeTimer !== null) {
+    return;
+  }
+  normalizeTimer = window.setTimeout(() => {
+    normalizeTimer = null;
+    void normalizeTags();
+  }, 4000);
+}
+
+async function normalizeTags(): Promise<void> {
+  if (!aiToken) {
+    return;
+  }
+  try {
+    const rows = await pgQuery<{ id: string; tags: string }>(
+      `SELECT id, tags FROM knowledge
+       WHERE (meta->>'tnormed') IS DISTINCT FROM '1' AND tags <> '[]'::jsonb AND kind <> 'evt'
+       LIMIT 24`,
+    );
+    const batch = (rows ?? []).filter((row) => {
+      const parsed = typeof row.tags === "string" ? safeParse(row.tags) : row.tags;
+      return Array.isArray(parsed) && parsed.length > 0;
+    });
+    if (batch.length === 0) {
+      return;
+    }
+    const response = await fetch("/zjsearch/ai/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tk: aiToken,
+        items: batch.map((row) => {
+          const parsed = typeof row.tags === "string" ? safeParse(row.tags) : row.tags;
+          return { tags: Array.isArray(parsed) ? parsed.map(String) : [] };
+        }),
+      }),
+    });
+    if (!response.ok) {
+      return;
+    }
+    const data = (await response.json()) as { items?: Array<{ tags?: string[] }> };
+    const items = data.items ?? [];
+    for (let i = 0; i < batch.length && i < items.length; i++) {
+      const row = batch[i];
+      const tags = (items[i]?.tags ?? []).map(String).slice(0, 12);
+      if (!row || tags.length === 0) {
+        continue;
+      }
       await pgQuery(
-        `INSERT INTO memories (id, content, created, updated, search_text)
-         VALUES ($1, $2, $3, $3, $4)`,
-        [id, text, now, segmentKeywords(text).slice(0, 300)],
+        `UPDATE knowledge SET tags = $1::jsonb,
+           search_text = search_text || ' ' || $2, meta = jsonb_set(meta, '{tnormed}', '1')
+         WHERE id = $3`,
+        [JSON.stringify(tags), segmentKeywords(...tags).slice(0, 1000), row.id],
       );
-    })
-    .catch(() => {
-      /* best-effort */
-    });
+    }
+  } catch {
+    /* best-effort: raw tags stay */
+  }
 }
 
-export function deleteMemory(id: string): void {
-  memories = memories.filter((memory) => memory.id !== id);
-  emitMirror();
-  queue = queue
-    .then(async () => {
-      await ready;
-      await pgQuery("DELETE FROM memories WHERE id = $1", [id]);
-    })
-    .catch(() => {
-      /* best-effort */
-    });
-}
+// -------------------------------------------------------------- hybrid read
 
-export function listMemories(): Array<{ id: string; content: string; updated: number }> {
-  return memories;
-}
-
-/** The corpus' recent sources (the 来源 tab's default listing). */
-export async function listRecentSources(limit = 40): Promise<RecallHit[]> {
-  await ready;
-  const rows = await pgQuery<{
-    url: string;
-    title: string;
-    host: string;
-    ref_count: number;
-    cited_count: number;
-    last_seen: number;
-  }>("SELECT url, title, host, ref_count, cited_count, last_seen FROM sources ORDER BY last_seen DESC LIMIT $1", [
-    limit,
-  ]);
-  return rows.map((row) => ({ ...toRecallHit(row), score: Number(row.last_seen) || 0 }));
-}
-
-/** Hybrid (BM25 + pgvector, weighted RRF) search over the reader cache
-    -- the semantic upgrade of the past_research index picking. */
-export async function searchReaderPages(
+/** Hybrid BM25 + pgvector over the searchable kinds, trigram rescue on
+    the zero-signal case.  Returns fused rows ranked by RRF.  The kind
+    names are internal constants, so they inline as SQL literals. */
+async function hybridRecall(
   query: string,
-  limit = 4,
-): Promise<Array<{ url: string; title: string; chars: number; text: string }>> {
+  kinds: string[],
+  limit: number,
+): Promise<Array<{ item: KnowledgeItem; score: number }>> {
   const trimmed = query.trim();
   if (!trimmed) {
     return [];
   }
-  await ready;
+  await pg();
+  const kindList = kinds.map((kind) => `'${kind.replaceAll("'", "")}'`).join(",");
   const keywords = segmentKeywords(trimmed);
   const semanticReady = embeddingsConfigured();
-  if (!keywords && !semanticReady) {
-    return [];
-  }
-  interface Row {
-    url: string;
-    title: string;
-    chars: number;
-    text: string;
-  }
-  const [keywordRows, semanticRows] = await Promise.all([
-    keywords
-      ? pgQuery<Row>(
-          `SELECT url, title, chars, substr(markdown, 1, 1500) AS text
-           FROM reader_cache
-           WHERE (search_text <@> to_bm25query($1, 'reader_bm25')) <> 0
-           ORDER BY (search_text <@> to_bm25query($1, 'reader_bm25')) DESC
-           LIMIT $2`,
-          [keywords, limit * 2],
-        )
-      : Promise.resolve([] as Row[]),
-    semanticReady
-      ? (async () => {
-          const queryVector = (await embedTexts([trimmed]))?.[0];
-          if (!queryVector) {
-            return [] as Row[];
-          }
-          return pgQuery<Row>(
-            `SELECT url, title, chars, substr(markdown, 1, 1500) AS text
-             FROM reader_cache WHERE embedding IS NOT NULL
-             ORDER BY embedding <=> $1::vector LIMIT $2`,
-            [toVectorLiteral(queryVector), limit * 2],
-          );
-        })()
-      : Promise.resolve([] as Row[]),
-  ]);
-  const scores = new Map<string, { row: Row; score: number }>();
-  const bump = (rows: Row[], weight: number) => {
-    rows.forEach((row, rank) => {
+  const scores = new Map<string, { item: KnowledgeItem; score: number }>();
+  const bump = (rows: Record<string, unknown>[], weight: number) => {
+    (rows ?? []).forEach((row, rank) => {
       const rrf = weight / (60 + rank + 1);
-      const entry = scores.get(row.url);
-      scores.set(row.url, { row, score: (entry?.score ?? 0) + rrf });
+      const item = rowToItem(row);
+      const entry = scores.get(item.id);
+      scores.set(item.id, { item, score: (entry?.score ?? 0) + rrf });
     });
   };
+  const [keywordRows, semanticRows] = await Promise.all([
+    keywords
+      ? pgQuery<Record<string, unknown>>(
+          `SELECT ${ITEM_COLUMNS}, (search_text <@> to_bm25query($1, 'knowledge_bm25')) AS _score
+           FROM knowledge
+           WHERE kind IN (${kindList}) AND (search_text <@> to_bm25query($1, 'knowledge_bm25')) <> 0
+           ORDER BY _score DESC LIMIT $2`,
+          [keywords, limit * 2],
+        )
+      : Promise.resolve([] as Record<string, unknown>[]),
+    semanticReady
+      ? (async () => {
+          const vector = (await embedTexts([trimmed]))?.[0];
+          if (!vector) {
+            return [] as Record<string, unknown>[];
+          }
+          return pgQuery<Record<string, unknown>>(
+            `SELECT ${ITEM_COLUMNS}, 1 - (embedding <=> $1::vector) AS _score
+             FROM knowledge
+             WHERE kind IN (${kindList}) AND embedding IS NOT NULL
+             ORDER BY embedding <=> $1::vector LIMIT $2`,
+            [toVectorLiteral(vector), limit * 2],
+          );
+        })()
+      : Promise.resolve([] as Record<string, unknown>[]),
+  ]);
   bump(keywordRows, 1.0);
   bump(semanticRows, 1.0);
   if (scores.size === 0 && trimmed.length >= 2) {
-    const rescued = await pgQuery<Row>(
-      `SELECT url, title, chars, substr(markdown, 1, 1500) AS text, word_similarity($1, title) AS score
-       FROM reader_cache WHERE word_similarity($1, title) >= ${TRIGRAM_THRESHOLD}
-       ORDER BY score DESC LIMIT $2`,
+    const rescued = await pgQuery<Record<string, unknown>>(
+      `SELECT ${ITEM_COLUMNS}, word_similarity($1, title) AS _score
+       FROM knowledge
+       WHERE kind IN (${kindList}) AND word_similarity($1, title) >= 0.3
+       ORDER BY _score DESC LIMIT $2`,
       [trimmed, limit],
     );
     bump(rescued, 1.0);
   }
+  return [...scores.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+/** The tag vocabulary (cached one minute): the client-side tag match
+    costs zero LLM calls. */
+let vocabularyCache: { tags: string[]; at: number } | null = null;
+
+async function tagVocabulary(): Promise<string[]> {
+  if (vocabularyCache && Date.now() - vocabularyCache.at < 60000) {
+    return vocabularyCache.tags;
+  }
+  const rows = await pgQuery<{ tag: string }>(
+    `SELECT DISTINCT t AS tag FROM knowledge, jsonb_array_elements_text(tags) AS t
+     WHERE kind <> 'evt' ORDER BY tag`,
+  );
+  const tags = (rows ?? []).map((row) => row.tag);
+  vocabularyCache = { tags, at: Date.now() };
+  return tags;
+}
+
+/** The knowledge-graph recall dimension: match the query against the tag
+    vocabulary, pull rows sharing the seed tags (more shared tags first). */
+async function graphRecall(query: string, kinds: string[], limit: number): Promise<KnowledgeItem[]> {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    return [];
+  }
+  const vocabulary = await tagVocabulary();
+  const seeds = vocabulary
+    .filter((tag) => trimmed.includes(tag.toLowerCase()) || tag.toLowerCase().includes(trimmed))
+    .slice(0, 4);
+  if (seeds.length === 0) {
+    return [];
+  }
+  const kindList = kinds.map((kind) => `'${kind.replaceAll("'", "")}'`).join(",");
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT ${ITEM_COLUMNS}, (
+       SELECT count(*) FROM jsonb_array_elements_text(tags) AS t
+       WHERE t = ANY($1::text[])
+     ) AS _hits
+     FROM knowledge
+     WHERE kind IN (${kindList}) AND EXISTS (
+       SELECT 1 FROM jsonb_array_elements_text(tags) AS t WHERE t = ANY($1::text[])
+     )
+     ORDER BY _hits DESC, updated DESC LIMIT $2`,
+    [seeds, limit],
+  );
+  return (rows ?? []).map((row) => rowToItem(row));
+}
+
+// -------------------------------------------------------------- public read
+
+export interface ThreadSummary {
+  id: string;
+  title: string;
+  runs: number;
+  sources: number;
+  updated: number;
+  pinned: boolean;
+}
+
+/** The thread directory: the run rows grouped by thread. */
+export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary[]> {
+  await pg();
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT k.thread_id AS id,
+            (SELECT title FROM knowledge WHERE thread_id = k.thread_id AND kind = 'run' ORDER BY n LIMIT 1) AS title,
+            count(*) AS runs,
+            COALESCE(sum((meta->>'sources')::int), 0) AS sources,
+            max(updated) AS updated,
+            max(pinned) AS pinned
+     FROM knowledge k WHERE k.kind = 'run' AND k.thread_id IS NOT NULL
+     GROUP BY k.thread_id
+     ORDER BY max(pinned) DESC, max(updated) DESC LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  return (rows ?? []).map((row) => ({
+    id: String(row.id),
+    title: String(row.title ?? ""),
+    runs: Number(row.runs) || 0,
+    sources: Number(row.sources) || 0,
+    updated: Number(row.updated) || 0,
+    pinned: Number(row.pinned) === 1,
+  }));
+}
+
+/** Cross-kind hybrid search (the knowledge page's search box). */
+export async function searchKnowledge(
+  query: string,
+  opts: { kinds?: string[]; pinned?: boolean; since?: number } = {},
+  limit = 24,
+): Promise<KnowledgeItem[]> {
+  const hits = await hybridRecall(query, opts.kinds?.length ? opts.kinds : SEARCHABLE_KINDS, limit);
+  return hits
+    .map((hit) => hit.item)
+    .filter((item) => (opts.pinned ? item.pinned : true))
+    .filter((item) => (opts.since ? item.updated >= opts.since : true));
+}
+
+/** The RESEARCH recall: the writer-phase corpus (sources + past answers).
+    THE RED LINE: these rows reach the writer phase or the UI only --
+    never the researcher's feed (ready-made material kills the search
+    incentive).  Fuses the hybrid dimension with the tag-graph dimension. */
+export async function recallCorpus(query: string, limit = 6): Promise<KnowledgeItem[]> {
+  const [hybrid, graph] = await Promise.all([
+    hybridRecall(query, ["source", "answer"], limit),
+    graphRecall(query, ["source", "answer"], limit),
+  ]);
+  const scores = new Map<string, { item: KnowledgeItem; score: number }>();
+  const bump = (items: KnowledgeItem[], weight: number) => {
+    items.forEach((item, rank) => {
+      const rrf = weight / (60 + rank + 1);
+      const entry = scores.get(item.id);
+      scores.set(item.id, { item, score: (entry?.score ?? 0) + rrf + item.cited * 0.01 });
+    });
+  };
+  bump(
+    hybrid.map((hit) => hit.item),
+    1.0,
+  );
+  bump(graph, 0.6);
   return [...scores.values()]
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map((entry) => entry.row);
+    .map((entry) => entry.item);
 }
 
-/** Forget one corpus source: its run links go first (run_sources keys
-    on url_hash -- the pre-fix statement selected a column that never
-    existed and silently removed nothing), then the row itself.  The
-    reader cache is a DIFFERENT table -- an archived full-text survives
-    a source forget (delete it explicitly from the 已读全文 list). */
+/** The past_research index: archived full texts ranked by the query
+    (the tool's feed then points at web_reader for a live re-read). */
+export async function recallPages(
+  query: string,
+  limit = 4,
+): Promise<Array<{ url: string; title: string; chars: number; text: string }>> {
+  const [hybrid, graph] = await Promise.all([
+    hybridRecall(query, ["document"], limit),
+    graphRecall(query, ["document"], limit),
+  ]);
+  const scores = new Map<string, { item: KnowledgeItem; score: number }>();
+  const bump = (items: KnowledgeItem[], weight: number) => {
+    items.forEach((item, rank) => {
+      const rrf = weight / (60 + rank + 1);
+      const entry = scores.get(item.id);
+      scores.set(item.id, { item, score: (entry?.score ?? 0) + rrf });
+    });
+  };
+  bump(
+    hybrid.map((hit) => hit.item),
+    1.0,
+  );
+  bump(graph, 0.6);
+  return [...scores.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((entry) => ({
+      url: entry.item.url ?? "",
+      title: entry.item.title,
+      chars: entry.item.body.length,
+      text: entry.item.body.slice(0, 1500),
+    }));
+}
+
+/** One run's full event log (the replay source), ordered by wire seq. */
+export async function loadRunEvents(runId: string): Promise<Array<{ n: number; event: unknown; at: number }>> {
+  const rows = await pgQuery<{ n: number; meta: string; occurred_at: number }>(
+    "SELECT n, meta, occurred_at FROM knowledge WHERE run_id = $1 AND kind = 'evt' ORDER BY n",
+    [runId],
+  );
+  return (rows ?? []).map(decodeEventRow);
+}
+
+/** A whole thread's event log, runs in chronological order (events carry
+    their arrival clock; the wire seq orders within a run). */
+export async function loadThreadEvents(
+  threadId: string,
+): Promise<Array<{ runId: string; n: number; event: unknown; at: number }>> {
+  const rows = await pgQuery<{ run_id: string; n: number; meta: string; occurred_at: number }>(
+    "SELECT run_id, n, meta, occurred_at FROM knowledge WHERE thread_id = $1 AND kind = 'evt' ORDER BY occurred_at, run_id, n",
+    [threadId],
+  );
+  return (rows ?? []).map((row) => ({ ...decodeEventRow(row), runId: row.run_id }));
+}
+
+function decodeEventRow(row: { n: number; meta: unknown; occurred_at: number }): {
+  n: number;
+  event: unknown;
+  at: number;
+} {
+  // PGlite hands jsonb columns back as ALREADY-PARSED objects -- the
+  // string path only fires for a legacy/text transport (parsing an
+  // object would stringify it into "[object Object]" and lose the event)
+  const raw: unknown = typeof row.meta === "string" ? safeParse(row.meta) : row.meta;
+  const event: unknown = raw && typeof raw === "object" ? raw : {};
+  return { n: Number(row.n) || 0, event, at: Number(row.occurred_at) || 0 };
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+/** Every run id of a thread, in run order. */
+export async function loadThreadRunIds(threadId: string): Promise<string[]> {
+  const rows = await pgQuery<{ run_id: string }>(
+    "SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n",
+    [threadId],
+  );
+  return (rows ?? []).map((row) => row.run_id);
+}
+
+/** One archived document's full markdown (the inspector's reading pane). */
+export async function loadDocument(url: string): Promise<{ title: string; markdown: string; chars: number } | null> {
+  const rows = await pgQuery<{ title: string; body: string; n: number }>(
+    "SELECT title, body, n FROM knowledge WHERE id = $1 AND kind = 'document'",
+    [`doc:${urlHash(url)}`],
+  );
+  const row = (rows ?? [])[0];
+  if (!row) {
+    return null;
+  }
+  return { title: String(row.title ?? ""), markdown: String(row.body ?? ""), chars: Number(row.n ?? 0) || 0 };
+}
+
+// -------------------------------------------------------------- graph view
+
+export interface TagGraph {
+  nodes: Array<{ tag: string; uses: number }>;
+  edges: Array<{ a: string; b: string; w: number }>;
+}
+
+/** The tag graph snapshot: nodes = tags by use count, edges = tag
+    co-occurrence within a row (weighted).  Computed on demand -- the
+    graph is a query, not a table. */
+export async function graphSnapshot(limit = 40): Promise<TagGraph> {
+  await pg();
+  const nodeRows = await pgQuery<{ tag: string; uses: number }>(
+    `SELECT t AS tag, count(*) AS uses FROM knowledge, jsonb_array_elements_text(tags) AS t
+     WHERE kind IN ('source', 'answer', 'document', 'memory', 'run')
+     GROUP BY t ORDER BY uses DESC LIMIT $1`,
+    [limit],
+  );
+  const nodes = (nodeRows ?? []).map((row) => ({ tag: row.tag, uses: Number(row.uses) || 0 }));
+  if (nodes.length < 2) {
+    return { nodes, edges: [] };
+  }
+  const names = nodes.map((node) => node.tag);
+  const edgeRows = await pgQuery<{ a: string; b: string; w: number }>(
+    `SELECT a.t AS a, b.t AS b, count(*) AS w
+     FROM knowledge k, jsonb_array_elements_text(k.tags) AS a(t), jsonb_array_elements_text(k.tags) AS b(t)
+     WHERE k.kind IN ('source', 'answer', 'document', 'memory', 'run')
+       AND a.t < b.t AND a.t = ANY($1::text[]) AND b.t = ANY($1::text[])
+     GROUP BY a.t, b.t ORDER BY w DESC LIMIT 160`,
+    [names],
+  );
+  return {
+    nodes,
+    edges: (edgeRows ?? []).map((row) => ({ a: row.a, b: row.b, w: Number(row.w) || 0 })),
+  };
+}
+
+// ------------------------------------------------------------------- stats
+
+export interface KnowledgeStats {
+  threads: number;
+  runs: number;
+  sources: number;
+  documents: number;
+  memories: number;
+  answers: number;
+  events: number;
+  approxBytes: number;
+  embedModel: string | null;
+}
+
+export async function knowledgeStats(): Promise<KnowledgeStats> {
+  await pg();
+  const rows = await pgQuery<{ kind: string; n: number }>("SELECT kind, count(*) AS n FROM knowledge GROUP BY kind");
+  const byKind = new Map<string, number>((rows ?? []).map((row) => [row.kind, Number(row.n) || 0]));
+  const sizeRows = await pgQuery<{ bytes: number; model: string | null }>(
+    `SELECT COALESCE(sum(octet_length(body) + octet_length(title) + octet_length(search_text)), 0) AS bytes,
+            max(embed_model) AS model FROM knowledge`,
+  );
+  const threads = await pgQuery<{ n: number }>(
+    "SELECT count(DISTINCT thread_id) AS n FROM knowledge WHERE kind = 'run' AND thread_id IS NOT NULL",
+  );
+  const pick = (kind: string) => byKind.get(kind) ?? 0;
+  return {
+    threads: Number((threads ?? [])[0]?.n ?? 0),
+    runs: pick("run"),
+    sources: pick("source"),
+    documents: pick("document"),
+    memories: pick("memory"),
+    answers: pick("answer"),
+    events: pick("evt"),
+    approxBytes: Number((sizeRows ?? [])[0]?.bytes ?? 0),
+    embedModel: (sizeRows ?? [])[0]?.model ?? null,
+  };
+}
+
+// ------------------------------------------------------------- mutations
+
+export function toggleThreadPin(threadId: string, on: boolean): void {
+  void enqueue(async () => {
+    await pgQuery("UPDATE knowledge SET pinned = $1 WHERE thread_id = $2 AND kind = 'run'", [on ? 1 : 0, threadId]);
+  });
+}
+
+/** A thread's everything: events, projections, provenance -- one DELETE. */
+export function deleteThread(threadId: string): void {
+  void enqueue(async () => {
+    await pgQuery("DELETE FROM knowledge WHERE thread_id = $1", [threadId]);
+  });
+}
+
+/** Forget one corpus source: its ref rows and its archived document go
+    with it (same url_hash identity). */
 export function deleteSource(url: string): void {
   const hash = urlHash(url);
-  queue = queue
-    .then(async () => {
-      await ready;
-      await pgQuery("DELETE FROM run_sources WHERE url_hash = $1", [hash]);
-      await pgQuery("DELETE FROM sources WHERE url_hash = $1", [hash]);
-      sourceTexts.delete(hash);
-      readerTexts.delete(hash);
-    })
-    .catch(() => {
-      /* best-effort */
-    });
+  void enqueue(async () => {
+    await pgQuery("DELETE FROM knowledge WHERE url_hash = $1 AND kind IN ('source', 'source_ref', 'document')", [hash]);
+  });
 }
 
-export function deleteSearch(q: string, category: string): void {
-  const id = `s${urlHash(`${q.trim().slice(0, 200)}|${category || "general"}`)}`;
-  queue = queue
-    .then(async () => {
-      await ready;
-      await pgQuery("DELETE FROM searches WHERE id = $1", [id]);
-    })
-    .catch(() => {
-      /* best-effort */
-    });
+/** Remove every study row (the admin panel's "clear studies"): the table
+    survives, the contents go. */
+export function clearAllStudies(): void {
+  void enqueue(async () => {
+    await pgQuery("DELETE FROM knowledge");
+  });
 }
 
-export function recordClassicResults(
-  q: string,
-  results: Array<{ url?: string; title?: string; netloc?: string }>,
-): void {
-  const query = q.trim().slice(0, 200);
-  if (!query || results.length === 0) {
-    return;
-  }
-  const rid = `classic:${urlHash(`${query}`)}`;
-  const now = Date.now();
-  queue = queue
-    .then(async () => {
-      await ready;
-      const db = await pg();
-      for (const [idx, result] of results.entries()) {
-        if (!result?.url) {
-          continue;
-        }
-        await linkSource(db, rid, { ...result, n: idx + 1 }, now, false);
-      }
-    })
-    .catch(() => {
-      /* best-effort: the corpus is a mirror, never the search's blocker */
-    });
+/** The nuclear option: drop the table itself (schema recreated on next
+    boot). */
+export function resetAll(): void {
+  void enqueue(async () => {
+    const { resetDatabase } = await import("@/lib/pg.ts");
+    await resetDatabase();
+  });
 }
 
-export function recordSearch(q: string, category: string, results: number): void {
-  const query = q.trim().slice(0, 200);
-  if (!query) {
-    return;
-  }
-  const cat = category || "general";
-  const id = `s${urlHash(`${query}|${cat}`)}`;
-  const now = Date.now();
-  queue = queue
-    .then(async () => {
-      await ready;
-      await pgQuery(
-        `INSERT INTO searches (id, q, category, results, times, created, last_ran)
-         VALUES ($1, $2, $3, $4, 1, $5, $5)
-         ON CONFLICT (id) DO UPDATE SET results = EXCLUDED.results,
-           times = searches.times + 1, last_ran = EXCLUDED.last_ran`,
-        [id, query, cat, results, now],
-      );
-    })
-    .catch(() => {
-      /* best-effort */
-    });
+// ---------------------------------------------------------- live subscriptions
+
+/** A live query's unsubscribe handle. */
+export interface StoreSubscription {
+  unsubscribe(): void;
 }
 
-export interface SearchHistoryEntry {
-  q: string;
-  category: string;
-  results: number;
-  times: number;
-  lastRan: number;
+type LiveNamespace = import("@electric-sql/pglite/live").LiveNamespace;
+
+async function liveQuery<T>(sql: string, params: unknown[], onUpdate: (rows: T[]) => void): Promise<StoreSubscription> {
+  const db = (await pg()) as Pg & { live: LiveNamespace };
+  const handle = await db.live.query<T>(sql, params, (results) => onUpdate((results.rows ?? []) as T[]));
+  return {
+    unsubscribe: () => {
+      handle.unsubscribe().catch(() => {
+        /* the session may already be gone */
+      });
+    },
+  };
 }
 
-/** The search history (keyword-filtered, newest first; a BM25 miss
-    rescues through pg_trgm's word_similarity over the raw queries).
-    The camelCase alias is QUOTED -- PGlite folds unquoted aliases to
-    lowercase and the row key would read `lastran`.  Async (SQL). */
-export async function listSearchHistory(query: string, limit = 30): Promise<SearchHistoryEntry[]> {
-  await ready;
-  const trimmed = query.trim();
-  const keywords = segmentKeywords(trimmed);
-  let rows: SearchHistoryEntry[];
-  if (keywords) {
-    rows = await pgQuery<SearchHistoryEntry>(
-      `SELECT q, category, results, times, last_ran AS "lastRan"
-       FROM searches WHERE (q <@> to_bm25query($1, 'searches_bm25')) <> 0
-       ORDER BY last_ran DESC LIMIT $2`,
-      [keywords, limit],
-    );
-    if (rows.length === 0 && trimmed.length >= 2) {
-      rows = await pgQuery<SearchHistoryEntry>(
-        `SELECT q, category, results, times, last_ran AS "lastRan",
-                word_similarity($1, q) AS score
-         FROM searches WHERE word_similarity($1, q) >= ${TRIGRAM_THRESHOLD}
-         ORDER BY score DESC, last_ran DESC LIMIT $2`,
-        [trimmed, limit],
-      );
-    }
-  } else {
-    rows = await pgQuery<SearchHistoryEntry>(
-      'SELECT q, category, results, times, last_ran AS "lastRan" FROM searches ORDER BY last_ran DESC LIMIT $1',
-      [limit],
-    );
-  }
-  return rows.map((row) => ({
-    q: row.q,
-    category: row.category,
-    results: Number(row.results) || 0,
-    times: Number(row.times) || 1,
-    lastRan: Number(row.lastRan),
-  }));
+/** The thread directory as a live listing (coarse: any knowledge write
+    re-fires the aggregate). */
+export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): Promise<StoreSubscription> {
+  return liveQuery<Record<string, unknown>>(
+    `SELECT k.thread_id AS id,
+            (SELECT title FROM knowledge WHERE thread_id = k.thread_id AND kind = 'run' ORDER BY n LIMIT 1) AS title,
+            count(*) AS runs,
+            COALESCE(sum((meta->>'sources')::int), 0) AS sources,
+            max(updated) AS updated,
+            max(pinned) AS pinned
+     FROM knowledge k WHERE k.kind = 'run' AND k.thread_id IS NOT NULL
+     GROUP BY k.thread_id
+     ORDER BY max(pinned) DESC, max(updated) DESC LIMIT 40`,
+    [],
+    (rows) =>
+      onUpdate(
+        (rows ?? []).map((row) => ({
+          id: String(row.id),
+          title: String(row.title ?? ""),
+          runs: Number(row.runs) || 0,
+          sources: Number(row.sources) || 0,
+          updated: Number(row.updated) || 0,
+          pinned: Number(row.pinned) === 1,
+        })),
+      ),
+  );
+}
+
+/** The memories as a live listing. */
+export function subscribeMemories(onUpdate: (memories: MemoryRow[]) => void): Promise<StoreSubscription> {
+  return liveQuery<{ id: string; body: string; updated: number }>(
+    "SELECT id, body, updated FROM knowledge WHERE kind = 'memory' ORDER BY created",
+    [],
+    (rows) =>
+      onUpdate(
+        (rows ?? []).map((row) => ({ id: row.id, content: String(row.body ?? ""), updated: Number(row.updated) || 0 })),
+      ),
+  );
+}
+
+/** Called once at boot with the embedding capability's width -- the
+    pgvector column is created at this dimension. */
+export function configureEmbeddingDimensions(dims: number): void {
+  configurePgDimensions(dims);
+}
+
+// Local-instance debugging handle: the store's write path is
+// fire-and-forget by design, so a stuck boot or a failed INSERT reads as
+// "the feature is broken" -- the console probe answers back (ask the
+// page, not the eye).  Runtime hostname check: public deployments never
+// carry it, and vite cannot fold the check away.
+if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+  (window as unknown as Record<string, unknown>).__zjsKnowledge = {
+    pgQuery,
+    loadThreadEvents,
+    loadRunEvents,
+    knowledgeStats,
+    listThreads,
+    graphSnapshot,
+    settleRun,
+    recallCorpus,
+  };
 }

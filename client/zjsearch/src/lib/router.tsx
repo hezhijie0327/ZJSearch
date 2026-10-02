@@ -9,6 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import { translateFor } from "@/lib/i18n.ts";
+import { configureKnowledge } from "@/lib/knowledgeStore.ts";
 import { extractBootPageData, extractPageData, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { buildSearchUrl, type SearchParams, searchParamEntries, urlThemeOverride } from "@/lib/searchParams.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
@@ -47,6 +48,7 @@ function pageTitle(data: AnyPageData): string {
     preferences: t("preferences"),
     stats: t("engine_stats"),
     info: t("info"),
+    knowledge: t("knowledge_title"),
     404: t("page_not_found"),
   };
   return `${labels[data.globals.page] ?? name} - ${name}`;
@@ -281,6 +283,8 @@ export function RouterProvider({
       // capability rides the page-data globals, and the STREAMED takeover's
       // boot payload carries none (the real one lands late)
       configureEmbeddings(parsed.globals?.embedding ? { token: parsed.globals.embedding.tk } : null);
+      const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai;
+      configureKnowledge({ aiToken: aiCapLanding?.tk, embedModel: parsed.globals?.embedding?.model });
       setData(parsed);
       setLoading(false);
       document.title = pageTitle(parsed);

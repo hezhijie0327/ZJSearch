@@ -23,7 +23,7 @@ from searx.zjsearch.ai.capabilities import mcp, reader
 from searx.zjsearch.ai.capabilities.calculator import calculator_spec
 from searx.zjsearch.ai.capabilities.past_research import parse_entries as parse_past_research
 from searx.zjsearch.ai.capabilities.past_research import past_research_spec
-from searx.zjsearch.ai.capabilities.user_memory import extract_facts, parse_memories, user_memory_spec
+from searx.zjsearch.ai.capabilities.user_memory import extract_insights, parse_memories, user_memory_spec
 from searx.zjsearch.ai.framework import loop as engine
 from searx.zjsearch.ai.framework import wire
 from searx.zjsearch.ai.framework.fences import parse_fence_json
@@ -414,9 +414,13 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             if found:
                 yield wire.encode({"e": "related", "items": found})
         try:
-            facts = extract_facts(self.cfg, self.question, answer, self.gate_usage)
+            facts, tags = extract_insights(self.cfg, self.question, answer, self.gate_usage)
             for fact in facts:
                 yield wire.encode({"e": "memory", "content": fact})
+            if tags:
+                # the tag graph's semantic layer: the client parks these on
+                # the run, its settle writes them into the projections
+                yield wire.encode({"e": "tags", "items": tags})
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch_ai_search: memory extraction failed: %r", exc)
         if self.gate_usage:

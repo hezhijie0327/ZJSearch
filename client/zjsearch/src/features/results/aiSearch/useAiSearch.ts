@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import type { AiSearchGallery } from "@/features/results/aiOverview.ts";
 import { fetchEventStream } from "@/lib/http.ts";
 import {
-  archiveReaderPage,
-  listMemories,
-  loadThread,
-  newThreadId,
-  recallSources,
+  appendRunEvents,
+  archiveDocument,
+  loadMemories,
+  loadThreadEvents,
+  recallCorpus,
+  recallPages,
   saveMemory,
-  saveThread,
-  searchReaderPages,
+  settleRun,
 } from "@/lib/knowledgeStore.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
@@ -183,6 +183,9 @@ export interface AiSearchRun {
   /** the server's halt explanation carried on settle (stall verdict,
       truncation, transport cut) -- the meta row renders it */
   halt?: string | null;
+  /** the extractor's concept tags (the LATE `tags` wire event) -- the
+      settle writes them into the knowledge projections */
+  tags?: string[];
   /** the living task list (the task_write tool maintains it; the task
       card renders it) -- empty for modes that do not decompose */
   tasks: Array<{
@@ -232,6 +235,17 @@ const IDLE: Core = {
   threadId: "",
 };
 
+/** The live fold's side effects: reader pages archive as their call
+    settles, memories persist as their events arrive. */
+const LIVE_FX: FoldFx = { archive: archiveDocument, saveMemory, now: () => Date.now() };
+/** The replay fold: persistence already happened live, so both ports are
+    no-ops (a replay must never double-archive or double-save). */
+const REPLAY_FX: FoldFx = {
+  archive: () => undefined,
+  saveMemory: () => undefined,
+  now: () => Date.now(),
+};
+
 /** Entries as step indices: think/say/calls events route by entry id. */
 type EntryIndex = { think?: number; intent?: number; calls?: number };
 
@@ -258,13 +272,13 @@ function interruptPending(runs: AiSearchRun[]): AiSearchRun[] {
   });
 }
 
-function settle(core: Core, failed: { error: string } | null, stopped: boolean): Core {
+function settle(core: Core, failed: { error: string } | null, stopped: boolean, now = Date.now()): Core {
   const runs = [...core.runs];
   const lastIdx = runs.length - 1;
   const run = runs[lastIdx];
   if (run) {
     const awaiting = !failed && run.ask !== null && !run.answer.trim() && !stopped;
-    const endedAt = awaiting ? null : Date.now();
+    const endedAt = awaiting ? null : now;
     runs[lastIdx] = failed
       ? { ...run, status: "error", error: failed.error, endedAt }
       : {
@@ -323,13 +337,33 @@ function parseClarifyPairs(text: string): Array<{ q: string; a: string }> {
   return pairs;
 }
 
-function applyEvent(
+/** The fold's side-effect ports: the LIVE run archives reader pages and
+    persists memories as their events arrive and stamps the wall clock;
+    a REPLAY no-ops the persistence (it happened live) and stamps the
+    event's own arrival time (the duration displays stay truthful). */
+export interface FoldFx {
+  archive(url: string, title: string, text: string): void;
+  saveMemory(content: string): void;
+  now(): number;
+}
+
+/** Exported for the knowledge page's replay: the SAME fold renders a live
+    stream and rebuilds a stored run from its evt rows (harness-style --
+    one reducer, two executions). */
+export function applyEvent(
   core: Core,
   event: Record<string, unknown>,
-  saveMemory: (content: string) => void,
+  fx: FoldFx,
   pastRefCounts?: Map<string, number>,
 ): Core {
   const kind = event.e as string;
+  // the bootstrap event CREATES the run -- it must pass before the
+  // last-run guard (there is no run to fold into yet, that's the point)
+  if (kind === "client.start") {
+    const fresh = emptyRun(Number(event.runNo) || 1, String(event.q ?? ""), (event.mode as AiSearchMode) ?? "balanced");
+    fresh.startedAt = Number(event.startedAt) || fresh.startedAt;
+    return { ...core, runs: [...core.runs, fresh], phase: "streaming" };
+  }
   const runs = [...core.runs];
   const lastIdx = runs.length - 1;
   const run = runs[lastIdx];
@@ -341,6 +375,51 @@ function applyEvent(
     run.steps.findIndex((step) => step.kind === kind2 && (step as { entry?: number }).entry === entryId);
 
   switch (kind) {
+    case "client.clarify": {
+      // the user answered the clarify gate: the run restarts on the SAME
+      // run id (the asking record survives, the answer resets)
+      runs[lastIdx] = {
+        ...run,
+        status: "streaming",
+        answer: "",
+        clarify: String(event.text ?? ""),
+        ask: null,
+        wrappingUp: false,
+        startedAt: Number(event.startedAt) || run.startedAt,
+        endedAt: null,
+        mode: (event.mode as AiSearchMode) ?? run.mode,
+      };
+      return { ...core, runs, phase: "streaming" };
+    }
+    case "client.retry": {
+      const clarifyText = typeof event.clarify === "string" && event.clarify ? event.clarify : undefined;
+      runs[lastIdx] = {
+        ...run,
+        status: "streaming",
+        // the retry keeps its confirmed direction: the clarify step
+        // re-opens the rebuilt timeline
+        steps: (clarifyText
+          ? [{ kind: "clarify" as const, pairs: parseClarifyPairs(clarifyText) }]
+          : []) as AiSearchStep[],
+        answer: "",
+        galleries: [],
+        related: [],
+        ask: null,
+        error: null,
+        wrappingUp: false,
+        startedAt: Number(event.startedAt) || run.startedAt,
+        endedAt: null,
+        mode: (event.mode as AiSearchMode) ?? run.mode,
+      };
+      return { ...core, runs, phase: "streaming", error: null };
+    }
+    case "client.stop": {
+      if (core.phase !== "streaming") {
+        return core;
+      }
+      const flagged = runs.map((item, index) => (index === lastIdx ? { ...item, stopped: true } : item));
+      return { ...settle({ ...core, runs: flagged }, null, true, fx.now()), phase: "done" };
+    }
     case "open": {
       if (String(event.kind) === "write") {
         // the writer phase opened: the 撰写 line covers its silence
@@ -422,12 +501,12 @@ function applyEvent(
         };
       });
       runs[lastIdx] = { ...run, steps };
-      // a page read's extracted text persists into the reader cache (the
-      // url-identity full-text store the memory tools recall from)
+      // a page read's extracted text persists as a document row (the
+      // url-identity full-text store the recall pages from)
       const text = typeof event.text === "string" ? event.text : "";
       if (text) {
         const url = String(event.url ?? "");
-        archiveReaderPage(url, run.sources.find((source) => source.url === url)?.title ?? "", text);
+        fx.archive(url, run.sources.find((source) => source.url === url)?.title ?? "", text);
       }
       return { ...core, runs };
     }
@@ -559,9 +638,20 @@ function applyEvent(
       // the model saved a durable fact about the user: persist into the
       // local store (no timeline rendering -- a silent background save)
       if (typeof event.content === "string" && event.content) {
-        saveMemory(event.content);
+        fx.saveMemory(event.content);
       }
       return core;
+    case "tags": {
+      // LATE: the extractor's concept tags for this run -- parked on the
+      // run so settleRun writes them into the projections (and the evt
+      // log carries them for replay)
+      const items = ((event.items as string[]) ?? []).map(String).filter(Boolean).slice(0, 12);
+      if (items.length) {
+        runs[lastIdx] = { ...run, tags: items };
+        return { ...core, runs };
+      }
+      return core;
+    }
     case "settle": {
       // the SERVER-DECLARED terminal state (status: done | awaiting |
       // error) -- no client inference
@@ -593,7 +683,7 @@ function applyEvent(
       }
       if (status === "error") {
         const reason = halt ?? "error";
-        next = { ...next, status: "error", error: reason, endedAt: Date.now() };
+        next = { ...next, status: "error", error: reason, endedAt: fx.now() };
         runs[lastIdx] = next;
         const withInterrupted = interruptPending(runs);
         const hasContent = withInterrupted.some((item) => item.answer || item.steps.length > 0);
@@ -605,7 +695,7 @@ function applyEvent(
         };
       }
       runs[lastIdx] = next;
-      return settle({ ...core, runs }, null, false);
+      return settle({ ...core, runs }, null, false, fx.now());
     }
     default:
       return core;
@@ -644,6 +734,13 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
   };
 }
 
+/** A fresh conversation identity (the thread url's uuid). */
+function newThreadId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-4${Math.random().toString(16).slice(2, 11)}`;
+}
+
 export function useAiSearch(capability: AiCapability | undefined): AiSearchState {
   const [core, setCore] = useState<Core>(IDLE);
   const abortRef = useRef<AbortController | null>(null);
@@ -652,6 +749,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   // state's
   const threadIdRef = useRef("");
   const entryIndexRef = useRef<Map<number, EntryIndex>>(new Map());
+  // the current run's recalled-refs badge map (set at beginRun, read by
+  // the sources fold)
+  const refCountsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     return () => {
@@ -659,25 +759,18 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     };
   }, []);
 
-  // the conversation checkpoint: settled runs persist immediately, a
-  // streaming run every 1.5 s at most (a crash loses 1.5 s of timeline)
+  // the run's knowledge checkpoint: once the run is terminal its
+  // projections land (idempotent per run id); DURING streaming the evt
+  // buffer flushes on its own debounce, nothing else needs doing
   useEffect(() => {
-    if (core.phase === "idle" || !core.threadId) {
+    if ((core.phase !== "done" && core.phase !== "error") || !core.threadId) {
       return;
     }
-    const handle = window.setTimeout(
-      () => {
-        const searchText = core.runs
-          .map((run) => `${run.q}\n${run.answer}`)
-          .join("\n")
-          .slice(0, 20000);
-        void saveThread(core.threadId, core.runs[0]?.q ?? "", core.runs, searchText);
-      },
-      core.phase === "streaming" ? 1500 : 0,
-    );
-    return () => {
-      window.clearTimeout(handle);
-    };
+    const last = core.runs[core.runs.length - 1];
+    if (!last) {
+      return;
+    }
+    void settleRun(core.threadId, last);
   }, [core.phase, core.threadId, core.runs]);
 
   const beginRun = (
@@ -687,6 +780,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     sourcesBase: number,
     mode: AiSearchMode,
     searchLanguage: string,
+    runNo: number,
     clarify?: { state: "answered" | "skipped"; text: string },
   ) => {
     if (!capability) {
@@ -699,21 +793,24 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     entryIndexRef.current = new Map();
     const signal = controller.signal;
     void (async () => {
-      // the browser recalls its PGlite corpus BEFORE the POST: past-research
-      // sources (WRITER-phase only), the past_research index (the RAG
-      // tool's searchable slice: reader full-text heads + corpus-source
-      // identities) and the user-memory snapshot
-      const [pastRefs, readerHits] = await Promise.all([
-        recallSources(q, 6).catch(() => []),
-        searchReaderPages(q, 4).catch(() => []),
+      // the browser recalls its knowledge BEFORE the POST, on TWO
+      // dimensions: the corpus (sources + past answers, WRITER-phase only)
+      // and the past_research index (archived full texts) -- each fusing
+      // the hybrid (BM25+vector) and the tag-graph dimensions -- plus the
+      // user-memory snapshot
+      const [corpus, readerHits, userMemories] = await Promise.all([
+        recallCorpus(q, 6).catch(() => []),
+        recallPages(q, 4).catch(() => []),
+        loadMemories().catch(() => []),
       ]);
-      const userMemories = listMemories();
       if (signal.aborted) {
         return;
       }
+      const withUrl = corpus.filter((item) => item.url);
       // the cross-session badge's lookup: captured BEFORE this run links
       // anything (the run's own ref-count increment must not badge itself)
-      const refCounts = new Map(pastRefs.map((hit) => [hit.url, hit.refCount]));
+      const refCounts = new Map(withUrl.map((item) => [item.url as string, item.refs]));
+      refCountsRef.current = refCounts;
       const body = {
         tk: capability.tk,
         q,
@@ -725,19 +822,20 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         clarify_state: clarify?.state ?? "ask",
         clarifications: clarify?.text ?? "",
         thread: threadId || undefined,
-        history_sources: pastRefs.map((hit) => ({ url: hit.url, title: hit.title })),
+        history_sources: withUrl.map((item) => ({ url: item.url as string, title: item.title })),
         user_memories: userMemories.map((memory) => memory.content),
         past_research: [
           ...readerHits.map((hit) => ({ url: hit.url, title: hit.title, text: hit.text })),
-          ...pastRefs.map((hit) => ({ url: hit.url, title: hit.title, host: hit.host })),
+          ...withUrl.map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
         ],
       };
       const apply = (event: Record<string, unknown>) => {
+        appendRunEvents(`${threadId}:${runNo}`, [event]);
         setCore((prev) => {
           if (prev.phase !== "streaming" && prev.phase !== "awaiting") {
             return prev;
           }
-          return applyEvent(prev, event, saveMemory, refCounts);
+          return applyEvent(prev, event, LIVE_FX, refCounts);
         });
       };
       try {
@@ -764,20 +862,26 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return;
     }
     threadIdRef.current = newThreadId();
-    setCore({
-      phase: "streaming",
-      runs: [emptyRun(1, q, mode)],
-      sources: [],
-      error: null,
+    setCore((prev) => ({
+      ...applyEvent(
+        { ...prev, threadId: threadIdRef.current },
+        { e: "client.start", q, runNo: 1, mode, startedAt: Date.now() },
+        LIVE_FX,
+      ),
       threadId: threadIdRef.current,
-    });
-    beginRun(q, lang, [], 0, mode, searchLanguage);
+    }));
+    appendRunEvents(`${threadIdRef.current}:1`, [{ e: "client.start", q, runNo: 1, mode, startedAt: Date.now() }]);
+    beginRun(q, lang, [], 0, mode, searchLanguage, 1);
   };
 
   const followup = (q: string, lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
     if (core.phase !== "done" || !q.trim()) {
       return;
     }
+    const runNo = core.runs.length + 1;
+    appendRunEvents(`${threadIdRef.current}:${runNo}`, [
+      { e: "client.start", q: q.trim(), runNo, mode, startedAt: Date.now() },
+    ]);
     beginRun(
       q.trim(),
       lang,
@@ -785,11 +889,12 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       core.sources.length,
       mode,
       searchLanguage,
+      runNo,
     );
     setCore((prev) => ({
       ...prev,
       phase: "streaming",
-      runs: [...prev.runs, emptyRun(prev.runs.length + 1, q.trim(), mode)],
+      runs: [...prev.runs, emptyRun(runNo, q.trim(), mode)],
     }));
   };
 
@@ -801,6 +906,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!last) {
       return;
     }
+    const runId = `${threadIdRef.current}:${last.runNo}`;
+    appendRunEvents(runId, [{ e: "client.clarify", text: text ?? "", startedAt: Date.now(), mode }]);
     // prior ANSWERED runs travel as history; the awaiting run has none
     beginRun(
       last.q,
@@ -809,30 +916,12 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       core.sources.length,
       mode,
       searchLanguage,
+      last.runNo,
       { state: text === null ? "skipped" : "answered", text: text ?? "" },
     );
-    setCore((prev) => ({
-      ...prev,
-      phase: "streaming",
-      runs: prev.runs.map((run, index) =>
-        index === prev.runs.length - 1
-          ? {
-              ...run,
-              status: "streaming" as const,
-              // the ASKING record survives (the ask_user row + the turn's
-              // reasoning) -- wiping the timeline would erase the "why did
-              // it ask" evidence; the ANSWER archives in the rail card
-              steps: run.steps,
-              answer: "",
-              clarify: text ?? "",
-              wrappingUp: false,
-              startedAt: Date.now(),
-              endedAt: null,
-              mode,
-            }
-          : run,
-      ),
-    }));
+    setCore((prev) =>
+      applyEvent(prev, { e: "client.clarify", text: text ?? "", startedAt: Date.now(), mode }, LIVE_FX),
+    );
   };
 
   const retry = (lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
@@ -843,6 +932,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!last) {
       return;
     }
+    const runId = `${threadIdRef.current}:${last.runNo}`;
+    appendRunEvents(runId, [{ e: "client.retry", clarify: last.clarify ?? "", startedAt: Date.now(), mode }]);
     beginRun(
       last.q,
       lang,
@@ -850,50 +941,21 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       core.sources.length,
       mode,
       searchLanguage,
+      last.runNo,
       last.clarify ? { state: "answered", text: last.clarify } : undefined,
     );
-    setCore((prev) => ({
-      ...prev,
-      phase: "streaming",
-      error: null,
-      runs: prev.runs.map((run, index) =>
-        index === prev.runs.length - 1
-          ? {
-              ...run,
-              status: "streaming" as const,
-              // the retry keeps its confirmed direction: the clarify step
-              // re-opens the rebuilt timeline
-              steps: (last.clarify
-                ? [{ kind: "clarify" as const, pairs: parseClarifyPairs(last.clarify) }]
-                : []) as AiSearchStep[],
-              answer: "",
-              galleries: [],
-              related: [],
-              ask: null,
-              error: null,
-              wrappingUp: false,
-              startedAt: Date.now(),
-              endedAt: null,
-              mode,
-            }
-          : run,
-      ),
-    }));
+    setCore((prev) =>
+      applyEvent(prev, { e: "client.retry", clarify: last.clarify ?? "", startedAt: Date.now(), mode }, LIVE_FX),
+    );
   };
 
   const stop = () => {
     abortRef.current?.abort();
-    setCore((prev) => {
-      if (prev.phase !== "streaming") {
-        return prev;
-      }
-      const runs = [...prev.runs];
-      const lastIdx = runs.length - 1;
-      if (runs[lastIdx]) {
-        runs[lastIdx] = { ...runs[lastIdx], stopped: true };
-      }
-      return { ...settle({ ...prev, runs }, null, true), phase: "done" };
-    });
+    const last = core.runs[core.runs.length - 1];
+    if (last && threadIdRef.current) {
+      appendRunEvents(`${threadIdRef.current}:${last.runNo}`, [{ e: "client.stop" }]);
+    }
+    setCore((prev) => applyEvent(prev, { e: "client.stop" }, LIVE_FX));
   };
 
   const reset = () => {
@@ -902,30 +964,32 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   };
 
   const resume = async (threadId: string): Promise<boolean> => {
-    const data = await loadThread(threadId);
-    if (!data?.length) {
+    // the replay: the thread's evt log folds through the SAME reducer the
+    // live stream used -- a stored run and a live run hit one renderer
+    const events = await loadThreadEvents(threadId).catch(() => []);
+    if (!events.length) {
       return false;
     }
     abortRef.current?.abort();
     threadIdRef.current = threadId;
-    const runs = data as unknown as AiSearchRun[];
-    setCore((prev) => ({
-      ...prev,
-      threadId,
-      phase: "done",
-      error: null,
-      // an interrupted run is a done run with interrupted call rows; an
-      // awaiting clarify never survives
-      runs: interruptPending(
-        runs.map((run) => ({
-          ...run,
-          status: run.status === "streaming" || run.status === "awaiting" ? ("done" as const) : run.status,
-          ask: null,
-          wrappingUp: false,
-        })),
-      ),
-      sources: runs.flatMap((run) => run.sources),
-    }));
+    let core: Core = { ...IDLE, threadId };
+    for (const entry of events) {
+      core = applyEvent(core, entry.event as Record<string, unknown>, { ...REPLAY_FX, now: () => entry.at });
+    }
+    if (!core.runs.length) {
+      return false;
+    }
+    // normalize: an interrupted run is a done run with interrupted call
+    // rows; an awaiting clarify never survives a reload
+    const runs = interruptPending(
+      core.runs.map((run) => ({
+        ...run,
+        status: run.status === "streaming" || run.status === "awaiting" ? ("done" as const) : run.status,
+        ask: null,
+        wrappingUp: false,
+      })),
+    );
+    setCore({ ...core, runs, phase: "done", error: null });
     return true;
   };
 

@@ -381,6 +381,14 @@ pipeline features without any Python changes. -#}
 }
 {%- endmacro %}
 
+{#- the knowledge-base page: the library lives entirely in the browser's
+    PGlite store -- the payload carries the globals (page identity + fresh
+    capability tokens) and nothing else (see KnowledgePage /
+    knowledgeStore) -#}
+{% macro page_knowledge() -%}
+{"globals": {{ globals('knowledge') }}}
+{%- endmacro %}
+
 {#- the standalone AI thread page: the thread lives in the browser's
     storage keyed by the uuid in the url -- the payload carries the
     identity plus fresh capability tokens and nothing else (the AI search

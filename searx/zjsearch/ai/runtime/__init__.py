@@ -39,14 +39,18 @@ client never reconstructs state.  A stream that dies before its first
 content answers 502 with a truncated upstream reason.
 """
 
-from searx.zjsearch.ai.runtime.profile import capability
+from searx.zjsearch.ai.runtime.knowledge_page import install as knowledge_page_install
 from searx.zjsearch.ai.runtime.page import install as page_install
+from searx.zjsearch.ai.runtime.profile import capability
 from searx.zjsearch.ai.runtime.route import install as route_install
+from searx.zjsearch.ai.runtime.tag_route import install as tag_route_install
 
 
 def install(app) -> None:  # pylint: disable=missing-function-docstring
     page_install(app)
+    knowledge_page_install(app)
     route_install(app)
+    tag_route_install(app)
 
 
 __all__ = ["capability", "install"]

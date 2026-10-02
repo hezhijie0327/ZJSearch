@@ -12,12 +12,13 @@ import type { AnyPageData } from "@/lib/types.ts";
 import {
   isAiThreadPageData,
   isInfoPageData,
+  isKnowledgePageData,
   isPreferencesPageData,
   isSearchPageData,
   isStatsPageData,
 } from "@/lib/types.ts";
 import { IndexPage } from "@/pages/IndexPage.tsx";
-import { AiThreadPage, InfoPage, PreferencesPage, ResultsPage, StatsPage } from "@/pages/lazyPages.ts";
+import { AiThreadPage, InfoPage, KnowledgePage, PreferencesPage, ResultsPage, StatsPage } from "@/pages/lazyPages.ts";
 
 function Pages() {
   const { data, error } = useRouter();
@@ -68,6 +69,13 @@ function Pages() {
     return (
       <Suspense fallback={<PageFallback />}>
         <AiThreadPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isKnowledgePageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <KnowledgePage data={data} />
       </Suspense>
     );
   }

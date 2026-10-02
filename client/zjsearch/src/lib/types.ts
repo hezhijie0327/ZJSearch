@@ -30,7 +30,17 @@ export interface AiCapability {
 }
 
 export interface GlobalData {
-  page: "index" | "results" | "preferences" | "stats" | "info" | "ai_thread" | "404" | "redirect" | "error";
+  page:
+    | "index"
+    | "results"
+    | "preferences"
+    | "stats"
+    | "info"
+    | "ai_thread"
+    | "knowledge"
+    | "404"
+    | "redirect"
+    | "error";
   instance_name: string;
   version: string;
   git_url: string;
@@ -537,12 +547,20 @@ export interface AiThreadPageData {
   thread: string;
 }
 
+/** The knowledge-base page (`/zjsearch/knowledge`): the payload carries
+    the globals (page identity + capability tokens) -- the library itself
+    lives in the browser's PGlite store (see lib/knowledgeStore). */
+export interface KnowledgePageData {
+  globals: GlobalData;
+}
+
 export type AnyPageData =
   | SearchPageData
   | PreferencesPageData
   | StatsPageData
   | InfoPageData
   | AiThreadPageData
+  | KnowledgePageData
   | RedirectPageData
   | ErrorPageData
   | BasicPageData;
@@ -577,4 +595,8 @@ export function isInfoPageData(data: AnyPageData): data is InfoPageData {
 
 export function isAiThreadPageData(data: AnyPageData): data is AiThreadPageData {
   return data.globals.page === "ai_thread";
+}
+
+export function isKnowledgePageData(data: AnyPageData): data is KnowledgePageData {
+  return data.globals.page === "knowledge";
 }

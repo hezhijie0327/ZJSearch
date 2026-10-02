@@ -282,7 +282,7 @@ zjsearch:
     #   | gemini (google-genai embed_content; base_url may stay empty
     #   for the google default endpoint, or a gateway prefix that
     #   already includes the API name)
-    base_url: "https://api.inferera.com/v1"
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
     api_key: ""                    # or the ZJSEARCH_EMBEDDING_KEY env
     model: "embedding-3"
     params:

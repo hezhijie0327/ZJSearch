@@ -41,7 +41,7 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { downloadThreadMarkdown } from "@/lib/exporters.ts";
 import { type Translate, themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
-import { recordClassicResults, recordSearch, searchReaderPages, threadUrl } from "@/lib/knowledgeStore.ts";
+import { recallPages, threadUrl } from "@/lib/knowledgeStore.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { fetchSearchPage, parseSearchUrl, shareableSearchUrl } from "@/lib/searchParams.ts";
@@ -560,7 +560,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     let cancelled = false;
-    searchReaderPages(data.q, 2)
+    recallPages(data.q, 2)
       .then((hits) => {
         if (!cancelled) {
           setAiRecall(hits);
@@ -692,19 +692,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     () => detectResultsLayout(data, selectedCategories, allResults),
     [data, selectedCategories, allResults],
   );
-  // the browser-local search history: one record per settled page-1
-  // classic search (AI takeovers do not land here; pager appends carry
-  // page>1 and are not the query's first look)
-  useEffect(() => {
-    if (data.pending || !data.q || Number(new URLSearchParams(window.location.search).get("pageno") ?? "1") > 1) {
-      return;
-    }
-    recordSearch(data.q, selectedCategories[0] ?? "general", allResults.length);
-    recordClassicResults(
-      data.q,
-      allResults.map((result) => ({ url: result.url, title: result.title_text })),
-    );
-  }, [data.q, data.pending, allResults, selectedCategories]);
   // stable identity: ResultsView is memoized against the AI stream's
   // per-chunk re-renders, an inline closure would break the memo
   const onToggleBlock = useCallback((key: string) => {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { AlertTriangle, Cookie, Database, LayoutGrid, Palette, Puzzle, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, Cookie, LayoutGrid, Palette, Puzzle, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Shell } from "@/components/Shell.tsx";
 import { useT } from "@/lib/i18n.ts";
@@ -10,12 +10,11 @@ import type { PreferencesPageData } from "@/lib/types.ts";
 import { CookieTab } from "@/pages/preferences/tabs/CookieTab.tsx";
 import { EnginesPane } from "@/pages/preferences/tabs/EnginesPane.tsx";
 import { GeneralTab } from "@/pages/preferences/tabs/GeneralTab.tsx";
-import { PgliteTab } from "@/pages/preferences/tabs/PgliteTab.tsx";
 import { PluginsTab } from "@/pages/preferences/tabs/PluginsTab.tsx";
 import { UiTab } from "@/pages/preferences/tabs/UiTab.tsx";
 import { usePreferencesForm } from "@/pages/preferences/usePreferencesForm.ts";
 
-type PrefsTab = "general" | "ui" | "engines" | "plugins" | "pglite" | "cookies";
+type PrefsTab = "general" | "ui" | "engines" | "plugins" | "cookies";
 
 export function PreferencesPage({ data, embedded = false }: { data: PreferencesPageData; embedded?: boolean }) {
   const t = useT();
@@ -43,7 +42,6 @@ export function PreferencesPage({ data, embedded = false }: { data: PreferencesP
     { id: "plugins", label: t("plugins"), icon: <Puzzle className="size-3.5" /> },
     { id: "engines", label: t("engines"), icon: <LayoutGrid className="size-3.5" /> },
     { id: "cookies", label: t("cookies"), icon: <Cookie className="size-3.5" /> },
-    { id: "pglite", label: t("prefs_pglite_tab"), icon: <Database className="size-3.5" /> },
   ] as const;
 
   return (
@@ -107,7 +105,6 @@ export function PreferencesPage({ data, embedded = false }: { data: PreferencesP
           ) : null}
           {tab === "plugins" ? <PluginsTab data={data} form={form} /> : null}
           {tab === "cookies" ? <CookieTab data={data} form={form} /> : null}
-          {tab === "pglite" ? <PgliteTab /> : null}
         </div>
       </main>
     </Shell>

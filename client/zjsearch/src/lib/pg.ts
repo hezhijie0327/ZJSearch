@@ -2,41 +2,37 @@
 
 /** The real database: PGlite (WASM Postgres) persisted to the browser's
     IndexedDB through PGlite's own `idb://` filesystem, with pgvector (the
-    semantic half of the search) and pg_textsearch (the BM25 keyword
-    half).  The module is dynamically imported by its consumers, so the
-    ~3MB WASM stays out of the eager graph -- the first AI-thread
-    operation pays the load once, the promise is cached for the session.
+    semantic half of the search), pg_textsearch (the BM25 keyword half) and
+    pg_trgm (the typo rescue).  The module is dynamically imported by its
+    consumers, so the ~3MB WASM stays out of the eager graph -- the first
+    knowledge operation pays the load once, the promise is cached for the
+    session.
 
-    Schema v2 (relational: the query dimensions are rows, the replay
-    dimensions stay blobs):
+    Schema v3 -- ONE event-sourced table.  Every wire event of an AI run is
+    a row (kind='evt', finest grain, storage-only: search_text stays empty
+    so the log never enters the retrieval indexes), and the queryable
+    surfaces are PROJECTIONS of that log, one row per knowledge object:
 
-    - threads -- the directory row (title, timestamps) plus the
-      thread-level search columns (the AGGREGATE of its runs' Q&A text --
-      the history drawer ranks by them).
-    - runs -- one row per AI-search run: the query columns (question,
-      mode, status, usage, timestamps) AND `data` jsonb, the run's full
-      replay object (the UI rehydrates from it -- the blob half of the
-      split).  Runs carry their own search columns (question + answer
-      prose), so a future run-level drawer rides existing data.
-    - sources -- the GLOBAL source registry keyed by normalized-url hash:
-      one row per url no matter how many runs referenced it, with
-      ref/cited counters and its own search columns.  This is the
-      browser's research corpus (the history recall ranks by it) -- a
-      design red line keeps it OUT of the researcher's path: recalled
-      sources may only reach the writer phase or the UI, never the
-      researcher's feed (ready-made material kills the search incentive).
-    - run_sources -- the (run, source) link with the run's global [n],
-      the link kind and whether the settled answer cited it.
+    - evt         one wire event (meta = the whole event object, n = wire seq)
+    - run         a run's head row (title = the question, meta = mode/model/usage)
+    - answer      the settled report markdown (the searchable document)
+    - source      a web source's canonical identity row (url_hash keyed; the
+                  ref/cited counters live here)
+    - source_ref  one (run x source) occurrence: the join as a kind
+    - document    an archived web_reader full text (same url_hash identity)
+    - memory      one durable user fact (with thread/run provenance)
+    - call        one tool invocation worth retrieving (web_search queries,
+                  reader reads, calculator runs)
+    - task        a run's task card (meta.items)
+    - clarify     a run's clarify gate + the user's answered pairs
+    - overview    an AI Overview answer (standalone -- thread_id is NULL)
 
-    Boot: open (with the four extensions registered), CREATE EXTENSION
-    and CREATE TABLE (idempotent) -- all on the main thread against the
-    IndexedDB store; a worker/OPFS tier was built and removed, see the
-    comment in boot().  A PRE-v2 database (the old blob-shaped
-    `threads.data` column) is dropped wholesale -- no migration: the
-    store's identity is the browser's own research memory and the v1
-    data never left the dev browsers.  Embedding columns are
-    dimension-locked at creation: the width change still needs the
-    tables dropped. */
+    The graph is not a table: tag co-occurrence within a row is an edge,
+    aggregated on demand (see the store's graphSnapshot); source_ref rows
+    are the provenance edges.  Boot: open (with the four extensions
+    registered), CREATE EXTENSION and CREATE TABLE (idempotent); a database
+    carrying ANY legacy v2 table (threads/runs/sources/...) is dropped
+    wholesale -- no migration, the v1/v2 data never left dev browsers. */
 
 export type Pg = import("@electric-sql/pglite").PGlite;
 
@@ -45,7 +41,7 @@ import { embeddingDimensions } from "@/lib/embed.ts";
 let pgPromise: Promise<Pg> | null = null;
 
 /** The embedding columns' width -- set once at boot from the embedding
-    capability (default 1024).  A LATER change needs the tables dropped:
+    capability (default 1024).  A LATER change needs the table dropped:
     pgvector columns are dimension-locked at creation.  The width is
     resolved LAZILY at boot from lib/embed's configured capability (the
     same source the embed calls use) so an early-boot payload without
@@ -69,20 +65,19 @@ export function pg(): Promise<Pg> {
   return pgPromise;
 }
 
-/** The FULL reset (the preferences surface's nuclear option): drop every
-    table, close the session and forget the boot promise -- the next
-    ``pg()`` call re-runs the boot DDL on a fresh empty database.  The
-    physical IndexedDB file stays (PGlite owns it); only the schema's
-    contents are destroyed. */
+/** The FULL reset (the knowledge page's nuclear option): drop the table,
+    close the session and forget the boot promise -- the next ``pg()``
+    call re-runs the boot DDL on a fresh empty database.  The physical
+    IndexedDB file stays (PGlite owns it); only the schema's contents are
+    destroyed. */
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
-  await db.query("DROP TABLE IF EXISTS run_sources");
-  await db.query("DROP TABLE IF EXISTS runs");
-  await db.query("DROP TABLE IF EXISTS threads");
-  await db.query("DROP TABLE IF EXISTS sources");
+  await db.query("DROP TABLE IF EXISTS knowledge");
   await db.close();
   pgPromise = null;
 }
+
+const LEGACY_TABLES = ["run_sources", "runs", "threads", "sources", "reader_cache", "memories", "searches"] as const;
 
 async function boot(): Promise<Pg> {
   const [{ PGlite }, { vector }, { pg_textsearch }, { live }, { pg_trgm }] = await Promise.all([
@@ -92,15 +87,6 @@ async function boot(): Promise<Pg> {
     import("@electric-sql/pglite/live"),
     import("@electric-sql/pglite/contrib/pg_trgm"),
   ]);
-  // The main-thread shape, deliberately: a PGlite WORKER (WASM off the
-  // main thread) was built and removed -- in the ZCode in-app webview
-  // the module-worker script request never completes after a reload
-  // (the boot wedged until a timeout, then silently fell back here
-  // anyway), and WebKit lingers the election Web Locks of dead pages.
-  // OPFS persistence was tried in the same round and removed for the
-  // same reason (its sync access handles HANG there instead of
-  // rejecting).  Both are documented in the boot history; re-introduce
-  // only with a verified environment matrix.
   const db = new PGlite({
     dataDir: "idb://zjs-ai",
     extensions: { vector, pg_textsearch, live, pg_trgm },
@@ -111,164 +97,77 @@ async function boot(): Promise<Pg> {
   // index yet -- the fallback seq-scans, and these tables are hundreds of
   // rows, not millions; add gin_trgm_ops indexes when that changes)
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
-  // the legacy drop runs FIRST: a pre-v2 table can predate whole columns
-  // (an era-1 threads without search_text) and would break the DDL below
-  // before the detection ever runs
-  await dropLegacyV1(db);
+  // the v2-and-older databases die wholesale (the v1 drop was the
+  // precedent): detect ANY legacy table before the new schema exists.
+  // CASCADE because the old live-query views / bm25 internals can hold
+  // dependencies a plain drop trips over, and one stubborn table must
+  // never wedge the whole store boot (observed: "cannot drop table
+  // searches because other objects depend on it" -> every store call
+  // failed silently for the session).
+  const legacy = await db.query<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.tables
+     WHERE table_name = ANY($1::text[])`,
+    [[...LEGACY_TABLES]],
+  );
+  for (const name of new Set((legacy.rows ?? []).map((row) => row.table_name))) {
+    try {
+      await db.query(`DROP TABLE IF EXISTS ${String(name)} CASCADE`);
+    } catch (err) {
+      console.warn(`zjsearch pg: legacy table ${String(name)} could not be dropped`, err);
+    }
+  }
   // the width comes from the SAME capability the embed calls use --
-  // whatever the boot payload carried, the columns match the vectors
+  // whatever the boot payload carried, the column matches the vectors
   const dims = embeddingDimensions() ?? pgDimensions;
-  await db.query(`CREATE TABLE IF NOT EXISTS threads (
-    id text PRIMARY KEY,
-    title text NOT NULL,
-    created double precision NOT NULL DEFAULT 0,
-    updated double precision NOT NULL,
+  await db.query(`CREATE TABLE IF NOT EXISTS knowledge (
+    id          text PRIMARY KEY,
+    kind        text NOT NULL,
+    thread_id   text,
+    run_id      text,
+    parent_id   text,
+    url_hash    text,
+    url         text,
+    host        text,
+    title       text NOT NULL DEFAULT '',
+    body        text NOT NULL DEFAULT '',
+    meta        jsonb NOT NULL DEFAULT '{}',
+    status      text NOT NULL DEFAULT 'done',
+    n           integer,
+    pinned      integer NOT NULL DEFAULT 0,
+    refs        integer NOT NULL DEFAULT 0,
+    cited       integer NOT NULL DEFAULT 0,
+    tags        jsonb NOT NULL DEFAULT '[]',
     search_text text NOT NULL DEFAULT '',
-    embedding vector(${dims})
+    embedding   vector(${dims}),
+    embed_model text,
+    created     double precision NOT NULL,
+    updated     double precision NOT NULL,
+    occurred_at double precision
   )`);
   await db.query(
-    "CREATE INDEX IF NOT EXISTS threads_bm25 ON threads USING bm25 (search_text) WITH (text_config = 'english')",
-  );
-  await db.query(`CREATE TABLE IF NOT EXISTS runs (
-    id text PRIMARY KEY,
-    thread_id text NOT NULL,
-    seq integer NOT NULL,
-    q text NOT NULL,
-    mode text NOT NULL DEFAULT '',
-    status text NOT NULL DEFAULT 'done',
-    error text,
-    created double precision NOT NULL DEFAULT 0,
-    settled double precision,
-    usage jsonb,
-    data jsonb NOT NULL,
-    search_text text NOT NULL DEFAULT '',
-    embedding vector(${dims})
-  )`);
-  await db.query(
-    "CREATE INDEX IF NOT EXISTS runs_bm25 ON runs USING bm25 (search_text) WITH (text_config = 'english')",
-  );
-  await db.query(`CREATE TABLE IF NOT EXISTS sources (
-    url_hash text PRIMARY KEY,
-    url text NOT NULL,
-    host text NOT NULL DEFAULT '',
-    title text NOT NULL DEFAULT '',
-    img text,
-    category text,
-    first_seen double precision NOT NULL,
-    last_seen double precision NOT NULL,
-    ref_count integer NOT NULL DEFAULT 0,
-    cited_count integer NOT NULL DEFAULT 0,
-    search_text text NOT NULL DEFAULT '',
-    embedding vector(${dims})
-  )`);
-  await db.query(
-    "CREATE INDEX IF NOT EXISTS sources_bm25 ON sources USING bm25 (search_text) WITH (text_config = 'english')",
-  );
-  await db.query(`CREATE TABLE IF NOT EXISTS run_sources (
-    run_id text NOT NULL,
-    url_hash text NOT NULL,
-    n integer NOT NULL,
-    kind text NOT NULL DEFAULT 'search',
-    cited boolean NOT NULL DEFAULT false,
-    PRIMARY KEY (run_id, url_hash)
-  )`);
-  await db.query(`CREATE TABLE IF NOT EXISTS reader_cache (
-    url_hash text PRIMARY KEY,
-    url text NOT NULL,
-    title text NOT NULL DEFAULT '',
-    markdown text NOT NULL,
-    chars integer NOT NULL,
-    fetched_at double precision NOT NULL,
-    search_text text NOT NULL DEFAULT '',
-    watched integer NOT NULL DEFAULT 0,
-    last_checked double precision NOT NULL DEFAULT 0,
-    embedding vector(${dims})
-  )`);
-  // pre-vector caches lack the embedding column (the semantic recall
-  // landed after the table) -- add it, idempotently
-  await db.query(`ALTER TABLE reader_cache ADD COLUMN IF NOT EXISTS embedding vector(${dims})`);
-  // pre-index caches lack the BM25 column (the archive landed after the
-  // table) -- add it and index, idempotently
-  await db.query("ALTER TABLE reader_cache ADD COLUMN IF NOT EXISTS search_text text NOT NULL DEFAULT ''");
-  await db.query(
-    "CREATE INDEX IF NOT EXISTS reader_bm25 ON reader_cache USING bm25 (search_text) WITH (text_config = 'english')",
-  );
-  await db.query(`CREATE TABLE IF NOT EXISTS memories (
-    id text PRIMARY KEY,
-    content text NOT NULL,
-    created double precision NOT NULL,
-    updated double precision NOT NULL,
-    search_text text NOT NULL DEFAULT '',
-    embedding vector(${dims})
-  )`);
-  await db.query(`CREATE TABLE IF NOT EXISTS searches (
-    id text PRIMARY KEY,
-    q text NOT NULL,
-    category text NOT NULL DEFAULT 'general',
-    results integer NOT NULL DEFAULT 0,
-    times integer NOT NULL DEFAULT 1,
-    created double precision NOT NULL,
-    last_ran double precision NOT NULL
-  )`);
-  await db.query("CREATE INDEX IF NOT EXISTS searches_bm25 ON searches USING bm25 (q) WITH (text_config = 'english')");
-  // the ANN indexes behind the semantic recall -- partial (rows with NULL
-  // embeddings stay out, and every recall query filters them anyway), so
-  // the `ORDER BY embedding <=> $1` shape plans onto the hnsw scan once
-  // the corpus grows past the exact scan's sweet spot
-  await db.query(
-    "CREATE INDEX IF NOT EXISTS threads_hnsw ON threads USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
   );
   await db.query(
-    "CREATE INDEX IF NOT EXISTS sources_hnsw ON sources USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS knowledge_hnsw ON knowledge USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
   );
-  await db.query(
-    "CREATE INDEX IF NOT EXISTS reader_hnsw ON reader_cache USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
-  );
+  await db.query("CREATE INDEX IF NOT EXISTS knowledge_trgm ON knowledge USING gin (title gin_trgm_ops)");
+  await db.query("CREATE INDEX IF NOT EXISTS knowledge_kind ON knowledge (kind, updated DESC)");
+  await db.query("CREATE INDEX IF NOT EXISTS knowledge_thread ON knowledge (thread_id, kind)");
+  await db.query("CREATE INDEX IF NOT EXISTS knowledge_run ON knowledge (run_id, n)");
+  await db.query("CREATE INDEX IF NOT EXISTS knowledge_url ON knowledge (url_hash)");
   return db;
-}
-
-/** The pre-v2 blob schema detection: a `threads.data` column means the
-    old whole-thread-jsonb table -- drop it (with its BM25 index) and
-    recreate the v2 shape.  Deliberately NO migration: the v1 data never
-    left the dev browsers, and the relational identity starts clean. */
-async function dropLegacyV1(db: Pg): Promise<void> {
-  const cols = await db.query<{ column_name: string }>(
-    "SELECT column_name FROM information_schema.columns WHERE table_name = 'threads'",
-  );
-  const names = new Set((cols.rows ?? []).map((row) => row.column_name));
-  if (names.size === 0) {
-    return; // no threads table at all (a fresh database)
-  }
-  const expected = new Set(["id", "title", "created", "updated", "search_text", "embedding"]);
-  const isCurrent = [...expected].every((name) => names.has(name));
-  if (isCurrent) {
-    return;
-  }
-  await db.query("DROP TABLE threads");
-  await db.query("DROP INDEX IF EXISTS threads_bm25");
-  await db.query(`CREATE TABLE threads (
-    id text PRIMARY KEY,
-    title text NOT NULL,
-    created double precision NOT NULL DEFAULT 0,
-    updated double precision NOT NULL,
-    search_text text NOT NULL DEFAULT '',
-    embedding vector(${pgDimensions})
-  )`);
-  await db.query("CREATE INDEX threads_bm25 ON threads USING bm25 (search_text) WITH (text_config = 'english')");
 }
 
 /** The keyword text behind a BM25 index: the CJK-aware pre-segmentation
     (each han character its own token, latin/digit runs stay words) --
-    shared by every searchable table.  Latin accents fold FIRST (café →
+    shared by every searchable row.  Latin accents fold FIRST (café →
     cafe) on both the write and the query side -- they pass through this
     one function, so the two sides can never drift.  The fold lives here
     and NOT in the SQL unaccent dictionary on purpose: pg_textsearch's
     bm25 only accepts its built-in text search configurations (a custom
     unaccent config fails CREATE INDEX with "text search configuration
     does not exist", probed against pglite 0.5.8), and the segmentation
-    is JS anyway -- an SQL fold could never sit in front of it.
-    Defined here (not lib/tokenize) because pg.ts is the single
-    bootstrapper and the store imports this module anyway. */
+    is JS anyway -- an SQL fold could never sit in front of it. */
 const SEGMENT_RE = /[a-z0-9_]+|[\u2e80-\u9fff\uf900-\ufaff\ufe30-\ufe4f]/g;
 
 /** NFD-decomposable accents strip with the combining marks; the map
@@ -295,10 +194,6 @@ function foldAccents(text: string): string {
 
 export function segmentKeywords(...parts: string[]): string {
   return (foldAccents(parts.filter(Boolean).join(" ").toLowerCase()).match(SEGMENT_RE) ?? []).join(" ");
-}
-
-function segmentOf(...parts: string[]): string {
-  return segmentKeywords(...parts).slice(0, 8000);
 }
 
 /** URL identity: strip the fragment and the common tracking params,
@@ -339,56 +234,4 @@ export async function pgQuery<T>(sql: string, params: unknown[] = []): Promise<T
   const db = await pg();
   const result = await db.query(sql, params);
   return (result.rows ?? []) as T[];
-}
-
-/** Upsert one source into the global registry and link it to a run.
-    The ref/cited counters accumulate across runs; the search text is the
-    title + host (the corpus the history recall ranks by).  The store's
-    sync and nothing else calls this. */
-export async function linkSource(
-  db: Pg,
-  runId: string,
-  source: {
-    url?: string;
-    title?: string;
-    host?: string;
-    netloc?: string;
-    img?: string;
-    category?: string;
-    crawled?: boolean;
-    n?: number;
-  },
-  seenAt: number,
-  cited = false,
-): Promise<void> {
-  const hash = urlHash(String(source.url));
-  const host = String(source.netloc ?? source.host ?? "");
-  const title = String(source.title ?? "");
-  const kind = source.crawled ? "reader" : "search";
-  await db.query(
-    `INSERT INTO sources (url_hash, url, host, title, img, category, first_seen, last_seen, ref_count, cited_count, search_text)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 1, $8, $9)
-     ON CONFLICT (url_hash) DO UPDATE SET
-       last_seen = GREATEST(sources.last_seen, EXCLUDED.last_seen),
-       title = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title ELSE sources.title END,
-       img = COALESCE(EXCLUDED.img, sources.img),
-       ref_count = sources.ref_count + 1,
-       cited_count = sources.cited_count + EXCLUDED.cited_count`,
-    [
-      hash,
-      String(source.url),
-      host,
-      title,
-      source.img ? String(source.img) : null,
-      source.category ? String(source.category) : null,
-      seenAt,
-      cited ? 1 : 0,
-      segmentOf(title, host),
-    ],
-  );
-  await db.query(
-    `INSERT INTO run_sources (run_id, url_hash, n, kind, cited) VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (run_id, url_hash) DO UPDATE SET cited = run_sources.cited OR EXCLUDED.cited`,
-    [runId, hash, Number(source.n ?? 0) || 0, kind, cited],
-  );
 }

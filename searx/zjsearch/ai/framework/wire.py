@@ -56,15 +56,16 @@ EVENTS: frozenset[str] = frozenset(
         "gallery",
         "related",
         "memory",
+        "tags",
         "usage",
         "settle",
     }
 )
 
-LATE_EVENTS: frozenset[str] = frozenset({"related", "memory", "usage"})
+LATE_EVENTS: frozenset[str] = frozenset({"related", "memory", "tags", "usage"})
 """The only events allowed AFTER ``settle`` (the post-settle related
-fallback completion and the memory extraction trail behind by design --
-the follow-up box unlocks on settle, not on them)."""
+fallback completion and the memory/tag extraction trail behind by
+design -- the follow-up box unlocks on settle, not on them)."""
 
 
 def encode(event: dict[str, t.Any]) -> str:

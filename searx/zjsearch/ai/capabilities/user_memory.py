@@ -110,21 +110,27 @@ _EXTRACT_SCHEMA: dict[str, t.Any] = {
             "items": {"type": "string"},
             "description": "0-3 durable facts, each self-contained, or an empty array.",
         },
+        "tags": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "2-8 concept tags naming the exchange's topics, or an empty array.",
+        },
     },
-    "required": ["facts"],
+    "required": ["facts", "tags"],
 }
 
 
-def extract_facts(
+def extract_insights(
     cfg: dict[str, t.Any], question: str, answer: str, usage_out: list[dict[str, t.Any]] | None = None
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     """The post-run extractor (LobeHub's downstream-extractor pattern):
     one small JSON completion decides whether the exchange revealed
-    durable facts worth remembering -- INDEPENDENT of the researcher's
-    tool discipline (small models skip the save call; this cannot be
-    skipped).  Degrades to [] on any failure."""
+    durable facts worth remembering AND which concept tags name its
+    topics (the tag graph's semantic layer) -- INDEPENDENT of the
+    researcher's tool discipline (small models skip the save call; this
+    cannot be skipped).  Degrades to ([], []) on any failure."""
     if not question or not answer.strip():
-        return []
+        return [], []
     from searx.zjsearch.ai.infra import jsongate  # pylint: disable=import-outside-toplevel
 
     value, usage = jsongate.json_completion(
@@ -133,14 +139,19 @@ def extract_facts(
             {
                 "role": "system",
                 "content": (
-                    "Extract DURABLE facts about the user from this"
-                    " question/answer exchange -- home city, occupation,"
-                    " standing preferences, ongoing projects.  Only facts"
-                    " that stay true and useful across future sessions."
-                    " Each fact self-contained, in the user's language.  No"
-                    " one-off details (today's weather is NOT a fact).  0-3"
-                    " facts.  Respond with ONLY: {\"facts\": [\"...\", ...]}"
-                    " (an empty array when nothing qualifies)."
+                    "Read this question/answer exchange and return two"
+                    " things.  facts: DURABLE facts about the user -- home"
+                    " city, occupation, standing preferences, ongoing"
+                    " projects; only facts that stay true and useful across"
+                    " future sessions; each self-contained, in the user's"
+                    " language; no one-off details (today's weather is NOT"
+                    " a fact); 0-3 of them.  tags: 2-8 CONCEPT tags naming"
+                    " the exchange's topics -- short noun phrases in the"
+                    " user's language (e.g. 支付网关费率, 跨境收款), no"
+                    " host names, no product versions, no verbatim query"
+                    " echoes.  Respond with ONLY:"
+                    ' {"facts": ["...", ...], "tags": ["...", ...]}'
+                    " (empty arrays when nothing qualifies)."
                 ),
             },
             {"role": "user", "content": f"<question>{question[:500]}</question>\n<answer>{answer[:3000]}</answer>"},
@@ -150,10 +161,14 @@ def extract_facts(
     )
     if usage_out is not None and usage:
         usage_out.append(usage)
-    facts = (value or {}).get("facts")
-    if not isinstance(facts, list):
-        return []
-    return [str(fact).strip()[:MAX_CONTENT] for fact in facts if str(fact).strip()][:3]
+    value = value or {}
+    facts = value.get("facts")
+    tags = value.get("tags")
+    clean_facts = (
+        [str(fact).strip()[:MAX_CONTENT] for fact in facts if str(fact).strip()][:3] if isinstance(facts, list) else []
+    )
+    clean_tags = [str(tag).strip()[:40] for tag in tags if str(tag).strip()] if isinstance(tags, list) else []
+    return clean_facts, clean_tags[:8]
 
 
 def evaluate_call(call: dict[str, t.Any], memories: list[dict[str, str]]) -> tuple[str, dict[str, t.Any] | None]:

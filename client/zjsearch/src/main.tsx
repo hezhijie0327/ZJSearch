@@ -3,7 +3,7 @@
 import { createRoot } from "react-dom/client";
 import { App } from "@/app.tsx";
 import { configureEmbeddings } from "@/lib/embed.ts";
-import { configureEmbeddingDimensions } from "@/lib/knowledgeStore.ts";
+import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/knowledgeStore.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
@@ -61,6 +61,10 @@ async function bootstrap(): Promise<void> {
   if (embeddingCap?.dimensions) {
     configureEmbeddingDimensions(embeddingCap.dimensions);
   }
+  // the knowledge store's AI routes (tag normalization) + the embed-model
+  // name recorded on every embedded row
+  const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;
+  configureKnowledge({ aiToken: aiCap?.tk, embedModel: embeddingCap?.model });
   // boot payloads of the streamed search page: handled before the app takes
   // over (the static boot skeleton is still on screen until this point)
   if (initialData && isRedirectPageData(initialData)) {

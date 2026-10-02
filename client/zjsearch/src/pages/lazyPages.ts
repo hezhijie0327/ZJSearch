@@ -29,3 +29,7 @@ export const PreferencesPage = lazy(() =>
 );
 
 export const StatsPage = lazy(() => import("@/pages/StatsPage.tsx").then((m) => ({ default: m.StatsPage })));
+
+export const KnowledgePage = lazy(() =>
+  import("@/pages/KnowledgePage.tsx").then((m) => ({ default: m.KnowledgePage })),
+);
