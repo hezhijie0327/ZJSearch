@@ -227,10 +227,9 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (static skeleton + `ResultSkeleton`), AI takeover (the ai_mode skeleton
   branch + `AiBootGhost`), lazy page chunks (`PageFallback` in app.tsx —
   the family page scaffold, since Shell itself is inside the chunk),
-  overlay panels (the panel-chrome `PanelSkeleton`), the knowledge drawer's
-  lazy chunk (`DrawerGhost` in Shell) and its async tabs (null →
-  `DrawerRowsSkeleton`; `[]` after resolve is the only honest empty), and
-  the AI thread page's async resume (`ThreadGhost`).  A new surface ships
+  overlay panels (the panel-chrome `PanelSkeleton`), the knowledge page's
+  graph/list skeletons (features/knowledge), and the AI thread page's
+  async resume (`ThreadGhost`).  A new surface ships
   with its ghost in the same change; a load state that renders an empty
   message while data is still in flight is a bug.
 
@@ -956,72 +955,121 @@ what `gates.sanitize_questions` passes (single/multi + 2-4 options; the
 client's free-text line covers yes/no and open answers — a type the
 sanitizer would downgrade must not be offered to the model).
 
-## Knowledge base (知识库 -- the browser-local RAG + memory layer)
+## Knowledge base (知识库 -- the event-sourced browser-local research memory)
 
-The PGlite store IS the theme's RAG + memory system; the header drawer
-(`KnowledgeDrawer`, opened by the LibraryBig button) is its DISPLAY —
-four tabs: 搜索 (classic search history) / 会话 (AI threads) / 来源
-(the corpus: sources + reader full-texts, BM25+pgvector+RRF searchable)
-/ 记忆 (user facts).  The store layer is `src/lib/knowledgeStore.ts`
-(renamed from threadStore — it was never only threads); table DDLs live
-in `src/lib/pg.ts` (pgvector + pg_textsearch extensions, dimension-locked
-columns from `zjsearch.embedding.dimensions`).
+The PGlite store IS the theme's research memory; schema v3 collapses it
+into ONE event-sourced table (`knowledge`, DDL in `src/lib/pg.ts`).
+Every wire event of an AI run lands as a `kind='evt'` row (finest
+grain, storage-only: `search_text` stays empty so the log never enters
+the retrieval indexes), and the queryable surfaces are PROJECTIONS
+written at settle: `run` / `answer` / `source` (canonical url identity
++ ref/cited counters) / `source_ref` (the (run, source) join AS a kind)
+/ `document` (web_reader full texts) / `memory` / `call` (the agent's
+search words -- the exploration trail) / `task` / `clarify`.  Replay
+and retrieval are separate executions of ONE reducer:
+`applyEvent` (useAiSearch, exported) folds a live stream in the hook
+and folds `loadThreadEvents` rows in `resume` -- a stored run and a
+live run hit the same renderers.  Client events (`client.start` /
+`client.clarify` / `client.retry` / `client.stop`) are recorded into
+the same log so a replay is self-contained.  PGlite hands jsonb
+columns back ALREADY-PARSED: decoding must type-dispatch, not
+`JSON.parse` blindly (parsing an object yields "[object Object]" and
+loses the event -- shipped bug).
+
+- STORE: `src/lib/knowledgeStore.ts` is the facade -- `appendRunEvents`
+  (buffered ~1.5s, crash window = one batch), `settleRun`
+  (flush + projections + deriveTags + embed pass + tag normalization),
+  the live subscriptions (PGlite `live` plugin), and the read APIs.
+  There is deliberately NO in-memory mirror anymore: every surface
+  reads the same table the writes land in.  The ordered write queue
+  warns on failure (fire-and-forget callers would swallow a broken
+  write into "the feature is broken").
+- RECALL: `recallCorpus` (writer-phase corpus) and `recallPages`
+  (past_research index) fuse TWO dimensions -- hybrid BM25+vector RRF
+  (trigram rescue on zero signal) and the TAG GRAPH (query matched
+  against the tag vocabulary, shared-tag rows ranked, one-hop
+  expansion).  THE RED LINE stands: recall reaches the writer phase or
+  the UI only, never the researcher's feed.  `answer` rows are corpus
+  too ("you researched this before").
+- TAGS, three layers: the mechanical derive (query tokens + hosts +
+  mode + task titles) at settle; the post-run extractor
+  (`extract_insights` in capabilities/user_memory.py -- ONE completion
+  returns {facts, tags}); and `POST /zjsearch/ai/tags`
+  (runtime/tag_route.py, the AI Search token, embed-route shape) which
+  folds batches of raw tags into 2-6 concept tags per row (language
+  merge, host/noise drop).  Rows carry `meta.tnormed`; a failed
+  normalization keeps raw tags.  Tags are a jsonb column + segmented
+  into search_text; the GRAPH is a query, not a table --
+  `graphSnapshot` aggregates nodes (tag uses) and co-occurrence edges
+  on demand.
+- PAGE: `/zjsearch/knowledge` (runtime/knowledge_page.py renders the
+  slim shell; `KnowledgePage` + `features/knowledge/`) -- Vane's
+  Library shape (hero stats, thread rows; the detail lives on the AI
+  thread page), morphic's interactions (row menu, confirm dialogs,
+  inspector reading pane for document hits), LobeHub's memory surface
+  (timeline/cards + tag chips), the cross-kind hybrid search, the
+  `TagGraphView` (hand-rolled force layout on canvas -- no graph
+  dependency), and the AdminPanel (per-kind stats, clear studies, the
+  database reset -- the old preferences PgliteTab's duties; that tab is
+  gone).  The header LibraryBig button navigates here; the old
+  KnowledgeDrawer is deleted.
+- CLASSIC SEARCH HISTORY IS GONE: the `searches` table, the
+  ResultsPage recording effect and every read path were removed (the
+  knowledge base is AI-runs-only).  `recordClassicResults`' corpus
+  feed died with it -- the sources corpus grows from AI runs only.
+- BOOT: schema v3 drops any legacy v2 table (CASCADE -- the old
+  live-query views/bm25 internals can hold dependencies a plain drop
+  trips over; a wedged legacy drop once silently failed EVERY store
+  write for the session).  No migration, by decision.
+- ENV keys: `ZJSEARCH_AI_KEY` / `ZJSEARCH_EMBEDDING_KEY` /
+  `ZJSEARCH_READER_KEY` (api_key stays "" in dev-settings.yml).
+- WhiteNoise serves the bundle bytes captured at INSTANCE START: after
+  every build, RESTART the dev instance or the browser keeps executing
+  the stale bundle (this masked three real bugs during the knowledge
+  work; the debugging note below the fold repeats it).
 
 How runs consume the corpus (the client recalls BEFORE every AI-search
 POST; the server stays stateless):
 
-- `history_sources` — `recallSources(q, 6)` (hybrid BM25+vector RRF,
-  cited-count bump): WRITER-phase only (numbered after the live feed,
-  `<past_research>` block; a url the researcher already numbered keeps
-  ITS number).  THE RED LINE: recalled sources never seed the
-  researcher's feed — ready-made material kills the live-search
-  incentive.
-- `past_research` — the RAG TOOL index (renamed from web_memory): page
-  entries carry ~1500-char reader-cache heads, source entries identity
-  only (the tool's feed then points at web_reader for a live re-read);
-  matches become citable history [n] sources.  Registered only when the
-  index is non-empty; the retired `web_memory` payload key still parses.
+- `history_sources` — corpus hits (sources + past answers): WRITER-phase
+  only (numbered after the live feed; a url the researcher already
+  numbered keeps ITS number).  THE RED LINE: recalled material never
+  seeds the researcher's feed — ready-made answers kill the
+  live-search incentive.
+- `past_research` — the RAG TOOL index: document entries carry
+  ~1500-char heads, source entries identity only (the tool's feed then
+  points at web_reader for a live re-read); registered only when
+  non-empty.
 - `user_memories` — the full snapshot (see the next section).
-- The `pastRefs` cross-session badge on source rail cards reads the
-  PRE-run recall's ref counts — the run's own increment must never
-  badge itself.
+- The `pastRefs` cross-session badge reads the PRE-run recall's
+  ref counts — the run's own increment must never badge itself.
 
 AI OVERVIEW accuracy levers: the classic page recalls up to 2
-reader-cache pages EAGERLY (a click-time recall would stall the first
-paint on an embedding round trip) and trails them as labeled [n]
-context lines (their citation chips open the url — no in-page card);
-server-side, `overview._ordered_context` cosine-reorders the numbered
-lines past 12k chars (the 16k cap cuts at a LINE boundary) — both
-silent when `zjsearch.embedding` is off.  The bm25_reranker plugin
-improves the overview too: the client assembles its context from the
-page payload AFTER server reranking.
+document rows EAGERLY (a click-time recall would stall the first
+paint on an embedding round trip) via `recallPages` and trails them as
+labeled [n] context lines; server-side, `overview._ordered_context`
+cosine-reorders the numbered lines past 12k chars (the 16k cap cuts at
+a LINE boundary) — both silent when `zjsearch.embedding` is off.
 
 ## User memory (browser-local durable facts)
 
-The `memories` table (PGlite, sixth table) stores durable facts about
-the user — one flat layer of self-contained sentences (home city,
-occupation, standing preferences), deliberately NOT LobeHub's five-layer
-taxonomy.  Two paths, both stateless-server:
+The `memory` kind (rows in the knowledge table) stores durable facts
+about the user — one flat layer of self-contained sentences, deliberately
+NOT LobeHub's five-layer taxonomy.  Two write paths, deliberately
+redundant, both fused into ONE post-run extractor:
 
-- READ: the run pre-sends every stored fact (`user_memories`, capped 50
-  x 300 chars) and the researcher prompt injects them in a
+- READ: the run pre-sends every stored fact (`user_memories`, the
+  content list) and the researcher prompt injects them in a
   `<user_memory>` block — ALWAYS rendered (the empty state carries the
   save guidance; small models never call the tool unprompted).
-- WRITE: two ways, deliberately redundant.  The `user_memory` tool
-  (`action: search|save` — search scores the pre-sent snapshot; save
-  yields a `memory` wire event), AND the post-run EXTRACTOR
-  (`extract_facts` in `capabilities/user_memory.py`): one small
-  json_completion after `end` decides whether the exchange revealed
-  durable facts — the belt-and-braces for small models that never call
-  the save tool (glm-4-flash never did; the extractor cannot be
-  skipped).  The client persists each fact into PGlite; the `memory`
-  wire event trails `end` and passes the client's late-event gate
-  (like `related`).  json_gate note: models answer "return a list"
-  prompts with a BARE array — `_parsed` wraps it into the schema's
-  single array property.
-
-The facts ride every request (inherent: the model must read them).
-`threadStats` counts them; the store reset clears them.
+- WRITE: the `user_memory` tool (action=save yields a `memory` wire
+  event), AND `extract_insights` (capabilities/user_memory.py): one
+  json_completion after the settle returns BOTH durable facts and
+  concept tags -- the belt-and-braces for small models that never call
+  the save tool.  The `memory` / `tags` wire events trail `end` and
+  pass the client's late-event gate (like `related`).  json_gate note:
+  models answer "return a list" prompts with a BARE array -- `_parsed`
+  wraps it into the schema's single array property.
 
 ## Custom plugin behaviour (server side, keep with the theme)
 
