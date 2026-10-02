@@ -195,7 +195,8 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{sources.length}</span>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 lg:mt-2 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-y-auto">
+      {/* ~4 cards visible, the rest scroll inside -- on every breakpoint */}
+      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:max-h-[42rem] lg:flex lg:flex-col">
         {sources.map((source) => (
           <SourceCard key={source.n} source={source} />
         ))}
