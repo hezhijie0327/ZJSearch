@@ -7,6 +7,7 @@
     Page-private to KnowledgePage -- nothing here exports beyond it. */
 
 import {
+  Binary,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -28,6 +29,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
+import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { readEmbedUsage } from "@/lib/embed.ts";
 import { formatDate } from "@/lib/format.ts";
@@ -623,31 +625,22 @@ export function InspectorView({
           <p className="line-clamp-2 text-sm font-semibold text-ink" dir="auto">
             {item.title || item.url}
           </p>
-          {usage && (usage.input || usage.output) ? (
-            <div className="mt-2 flex flex-wrap items-center gap-1">
-              {usage.model ? <span className={CHIP}>{usage.model}</span> : null}
-              {usage.input ? (
-                <span className={CHIP}>
-                  {t("knowledge_usage_input")} {usage.input.toLocaleString()}
-                </span>
-              ) : null}
-              {usage.output ? (
-                <span className={CHIP}>
-                  {t("knowledge_usage_output")} {usage.output.toLocaleString()}
-                </span>
-              ) : null}
-              {usage.thoughts ? (
-                <span className={CHIP}>
-                  {t("knowledge_usage_thoughts")} {usage.thoughts.toLocaleString()}
-                </span>
-              ) : null}
-              {usage.cached ? (
-                <span className={CHIP}>
-                  {t("knowledge_usage_cached")} {usage.cached.toLocaleString()}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
+          {/* the SAME meta line the thread page's answer card ends with */}
+          <AiRunFooter
+            finish={usage?.finish ?? null}
+            model={usage?.model ?? null}
+            usage={
+              usage
+                ? ({
+                    cache_write: 0,
+                    cached: usage.cached ?? 0,
+                    input: usage.input ?? 0,
+                    output: usage.output ?? 0,
+                    thoughts: usage.thoughts ?? null,
+                  } satisfies AiUsage)
+                : null
+            }
+          />
           <div className="mt-3 text-[13px] leading-relaxed text-ink-2">
             {item.kind === "answer" ? (
               <InspectorMarkdown text={item.body} />
@@ -840,25 +833,39 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   </div>
                 ))}
               </dl>
-              {(() => {
-                const embed = readEmbedUsage();
-                if (!embed.calls) {
-                  return null;
-                }
-                const parts = [
-                  embed.model,
-                  `${t("knowledge_usage_input")} ${embed.input.toLocaleString()}`,
-                  `${t("knowledge_usage_calls")} ${embed.calls.toLocaleString()}`,
-                ].filter(Boolean);
-                return (
-                  <p className="mt-3 text-xs text-ink-3">
-                    {t("knowledge_admin_embed_usage")} · {parts.join(" · ")}
-                  </p>
-                );
-              })()}
             </div>
           </Card>
         ) : null}
+        {(() => {
+          const embed = readEmbedUsage();
+          if (!embed.calls) {
+            return null;
+          }
+          return (
+            <Card>
+              <div className="px-5 py-5 sm:px-6">
+                <div className="flex items-center gap-2">
+                  <Binary aria-hidden="true" className="size-4.5 text-ink-3" />
+                  <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_embed_usage")}</h2>
+                </div>
+                <dl className="mt-4 grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                    <dt className="text-xs text-ink-3">{t("knowledge_admin_embed")}</dt>
+                    <dd className="mt-0.5 truncate text-sm font-medium text-ink">{embed.model || "—"}</dd>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                    <dt className="text-xs text-ink-3">{t("knowledge_usage_input")}</dt>
+                    <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.input.toLocaleString()}</dd>
+                  </div>
+                  <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                    <dt className="text-xs text-ink-3">{t("knowledge_usage_calls")}</dt>
+                    <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.calls.toLocaleString()}</dd>
+                  </div>
+                </dl>
+              </div>
+            </Card>
+          );
+        })()}
         <div className="space-y-3 px-5 py-5 sm:px-6">
           <button
             className="flex w-full items-center justify-between rounded-xl border border-danger/40 px-4 py-3 text-start text-[13px] text-danger transition-colors hover:bg-danger/5"

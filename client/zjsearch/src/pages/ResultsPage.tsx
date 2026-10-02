@@ -684,6 +684,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         })),
         usage: {
           cached: runMeta?.usage?.cached ?? null,
+          finish: runMeta?.finish ?? null,
           input: runMeta?.usage?.input ?? null,
           model: runMeta?.model ?? null,
           output: runMeta?.usage?.output ?? null,

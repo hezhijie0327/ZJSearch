@@ -288,6 +288,7 @@ function deriveTags(run: RunSnapshot): string[] {
     DO NOTHING guards keep the counters honest. */
 export interface OverviewUsage {
   model?: string | null;
+  finish?: string | null;
   input?: number | null;
   output?: number | null;
   thoughts?: number | null;

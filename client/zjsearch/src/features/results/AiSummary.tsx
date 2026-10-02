@@ -449,7 +449,7 @@ let mermaidSeq = 0;
     source rides a data-zjs-mermaid attribute so the print view can render
     its own LIGHT copies off-screen (print.css's token force cannot recolor
     a baked svg, and re-rendering in place would flash the live page). */
-function MermaidBlock({ chart }: { chart: string }) {
+export function MermaidBlock({ chart }: { chart: string }) {
   const t = useT();
   const [svg, setSvg] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);

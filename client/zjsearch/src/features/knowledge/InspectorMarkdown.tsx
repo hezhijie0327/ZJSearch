@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import remarkDeflist from "remark-deflist";
 import remarkGfm from "remark-gfm";
+import { MermaidBlock } from "@/features/results/AiSummary.tsx";
 import { CODE_CHIP } from "@/lib/styles.ts";
 
 /**
@@ -72,7 +73,18 @@ const components: Record<string, (props: MdProps) => ReactNode> = {
       {children}
     </p>
   ),
-  pre: ({ children }) => <pre className={CODE_BLOCK}>{children}</pre>,
+  pre: ({ children }) => {
+    // settled ```mermaid / ```mindmap fences render as diagrams (the
+    // overview writer plants mindmaps); everything else keeps the mono
+    // chrome of the 12px tier
+    const child = Children.toArray(children).find(isValidElement);
+    const props = child?.props as { children?: ReactNode; className?: string } | undefined;
+    const lang = props?.className ?? "";
+    if (lang.includes("language-mermaid") || lang.includes("language-mindmap")) {
+      return <MermaidBlock chart={textOf(props?.children)} />;
+    }
+    return <pre className={CODE_BLOCK}>{children}</pre>;
+  },
   table: ({ children }) => (
     <div className="zjs-md-table my-2 overflow-x-auto" dir="auto">
       <table className="w-full border-collapse text-xs">{children}</table>
@@ -86,6 +98,22 @@ const components: Record<string, (props: MdProps) => ReactNode> = {
   ),
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 ps-5 first:mt-0">{children}</ul>,
 };
+
+function textOf(children: ReactNode): string {
+  if (children === null || children === undefined) {
+    return "";
+  }
+  if (typeof children === "string") {
+    return children;
+  }
+  if (Array.isArray(children)) {
+    return children.map(textOf).join("");
+  }
+  if (isValidElement(children)) {
+    return textOf((children.props as { children?: ReactNode }).children);
+  }
+  return "";
+}
 
 export function InspectorMarkdown({ text }: { text: string }) {
   return (
