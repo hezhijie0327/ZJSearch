@@ -85,11 +85,20 @@ def rerank_doc(result: t.Any) -> str:
 
 def _parse_rerank(payload: t.Any, docs: list[str]) -> tuple[list[int] | None, int]:
     """One rerank response body -> ``(order, tokens)``; ``(None, 0)`` when
-    the body carries nothing usable."""
+    the body carries nothing usable.  The token count parses BEFORE the
+    results bail-outs: a billed call with a malformed body still lands in
+    the run's account."""
+    tokens = 0
+    usage = payload.get("usage") if isinstance(payload, dict) else None
+    if isinstance(usage, dict):
+        try:
+            tokens = int(usage.get("prompt_tokens") or 0)
+        except (TypeError, ValueError):
+            tokens = 0
     ranked = payload.get("results") if isinstance(payload, dict) else None
     if not isinstance(ranked, list) or not ranked:
         logger.debug("zjsearch rerank: malformed response, keeping the previous order")
-        return None, 0
+        return None, tokens
     order: list[int] = []
     for item in ranked:
         try:
@@ -100,15 +109,8 @@ def _parse_rerank(payload: t.Any, docs: list[str]) -> tuple[list[int] | None, in
             order.append(index)
     if not order:
         logger.debug("zjsearch rerank: no usable indices, keeping the previous order")
-        return None, 0
+        return None, tokens
     order += [i for i in range(len(docs)) if i not in set(order)]
-    tokens = 0
-    usage = payload.get("usage")
-    if isinstance(usage, dict):
-        try:
-            tokens = int(usage.get("prompt_tokens") or 0)
-        except (TypeError, ValueError):
-            tokens = 0
     return order, tokens
 
 

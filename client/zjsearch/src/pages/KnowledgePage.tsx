@@ -424,7 +424,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 <Search aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
                 <input
                   aria-label={t("knowledge_search_placeholder")}
-                  className="h-6 w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+                  className="h-7 w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={t("knowledge_search_placeholder")}
                   type="text"
@@ -432,12 +432,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 />
                 {query ? (
                   <button
-                    aria-label={t("knowledge_inspector_close")}
-                    className="text-ink-3 transition-colors hover:text-ink"
+                    aria-label={t("clear")}
+                    className="grid size-6 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
                     onClick={() => setQuery("")}
                     type="button"
                   >
-                    <X aria-hidden="true" className="size-4" />
+                    <X aria-hidden="true" className="size-3.5" />
                   </button>
                 ) : null}
               </div>

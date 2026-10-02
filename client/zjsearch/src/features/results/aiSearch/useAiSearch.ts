@@ -269,6 +269,10 @@ const REPLAY_FX: FoldFx = {
 /** Entries as step indices: think/say/calls events route by entry id. */
 type EntryIndex = { think?: number; intent?: number; calls?: number };
 
+const LATE_KINDS = new Set(["related", "memory", "tags", "usage"]);
+/** The wire's LATE_EVENTS: they trail the settle on purpose and must
+    fold in the settled phases too (the live-fold guard above). */
+
 /** Settle every still-pending call row (abort / stream cut / error settle):
     no timeline row spins forever. */
 function interruptPending(runs: AiSearchRun[]): AiSearchRun[] {
@@ -417,7 +421,12 @@ export function applyEvent(
         ...run,
         status: "streaming",
         // the retry keeps its confirmed direction: the clarify step
-        // re-opens the rebuilt timeline
+        // re-opens the rebuilt timeline.  The LEDGER resets with the
+        // attempt: the server built a fresh Searches (empty learnings, a
+        // fresh task list) -- showing the dead attempt's findings card
+        // and task states would present state the writer never received
+        learnings: [],
+        tasks: [],
         steps: (clarifyText
           ? [{ kind: "clarify" as const, pairs: parseClarifyPairs(clarifyText) }]
           : []) as AiSearchStep[],
@@ -873,7 +882,12 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       const apply = (event: Record<string, unknown>) => {
         appendRunEvents(`${threadId}:${runNo}`, [event]);
         setCore((prev) => {
-          if (prev.phase !== "streaming" && prev.phase !== "awaiting") {
+          // LATE wire events (related/memory/tags/usage) trail the settle
+          // BY DESIGN -- the settled phases must still fold them (the
+          // fallback suggestions render live, memory saves persist BEFORE
+          // settleRun, tags park on the run, the gates correction lands);
+          // everything else after the settle is dropped
+          if (prev.phase !== "streaming" && prev.phase !== "awaiting" && !LATE_KINDS.has(String(event.e ?? ""))) {
             return prev;
           }
           return applyEvent(prev, event, LIVE_FX, refCounts);

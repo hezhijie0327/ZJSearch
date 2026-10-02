@@ -206,11 +206,21 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # whose engines errored stays retryable (an executed query -- empty
         # or not -- is honestly remembered; its outcome is in the feed)
         self.reg.note_query(dedup_key, query)
-        raw = self._ranked(query, raw)
-        items = serialize_results(raw, query)
+        try:
+            raw = self._ranked(query, raw)
+            items = serialize_results(raw, query)
+            feed_block, entries = build_search_feed(self.reg, query, category, items)
+        except Exception as exc:  # pylint: disable=broad-except
+            # one malformed result must never unwind _dispatch's settlement
+            # loop -- THIS call degrades to an error row, the round's
+            # remaining calls still settle (the loop's own catch is the
+            # last resort, and it kills the whole batch)
+            logger.warning("zjsearch_ai_search: search %d/%d settlement failed: %r", rnd, idx, exc)
+            feeds[idx - 1] = "error: the search failed"
+            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms})
+            return
         if items:
             self.round_new_hits += 1
-        feed_block, entries = build_search_feed(self.reg, query, category, items)
         for entry in entries:
             entry["round"] = rnd
             entry["id"] = idx
@@ -271,7 +281,13 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # the read's subtask coverage with the REAL title: the matched
         # subtask goes done and the opened page's [n] rides its provenance
         if self.coverage.task_list:
-            self.coverage.track(url, [title], [n])
+            try:
+                self.coverage.track(url, [title], [n])
+            except Exception as exc:  # pylint: disable=broad-except
+                # coverage bookkeeping must never kill the settlement (the
+                # card falls back to queue-time state, the read itself is
+                # already recorded)
+                logger.warning("zjsearch_ai_search: page %d/%d coverage tracking failed: %r", rnd, idx, exc)
         # the read page always rides a sources event FIRST: a NEW url
         # registers its card, an already-numbered one re-emits its [n] with
         # ``crawled`` set -- the client upgrades the existing card in place
@@ -564,7 +580,24 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         query, category, time_range, include, exclude = parse_call(call)
         if not query:
             return "error: empty query", {"call": wire_id, "status": "error", "n": 0, "ms": 0}, None
-        dedup_key = " ".join((query + " " + " ".join(f"site:{h}" for h in include + exclude)).lower().split())
+        # the key must describe the search AS EXECUTED: exclude hosts wear
+        # their operator (a role swap is a different search), and the
+        # category/time_range ride along -- the prompt's own recovery
+        # recipe ("a filtered search came back empty: retry without the
+        # filter") must not settle as a duplicate
+        dedup_key = " ".join(
+            (
+                query
+                + " "
+                + " ".join(f"site:{h}" for h in include)
+                + " "
+                + " ".join(f"-site:{h}" for h in exclude)
+                + (f" cat:{category}" if category else "")
+                + (f" tr:{time_range}" if time_range else "")
+            )
+            .lower()
+            .split()
+        )
         if dedup_key in self.reg.ran:
             return (
                 "duplicate: this exact query already ran in an earlier"
@@ -593,7 +626,11 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 {"call": wire_id, "status": "duplicate", "url": url, "ms": 0},
                 None,
             )
-        self.reg.note_read(url)
+        # NO dedup mark here: completion-time marking (_finish_page) is the
+        # contract -- a failed read must stay retryable, and a same-batch
+        # re-read of a not-yet-settled url settles through the known-n
+        # path (one identity, no duplicate numbering) exactly like
+        # searches do.
         return "", None, url
 
     @staticmethod

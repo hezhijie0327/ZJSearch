@@ -51,8 +51,10 @@ export function formatBytesLocal(bytes: number): string {
 }
 
 /** The knowledge meta chip (the OUTLINE variant of lib CHIP: bordered, not
-    filled -- row meta and hero stats share it). */
-export const CHIP = "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
+    filled -- row meta and hero stats share it).  Named CHIP_OUTLINE: the
+    unqualified CHIP is the design system's FILLED chip (lib/styles). */
+export const CHIP_OUTLINE =
+  "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
 
 /** The in-panel views' back row: focus lands here on view swap (the
     imperative focus-on-mount pattern -- no autoFocus attribute). */
@@ -69,7 +71,7 @@ function BackRow({ onClick }: { onClick: () => void }) {
       ref={ref}
       type="button"
     >
-      <ChevronLeft aria-hidden="true" className="size-4" />
+      <ChevronLeft aria-hidden="true" className="size-3.5" />
       {t("knowledge_back")}
     </button>
   );
@@ -132,7 +134,7 @@ export function ThreadRows({
         >
           <div className="flex items-start justify-between gap-3">
             <button
-              className="min-w-0 flex-1 text-start text-[15px] font-medium leading-snug text-ink transition-colors hover:text-accent"
+              className="min-w-0 flex-1 text-start text-base font-medium leading-snug text-ink transition-colors hover:text-accent"
               onClick={() => onOpen(thread)}
               title={thread.title}
               type="button"
@@ -151,9 +153,9 @@ export function ThreadRows({
           ) : null}
           <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
             <span className="shrink-0">{formatDate(new Date(thread.updated).toISOString())}</span>
-            <span className={CHIP}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
+            <span className={CHIP_OUTLINE}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
             {thread.sources > 0 ? (
-              <span className={CHIP}>{t("knowledge_row_sources", { n: String(thread.sources) })}</span>
+              <span className={CHIP_OUTLINE}>{t("knowledge_row_sources", { n: String(thread.sources) })}</span>
             ) : null}
           </div>
         </div>
@@ -186,7 +188,7 @@ function RowActions({
         <button
           aria-label={t(pinned ? "knowledge_menu_unpin" : "knowledge_menu_pin")}
           aria-pressed={pinned}
-          className={`grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 ${
+          className={`grid size-7 place-items-center rounded-full transition-colors hover:bg-surface-2 ${
             pinned ? "fill-current text-accent" : "text-ink-3 hover:text-ink"
           }`}
           onClick={(event) => {
@@ -195,19 +197,19 @@ function RowActions({
           }}
           type="button"
         >
-          <Star aria-hidden="true" className="size-4" />
+          <Star aria-hidden="true" className="size-3.5" />
         </button>
       ) : null}
       <button
         aria-label={t("knowledge_menu_delete")}
-        className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+        className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
         onClick={(event) => {
           event.stopPropagation();
           onRemove();
         }}
         type="button"
       >
-        <Trash2 aria-hidden="true" className="size-4" />
+        <Trash2 aria-hidden="true" className="size-3.5" />
       </button>
     </div>
   );
@@ -288,14 +290,14 @@ export function SearchResults({
                   }}
                   type="button"
                 >
-                  <span className="line-clamp-2 text-[15px] font-medium leading-snug text-ink">
+                  <span className="line-clamp-2 text-base font-medium leading-snug text-ink">
                     {item.title || item.body.slice(0, 80) || item.url}
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                     <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
-                    {item.host ? <span className={CHIP}>{item.host}</span> : null}
+                    {item.host ? <span className={CHIP_OUTLINE}>{item.host}</span> : null}
                     {item.cited > 0 ? (
-                      <span className={CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
+                      <span className={CHIP_OUTLINE}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
                     ) : null}
                     {item.body && item.kind !== "source" ? (
                       <span className="min-w-0 flex-1 truncate">{item.body.slice(0, 90)}</span>
@@ -345,7 +347,7 @@ export function MemorySection({
     <div>
       <div className="mb-3 flex items-center">
         <button
-          className="ms-auto flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
           onClick={() => setAdding(true)}
           type="button"
         >
@@ -508,7 +510,7 @@ function MemoryCard({
           title={t("knowledge_memory_save")}
           type="button"
         >
-          <Check aria-hidden="true" className="size-4" />
+          <Check aria-hidden="true" className="size-3.5" />
         </button>
         <button
           aria-label={t("ai_delete_cancel")}
@@ -517,7 +519,7 @@ function MemoryCard({
           title={t("ai_delete_cancel")}
           type="button"
         >
-          <X aria-hidden="true" className="size-4" />
+          <X aria-hidden="true" className="size-3.5" />
         </button>
       </div>
     );
@@ -617,7 +619,7 @@ export function InspectorView({
   const bodyCardRef = useRef<HTMLDivElement>(null);
   return (
     <div className="space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <BackRow onClick={onBack} />
         <div className="flex items-center gap-1">
           {item.kind === "answer" || item.kind === "run" ? (
@@ -629,7 +631,7 @@ export function InspectorView({
                 title={t("download_md")}
                 type="button"
               >
-                <FileDown aria-hidden="true" className="size-4" />
+                <FileDown aria-hidden="true" className="size-3.5" />
               </button>
               <button
                 aria-label={t("print")}
@@ -638,7 +640,7 @@ export function InspectorView({
                 title={t("print")}
                 type="button"
               >
-                <FileText aria-hidden="true" className="size-4" />
+                <FileText aria-hidden="true" className="size-3.5" />
               </button>
             </>
           ) : null}
@@ -657,13 +659,13 @@ export function InspectorView({
               target="_blank"
               title={t("open_in_new_tab")}
             >
-              <ExternalLink aria-hidden="true" className="size-4" />
+              <ExternalLink aria-hidden="true" className="size-3.5" />
             </a>
           ) : null}
           {item.threadId ? (
             item.kind === "run" ? (
               <button
-                className="rounded-full border border-line px-2.5 py-1 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                className="rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
                 onClick={() => onOpenThread(item.threadId ?? "")}
                 type="button"
               >
@@ -677,7 +679,7 @@ export function InspectorView({
                 title={t("knowledge_open_research")}
                 type="button"
               >
-                <MessageCircleQuestion aria-hidden="true" className="size-4" />
+                <MessageCircleQuestion aria-hidden="true" className="size-3.5" />
               </button>
             )
           ) : null}
@@ -819,17 +821,17 @@ export function KindItemRows({
               }}
               type="button"
             >
-              <span className="line-clamp-2 text-[15px] font-medium leading-snug text-ink">
+              <span className="line-clamp-2 text-base font-medium leading-snug text-ink">
                 {item.title || item.body.slice(0, 90) || item.url}
               </span>
               <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                 <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
-                {item.host ? <span className={CHIP}>{item.host}</span> : null}
+                {item.host ? <span className={CHIP_OUTLINE}>{item.host}</span> : null}
                 {item.cited > 0 ? (
-                  <span className={CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
+                  <span className={CHIP_OUTLINE}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
                 ) : null}
                 {item.refs > 0 ? (
-                  <span className={CHIP}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
+                  <span className={CHIP_OUTLINE}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
                 ) : null}
               </span>
             </button>
@@ -986,7 +988,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
             type="button"
           >
             {t("knowledge_admin_reset")}
-            <Trash2 aria-hidden="true" className="size-4" />
+            <Trash2 aria-hidden="true" className="size-3.5" />
           </button>
           <p className="text-xs leading-relaxed text-ink-3">{t("knowledge_admin_reset_desc")}</p>
         </div>
@@ -1021,7 +1023,7 @@ export function ConfirmDialog({
   }, [cancel]);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
+      <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/60" />
       <div
         aria-label={title}
         aria-modal="true"
@@ -1041,7 +1043,7 @@ export function ConfirmDialog({
             {t("ai_delete_cancel")}
           </button>
           <button
-            className="rounded-full bg-danger px-4 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+            className="rounded-full bg-danger px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-danger/85"
             onClick={onConfirm}
             type="button"
           >

@@ -61,7 +61,20 @@ _RERANK_ABOVE = 24000
 cap sits at 40k): the relevance embedding runs only there -- a fitting
 feed keeps its chronological order and costs no embedding round trip."""
 
-_CONTENT_EVENTS = ("open", "think", "say", "answer", "calls", "call", "tasks", "sources", "ask", "gallery")
+_CONTENT_EVENTS = (
+    "open",
+    "think",
+    "say",
+    "answer",
+    "calls",
+    "call",
+    "close",
+    "tasks",
+    "learnings",
+    "sources",
+    "ask",
+    "gallery",
+)
 """The wire events that prove the upstream is alive: a ``settle`` before
 any of these is the 502 path (the stream died before its first token)."""
 
@@ -333,9 +346,12 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
     def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
         """The settle with the GATES' token account folded into its usage:
         ``usage.gates = {input, output, calls}`` -- the client's meta row
-        renders the whole flow, gates included."""
+        renders the whole flow, gates included.  The RERANK bucket forces
+        the fold too: a transport that reports no usage (or a writer that
+        died) must not silently drop the ranking cascade's spend."""
         usage = event.get("usage")
-        if self.gate_usage or isinstance(usage, dict):
+        rerank_spend = bool(self.rerank_usage and self.rerank_usage.get("calls"))
+        if self.gate_usage or isinstance(usage, dict) or rerank_spend:
             usage = (
                 dict(usage)
                 if isinstance(usage, dict)

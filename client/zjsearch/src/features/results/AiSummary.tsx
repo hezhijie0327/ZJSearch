@@ -26,7 +26,7 @@ import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
-import { CODE_CHIP, META_TOGGLE } from "@/lib/styles.ts";
+import { CODE_CHIP, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /** mermaid is initialized ONCE per palette (global state — re-running
@@ -340,6 +340,7 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
   return (
     <>
       <button
+        aria-label={`${t("open_source")} ${n}`}
         className="mx-0.5 inline-flex items-center rounded align-middle text-xs text-accent transition-colors hover:text-accent-hover hover:underline underline-offset-2"
         onBlur={closeSoon}
         onClick={() => {
@@ -419,7 +420,7 @@ function CodeBlock({ children }: { children: ReactNode }) {
       </pre>
       <button
         aria-label={t("copy")}
-        className="absolute end-2 top-2 inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 hover:text-ink"
+        className={`absolute end-2 top-2 ${HOVER_CHIP}`}
         onClick={() => {
           copyToast(ref.current?.textContent ?? "");
         }}
@@ -734,7 +735,11 @@ export function ThinkScroll({ active, text }: { active: boolean; text: string })
   }, [active, text]);
   return (
     <div
-      className="max-h-40 overflow-y-auto overscroll-contain pe-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-ink-3"
+      // the machine-voice chrome: the reasoning stream sits on the same
+      // boxed ground as the reading pane and the args debug pane -- THINK
+      // (12px ink-3 on surface-2) vs CONTENT (14px ink on the plain
+      // ground) distinguishes at a glance
+      className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 px-3 py-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-ink-3"
       dir="auto"
       onScroll={() => {
         const el = scrollRef.current;

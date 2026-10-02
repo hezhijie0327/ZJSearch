@@ -127,7 +127,11 @@ def build_search_feed(
             continue
         n = reg.mint()
         reg.note_url(norm, n)
-        reg.note_gallery(img, n)
+        # the gallery whitelist mirrors the FEED: only deep lines carry the
+        # img= token -- an image the model was never shown must not spend
+        # the writer's validated pool
+        if pos < FEED_DEEP:
+            reg.note_gallery(img, n)
         entries.append(
             {
                 "n": n,

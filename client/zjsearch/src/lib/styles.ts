@@ -78,6 +78,33 @@ export const OUTLINE_PILL =
     dimmed and click-transparent, never invisible. */
 export const DISABLED = "disabled:pointer-events-none disabled:opacity-40";
 
+/** The machine-voice pane (AI reading panes, args debug panes): the boxed
+    ground that says "produced by the pipeline, not the answer" -- THINK
+    reasoning, tool results and debug payloads share it, CONTENT sits on
+    the plain ground. */
+export const READ_PANE =
+  "rounded-lg bg-surface-2/50 py-2 ps-3 pe-10 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2";
+
+/** Hover-revealed corner chips over a pane/card (copy, external-open): a
+    28px chip that appears on the group's hover AND focus (keyboard users
+    tab to it -- without focus-within the control stays invisible). */
+export const HOVER_CHIP =
+  "grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-opacity hover:text-ink opacity-0 group-hover:opacity-100 group-focus-within:opacity-100";
+
+/** Auxiliary circular ghost button, 28px with 14px icons -- the compact
+    action tier for in-card rows (answer actions, row stars/trash, memory
+    edit); the 36px ICON_BTN stays the chrome-level tier. */
+export const CHIP_BTN =
+  "grid size-7 place-items-center rounded-full text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink";
+
+/** Outlined chip on the 13px control tier (choice chips, filter pills):
+    the unselected shape; the selected language per the design contract is
+    border-accent-strong + bg-accent-soft + font-medium + text-accent. */
+export const CHIP_OUTLINE =
+  "inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors";
+export const CHIP_OUTLINE_ACTIVE =
+  "border-accent-strong bg-accent-soft font-medium text-accent hover:text-accent-hover";
+
 /** Corner badge over media (duration / filesize): the sanctioned 11px badge
     tier on a fixed-dark scrim, readable over any thumbnail in every palette.
     Numerals are tabular so durations/sizes align across a grid. */

@@ -109,9 +109,13 @@ def _query_params() -> dict[str, t.Any]:
     parameters.  Scalar values pass through (``blockAds: true`` ->
     ``blockAds=true``, lowercased per the manual's shape); a dict/list
     value is the launch-JSON form (``launch: {stealth: true}`` ->
-    ``launch={"stealth": true}``, URL-encoded by the network layer)."""
+    ``launch={"stealth": true}``, URL-encoded by the network layer).
+    ``None`` values are skipped and a config ``token`` is ignored -- the
+    credential comes from ``api_key``/the env, one source of truth."""
     out: dict[str, t.Any] = {"token": api_key(cfg())}
     for key, value in query().items():
+        if value is None or str(key) == "token":
+            continue
         if isinstance(value, bool):
             out[str(key)] = str(value).lower()
         elif isinstance(value, (dict, list)):
@@ -174,20 +178,25 @@ def rendered_html(url: str) -> str:
     body.update(params_block)
     response = _post_render(body)
     if response.status_code == 400 and params_block:
-        # the provider's schema rejected a params property (builds differ
-        # -- blockAds/launch on a strict Browserless answer "must NOT have
-        # additional properties"): degrade ONCE to the structural body --
-        # every read failing would blind the whole web_reader tool, the
-        # extras are optimisations, not requirements
-        global _PARAMS_400_WARNED  # pylint: disable=global-statement
-        if not _PARAMS_400_WARNED:
-            _PARAMS_400_WARNED = True
-            logger.warning(
-                "zjsearch reader: the provider rejected the params block"
-                " (HTTP 400) -- retrying reads with the structural body only;"
-                " check zjsearch.reader.params against this provider build"
-            )
-        response = _post_render({k: v for k, v in body.items() if k not in params_block})
+        # the provider's schema rejected a body property (builds differ):
+        # degrade in TWO steps -- first drop only the NON-structural
+        # extras (the user's tuning of gotoOptions/waitForTimeout/
+        # rejectResourceTypes survives), and let a still-400 fail loudly:
+        # every read failing would blind the whole web_reader tool, but a
+        # schema this narrow deserves the visible error
+        structural = ("gotoOptions", "waitForTimeout", "rejectResourceTypes")
+        extras = {k: v for k, v in params_block.items() if k not in structural}
+        if extras:
+            global _PARAMS_400_WARNED  # pylint: disable=global-statement
+            if not _PARAMS_400_WARNED:
+                _PARAMS_400_WARNED = True
+                logger.warning(
+                    "zjsearch reader: the provider rejected params extra(s)"
+                    " %s (HTTP 400) -- retrying without them; reconcile"
+                    " zjsearch.reader.params with this provider build",
+                    sorted(extras),
+                )
+            response = _post_render({k: v for k, v in body.items() if k not in extras})
     if response.status_code != 200:
         raise PageReadError(f"page reader HTTP {response.status_code}: {_error_snippet(response.text)}")
     return response.text

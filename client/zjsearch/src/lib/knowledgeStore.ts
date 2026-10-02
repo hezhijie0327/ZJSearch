@@ -999,10 +999,37 @@ export interface ThreadSummary {
   preview: string;
 }
 
+const STALE_RUN_MS = 2 * 60 * 60 * 1000;
+/** A run streaming for longer than this died with its tab: the settle
+    checkpoint lives in the page, a closed browser takes it with it. */
+
+let staleSwept = false;
+
+/** One sweep per session (at the first directory read): runs whose row
+    still says "streaming" but that have been silent for two hours settle
+    as errors -- the row, its events and its replay stay intact, only the
+    forever-"streaming" lie is corrected.  A resumed thread heals the
+    rest (the replay's own settle re-runs the projections). */
+function sweepStaleRuns(): void {
+  if (staleSwept) {
+    return;
+  }
+  staleSwept = true;
+  void enqueue(async () => {
+    await pgQuery(
+      `UPDATE knowledge SET status = 'error',
+         meta = jsonb_set(meta, '{halted}', '"the run was interrupted -- the browser closed mid-research"')
+       WHERE kind = 'run' AND status = 'streaming' AND updated < $1`,
+      [Date.now() - STALE_RUN_MS],
+    );
+  });
+}
+
 /** The thread directory: the thread_head projection (maintained at
     settle -- the old GROUP BY aggregate re-fired on every evt flush). */
 export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary[]> {
   await pg();
+  sweepStaleRuns();
   const rows = await pgQuery<Record<string, unknown>>(
     `SELECT thread_id AS id, title, preview, runs, sources, updated, pinned
      FROM thread_head ORDER BY pinned DESC, updated DESC LIMIT $1 OFFSET $2`,
@@ -1487,6 +1514,7 @@ async function liveQuery<T>(sql: string, params: unknown[], onUpdate: (rows: T[]
 /** The thread directory as a live listing (re-fires on thread_head
     writes -- settle/pin/delete -- not on every evt flush). */
 export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): Promise<StoreSubscription> {
+  void pg().then(() => sweepStaleRuns());
   return liveQuery<Record<string, unknown>>(
     `SELECT thread_id AS id, title, preview, runs, sources, updated, pinned
      FROM thread_head ORDER BY pinned DESC, updated DESC LIMIT 40`,

@@ -23,13 +23,12 @@ import {
   NotebookPen,
   Play,
   Plug,
+  RefreshCw,
   Repeat2,
-  RotateCw,
   Search,
   Waypoints,
-  X,
 } from "lucide-react";
-import { memo, useEffect, useState } from "react";
+import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Collapse } from "@/components/Collapse.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
@@ -46,9 +45,10 @@ import type {
 import { Snippet } from "@/features/results/cardParts.tsx";
 import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
+import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
-import { SCROLLBAR_NONE } from "@/lib/styles.ts";
+import { CHIP_BTN, HOVER_CHIP, META_TOGGLE, READ_PANE, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /**
  * One threaded Q&A section of the AI Search page: the question as a
@@ -124,9 +124,9 @@ function CallContent({ call }: { call: AiSearchCall }) {
   const long = text.length > 900;
   const [full, setFull] = useState(false);
   return (
-    <div className="relative mt-1">
+    <div className="group relative mt-1">
       <div
-        className={`relative rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2 ${
+        className={`relative ${READ_PANE} ${
           full ? "max-h-96 overflow-y-auto overscroll-contain" : long ? "max-h-40 overflow-hidden" : ""
         }`}
         dir="auto"
@@ -148,11 +148,11 @@ function CallContent({ call }: { call: AiSearchCall }) {
           {t("ai_content_expand")}
         </button>
       ) : null}
-      <div className="absolute end-2 top-2 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="absolute end-2 top-2 flex gap-0.5">
         {call.url ? (
           <a
             aria-label={t("open_source")}
-            className="inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-accent"
+            className={`${HOVER_CHIP} hover:text-accent`}
             href={call.url}
             rel="noreferrer"
             target="_blank"
@@ -163,7 +163,7 @@ function CallContent({ call }: { call: AiSearchCall }) {
         ) : null}
         <button
           aria-label={t("copy")}
-          className="inline-flex size-7 items-center justify-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
+          className={HOVER_CHIP}
           onClick={() => {
             copyToast(text);
           }}
@@ -247,6 +247,7 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
   return (
     <li>
       <div className="flex items-start gap-2 text-xs">
+        <span className="sr-only">{t(`ai_task_status_${task.status}`)}</span>
         {task.status === "done" ? (
           <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
         ) : task.status === "active" ? (
@@ -323,7 +324,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
         ) : call.status === "interrupted" || call.status === "duplicate" ? (
           <Minus aria-hidden="true" className="size-3 shrink-0" />
         ) : (
-          <X aria-hidden="true" className="size-3 shrink-0 text-danger" />
+          <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
         )}
         {isPage ? (
           <BookOpen aria-hidden="true" className="size-3 shrink-0" />
@@ -473,7 +474,7 @@ function ThinkSegment({
     <div>
       <button
         aria-expanded={expanded}
-        className="inline-flex min-h-6 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink-2"
+        className={`${META_TOGGLE} text-xs`}
         onClick={() => {
           setForced(!expanded);
         }}
@@ -504,7 +505,7 @@ function StepSegment({
   const t = useT();
   if (step.kind === "think") {
     return (
-      <div className={index > 0 ? "mt-2.5" : ""}>
+      <div className={index > 0 ? "mt-2" : ""}>
         <ThinkSegment
           live={streaming && index === run.steps.length - 1}
           // while the run streams, only the LIVE round's reasoning is open
@@ -601,6 +602,16 @@ function AskCard({
   const t = useT();
   const [picked, setPicked] = useState<Record<number, string[]>>({});
   const [note, setNote] = useState("");
+  // the run BLOCKS on this card: full modal semantics -- focus moves to
+  // the card on mount (tabIndex -1), Tab is trapped, focus returns to the
+  // page on answer; Escape is handled by the portal wrapper (skip)
+  const dialogRef = useDialogFocus<HTMLDivElement>();
+  // Escape means skip: the run proceeds on the user's best interpretation
+  const onCardKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === "Escape") {
+      onSubmit(null);
+    }
+  };
   const toggle = (qi: number, option: string, type: "single" | "multi") => {
     setPicked((prev) => {
       const current = prev[qi] ?? [];
@@ -639,12 +650,16 @@ function AskCard({
   return (
     <div
       aria-label={t("ai_clarify_title")}
+      aria-modal="true"
       className="flex max-h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface p-4"
-      role="form"
+      onKeyDown={onCardKeyDown}
+      ref={dialogRef}
+      role="dialog"
+      tabIndex={-1}
     >
       <div className="flex shrink-0 items-center gap-2">
         <Compass aria-hidden="true" className="size-5 shrink-0 text-ink-3" />
-        <h3 className="text-xl font-medium text-ink">{t("ai_clarify_title")}</h3>
+        <h3 className="text-lg font-semibold text-ink">{t("ai_clarify_title")}</h3>
       </div>
       {ask.intro ? (
         <p className="mt-2 shrink-0 text-sm leading-relaxed text-ink-2" dir="auto">
@@ -703,7 +718,7 @@ function AskCard({
           {t("ai_clarify_skip")}
         </button>
         <button
-          className="rounded-full bg-accent-strong px-4 py-1.5 text-[13px] font-medium text-accent-contrast transition-opacity hover:opacity-90"
+          className="rounded-full bg-accent-strong px-4 py-1.5 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
           onClick={submit}
           type="button"
         >
@@ -859,18 +874,21 @@ function AiSearchRunSectionImpl({
       className={`animate-fade-up space-y-5 ${isFirst ? "" : "border-t border-line pt-8"}`}
       id={`ai-run-${run.runNo}`}
     >
-      <h2 className={`break-words font-medium leading-tight text-ink ${isFirst ? "text-3xl" : "text-2xl"}`} dir="auto">
+      <h2 className="break-words font-medium leading-tight text-ink text-2xl" dir="auto">
         {run.q}
       </h2>
 
       {/* the clarify modal floats OVER the page -- PORTALed to the body:
           the run section's animate-fade-up leaves a residual transform and
           a fixed child of a transformed ancestor positions (and clips)
-          against THAT box, not the viewport */}
+          against THAT box, not the viewport.  FULL dialog contract: the
+          run blocks on these questions, so focus moves in and is trapped
+          (useDialogFocus), Escape means skip, the scrim fades (never
+          pops). */}
       {awaiting && run.ask
         ? createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div aria-hidden="true" className="absolute inset-0 bg-black/30" />
+              <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/30" />
               <div className="relative z-10 flex max-h-full w-full max-w-lg animate-fade-up">
                 <AskCard ask={run.ask} onSubmit={onSubmitClarify ?? (() => {})} />
               </div>
@@ -909,12 +927,12 @@ function AiSearchRunSectionImpl({
           {streaming ? (
             <button
               aria-label={t("stop")}
-              className="grid size-8 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              className={`${CHIP_BTN} shrink-0`}
               onClick={onStop}
               title={t("stop")}
               type="button"
             >
-              <CircleStop className="size-4" />
+              <CircleStop className="size-3.5" />
             </button>
           ) : null}
         </div>
@@ -979,23 +997,23 @@ function AiSearchRunSectionImpl({
                   ONLY -- the answer surfaces stay read-and-ask. */}
               <button
                 aria-label={t("regenerate")}
-                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                className={CHIP_BTN}
                 onClick={onRegenerate}
                 title={t("regenerate")}
                 type="button"
               >
-                <RotateCw className="size-4" />
+                <RefreshCw className="size-3.5" />
               </button>
               <button
                 aria-label={t("copy")}
-                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                className={CHIP_BTN}
                 onClick={() => {
                   copyToast(run.answer);
                 }}
                 title={t("copy")}
                 type="button"
               >
-                <Copy className="size-4" />
+                <Copy className="size-3.5" />
               </button>
             </div>
           ) : null}
@@ -1041,7 +1059,7 @@ function AiSearchRunSectionImpl({
                   onClick={onRegenerate}
                   type="button"
                 >
-                  <RotateCw aria-hidden="true" className="size-3.5" />
+                  <RefreshCw aria-hidden="true" className="size-3.5" />
                   {t("regenerate")}
                 </button>
                 {onFallback ? (

@@ -8,6 +8,7 @@ import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
+import { MONO_CHIP } from "@/lib/styles.ts";
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
@@ -111,15 +112,12 @@ function SourceCard({ source }: { source: AiSearchSource }) {
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
             {typeof source.score === "number" ? (
-              <span
-                className="inline-flex min-h-6 items-center rounded-md bg-surface-2 px-1.5 font-mono text-[11px] tabular-nums"
-                title={t("score")}
-              >
+              <span className={MONO_CHIP} title={t("score")}>
                 {formatScore(source.score)}
               </span>
             ) : null}
             {engineFirst ? (
-              <span className="inline-flex min-w-0 items-center gap-1">
+              <span className="inline-flex min-w-0 items-center gap-1" title={source.engines?.join(", ")}>
                 <span className="truncate">{engineFirst}</span>
                 {engineRest > 0 ? <span className="shrink-0 text-ink-3">+{engineRest}</span> : null}
               </span>
@@ -218,9 +216,11 @@ export function AiSearchSourcesSkeleton() {
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
       </div>
-      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto lg:mt-2 lg:flex lg:max-h-[calc(100vh-6rem)] lg:flex-col">
+      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto lg:mt-2 lg:flex lg:max-h-[42rem] lg:flex-col">
+        {/* one REAL card's resting height (title 2 lines + snippet slot +
+            meta row) -- the swap must not grow the rail */}
         {[0, 1, 2, 3].map((i) => (
-          <div className="h-[62px] animate-pulse rounded-lg bg-surface-2/70 lg:h-11" key={i} />
+          <div className="h-[208px] animate-pulse rounded-lg bg-surface-2/70 lg:h-[188px]" key={i} />
         ))}
       </div>
     </section>
