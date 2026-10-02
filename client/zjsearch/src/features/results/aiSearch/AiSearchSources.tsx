@@ -66,6 +66,14 @@ function SourceCard({ source }: { source: AiSearchSource }) {
         <span className="block truncate text-xs font-medium text-ink" dir="auto">
           {source.title}
         </span>
+        {source.content ? (
+          // the result's SearXNG snippet: two capped lines under the title
+          // (mobile stacks it full-width, the desktop row keeps one line
+          // before the domain strip)
+          <span className="mt-1 block line-clamp-2 text-xs leading-relaxed text-ink-3 lg:mt-0.5" dir="auto">
+            {source.content}
+          </span>
+        ) : null}
         <span className="mt-1.5 flex items-center justify-between gap-1.5 lg:mt-0.5">
           <span className="flex min-w-0 items-center gap-1">
             <span className="lg:hidden">
