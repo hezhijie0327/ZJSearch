@@ -426,43 +426,18 @@ export function buildThreadMarkdown(threadId: string, title: string, runs: Markd
   return lines.join("\n");
 }
 
-/** Download one AI conversation as Markdown (the thread actions' export). */
-export function downloadThreadMarkdown(
-  threadId: string,
-  title: string,
-  runs: MarkdownRun[],
-  instance = "zjsearch",
-): void {
-  const safeTitle =
-    title
-      .replace(/[/\\:*?"<>|]+/g, "_")
-      .trim()
-      .slice(0, 64) || "thread";
-  downloadText(
-    `zjsearch_${safeTitle}.${threadId.slice(0, 8)}.md`,
-    buildThreadMarkdown(threadId, title, runs, instance),
-    EXPORT_MIME.md ?? "text/markdown",
-  );
-}
-
-/** Trigger a browser download for one generated text file. */
+/** Trigger a text download (the exporters' shared sink). */
 function downloadText(filename: string, text: string, mime: string): void {
-  const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+  const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
   URL.revokeObjectURL(url);
 }
 
-/** Build and download the current results as `format` (csv/json/rss/md; xml
-    is an alias of rss) in the same structure as the server's format
-    endpoints (markdown is the one client-only extra).  Returns false when
-    the format has no client-side builder — the caller then leaves the
-    server URL link untouched. */
+/** The results-strip export chips: download the CURRENT results client-side. */
 export function downloadResults(format: string, data: SearchPageData, results: ResultItem[], origin: string): boolean {
   const mime = EXPORT_MIME[format];
   if (!mime) {

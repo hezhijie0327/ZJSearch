@@ -228,7 +228,17 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
   return (
     <li>
       <div className="flex items-start gap-2 text-xs">
-        <span className="sr-only">{t(`ai_task_status_${task.status}`)}</span>
+        <span className="sr-only">
+          {t(
+            task.status === "done"
+              ? "ai_task_status_done"
+              : task.status === "active"
+                ? "ai_task_status_active"
+                : task.status === "missed"
+                  ? "ai_task_status_missed"
+                  : "ai_task_status_pending",
+          )}
+        </span>
         {task.status === "done" ? (
           <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
         ) : task.status === "active" ? (
