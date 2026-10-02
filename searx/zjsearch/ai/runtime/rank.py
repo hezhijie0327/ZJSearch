@@ -14,12 +14,14 @@ stage fails open -- no signal or any error leaves the previous order
 standing.
 """
 
+import asyncio
 import logging
 import typing as t
 
 import bm25s
-import httpx
 
+from searx.network.client import get_loop
+from searx.network.network import get_network
 from searx.plugins.bm25_reranker import RRF_K, _doc_text, _field, _rrf, cjk_tokenize
 from searx.zjsearch.ai.infra import config as llm_config
 
@@ -34,9 +36,16 @@ RERANK_SNIPPET_CHARS = 400
 (the same shape the feed line carries -- the model ranks what the model
 will read)."""
 
-_RERANK_TIMEOUT = httpx.Timeout(connect=2.0, read=4.0, write=2.0, pool=2.0)
+RERANK_NETWORK = "zjsearch-rerank"
+"""The optional named network for the rerank endpoint -- a self-hosted
+reranker on plain http defines it with ``enable_http: true`` (the
+``zjsearch-reader`` pattern); absent, the endpoint rides the DEFAULT
+network like every engine (https endpoints are unaffected)."""
+
+RERANK_TIMEOUT = (2.0, 6.0)
 """One search's rerank call sits on the research round's critical path:
-a dead endpoint must cost seconds, not the round."""
+the (connect, total) curl_cffi budget keeps a dead endpoint's cost at
+seconds, not the round."""
 
 
 def bm25_order(query: str, results: list[t.Any]) -> list[int] | None:
@@ -74,7 +83,36 @@ def rerank_doc(result: t.Any) -> str:
     return f"{title} - {content[:RERANK_SNIPPET_CHARS]}"
 
 
-def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:  # pylint: disable=too-many-branches
+def _parse_rerank(payload: t.Any, docs: list[str]) -> tuple[list[int] | None, int]:
+    """One rerank response body -> ``(order, tokens)``; ``(None, 0)`` when
+    the body carries nothing usable."""
+    ranked = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(ranked, list) or not ranked:
+        logger.debug("zjsearch rerank: malformed response, keeping the previous order")
+        return None, 0
+    order: list[int] = []
+    for item in ranked:
+        try:
+            index = int(item["index"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 0 <= index < len(docs) and index not in order:
+            order.append(index)
+    if not order:
+        logger.debug("zjsearch rerank: no usable indices, keeping the previous order")
+        return None, 0
+    order += [i for i in range(len(docs)) if i not in set(order)]
+    tokens = 0
+    usage = payload.get("usage")
+    if isinstance(usage, dict):
+        try:
+            tokens = int(usage.get("prompt_tokens") or 0)
+        except (TypeError, ValueError):
+            tokens = 0
+    return order, tokens
+
+
+def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
     """The rerank-model leg: the deployment's ``zjsearch.rerank`` endpoint
     re-scores ``docs`` against ``query``.  RETURNS ``(order, tokens)`` --
     ``order`` maps rank position -> doc index (a full permutation: results
@@ -100,34 +138,33 @@ def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:  
     extra_headers = llm_config.extra_headers(cfg)
     if extra_headers:
         headers.update(extra_headers)
+    # the instance's own network layer (curl_cffi under the hood): proxies
+    # and per-network settings apply, the shared asyncio loop bridges the
+    # sync request thread (the page reader's pattern)
+    future = asyncio.run_coroutine_threadsafe(
+        (get_network(RERANK_NETWORK) or get_network()).request(
+            "POST",
+            url,
+            json=body,
+            headers=headers,
+            timeout=RERANK_TIMEOUT,
+            # status codes are THIS module's fail-open signal -- no
+            # network-layer raise
+            raise_for_httperror=False,
+        ),
+        get_loop(),
+    )
     try:
-        response = httpx.post(url, json=body, headers=headers, timeout=_RERANK_TIMEOUT)
-        response.raise_for_status()
+        response = future.result(timeout=RERANK_TIMEOUT[1] + 2.0)
+        if response.status_code != 200:
+            logger.debug(
+                "zjsearch rerank: HTTP %d, keeping the previous order: %.120s",
+                response.status_code,
+                response.text,
+            )
+            return None, 0
         payload = response.json()
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug("zjsearch rerank: endpoint failed, keeping the previous order: %r", exc)
         return None, 0
-    ranked = payload.get("results") if isinstance(payload, dict) else None
-    if not isinstance(ranked, list) or not ranked:
-        logger.debug("zjsearch rerank: malformed response, keeping the previous order")
-        return None, 0
-    order: list[int] = []
-    for item in ranked:
-        try:
-            index = int(item["index"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if 0 <= index < len(docs) and index not in order:
-            order.append(index)
-    if not order:
-        logger.debug("zjsearch rerank: no usable indices, keeping the previous order")
-        return None, 0
-    order += [i for i in range(len(docs)) if i not in set(order)]
-    tokens = 0
-    usage = payload.get("usage")
-    if isinstance(usage, dict):
-        try:
-            tokens = int(usage.get("prompt_tokens") or 0)
-        except (TypeError, ValueError):
-            tokens = 0
-    return order, tokens
+    return _parse_rerank(payload, docs)
