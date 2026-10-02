@@ -727,6 +727,7 @@ export function InspectorView({
                     input: usage.input ?? 0,
                     output: usage.output ?? 0,
                     thoughts: usage.thoughts ?? null,
+                    rerank: usage.rerank,
                   } satisfies AiUsage)
                 : null
             }
@@ -898,6 +899,31 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                         <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{value.toLocaleString()}</dd>
                       </div>
                     ))}
+                  </dl>
+                </>
+              ) : null}
+              {stats?.usage?.rerank ? (
+                <>
+                  <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <ArrowUp aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_tokens")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                        {stats.usage.rerank.tokens.toLocaleString()}
+                      </dd>
+                    </div>
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <Repeat aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_calls")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                        {stats.usage.rerank.calls.toLocaleString()}
+                      </dd>
+                    </div>
                   </dl>
                 </>
               ) : null}

@@ -255,6 +255,8 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_usage_empty: "还没有模型调用记录——使用一次 AI 搜索或概览后出现在这里。",
   knowledge_usage_group_llm: "LLM",
   knowledge_usage_embedding: "嵌入",
+  knowledge_usage_rerank: "重排序(排序级联)",
+  knowledge_usage_tokens: "Tokens",
   knowledge_admin_embed_usage: "嵌入累计",
   knowledge_memory_add: "添加记忆",
   knowledge_memory_save: "保存",
@@ -344,6 +346,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_usage_cached_title: "缓存命中词元",
 
   ai_usage_cache_write_title: "缓存写入词元",
+  ai_usage_rerank_title: "重排序词元",
   open_in_new_tab: "打开网页",
   ai_pdf_working: "正在生成 PDF…",
   knowledge_open: "知识库",

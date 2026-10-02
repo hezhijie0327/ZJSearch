@@ -253,6 +253,8 @@ export const EN = {
   knowledge_usage_empty: "No model calls recorded yet -- they appear after your first AI search or overview.",
   knowledge_usage_group_llm: "LLM",
   knowledge_usage_embedding: "Embedding",
+  knowledge_usage_rerank: "Rerank (ranking cascade)",
+  knowledge_usage_tokens: "Tokens",
   knowledge_admin_embed_usage: "Embedding totals",
   knowledge_memory_add: "Add memory",
   knowledge_memory_save: "Save",
@@ -343,6 +345,7 @@ export const EN = {
   ai_usage_cached_title: "Cache-hit tokens",
 
   ai_usage_cache_write_title: "Cache-write tokens",
+  ai_usage_rerank_title: "Rerank tokens",
   open_in_new_tab: "Open page",
   ai_pdf_working: "Generating PDF…",
   knowledge_open: "Knowledge",

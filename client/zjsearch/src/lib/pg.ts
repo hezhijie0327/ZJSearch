@@ -8,31 +8,31 @@
     knowledge operation pays the load once, the promise is cached for the
     session.
 
-    Schema v3 -- ONE event-sourced table.  Every wire event of an AI run is
-    a row (kind='evt', finest grain, storage-only: search_text stays empty
-    so the log never enters the retrieval indexes), and the queryable
-    surfaces are PROJECTIONS of that log, one row per knowledge object:
+    Schema v4 -- the event log moves to its OWN table (`run_event`), so
+    every projection scan, aggregate and work queue costs O(projections),
+    never O(projections + events); the projections stay one `knowledge`
+    table (kinds are few, identities are id-keyed):
 
-    - evt         one wire event (meta = the whole event object, n = wire seq)
-    - run         a run's head row (title = the question, meta = mode/model/usage)
-    - answer      the settled report markdown (the searchable document)
-    - source      a web source's canonical identity row (url_hash keyed; the
-                  ref/cited counters live here)
-    - source_ref  one (run x source) occurrence: the join as a kind
-    - document    an archived web_reader full text (same url_hash identity)
-    - memory      one durable user fact (with thread/run provenance)
-    - call        one tool invocation worth retrieving (web_search queries,
-                  reader reads, calculator runs)
-    - task        a run's task card (meta.items)
-    - clarify     a run's clarify gate + the user's answered pairs
-    - overview    an AI Overview answer (standalone -- thread_id is NULL)
+    - run_event   the wire log, one row per event (data = the whole event,
+                  PK (run_id, n)) -- replay's source, excluded from every
+                  retrieval index
+    - knowledge   the projections, one row per knowledge object:
+                  run / answer (the AI Overview archive) / source /
+                  source_ref / document / memory / call / task / clarify
+    - thread_head the thread directory, maintained at settle (the old
+                  GROUP BY + correlated-subqueries aggregate re-fired on
+                  every evt flush; this is a 40-row indexed listing)
 
-    The graph is not a table: tag co-occurrence within a row is an edge,
-    aggregated on demand (see the store's graphSnapshot); source_ref rows
-    are the provenance edges.  Boot: open (with the four extensions
-    registered), CREATE EXTENSION and CREATE TABLE (idempotent); a database
-    carrying ANY legacy v2 table (threads/runs/sources/...) is dropped
-    wholesale -- no migration, the v1/v2 data never left dev browsers. */
+    Relational furniture v4 puts to work: a GIN index on tags (the tag
+    queries ride `?` / `?|`), partial indexes for the two work queues
+    (embed-pending, tag-normalize -- the old shape full-scanned to find
+    nothing, twice per settle), and a GiST trgm index serving the rescue
+    as a KNN ordering.  Boot: open (with the four extensions registered),
+    CREATE EXTENSION / CREATE TABLE (idempotent); a database carrying ANY
+    legacy v2 table (threads/runs/sources/...) is dropped wholesale -- no
+    migration, the v1/v2 data never left dev browsers.  The v3 -> v4
+    upgrade is IN PLACE: the evt rows copy into run_event (one idempotent
+    INSERT..SELECT, safe to resume after a crash) and leave `knowledge`. */
 
 export type Pg = import("@electric-sql/pglite").PGlite;
 
@@ -65,7 +65,7 @@ export function pg(): Promise<Pg> {
   return pgPromise;
 }
 
-/** The FULL reset (the knowledge page's nuclear option): drop the table,
+/** The FULL reset (the knowledge page's nuclear option): drop the tables,
     close the session and forget the boot promise -- the next ``pg()``
     call re-runs the boot DDL on a fresh empty database.  The physical
     IndexedDB file stays (PGlite owns it); only the schema's contents are
@@ -73,6 +73,8 @@ export function pg(): Promise<Pg> {
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
   await db.query("DROP TABLE IF EXISTS knowledge");
+  await db.query("DROP TABLE IF EXISTS run_event");
+  await db.query("DROP TABLE IF EXISTS thread_head");
   await db.close();
   pgPromise = null;
 }
@@ -93,9 +95,6 @@ async function boot(): Promise<Pg> {
   });
   await db.query("CREATE EXTENSION IF NOT EXISTS vector");
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_textsearch");
-  // pg_trgm: the BM25 zero-signal fallback's word_similarity() (no GIN
-  // index yet -- the fallback seq-scans, and these tables are hundreds of
-  // rows, not millions; add gin_trgm_ops indexes when that changes)
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
   // the v2-and-older databases die wholesale (the v1 drop was the
   // precedent): detect ANY legacy table before the new schema exists.
@@ -119,12 +118,15 @@ async function boot(): Promise<Pg> {
   // the width comes from the SAME capability the embed calls use --
   // whatever the boot payload carried, the column matches the vectors
   const dims = embeddingDimensions() ?? pgDimensions;
+  // the event log's own table (v4): its existence is the schema marker --
+  // a database without it carries v3 evt rows to copy over
+  const hadRunEvent = await db.query<{ present: boolean }>("SELECT to_regclass('run_event') IS NOT NULL AS present");
+  const fresh = !(hadRunEvent.rows ?? [])[0]?.present;
   await db.query(`CREATE TABLE IF NOT EXISTS knowledge (
     id          text PRIMARY KEY,
     kind        text NOT NULL,
     thread_id   text,
     run_id      text,
-    parent_id   text,
     url_hash    text,
     url         text,
     host        text,
@@ -144,13 +146,66 @@ async function boot(): Promise<Pg> {
     updated     double precision NOT NULL,
     occurred_at double precision
   )`);
+  await db.query(`CREATE TABLE IF NOT EXISTS run_event (
+    run_id      text NOT NULL,
+    n           integer NOT NULL,
+    thread_id   text,
+    occurred_at double precision NOT NULL,
+    data        jsonb NOT NULL,
+    PRIMARY KEY (run_id, n)
+  )`);
+  await db.query("CREATE INDEX IF NOT EXISTS run_event_thread ON run_event (thread_id, occurred_at)");
+  await db.query(`CREATE TABLE IF NOT EXISTS thread_head (
+    thread_id text PRIMARY KEY,
+    title     text NOT NULL DEFAULT '',
+    preview   text NOT NULL DEFAULT '',
+    runs      integer NOT NULL DEFAULT 0,
+    sources   integer NOT NULL DEFAULT 0,
+    updated   double precision NOT NULL DEFAULT 0,
+    pinned    integer NOT NULL DEFAULT 0
+  )`);
+  if (fresh) {
+    // the v3 -> v4 upgrade, IN PLACE: the evt rows move to their own
+    // table (DO NOTHING keeps a crash-resumed re-run idempotent), the
+    // projections table loses them and v3's dead column; nothing replays,
+    // nothing drops
+    await db.query(
+      `INSERT INTO run_event (run_id, n, thread_id, occurred_at, data)
+       SELECT run_id, n, thread_id, occurred_at, meta FROM knowledge
+       WHERE kind = 'evt' AND run_id IS NOT NULL AND n IS NOT NULL
+       ON CONFLICT DO NOTHING`,
+    );
+    await db.query("DELETE FROM knowledge WHERE kind = 'evt'");
+    await db.query("ALTER TABLE knowledge DROP COLUMN IF EXISTS parent_id");
+  }
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
   );
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_hnsw ON knowledge USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
   );
-  await db.query("CREATE INDEX IF NOT EXISTS knowledge_trgm ON knowledge USING gin (title gin_trgm_ops)");
+  // the tag dimension, relational at last: the `?`/`?|` membership
+  // queries (graphRecall, itemsByTag) ride this GIN instead of expanding
+  // every row's jsonb
+  await db.query("CREATE INDEX IF NOT EXISTS knowledge_tags ON knowledge USING gin (tags jsonb_ops)");
+  // the two work queues ran a full scan per settle to select NOTHING when
+  // idle -- the partial indexes make the idle probe an index check
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS knowledge_embed_pending ON knowledge (updated) WHERE embed_model IS NULL AND search_text <> ''",
+  );
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS knowledge_tnormed ON knowledge (updated) WHERE (meta->>'tnormed') IS DISTINCT FROM '1' AND tags <> '[]'::jsonb",
+  );
+  // the trigram rescue as a KNN ordering (title <-> query): GiST serves
+  // it, the old GIN served no query shape we ever issued -- replaced
+  await db.query("DROP INDEX IF EXISTS knowledge_trgm");
+  try {
+    await db.query("CREATE INDEX IF NOT EXISTS knowledge_trgm_gist ON knowledge USING gist (title gist_trgm_ops)");
+  } catch (err) {
+    // a pglite build without gist_trgm_ops: the rescue stays a (rare,
+    // zero-signal-only) seq scan
+    console.warn("zjsearch pg: gist_trgm_ops unavailable -- the trigram rescue stays a seq scan", err);
+  }
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_kind ON knowledge (kind, updated DESC)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_thread ON knowledge (thread_id, kind)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_run ON knowledge (run_id, n)");
@@ -238,10 +293,24 @@ export function urlHash(url: string): string {
   return laneA.toString(16).padStart(8, "0") + laneB.toString(16).padStart(8, "0");
 }
 
+/** The one member a statement needs of a database handle -- the live
+    connection OR a transaction's tx both satisfy it. */
+export type QueryClient = Pick<Pg, "query">;
+
 /** One typed query helper (single statement -- PGlite's query is a
-    prepared statement and rejects multi-command strings). */
-export async function pgQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-  const db = await pg();
+    prepared statement and rejects multi-command strings).  An explicit
+    ``client`` (a transaction's tx) routes the statement onto it. */
+export async function pgQuery<T>(sql: string, params: unknown[] = [], client?: QueryClient): Promise<T[]> {
+  const db = client ?? (await pg());
   const result = await db.query(sql, params);
   return (result.rows ?? []) as T[];
+}
+
+/** One transaction: the body's statements commit together or not at all.
+    PGlite is a single connection, so this buys ATOMICITY for a
+    multi-statement write like settleRun -- never concurrency (the store's
+    ordered queue serializes everything anyway). */
+export async function pgTransaction<T>(body: (client: QueryClient) => Promise<T>): Promise<T> {
+  const db = await pg();
+  return db.transaction((tx) => body(tx));
 }

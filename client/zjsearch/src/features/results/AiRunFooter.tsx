@@ -10,6 +10,7 @@ import {
   CircleCheck,
   Database,
   DatabaseZap,
+  Repeat,
   ShieldAlert,
   Wrench,
 } from "lucide-react";
@@ -41,6 +42,8 @@ export interface AiUsage {
   research?: AiUsagePhase | null;
   write?: AiUsagePhase | null;
   gates?: (AiUsagePhase & { calls: number }) | null;
+  /** the ranking cascade's endpoint spend (NOT LLM tokens) */
+  rerank?: { calls: number; tokens: number };
 }
 
 /** The run's quiet meta line at the END of the answer (lobehub's message
@@ -91,6 +94,9 @@ export function AiRunFooter({
           : []),
         ...(usage.cache_write
           ? [{ icon: DatabaseZap, title: t("ai_usage_cache_write_title"), value: formatTokens(usage.cache_write) }]
+          : []),
+        ...(usage.rerank
+          ? [{ icon: Repeat, title: t("ai_usage_rerank_title"), value: formatTokens(usage.rerank.tokens) }]
           : []),
       ]
     : [];
