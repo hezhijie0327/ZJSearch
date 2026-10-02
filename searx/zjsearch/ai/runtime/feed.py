@@ -90,6 +90,7 @@ def build_search_feed(
     entries: list[dict[str, t.Any]] = []
     feed_lines = [f'Search "{query}" (category: {category}) returned {len(items)} results:']
     for pos, item in enumerate(items[: FEED_DEEP + FEED_SHALLOW]):
+        meta = str(item.get("length_display") or item.get("filesize_display") or "")
         url = str(item.get("url") or "")
         norm = reader.normalize_url(url) if url else ""
         known_n = reg.known(norm)
@@ -118,6 +119,9 @@ def build_search_feed(
                         "content": str(item.get("content_text") or "")[:500],
                         "pretty_url": str(item.get("pretty_url") or ""),
                         "published_date": str(item.get("published_date") or ""),
+                        "meta": meta,
+                        "engines": [str(e) for e in (item.get("engines") or [])][:4],
+                        "score": item.get("score"),
                     }
                 )
             continue
@@ -139,6 +143,9 @@ def build_search_feed(
                 "content": str(item.get("content_text") or "")[:500],
                 "pretty_url": str(item.get("pretty_url") or ""),
                 "published_date": str(item.get("published_date") or ""),
+                "meta": meta,
+                "engines": [str(e) for e in (item.get("engines") or [])][:4],
+                "score": item.get("score"),
             }
         )
         if pos < FEED_DEEP:

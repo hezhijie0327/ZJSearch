@@ -378,6 +378,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_thinking: "思考过程",
   ai_figure: "图表",
   regenerate: "重新生成",
+  score: "评分",
   ai_thread_export: "导出此对话为 Markdown",
   ai_thread_exported: "对话已导出",
   ai_pdf_download: "下载 PDF",

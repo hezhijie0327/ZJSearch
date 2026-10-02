@@ -122,6 +122,13 @@ export interface AiSearchSource {
   /** how many PAST runs referenced this url (the cross-session badge;
       0/undefined = new to the corpus) */
   pastRefs?: number;
+  /** the engines that reported this result + the relevance score -- the
+      card's engines row (the traditional result card's footer) */
+  engines?: string[];
+  score?: number;
+  /** the type-aware meta (video duration / torrent filesize -- the
+      classic presentations' tile badge) */
+  meta?: string;
 }
 
 export interface AiSearchRun {
@@ -561,6 +568,9 @@ export function applyEvent(
           // url, captured at the pre-run recall (never the run's own
           // ref-count increment -- the map is read-only after beginRun)
           pastRefs: pastRefCounts?.get(url) || undefined,
+          engines: Array.isArray(item.engines) ? item.engines.map((e) => String(e)).slice(0, 4) : undefined,
+          score: typeof item.score === "number" ? item.score : undefined,
+          meta: String(item.meta ?? "") || undefined,
         });
       }
       if (!fresh.length) {

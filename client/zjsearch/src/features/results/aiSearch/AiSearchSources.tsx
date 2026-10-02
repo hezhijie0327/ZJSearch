@@ -4,6 +4,8 @@ import { BookOpen, ChevronDown, Globe, History } from "lucide-react";
 import { useState } from "react";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
+import { categoryLabel } from "@/lib/categories.ts";
+import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
@@ -52,13 +54,18 @@ function SourceCard({ source }: { source: AiSearchSource }) {
   const open = () => {
     window.open(source.url, "_blank", "noopener");
   };
+  // the traditional presentations' type adaptation: videos carry their
+  // duration, torrents their filesize -- one badge string either way
+  const isMedia = source.category === "videos" || source.category === "files";
+  const engineFirst = source.engines?.[0];
+  const engineRest = source.engines ? source.engines.length - 1 : 0;
   return (
-    // the REGULAR result card's chrome (rounded-2xl, borderless, p-4,
+    // the REGULAR result card's chrome (rounded-2xl, borderless, p-3/4,
     // hover:bg-surface) and hierarchy (pretty-url line, title, snippet):
-    // one design system -- the AI-specific extras (#n, the read marks)
-    // ride the footer where the engines chips would sit
+    // one design system -- the AI extras (category chip, read marks, #n)
+    // and the engines/score row ride where the classic card puts them
     <div
-      className="group relative rounded-2xl p-4 transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      className="group relative rounded-2xl p-3 transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent sm:p-4"
       data-ai-n={source.n}
       onClick={open}
       onKeyDown={(event) => {
@@ -69,68 +76,109 @@ function SourceCard({ source }: { source: AiSearchSource }) {
       role="link"
       tabIndex={0}
     >
-      <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
-        <SourceFavicon source={source} />
-        <span className="truncate" dir="ltr">
-          {source.netloc}
-        </span>
-      </div>
-      <a
-        className="mt-1 line-clamp-1 block text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
-        dir="auto"
-        href={source.url}
-        onClick={(event) => event.stopPropagation()}
-        rel="noreferrer"
-        target="_blank"
-      >
-        {source.title}
-      </a>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
-      <div
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.stopPropagation();
-          }
-        }}
-      >
-        <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
-      </div>
-      <div className="mt-1.5 flex items-center gap-1 text-xs tabular-nums text-ink-3">
-        {/* the read marks ride a FIXED-WIDTH slot: with a badge present or
-            not, the #n stays aligned across crawled, recalled and plain
-            cards */}
-        <span className="flex w-4 shrink-0 items-center justify-end">
-          {source.crawled ? (
-            <span
-              aria-label={t("ai_source_crawled")}
-              className="inline-flex size-4 items-center justify-center rounded-full bg-accent-soft text-accent"
-              role="img"
-              title={t("ai_source_crawled")}
-            >
-              <BookOpen aria-hidden="true" className="size-2.5" />
+      <div className="flex gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
+            <SourceFavicon source={source} />
+            <span className="truncate" dir="ltr">
+              {source.netloc}
             </span>
-          ) : source.history ? (
-            <span
-              aria-label={t("ai_source_history")}
-              className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
-              role="img"
-              title={t("ai_source_history")}
-            >
-              <History aria-hidden="true" className="size-2.5" />
+            {source.category && source.category !== "general" ? (
+              <span className="shrink-0 rounded-md bg-surface-2 px-1.5 text-[11px] leading-4 text-ink-3">
+                {categoryLabel(source.category, t)}
+              </span>
+            ) : null}
+          </div>
+          <a
+            className="mt-1 line-clamp-2 block text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
+            dir="auto"
+            href={source.url}
+            onClick={(event) => event.stopPropagation()}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {source.title}
+          </a>
+          {/* the snippet's toggle stays off the card's link */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
+          <div
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.stopPropagation();
+              }
+            }}
+          >
+            <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
+            {typeof source.score === "number" ? (
+              <span
+                className="inline-flex min-h-6 items-center rounded-md bg-surface-2 px-1.5 font-mono text-[11px] tabular-nums"
+                title={t("score")}
+              >
+                {formatScore(source.score)}
+              </span>
+            ) : null}
+            {engineFirst ? (
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <span className="truncate">{engineFirst}</span>
+                {engineRest > 0 ? <span className="shrink-0 text-ink-3">+{engineRest}</span> : null}
+              </span>
+            ) : null}
+            <span className="ms-auto flex shrink-0 items-center gap-1.5">
+              {/* the read marks ride a FIXED-WIDTH slot: with a badge
+                  present or not, the #n stays aligned across crawled,
+                  recalled and plain cards */}
+              <span className="flex w-4 shrink-0 items-center justify-end">
+                {source.crawled ? (
+                  <span
+                    aria-label={t("ai_source_crawled")}
+                    className="inline-flex size-4 items-center justify-center rounded-full bg-accent-soft text-accent"
+                    role="img"
+                    title={t("ai_source_crawled")}
+                  >
+                    <BookOpen aria-hidden="true" className="size-2.5" />
+                  </span>
+                ) : source.history ? (
+                  <span
+                    aria-label={t("ai_source_history")}
+                    className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
+                    role="img"
+                    title={t("ai_source_history")}
+                  >
+                    <History aria-hidden="true" className="size-2.5" />
+                  </span>
+                ) : source.pastRefs ? (
+                  <span
+                    aria-label={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+                    className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-[11px] font-medium leading-none tabular-nums text-ink-3 ring-1 ring-line"
+                    role="img"
+                    title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+                  >
+                    ×{source.pastRefs}
+                  </span>
+                ) : null}
+              </span>
+              <span>#{source.n}</span>
             </span>
-          ) : source.pastRefs ? (
-            <span
-              aria-label={t("knowledge_source_refs", { n: String(source.pastRefs) })}
-              className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-[11px] font-medium leading-none tabular-nums text-ink-3 ring-1 ring-line"
-              role="img"
-              title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
-            >
-              ×{source.pastRefs}
-            </span>
-          ) : null}
-        </span>
-        <span>#{source.n}</span>
+          </div>
+        </div>
+        {source.img ? (
+          <div className="relative hidden shrink-0 self-start sm:block">
+            <img
+              alt=""
+              className="h-20 w-28 rounded-lg border border-line object-cover"
+              loading="lazy"
+              src={source.img}
+            />
+            {isMedia && source.meta ? (
+              <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
+                {source.meta}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

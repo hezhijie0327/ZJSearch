@@ -380,6 +380,7 @@ export const EN = {
   ai_thinking: "Thinking",
   ai_figure: "Diagram",
   regenerate: "Regenerate",
+  score: "Score",
   ai_thread_export: "Export this conversation as Markdown",
   ai_thread_exported: "Conversation exported",
   ai_pdf_download: "Download as PDF",

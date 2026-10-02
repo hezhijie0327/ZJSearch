@@ -23,7 +23,6 @@ import {
   MessageCircleQuestion,
   Minus,
   Plug,
-  Plus,
   Repeat2,
   RotateCw,
   Search,
@@ -1067,10 +1066,6 @@ function AiSearchRunSectionImpl({
                       {question}
                     </span>
                   </span>
-                  <Plus
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                  />
                 </button>
               </div>
             ))}
