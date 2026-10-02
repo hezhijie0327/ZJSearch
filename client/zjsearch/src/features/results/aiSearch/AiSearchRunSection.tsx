@@ -14,6 +14,8 @@ import {
   Compass,
   Copy,
   CornerDownRight,
+  FileDown,
+  FileText,
   Globe,
   Lightbulb,
   ListTodo,
@@ -45,6 +47,7 @@ import type {
 import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useT } from "@/lib/i18n.ts";
+import { printDocument } from "@/lib/print.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /**
@@ -756,6 +759,7 @@ function AiSearchRunSectionImpl({
   live,
   sourceMeta,
   onCite,
+  onExportThread,
   onRegenerate,
   onFallback,
   onRelated,
@@ -771,6 +775,9 @@ function AiSearchRunSectionImpl({
   sourceMeta: AiSourceMeta[];
   onCite?: (index: number) => void;
   onRegenerate?: () => void;
+  /** download the WHOLE thread as a Markdown document (the last run's
+      actions row hosts it -- end of the conversation, where users look) */
+  onExportThread?: () => void;
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
@@ -938,6 +945,41 @@ function AiSearchRunSectionImpl({
                 type="button"
               >
                 <Copy className="size-4" />
+              </button>
+              {onExportThread ? (
+                <button
+                  aria-label={t("ai_thread_export")}
+                  className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                  onClick={onExportThread}
+                  title={t("ai_thread_export")}
+                  type="button"
+                >
+                  <FileDown className="size-4" />
+                </button>
+              ) : null}
+              <button
+                aria-label={t("ai_pdf_download")}
+                className="grid size-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                onClick={() => {
+                  const source = document.getElementById(`ai-run-${run.runNo}`);
+                  if (!source) {
+                    return;
+                  }
+                  printDocument({
+                    title: run.q || "thread",
+                    fileTag: (/\/ai\/thread\/([\w-]+)/.exec(window.location.pathname)?.[1] ?? "").slice(0, 8),
+                    source,
+                    sources: run.sources.slice(0, 30).map((item, index) => ({
+                      n: item.n || index + 1,
+                      title: item.title || item.url,
+                      netloc: item.netloc || item.url,
+                    })),
+                  });
+                }}
+                title={t("ai_pdf_download")}
+                type="button"
+              >
+                <FileText className="size-4" />
               </button>
             </div>
           ) : null}

@@ -384,6 +384,67 @@ export function downloadAnswerMarkdown(
   downloadText(`zjsearch_${safeTitle}.md`, lines.join("\n"), EXPORT_MIME.md ?? "text/markdown");
 }
 
+/** The structural run shape the AI-thread export reads (lib stays free of
+    the feature's types). */
+export interface MarkdownRun {
+  q: string;
+  answer: string;
+  mode?: string;
+  sources?: Array<{ n: number; title: string; url: string }>;
+  /** the answer's inline image groups (the {{zjs-gallery:i}} placeholders
+      index into this array) */
+  galleries?: Array<Array<{ url: string; title?: string }>>;
+}
+
+/** One AI conversation as a readable Markdown document: title header, one
+    `## ` section per question with the settled answer verbatim (it IS
+    markdown -- citations kept as literal [n], the source list grounds
+    them) and the run's source registry at its foot.  The gallery
+    placeholders never appear on paper: each becomes its group's images
+    as markdown figures (an empty group just vanishes). */
+export function buildThreadMarkdown(threadId: string, title: string, runs: MarkdownRun[], instance: string): string {
+  const lines: string[] = [`# ${title}`, "", `_${instance} · ${threadId} · ${new Date().toLocaleString()}_`];
+  for (const run of runs) {
+    lines.push("", `## ${run.q}`, "");
+    const answer = run.answer.replaceAll(/\{\{zjs-gallery:(\d+)\}\}/g, (_, index: string) => {
+      const group = run.galleries?.[Number.parseInt(index, 10)] ?? [];
+      return group.map((image) => `![${image.title ?? ""}](${image.url})`).join("\n");
+    });
+    if (answer.trim()) {
+      lines.push(answer.trim(), "");
+    } else {
+      lines.push(`_(no answer${run.mode ? ` · ${run.mode}` : ""})_`, "");
+    }
+    const sources = run.sources ?? [];
+    if (sources.length > 0) {
+      lines.push("**Sources**", "");
+      for (const source of [...sources].sort((a, b) => a.n - b.n)) {
+        lines.push(`- [${source.n}] [${source.title || source.url}](${source.url})`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
+/** Download one AI conversation as Markdown (the thread actions' export). */
+export function downloadThreadMarkdown(
+  threadId: string,
+  title: string,
+  runs: MarkdownRun[],
+  instance = "zjsearch",
+): void {
+  const safeTitle =
+    title
+      .replace(/[/\\:*?"<>|]+/g, "_")
+      .trim()
+      .slice(0, 64) || "thread";
+  downloadText(
+    `zjsearch_${safeTitle}.${threadId.slice(0, 8)}.md`,
+    buildThreadMarkdown(threadId, title, runs, instance),
+    EXPORT_MIME.md ?? "text/markdown",
+  );
+}
+
 /** Trigger a browser download for one generated text file. */
 function downloadText(filename: string, text: string, mime: string): void {
   const blob = new Blob([text], { type: `${mime};charset=utf-8` });
