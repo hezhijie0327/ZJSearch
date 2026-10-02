@@ -29,6 +29,7 @@ from searx.zjsearch.ai.capabilities import user_memory as user_memory_cap
 from searx.zjsearch.ai.runtime.coverage import Coverage
 from searx.zjsearch.ai.runtime.feed import RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.runtime.prompts import STALL_NOTE
+from searx.zjsearch.ai.runtime.rank import RERANK_HEAD, bm25_order, rerank_doc, rerank_order
 from searx.zjsearch.ai.runtime.registry import SourcesRegistry
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
@@ -106,6 +107,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # consecutive-round count of rounds without any
         self.round_new_hits = 0
         self.stalled_rounds = 0
+        # the rerank model's account (zjsearch.rerank): one entry per
+        # endpoint call + its prompt tokens -- the settle folds it into
+        # ``usage.rerank`` and the knowledge base's model stats sum it
+        self.rerank_usage = {"calls": 0, "tokens": 0}
 
     @property
     def next_n(self) -> int:
@@ -142,6 +147,25 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
         return search_obj.search().get_ordered_results()
 
+    def _ranked(self, query: str, raw: list[t.Any]) -> list[t.Any]:
+        """One search's results through the ranking cascade: engine order
+        -> BM25 text relevance -> the rerank model re-scoring the head.
+        Every stage fails open into the previous order (rank.py); the
+        rerank model's token usage joins the run's account (the settle
+        carries it as ``usage.rerank``)."""
+        order = bm25_order(query, raw)
+        if order is None:
+            return raw
+        head = order[:RERANK_HEAD]
+        if len(head) >= 2:
+            sub_order, tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head])
+            if tokens:
+                self.rerank_usage["calls"] += 1
+                self.rerank_usage["tokens"] += tokens
+            if sub_order is not None:
+                order = [head[i] for i in sub_order] + order[RERANK_HEAD:]
+        return [raw[i] for i in order]
+
     def _finish(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
         self,
         rnd: int,
@@ -160,6 +184,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             feeds[idx - 1] = "error: the search failed"
             yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms})
             return
+        raw = self._ranked(query, raw)
         items = serialize_results(raw, query)
         if items:
             self.round_new_hits += 1

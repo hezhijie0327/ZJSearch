@@ -275,7 +275,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
     )
-    return _respond(_Ndjson(events, cfg, research_q, lang, gate_usage))
+    return _respond(_Ndjson(events, cfg, research_q, lang, gate_usage, state.rerank_usage))
 
 
 def _respond(stream: "_Ndjson") -> flask.Response:
@@ -314,12 +314,16 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         question: str,
         lang: str,
         gate_usage: list[dict[str, t.Any]],
+        rerank_usage: dict[str, int] | None = None,
     ):
         self.events = events
         self.cfg = cfg
         self.question = question
         self.lang = lang
         self.gate_usage = gate_usage
+        # the executor's rerank-model account (a LIVE dict -- the settle
+        # reads it after the run's searches have mutated it)
+        self.rerank_usage = rerank_usage
         self.buffer: list[str] = []
         self.rest: t.Iterator[str] | None = None
         self.primed = False
@@ -346,6 +350,11 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
                 "calls": len(self.gate_usage),
             }
+            rerank = self.rerank_usage
+            if rerank and rerank.get("calls"):
+                # the ranking cascade's endpoint spend, its own bucket (the
+                # model stats page sums it separately from the LLM tokens)
+                usage["rerank"] = {"calls": int(rerank["calls"]), "tokens": int(rerank.get("tokens") or 0)}
             event = {**event, "usage": usage}
         return event
 

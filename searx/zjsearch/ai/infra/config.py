@@ -180,6 +180,26 @@ def sdk_missing(cfg: dict[str, t.Any]) -> str | None:
     return None
 
 
+def rerank_cfg() -> dict[str, t.Any]:
+    """The ``zjsearch.rerank`` settings block (absent unless the deployment
+    defines it) -- the rerank-model provider behind the AI search feed's
+    ranking cascade.  Same shape as the embedding block: ``base_url`` with
+    the method path appended client-side (``{base_url}/rerank`` -- the
+    Cohere-shaped endpoint bigmodel / Jina / SiliconFlow all speak),
+    ``enabled`` / ``api_key`` (empty = the ``ZJSEARCH_RERANK_KEY`` env) /
+    ``model``, plus the shared ``extra_headers`` / ``extra_body`` escape
+    hatches."""
+    cfg = settings.get("zjsearch", {}).get("rerank", {})
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def rerank_key(cfg: dict[str, t.Any]) -> str:
+    """The rerank endpoint's effective API key: the ``api_key`` setting
+    first, then the ``ZJSEARCH_RERANK_KEY`` environment (the key stays out
+    of the repository either way)."""
+    return str(cfg.get("api_key") or "") or os.environ.get("ZJSEARCH_RERANK_KEY", "")
+
+
 EMBED_DEFAULT_WIDTH = 1024
 """The pgvector column width when the embedding block carries no explicit
 override -- the browser creates its column from THIS value (the capability

@@ -25,6 +25,11 @@ google-genai==2.25.0
 # -- Apache-2.0, numpy is its only runtime dependency
 bm25s==0.3.11
 
+# zjsearch theme: the AI search feed's rerank-model client
+# (searx/zjsearch/ai/runtime/rank.py) -- already installed transitively by
+# the SDK transports above; declared for the direct import
+httpx==0.28.1
+
 # zjsearch theme: the web_crawler page reader's HTML -> Markdown converter
 # (searx/zjsearch/ai/capabilities/reader/) -- MIT, zero runtime deps; without it
 # the reader degrades to the built-in walker
