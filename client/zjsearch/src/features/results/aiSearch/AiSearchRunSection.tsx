@@ -292,12 +292,16 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const isLearnings = call.tool === "learnings";
   const isAsk = call.tool === "ask_user";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
+  // web_reader rows NEVER fold: the reading pane (scroll-capped inside)
+  // renders below the row unconditionally -- the content is the row's
+  // point, and a second click to see what was read is friction
   const expandable =
-    (isPage || call.tool === "mcp"
+    (call.tool === "mcp"
       ? Boolean(call.text)
       : isCalc || isMemory || isPastResearch || isLearnings
         ? false
-        : results.length > 0) || Boolean(rawArgs);
+        : results.length > 0) ||
+    (Boolean(rawArgs) && !isPage);
   return (
     <div>
       <button
@@ -409,6 +413,9 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           />
         ) : null}
       </button>
+      {/* the reading pane NEVER folds: a settled read shows its content
+          right under the row (scroll-capped inside CallContent) */}
+      {isPage && call.text ? <CallContent call={call} /> : null}
       {open && expandable ? (
         <>
           {rawArgs ? (
@@ -434,7 +441,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
               </button>
             </div>
           ) : null}
-          {isPage || call.tool === "mcp" ? (
+          {call.tool === "mcp" ? (
             <CallContent call={call} />
           ) : isTask || isAsk || isLearnings ? null : (
             <CallResults results={results} />
