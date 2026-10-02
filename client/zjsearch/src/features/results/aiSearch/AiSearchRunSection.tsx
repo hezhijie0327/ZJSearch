@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   MessageCircleQuestion,
   Minus,
+  NotebookPen,
   Plug,
   Repeat2,
   RotateCw,
@@ -205,6 +206,37 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
   );
 }
 
+/** The findings ledger (the learnings tool writes it; the writer received
+    the same list as <findings>): the evidence trail under the plan card --
+    what the sources ESTABLISHED, one clamped fact per row, growing live
+    as the run records.  The plan card above says what the run intends;
+    this card says what it already has. */
+function FindingsCard({ learnings }: { learnings: string[] }) {
+  const t = useT();
+  if (learnings.length === 0) {
+    return null;
+  }
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2">
+        <NotebookPen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
+        <h3 className="text-base font-semibold text-ink">{t("ai_findings_card")}</h3>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">{learnings.length}</span>
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {learnings.map((fact, index) => (
+          <li className="flex items-start gap-2 text-xs" key={`${index}-${fact}`}>
+            <span aria-hidden="true" className="mt-1 size-1.5 shrink-0 rounded-full bg-accent/70" />
+            <span className="line-clamp-2 min-w-0 flex-1 break-words text-ink-2" dir="auto">
+              {fact}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** One task row: the colored status mark + the subtask title (+ its source
     count once covered).  Not interactive -- the process lives in the
     research timeline. */
@@ -255,12 +287,13 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const isMemory = call.tool === "user_memory";
   const isPastResearch = call.tool === "past_research";
   const isTask = call.tool === "task_write";
+  const isLearnings = call.tool === "learnings";
   const isAsk = call.tool === "ask_user";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
   const expandable =
     (isPage || call.tool === "mcp"
       ? Boolean(call.text)
-      : isCalc || isMemory || isPastResearch
+      : isCalc || isMemory || isPastResearch || isLearnings
         ? false
         : results.length > 0) || Boolean(rawArgs);
   return (
@@ -292,6 +325,8 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           <Calculator aria-hidden="true" className="size-3 shrink-0" />
         ) : isTask ? (
           <ListTodo aria-hidden="true" className="size-3 shrink-0" />
+        ) : isLearnings ? (
+          <NotebookPen aria-hidden="true" className="size-3 shrink-0" />
         ) : isAsk ? (
           <MessageCircleQuestion aria-hidden="true" className="size-3 shrink-0" />
         ) : call.tool === "mcp" ? (
@@ -308,17 +343,19 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
             ? pageLabel(call.url)
             : isTask
               ? t("ai_task_row")
-              : isAsk
-                ? call.q || t("ai_ask_row")
-                : call.tool === "mcp"
-                  ? call.name === "search_tools"
-                    ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
-                    : (call.name ?? t("ai_mcp_tool"))
-                  : isPastResearch
-                    ? call.q
-                    : isMemory
-                      ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
-                      : call.q}
+              : isLearnings
+                ? t("ai_learnings_row")
+                : isAsk
+                  ? call.q || t("ai_ask_row")
+                  : call.tool === "mcp"
+                    ? call.name === "search_tools"
+                      ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
+                      : (call.name ?? t("ai_mcp_tool"))
+                    : isPastResearch
+                      ? call.q
+                      : isMemory
+                        ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
+                        : call.q}
         </span>
         <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">
           {call.status === "pending"
@@ -328,15 +365,17 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                 ? t("ai_calc_running")
                 : isTask
                   ? t("ai_task_writing")
-                  : isAsk
-                    ? t("ai_ask_awaiting")
-                    : call.tool === "mcp"
-                      ? t("ai_mcp_running")
-                      : isPastResearch
-                        ? t("ai_past_research_running")
-                        : isMemory
-                          ? t("ai_memory_running")
-                          : t("ai_search_running")
+                  : isLearnings
+                    ? t("ai_learnings_running")
+                    : isAsk
+                      ? t("ai_ask_awaiting")
+                      : call.tool === "mcp"
+                        ? t("ai_mcp_running")
+                        : isPastResearch
+                          ? t("ai_past_research_running")
+                          : isMemory
+                            ? t("ai_memory_running")
+                            : t("ai_search_running")
             : ok
               ? isPage
                 ? t("ai_page_chars", { n: String(call.chars ?? 0) })
@@ -344,15 +383,17 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                   ? `= ${call.result ?? "?"}`
                   : isTask
                     ? (call.q ?? "")
-                    : isAsk
-                      ? ""
-                      : call.tool === "mcp"
-                        ? t("ai_mcp_done")
-                        : isPastResearch
-                          ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
-                          : isMemory
-                            ? ""
-                            : t("ai_search_results", { n: String(call.n ?? 0) })
+                    : isLearnings
+                      ? t("ai_learnings_done", { n: String(call.n ?? 0) })
+                      : isAsk
+                        ? ""
+                        : call.tool === "mcp"
+                          ? t("ai_mcp_done")
+                          : isPastResearch
+                            ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
+                            : isMemory
+                              ? ""
+                              : t("ai_search_results", { n: String(call.n ?? 0) })
               : call.status === "interrupted"
                 ? t("ai_search_row_interrupted")
                 : call.status === "duplicate"
@@ -393,7 +434,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           ) : null}
           {isPage || call.tool === "mcp" ? (
             <CallContent call={call} />
-          ) : isTask || isAsk ? null : (
+          ) : isTask || isAsk || isLearnings ? null : (
             <CallResults results={results} />
           )}
         </>
@@ -1030,6 +1071,7 @@ function AiSearchRunSectionImpl({
         {run.sources.length > 0 || streaming ? (
           <aside className="mt-5 w-full lg:sticky lg:top-4 lg:mt-0 lg:max-h-[calc(100vh-2rem)] lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-80">
             {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
+            {run.learnings && run.learnings.length > 0 ? <FindingsCard learnings={run.learnings} /> : null}
             {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
             {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
           </aside>

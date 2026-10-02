@@ -33,8 +33,10 @@ from searx.zjsearch.ai.runtime.rank import RERANK_HEAD, bm25_order, rerank_doc, 
 from searx.zjsearch.ai.runtime.registry import SourcesRegistry
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
+    LEARNINGS_TOOL,
     PAGE_TOOL,
     parse_call,
+    parse_learnings_call,
     parse_page_call,
     parse_task_call,
     TASK_TOOL,
@@ -116,6 +118,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # endpoint call + its prompt tokens -- the settle folds it into
         # ``usage.rerank`` and the knowledge base's model stats sum it
         self.rerank_usage = {"calls": 0, "tokens": 0}
+        # the run's findings ledger (the learnings tool): what the sources
+        # ESTABLISHED, the model's own distillation -- the writer reads it
+        # as <findings> alongside the raw source feed
+        self.learnings: list[str] = []
 
     @property
     def next_n(self) -> int:
@@ -365,6 +371,28 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     f"plan written: {done}/{len(items)} subtasks covered."
                     " Search each subtask's keywords; a subtask with sources"
                     " is marked done automatically."
+                )
+                continue
+            if tool_name == LEARNINGS_TOOL:
+                # the findings ledger: the model's own distillation of what
+                # the sources established -- deduped, appended, snapshot to
+                # the client (the writer reads it as <findings>)
+                fresh: list[str] = []
+                known = {fact.lower() for fact in self.learnings}
+                for fact in parse_learnings_call(call):
+                    if fact.lower() not in known:
+                        known.add(fact.lower())
+                        fresh.append(fact)
+                        self.learnings.append(fact)
+                yield ("learnings", {"round": rnd, "id": wire_id, "items": list(self.learnings)})
+                # the row settles like every other instant write (n = the
+                # ledger size -- the client renders it localized)
+                yield ("call", {"call": wire_id, "status": "ok", "n": len(self.learnings)})
+                feeds[wire_id - 1] = (
+                    f"recorded {len(fresh)} new finding(s); the ledger now"
+                    f" holds {len(self.learnings)}.  Keep each fact"
+                    " self-contained and [n]-cited -- the writer reads it"
+                    " alongside your sources."
                 )
                 continue
             if tool_name == past_research_cap.PAST_RESEARCH_TOOL:

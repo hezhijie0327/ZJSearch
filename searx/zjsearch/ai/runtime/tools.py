@@ -27,6 +27,8 @@ USER_MEMORY_TOOL = "user_memory"
 
 TASK_TOOL = "task_write"
 
+LEARNINGS_TOOL = "learnings"
+
 PAST_RESEARCH_TOOL = "past_research"
 
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
@@ -275,6 +277,57 @@ def parse_task_call(call: dict[str, t.Any]) -> list[dict[str, str]]:
     return out
 
 
+_LEARNING_MAX_CHARS = 400
+"""One recorded finding's cap -- a finding is one self-contained sentence,
+not a paragraph (the writer reads them alongside the full sources)."""
+
+
+def learnings_spec() -> dict[str, t.Any]:
+    """The findings ledger (dzhng's learnings, as a tool): the model
+    records what the sources ESTABLISHED as it goes -- the distilled
+    record the writer reads alongside the raw sources, and the run's
+    visible evidence trail.  Plans and next steps belong to
+    ``task_write``; narration belongs to the step notes."""
+    return {
+        "name": LEARNINGS_TOOL,
+        "description": (
+            "Record what the sources ESTABLISHED as durable findings of"
+            " this research -- the running evidence ledger the writer"
+            " reads alongside your sources.  One call, up to 6 facts,"
+            " whenever a round settled something real; each fact is ONE"
+            " self-contained sentence with its [n] citations where they"
+            " apply (\"DeepSeek-V4 ships a 256k context window [4]\")."
+            "  Never record plans, next steps or questions (the task list"
+            " owns those), never restate the query -- and never record a"
+            " fact no source supports."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "facts": {
+                    "type": "array",
+                    "items": {"type": "string", "description": "One self-contained finding, [n]-cited."},
+                    "description": "1-6 NEW findings from this round (duplicates are dropped silently).",
+                },
+            },
+            "required": ["facts"],
+        },
+    }
+
+
+def parse_learnings_call(call: dict[str, t.Any]) -> list[str]:
+    """The sanitized findings out of a ``learnings`` call: trimmed, capped,
+    empty strings dropped."""
+    args = _raw_args(call)
+    facts = args.get("facts")
+    out: list[str] = []
+    for fact in (facts if isinstance(facts, list) else [])[:8]:
+        text = " ".join(str(fact or "").split())[:_LEARNING_MAX_CHARS]
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
 def _clean_sites(raw: t.Any) -> list[str]:
     """Bare domains out of the model's ``included_sites``/``excluded_sites``
     arguments: scheme/path/port stripped, lowercased, deduped, capped --
@@ -369,6 +422,10 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": f"{sum(1 for i in items if i.get('status') == 'done')}/{len(items)}",
             "args": _raw_args(call),
         }
+    if call_name == LEARNINGS_TOOL:
+        # the findings ledger write: a fixed row label (the settlement's
+        # label carries the count); the raw facts ride the debug pane
+        return {"id": idx, "tool": LEARNINGS_TOOL, "q": "", "args": _raw_args(call)}
     if call_name == ASK_TOOL:
         # the human-in-the-loop ask: the row's label is the question's
         # intro (falling back to the first question's text) -- the raw

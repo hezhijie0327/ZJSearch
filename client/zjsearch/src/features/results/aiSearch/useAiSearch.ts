@@ -58,6 +58,7 @@ export interface AiSearchCall {
     | "user_memory"
     | "past_research"
     | "task_write"
+    | "learnings"
     | "ask_user";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
@@ -189,6 +190,7 @@ export interface AiSearchRun {
     research?: { input: number; output: number } | null;
     write?: { input: number; output: number } | null;
     gates?: { input: number; output: number; calls: number } | null;
+    rerank?: { calls: number; tokens: number };
   } | null;
   /** the server's halt explanation carried on settle (stall verdict,
       truncation, transport cut) -- the meta row renders it */
@@ -211,6 +213,10 @@ export interface AiSearchRun {
     steps: AiSearchStep[];
     findings?: string;
   }>;
+  /** the findings ledger (the learnings tool's authoritative snapshots):
+      what the researcher recorded as established -- the findings card
+      renders it, the writer received the same list as <findings> */
+  learnings?: string[];
 }
 
 interface Core {
@@ -539,6 +545,15 @@ export function applyEvent(
       runs[lastIdx] = { ...run, tasks };
       return { ...core, runs };
     }
+    case "learnings": {
+      // the findings ledger's AUTHORITATIVE snapshot -- replace, never
+      // merge (the server's list is the truth, the writer read the same)
+      const facts = Array.isArray(event.items)
+        ? (event.items as unknown[]).map((fact) => String(fact ?? "")).filter(Boolean)
+        : [];
+      runs[lastIdx] = { ...run, learnings: facts };
+      return { ...core, runs };
+    }
     case "sources": {
       // the global [n] registry of the cited feed -- new entries append, a
       // crawled re-emission upgrades the existing card in place, an
@@ -686,6 +701,7 @@ export function applyEvent(
               research: usage.research ?? null,
               write: usage.write ?? null,
               gates: usage.gates ?? null,
+              rerank: usage.rerank,
             }
           : (run.usage ?? null),
         halt,
@@ -735,9 +751,11 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
                 ? ("past_research" as const)
                 : tool === "task_write"
                   ? ("task_write" as const)
-                  : tool === "ask_user"
-                    ? ("ask_user" as const)
-                    : ("web_search" as const),
+                  : tool === "learnings"
+                    ? ("learnings" as const)
+                    : tool === "ask_user"
+                      ? ("ask_user" as const)
+                      : ("web_search" as const),
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
     q: String(item.q ?? ""),

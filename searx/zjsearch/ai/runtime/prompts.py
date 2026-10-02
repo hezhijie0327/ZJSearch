@@ -17,6 +17,7 @@ from searx.zjsearch.ai.runtime import spine as shared
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
     CALCULATOR_TOOL_NAME,
+    LEARNINGS_TOOL,
     PAGE_TOOL,
     TASK_TOOL,
     TOOL_NAME,
@@ -190,10 +191,13 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " with its engine bang, e.g. !baidu) -- without one, the"
             " category parameter already fans out across every engine in"
             " that vertical.",
+            "- Record what you ESTABLISH with the"
+            f" {LEARNINGS_TOOL} tool as you go (one call, up to 6 facts);"
+            " do not summarize your findings in prose narration -- the"
+            " ledger, not your step notes, is the writer's distillation.",
             "- When the research is done, STOP: just end your turn without"
-            " tool calls.  Do not draft the answer, do not summarize your"
-            " findings in prose -- the writer has your sources and your"
-            " plan.",
+            " tool calls.  Do not draft the answer -- the writer has your"
+            " sources, your plan and your findings ledger.",
             "</how_to_search>",
         ]
     )
@@ -263,6 +267,20 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " When all subtasks are covered, stop calling tools -- the"
             " writer builds the answer from everything gathered.\n</task_list>"
         )
+    learnings_block = (
+        "<learnings>\n"
+        f"The {LEARNINGS_TOOL} tool is your findings ledger: whenever a"
+        " round's sources settled something real, record it (up to 6"
+        " facts per call) as ONE self-contained sentence with its [n]"
+        " citations -- \"DeepSeek-V4 ships a 256k context window [4]\"."
+        "  The ledger is what the WRITER reads alongside the raw sources,"
+        " and the user watches it grow as your evidence trail: record"
+        " what the sources ESTABLISH (figures, definitions, verdicts,"
+        " disagreements), never your plans or next steps (the task list"
+        " owns those), never a restatement of the question, and never a"
+        " fact no source supports.  Skip a round honestly when it"
+        " produced nothing durable.\n</learnings>"
+    )
     # (the one-shot plan tool was superseded by the living task list -- the
     # task_block carries decomposition + progress for quality/goal)
     ambiguity_escape = ""
@@ -308,6 +326,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     lines.append(calculator_block)
     if task_block:
         lines.append(task_block)
+    lines.append(learnings_block)
 
     lines.append(f"<depth>\n{depth}\n</depth>")
     if max_rounds:
@@ -429,6 +448,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     galleries_on: bool = False,
     past_sources: list[dict[str, t.Any]] | None = None,
     relevance: list[int] | None = None,
+    learnings: list[str] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The WRITER's fresh conversation (Vane's writer): a system prompt of
     XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
@@ -481,6 +501,20 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
         lines.append(f"<research_note>\n{halt}\n</research_note>")
     elif budget_truncated:
         lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
+    if learnings:
+        # the researcher's own distillation (dzhng's writeFinalReport
+        # pattern): a pre-digested evidence trail beside the raw sources
+        # -- support, never substitute (the citation contract still binds
+        # every claim to its numbered source)
+        findings = "\n".join(f"- {fact}" for fact in learnings)
+        lines.append(
+            "<findings>\nThe research agent recorded these findings as it"
+            " worked -- its distillation of what the sources below"
+            " established.  Use them as your map of the material: they"
+            " carry the agent's [n] labels and every claim still cites"
+            " its numbered source; when a finding and a source disagree,"
+            " the source wins.\n" + findings + "\n</findings>"
+        )
     if past_sources:
         # the browser's research memory (writer-phase ONLY -- the
         # researcher never sees ready-made sources): pre-numbered after

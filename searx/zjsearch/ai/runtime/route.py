@@ -46,6 +46,7 @@ from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
     ask_user_spec,
     display_item,
+    learnings_spec,
     page_spec,
     task_write_spec,
     tool_spec,
@@ -228,6 +229,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             galleries_on=bool(state.reg.gallery_pool),
             past_sources=assign_past_sources(),
             relevance=await _relevance_order(research_q, state.feed),
+            learnings=state.learnings,
         )
 
     def gallery_validator(body: str) -> list[dict[str, t.Any]]:
@@ -259,7 +261,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             task_tool=register_tasks,
             user_memories=user_memories,
         ),
-        tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec()]
+        tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec(), learnings_spec()]
         + ([past_research_spec()] if past_research_entries else [])
         + ([page_spec()] if pages_on else [])
         + [ask_user_spec()]

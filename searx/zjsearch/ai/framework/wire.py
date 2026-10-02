@@ -20,6 +20,9 @@ bug and :py:func:`encode` refuses it):
                         (n/ms/chars/text/result/preview per tool kind).
 ``close``               entry ``id`` is final.
 ``tasks``               the task card's AUTHORITATIVE snapshot.
+``learnings``           the findings ledger's AUTHORITATIVE snapshot
+                        (``items``: the facts so far) -- what the
+                        researcher recorded as established.
 ``sources``             the global [n] registry's new/updated entries.
 ``answer``              the writer's answer delta (its OWN buffer --
                         narration never mixes in).
@@ -50,6 +53,7 @@ EVENTS: frozenset[str] = frozenset(
         "call",
         "close",
         "tasks",
+        "learnings",
         "sources",
         "answer",
         "ask",
