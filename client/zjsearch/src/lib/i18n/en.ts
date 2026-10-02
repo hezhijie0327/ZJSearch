@@ -262,6 +262,7 @@ export const EN = {
   knowledge_graph_filter: "Filter by this tag",
   knowledge_graph_items: "Content with this tag",
   knowledge_graph_drag: "Click a tag to inspect it · double-click to filter · wheel to zoom · drag to pan",
+  knowledge_graph_search: "Search tags…",
   knowledge_graph_empty: "Tags appear as studies accumulate.",
   knowledge_graph_hint: "Click a tag to filter -- its neighbors are the next hop.",
   knowledge_inspector_close: "Close",

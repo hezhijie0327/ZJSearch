@@ -43,7 +43,6 @@ import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { KnowledgeItem, KnowledgeStats, MemoryRow, OverviewUsage, ThreadSummary } from "@/lib/knowledgeStore.ts";
 import { printDocument } from "@/lib/print.ts";
-import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 
 export function formatBytesLocal(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -322,15 +321,11 @@ export function MemorySection({
   onAdd,
   onForget,
   onSave,
-  onView,
-  view,
 }: {
   memories: MemoryRow[];
   onAdd: (content: string) => void;
   onForget: (id: string) => void;
   onSave: (id: string, content: string) => void;
-  onView: (view: "timeline" | "cards") => void;
-  view: "timeline" | "cards";
 }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
@@ -355,20 +350,7 @@ export function MemorySection({
   }
   return (
     <div>
-      <div className="mb-3 flex items-center gap-1.5">
-        <div className="flex w-fit gap-1 rounded-xl border border-line bg-surface p-1">
-          {(["timeline", "cards"] as const).map((mode) => (
-            <button
-              aria-pressed={view === mode}
-              className={`${SEGMENT_SM} ${view === mode ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
-              key={mode}
-              onClick={() => onView(mode)}
-              type="button"
-            >
-              {mode === "timeline" ? t("knowledge_memory_timeline") : t("knowledge_memory_cards")}
-            </button>
-          ))}
-        </div>
+      <div className="mb-3 flex items-center">
         <button
           className="ms-auto flex items-center gap-1 rounded-full border border-line px-2.5 py-1 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
           onClick={() => {
@@ -424,7 +406,7 @@ export function MemorySection({
           </span>
           <p className="mt-4 text-sm text-ink-2">{t("knowledge_memory_empty")}</p>
         </div>
-      ) : view === "timeline" ? (
+      ) : (
         <div className="relative ps-5">
           <span aria-hidden="true" className="absolute inset-block-0 start-2 w-px bg-line" />
           {[...groups.entries()].map(([day, rows]) => (
@@ -440,12 +422,6 @@ export function MemorySection({
                 <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
               ))}
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {memories.map((memory) => (
-            <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
           ))}
         </div>
       )}

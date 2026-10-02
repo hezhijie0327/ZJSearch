@@ -145,7 +145,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
   // ── memories (live, fetched for the memory view) ─────────────────────
   const [memories, setMemories] = useState<MemoryRow[] | null>(null);
-  const [memoryView, setMemoryView] = useState<"timeline" | "cards">("timeline");
   useEffect(() => {
     if (kind !== "memory") {
       return;
@@ -498,8 +497,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                     updateMemory(id, content);
                     flashToast(t("saved"), { tone: "ok" });
                   }}
-                  onView={setMemoryView}
-                  view={memoryView}
                 />
               ) : graphOpen ? (
                 <TagGraphView
