@@ -499,14 +499,18 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   }}
                 />
               ) : graphOpen ? (
-                <TagGraphView
-                  onOpenInspector={setView}
-                  onOpenThread={(id) => openThreadInspector(id, t("knowledge_kind_run"))}
-                  onSelectTag={(tag) => {
-                    setQuery(tag);
-                    setKind("run");
-                  }}
-                />
+                // the graph carries its own search card: pull it up to the
+                // list tabs' 12px search position (the body wraps at mt-5)
+                <div className="-mt-2">
+                  <TagGraphView
+                    onOpenInspector={setView}
+                    onOpenThread={(id) => openThreadInspector(id, t("knowledge_kind_run"))}
+                    onSelectTag={(tag) => {
+                      setQuery(tag);
+                      setKind("run");
+                    }}
+                  />
+                </div>
               ) : searching ? (
                 <SearchResults
                   groups={searchByKind}
