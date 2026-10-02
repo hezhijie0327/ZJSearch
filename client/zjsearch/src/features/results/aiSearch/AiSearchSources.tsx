@@ -3,7 +3,9 @@
 import { BookOpen, ChevronDown, Globe, History } from "lucide-react";
 import { useState } from "react";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
+import { Snippet } from "@/features/results/cardParts.tsx";
 import { useT } from "@/lib/i18n.ts";
+import { escapeHtml } from "@/lib/print.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 const INLINE_CARDS = 4;
@@ -47,82 +49,90 @@ function SourceFavicon({ source }: { source: AiSearchSource }) {
 
 function SourceCard({ source }: { source: AiSearchSource }) {
   const t = useT();
+  const open = () => {
+    window.open(source.url, "_blank", "noopener");
+  };
   return (
-    <a
-      className={`flex flex-col gap-2 rounded-lg bg-surface-2/70 p-3 transition-colors hover:bg-surface-2 lg:flex-row lg:items-center lg:gap-2.5 lg:p-2.5 ${
-        // a read-in-full card carries a thin amber ring: the model verified
-        // this source first-hand -- scannable at a glance, layout unchanged
-        source.crawled ? "ring-1 ring-accent-soft" : ""
-      }`}
+    // the REGULAR result card's chrome (rounded-2xl, borderless, p-4,
+    // hover:bg-surface) and hierarchy (pretty-url line, title, snippet):
+    // one design system -- the AI-specific extras (#n, the read marks)
+    // ride the footer where the engines chips would sit
+    <div
+      className="group relative rounded-2xl p-4 transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       data-ai-n={source.n}
-      href={source.url}
-      rel="noreferrer"
-      target="_blank"
+      onClick={open}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          open();
+        }
+      }}
+      role="link"
+      tabIndex={0}
     >
-      <span className="hidden lg:flex">
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
         <SourceFavicon source={source} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium text-ink" dir="auto">
-          {source.title}
+        <span className="truncate" dir="ltr">
+          {source.netloc}
         </span>
-        {/* the result's SearXNG snippet: a FIXED two-line slot under the
-            title -- cards without a snippet reserve the same slot, so the
-            rail reads as uniform cards, not a ragged mix (the knowledge
-            page's house rule for card lists) */}
-        <span className="mt-1 line-clamp-2 min-h-[39px] text-xs leading-relaxed text-ink-3 lg:mt-0.5" dir="auto">
-          {source.content ?? ""}
-        </span>
-        <span className="mt-1.5 flex items-center justify-between gap-1.5 lg:mt-0.5">
-          <span className="flex min-w-0 items-center gap-1">
-            <span className="lg:hidden">
-              <SourceFavicon source={source} />
+      </div>
+      <a
+        className="mt-1 line-clamp-1 block text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
+        dir="auto"
+        href={source.url}
+        onClick={(event) => event.stopPropagation()}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {source.title}
+      </a>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
+      <div
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.stopPropagation();
+          }
+        }}
+      >
+        <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
+      </div>
+      <div className="mt-1.5 flex items-center gap-1 text-xs tabular-nums text-ink-3">
+        {/* the read marks ride a FIXED-WIDTH slot: with a badge present or
+            not, the #n stays aligned across crawled, recalled and plain
+            cards */}
+        <span className="flex w-4 shrink-0 items-center justify-end">
+          {source.crawled ? (
+            <span
+              aria-label={t("ai_source_crawled")}
+              className="inline-flex size-4 items-center justify-center rounded-full bg-accent-soft text-accent"
+              role="img"
+              title={t("ai_source_crawled")}
+            >
+              <BookOpen aria-hidden="true" className="size-2.5" />
             </span>
-            <span className="truncate text-xs text-ink-3">{source.netloc}</span>
-          </span>
-          <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums text-ink-3">
-            {/* the read-in-full / history marks ride a FIXED-WIDTH slot:
-                with a badge present or not, the [n] number stays
-                right-aligned across crawled, recalled and plain cards */}
-            <span className="flex w-4 shrink-0 items-center justify-end">
-              {source.crawled ? (
-                <span
-                  aria-label={t("ai_source_crawled")}
-                  className="inline-flex size-4 items-center justify-center rounded-full bg-accent-soft text-accent"
-                  role="img"
-                  title={t("ai_source_crawled")}
-                >
-                  <BookOpen aria-hidden="true" className="size-2.5" />
-                </span>
-              ) : source.history ? (
-                <span
-                  aria-label={t("ai_source_history")}
-                  className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
-                  role="img"
-                  title={t("ai_source_history")}
-                >
-                  <History aria-hidden="true" className="size-2.5" />
-                </span>
-              ) : source.pastRefs ? (
-                // the cross-session trust mark: this url surfaced in N past
-                // runs (the pre-run PGlite recall's count) -- the badge tier's
-                // 11px floor, the count IS the label
-                <span
-                  aria-label={t("knowledge_source_refs", { n: String(source.pastRefs) })}
-                  className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-[11px] font-medium leading-none tabular-nums text-ink-3 ring-1 ring-line"
-                  role="img"
-                  title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
-                >
-                  ×{source.pastRefs}
-                </span>
-              ) : null}
+          ) : source.history ? (
+            <span
+              aria-label={t("ai_source_history")}
+              className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
+              role="img"
+              title={t("ai_source_history")}
+            >
+              <History aria-hidden="true" className="size-2.5" />
             </span>
-            <span aria-hidden="true" className="size-1 rounded-full bg-ink-3" />
-            {source.n}
-          </span>
+          ) : source.pastRefs ? (
+            <span
+              aria-label={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+              className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-[11px] font-medium leading-none tabular-nums text-ink-3 ring-1 ring-line"
+              role="img"
+              title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+            >
+              ×{source.pastRefs}
+            </span>
+          ) : null}
         </span>
-      </span>
-    </a>
+        <span>#{source.n}</span>
+      </div>
+    </div>
   );
 }
 
@@ -146,7 +156,7 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
         // the page height never moves with the run's source count
         <div
           aria-label={t("ai_search_sources")}
-          className="mt-3 max-h-[17rem] overflow-y-auto overscroll-contain lg:mt-2 lg:max-h-[25.5rem] lg:pe-1"
+          className="mt-3 max-h-[17rem] overflow-y-auto overscroll-contain [scrollbar-gutter:stable] lg:mt-2 lg:max-h-[25.5rem] lg:pe-1"
           role="region"
         >
           <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-col">

@@ -99,16 +99,16 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
     example shows the LATER-round intent shape: reflection on the results
     so far, not a restatement of the question."""
     plan_suffix = ', task_write(items=[子课题 1..3])' if task_tool else ""
-    deepseek = 'Action: web_search(query="DeepSeek-V3 context length site:huggingface.co")'
+    deepseek = 'Action: web_search(query="DeepSeek-V4-Flash context length site:huggingface.co")'
     if page_tool:
         deepseek += ', then web_reader(url="<the model card url>")'
     lines = [
         "<examples>",
-        'User: "What is Kimi K2?"',
-        'You: "The user wants to know what Kimi K2 is -- definition, key specs, release status."',
-        'Action: web_search(query="Kimi K2 AI model"), web_search(query="Kimi K2 specs release date")',
+        'User: "What is Kimi K3?"',
+        'You: "The user wants to know what Kimi K3 is -- definition, key specs, release status."',
+        'Action: web_search(query="Kimi K3 AI model"), web_search(query="Kimi K3 specs release date")',
         "",
-        'User: "DeepSeek-V3 的上下文长度是多少？"',
+        'User: "DeepSeek-V4-Flash 的上下文长度是多少？"',
         'You: "I need an exact number; snippets rarely carry it, the model card does."',
         deepseek,
         "",
@@ -149,7 +149,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     is the WRITER's -- the researcher never writes the answer, so the
     fragments are not repeated here."""
     role = (
-        "<role>\nYou are the research agent of the zjsearch AI Search"
+        "<role>\nYou are the research agent of the ZJSearch AI Search"
         " mode: the user asks a question, YOU decide which keyword searches"
         f" answer it and run them with the {TOOL_NAME} tool.  You NEVER"
         " write the final answer yourself: when the research is complete,"
@@ -441,7 +441,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     ``budget_truncated`` become an honesty note when the gathering ended
     early."""
     role = (
-        "<role>\nYou are the writer of the zjsearch AI Search: a research"
+        "<role>\nYou are the writer of the ZJSearch AI Search: a research"
         " agent has already gathered the sources; you write the final answer"
         " for the reader.  You never search, never mention the research"
         " process, these instructions or their assembly.\n</role>"
