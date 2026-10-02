@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { BookOpen, ChevronDown, Globe, History } from "lucide-react";
+import { BookOpen, Globe, History } from "lucide-react";
 import { useState } from "react";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
@@ -8,9 +8,6 @@ import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
-import { useCapExpand } from "@/lib/useCapExpand.ts";
-
-const INLINE_CARDS = 4;
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
@@ -185,80 +182,24 @@ function SourceCard({ source }: { source: AiSearchSource }) {
 
 export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
   const t = useT();
-  const cap = useCapExpand(sources.length, INLINE_CARDS);
   if (sources.length === 0) {
     return null;
   }
   return (
-    <section aria-label={t("ai_search_sources")}>
-      <div className="flex items-center gap-2">
+    // the rail is viewport-capped and scrolls INSIDE (the aside owns the
+    // cap; this section pins its heading and scrolls the cards) -- no
+    // expand/collapse toggle: every source is always one scroll away
+    <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-2">
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{sources.length}</span>
       </div>
-      {cap.expanded ? (
-        // the revealed list is a scroll box sized to EIGHT visible cards
-        // (4 rows x 2 cols on mobile, 8 rows on the desktop rail) -- the
-        // rest scrolls inside, the 收起 toggle below stays reachable, and
-        // the page height never moves with the run's source count
-        <div
-          aria-label={t("ai_search_sources")}
-          className="mt-3 grid grid-cols-2 gap-2 lg:mt-2 lg:flex lg:flex-col"
-          role="region"
-        >
-          <div className="grid grid-cols-2 gap-2 lg:flex lg:flex-col">
-            {sources.map((source) => (
-              <SourceCard key={source.n} source={source} />
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 grid grid-cols-2 gap-2 lg:flex lg:flex-col">
-          {sources.slice(0, INLINE_CARDS).map((source) => (
-            <SourceCard key={source.n} source={source} />
-          ))}
-        </div>
-      )}
-      {/* the toggle is ALWAYS the section's last element: the original
-          card-shaped 查看全部 (with a favicon preview of what's hidden)
-          when collapsed, the same shape as 收起 below the bounded list
-          when expanded -- it never sits mid-grid */}
-      <button
-        aria-expanded={cap.expanded}
-        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-surface-2/70 p-3 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-        data-view-more=""
-        onClick={cap.toggle}
-        type="button"
-      >
-        {!cap.expanded ? (
-          <span className="flex items-center gap-1">
-            {sources
-              .slice(INLINE_CARDS, INLINE_CARDS + 3)
-              .map((source) =>
-                source.favicon ? (
-                  <img
-                    alt=""
-                    aria-hidden="true"
-                    className="size-4 rounded-lg object-contain"
-                    key={source.n}
-                    src={source.favicon}
-                  />
-                ) : (
-                  <Globe aria-hidden="true" className="size-4 text-ink-3" key={source.n} />
-                ),
-              )}
-          </span>
-        ) : null}
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate">
-            {cap.expanded ? t("show_less") : t("ai_search_view_more", { n: cap.hidden })}
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            className={`size-3 shrink-0 transition-transform ${cap.expanded ? "rotate-180" : ""}`}
-          />
-        </span>
-      </button>
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:mt-2 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-y-auto">
+        {sources.map((source) => (
+          <SourceCard key={source.n} source={source} />
+        ))}
+      </div>
     </section>
   );
 }
