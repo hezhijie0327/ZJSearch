@@ -156,6 +156,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         self.facts: list[dict[str, t.Any]] = []
         self.gaps: list[dict[str, t.Any]] = []
         self._ledger_seq = 0
+        # the plan review's weak-subtask note (one shot per plan write)
+        self.weak_tasks: list[str] = []
         # the run's wall clock (the max_seconds budget reads it)
         self.started_at = time.monotonic()
         # the numbered entries' identity (n -> title + snippet) -- the
@@ -580,6 +582,58 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # into facets -- the task card tracks which facets have
                 # sources, the researcher follows the plan step by step
                 self.coverage.task_list = items
+                # the plan REVIEW (fail-open): one decision pass asks per
+                # subtask whether it is independently researchable -- a
+                # muddled plan gets one early note instead of three wasted
+                # rounds
+                review = decision_features("plan_review")
+                if items and review.get("enabled") and decision.enabled() and decision.configured():
+                    try:
+                        max_tasks = int(review.get("max_tasks", 4) or 4)
+                        questions = {
+                            f"task_{i}": {
+                                "type": "noul",
+                                "instructions": (
+                                    (
+                                        "这个子课题能否通过独立的网络搜索来研究（具体、可搜索、不依赖另一个子课题的结论）？"
+                                        if has_cjk(" ".join(str(item.get("title") or "") for item in items))
+                                        else (
+                                            "Can this subtask be researched through independent web searches"
+                                            " (concrete, searchable, not dependent on another subtask's"
+                                            " conclusion)?"
+                                        )
+                                    )
+                                ),
+                            }
+                            for i, item in enumerate(items[:max_tasks])
+                        }
+                        started = time.monotonic()
+                        out = decision.judge(
+                            {"subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]},
+                            questions,
+                            timeout=5.0,
+                        )
+                        answers = out.get("answers") if isinstance(out, dict) else None
+                        if isinstance(answers, dict) and answers:
+                            weak = [
+                                str(items[int(name.split("_")[1])].get("title") or "")[:80]
+                                for name, answer in answers.items()
+                                if isinstance(answer, dict)
+                                and float(answer.get("noul") or 1.0) < 0.5
+                                and name.startswith("task_")
+                                and int(name.split("_")[1]) < len(items)
+                            ]
+                            self.judgments.append(
+                                {
+                                    "purpose": "plan_review",
+                                    "tasks": len(items[:max_tasks]),
+                                    "weak": len(weak),
+                                    "ms": int((time.monotonic() - started) * 1000),
+                                }
+                            )
+                            self.weak_tasks = weak
+                    except Exception:  # pylint: disable=broad-except
+                        pass
                 yield ("tasks", {"round": rnd, "id": wire_id, "items": items})
                 done = sum(1 for item in items if item["status"] == "done")
                 summary = f"{done}/{len(items)}"
@@ -590,6 +644,14 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     " Search each subtask's keywords; a subtask with sources"
                     " is marked done automatically."
                 )
+                if getattr(self, "weak_tasks", None):
+                    feed_text += (
+                        "\n(plan review: these subtasks look hard to research independently --"
+                        " sharpen them into concrete searchable questions: "
+                        + "; ".join(f"『{t}』" for t in self.weak_tasks[:3])
+                        + ")"
+                    )
+                    self.weak_tasks = []
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",

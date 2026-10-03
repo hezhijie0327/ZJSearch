@@ -30,8 +30,10 @@ from searx.zjsearch.ai.infra import decision, http, jsongate
 from searx.zjsearch.ai.infra import sdk as sdk_registry
 from searx.zjsearch.ai.runtime.context import _relevance_order
 from searx.zjsearch.ai.runtime.executor import Searches
+from searx.zjsearch.ai.infra.decision import features as decision_features
 from searx.zjsearch.ai.runtime import audit
 from searx.zjsearch.ai.runtime.progress import continuation_note, round_progress
+from searx.zjsearch.ai.runtime.rank import has_cjk
 from searx.zjsearch.ai.runtime.gates import (
     clarify_gate,
     related_questions,
@@ -151,11 +153,44 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # research); everything else passes one small completion that skips
     # research only for greetings, chat and writing tasks
     research_needed = bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
-    # the clarify gate fires on the FIRST run of any mode: a follow-up's
-    # history already disambiguates the direction (the gate's own prompt
-    # carries the restraint -- speed's behavior note tells the model the
-    # run has no time for a round-trip)
+    # the clarify PRE-GATE (fail-open): one decision noul decides whether
+    # the query even reads ambiguous/high-stakes -- a clear question skips
+    # the (expensive) clarify completion entirely; the gate itself stays
+    # as the second opinion for everything ambiguous enough to reach it
+    clarify_worth_asking = True
     if research_needed and clarify_state == "ask" and not history:
+        pre = decision_features("clarify_gate")
+        if pre.get("enabled") and decision.enabled() and decision.configured():
+            try:
+                is_zh = has_cjk(q)
+                pre_out = decision.judge(
+                    q,
+                    {
+                        "ambiguous": {
+                            "type": "noul",
+                            "instructions": (
+                                (
+                                    "这个问题是否真的模糊或有高风险（答案的关键取决于用户没说清的意图/范围/标准，猜错会浪费整轮研究）？"
+                                    if is_zh
+                                    else (
+                                        "Is this question genuinely ambiguous or high-stakes (the answer's key"
+                                        " depends on unstated user intent/scope/criteria, and guessing wrong"
+                                        " wastes the whole research)?"
+                                    )
+                                )
+                            ),
+                        }
+                    },
+                    timeout=5.0,
+                )
+                answers = pre_out.get("answers") if isinstance(pre_out, dict) else None
+                ambiguous = answers.get("ambiguous") if isinstance(answers, dict) else None
+                if isinstance(ambiguous, dict):
+                    score = float(ambiguous.get("noul") or 0.0)
+                    clarify_worth_asking = score >= float(pre.get("ambiguous_min", 0.55))
+            except Exception:  # pylint: disable=broad-except
+                clarify_worth_asking = True
+    if research_needed and clarify_worth_asking and clarify_state == "ask" and not history:
         gate = clarify_gate(cfg, q, lang, mode, gate_usage)
         if gate:
             stream = _Ndjson(_clarify_events(gate), cfg, q, lang, gate_usage)

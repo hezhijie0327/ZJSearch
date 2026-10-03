@@ -116,6 +116,14 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
     "read_gate": {"enabled": True, "injection_max": 0.70, "relevant_min": 0.45},
     "diversity": {"enabled": True, "cosine": 0.92},
     "coverage": {"enabled": True},
+    "plan_review": {"enabled": True, "max_tasks": 4},
+    "clarify_gate": {
+        "enabled": True,
+        # the noul floor: BELOW it the query is genuinely
+        # ambiguous/high-stakes and the (expensive) clarify gate may ask;
+        # above it the query reads clear -- skip the round-trip
+        "ambiguous_min": 0.55,
+    },
 }
 
 
