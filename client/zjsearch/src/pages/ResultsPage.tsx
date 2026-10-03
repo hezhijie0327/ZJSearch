@@ -791,12 +791,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
 
   return (
     <Shell globals={globals} hideTopNav>
-      <header className="zjs-appbar sticky top-0 z-30 border-b border-line/60 bg-surface/95 backdrop-blur-sm">
+      <header className="zjs-appbar sticky top-0 z-50 h-14 border-b border-line/80 bg-bg/80 backdrop-blur-md">
         {!aiMode ? (
           // classic header: brand + query pill + mode switch + actions
           <>
             <h1 className="sr-only">{data.q}</h1>
-            <div className="zjs-results-header-row mx-auto flex w-full items-center gap-4 px-4 pt-3 sm:px-6">
+            <div className="zjs-results-header-row mx-auto flex h-full w-full items-center gap-4 px-4 sm:px-6">
               <div className="hidden min-[480px]:block">
                 <Brand className="text-2xl" globals={globals} />
               </div>
@@ -815,7 +815,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
           // instance name must never push the slim bar into a horizontal pan
           <>
             <h1 className="sr-only">{data.q}</h1>
-            <div className="zjs-results-header-row mx-auto flex w-full min-w-0 items-center gap-3 px-4 pt-3 sm:px-6">
+            <div className="zjs-results-header-row mx-auto flex h-full w-full min-w-0 items-center gap-3 px-4 sm:px-6">
               {/* the wordmark stays visible at EVERY width now -- the takeover
                   page has no other brand surface; overflow-hidden + a short
                   max-width keeps a long instance name from panning */}

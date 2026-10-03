@@ -143,7 +143,7 @@ export function HeaderActions({ globals }: { globals: GlobalData }) {
 /** Standalone top bar used by full pages (preferences/stats/info/404). */
 function TopNav({ globals, hideBrand = false }: { globals: GlobalData; hideBrand?: boolean }) {
   return (
-    <nav className="zjs-appbar sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line/60 bg-surface/95 px-4 py-3 backdrop-blur-sm sm:px-6">
+    <nav className="zjs-appbar sticky top-0 z-50 flex h-14 items-center justify-between gap-3 border-b border-line/80 bg-bg/80 px-4 backdrop-blur-md sm:px-6">
       {hideBrand ? (
         <span aria-hidden="true" />
       ) : (
