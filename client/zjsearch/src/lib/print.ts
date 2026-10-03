@@ -33,6 +33,9 @@ export interface PrintOptions {
   heading?: string | null;
   source: HTMLElement;
   sources: PrintSource[];
+  /** the localized caption above the sources tail (the UI's own section
+      label -- the document reads like the view that produced it) */
+  sourcesLabel?: string;
   /** extra selectors stripped from the clone (beyond .zjs-print-hide and
       the buttons-outside-.zjs-answer-body rule) */
   dropSelectors?: string[];
@@ -41,7 +44,7 @@ export interface PrintOptions {
 /** Returns the view's dispose function (an effect's cleanup): the dialog
     closing tears the injected document down. */
 export function printDocument(options: PrintOptions): () => void {
-  const { title, fileTag = "", heading = null, source, sources, dropSelectors = [] } = options;
+  const { title, fileTag = "", heading = null, source, sources, sourcesLabel = "", dropSelectors = [] } = options;
   const darkDiagrams =
     (document.documentElement.classList.contains("dark") || document.documentElement.classList.contains("black")) &&
     source.querySelector("[data-zjs-mermaid]") !== null;
@@ -103,6 +106,7 @@ export function printDocument(options: PrintOptions): () => void {
         <div style="height:1px;background:var(--line);margin:16px 0 24px;"></div>
         ${clone.outerHTML}
         <div style="height:1px;background:var(--line);margin:28px 0 12px;"></div>
+        ${sourcesLabel ? `<div style="font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:6px;">${escapeHtml(sourcesLabel)}</div>` : ""}
         ${sourceRows}
       `;
     document.body.appendChild(root);

@@ -438,6 +438,47 @@ async function main() {
         }
       }
     }
+    // PWA installability: the layer's contract checked DIRECTLY against
+    // the audited origin (Lighthouse v10+ dropped the pwa category) -- the
+    // manifest answers standalone + the declared icon sizes, the worker
+    // serves at the scope root, and every declared icon resolves.
+    const pwaChecks = [];
+    const pass = (name) => pwaChecks.push({ name, ok: true });
+    const fail = (name) => pwaChecks.push({ name, ok: false });
+    try {
+      const manifest = await (await fetch(`${BASE}/manifest.json`)).json();
+      manifest.display === "standalone" ? pass("manifest display=standalone") : fail("manifest display=standalone");
+      Array.isArray(manifest.icons) && manifest.icons.length > 0
+        ? pass("manifest icons declared")
+        : fail("manifest icons declared");
+      (manifest.icons ?? []).some((icon) => (icon.sizes ?? "").split(" ").includes("192x192"))
+        ? pass("icon 192x192")
+        : fail("icon 192x192");
+      (manifest.icons ?? []).some((icon) => (icon.sizes ?? "").split(" ").includes("512x512"))
+        ? pass("icon 512x512")
+        : fail("icon 512x512");
+      (manifest.icons ?? []).some((icon) => (icon.purpose ?? "").includes("maskable"))
+        ? pass("maskable icon")
+        : fail("maskable icon");
+      const worker = await fetch(`${BASE}/sw.js`);
+      worker.ok && (worker.headers.get("service-worker-allowed") ?? "").includes("/")
+        ? pass("service worker at scope root")
+        : fail("service worker at scope root");
+      for (const icon of manifest.icons ?? []) {
+        const iconResp = await fetch(new URL(icon.src, `${BASE}/`));
+        iconResp.ok ? pass(`icon resolves: ${icon.src}`) : fail(`icon resolves: ${icon.src}`);
+      }
+    } catch (error) {
+      fail(`pwa checks threw: ${String(error).slice(0, 120)}`);
+    }
+    const pwaOk = pwaChecks.every((check) => check.ok);
+    failed = failed || !pwaOk;
+    scores.pwa = pwaChecks;
+    console.log("\nPWA installability");
+    for (const check of pwaChecks) {
+      console.log(`  ${check.ok ? "✓" : "✗"} ${check.name}`);
+    }
+
     await mkdir(runDir, { recursive: true });
     await writeFile(join(runDir, "scores.json"), JSON.stringify(scores, null, 2));
     console.log(`\narchived: ${runDir}`);

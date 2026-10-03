@@ -360,6 +360,13 @@ function buildResultsMarkdown(data: SearchPageData, results: ResultItem[], origi
   return lines.join("\n");
 }
 
+/** The localized section labels an answer/thread export carries -- the
+    documents must read like the UI that produced them (WYSIWYG), so the
+    callers hand the i18n strings in (lib stays free of the catalogs). */
+export interface ExportLabels {
+  sources?: string;
+}
+
 /** One archived answer as markdown (the knowledge inspector's ⬇): the
     same shape as a thread export's single run -- title, the answer, the
     numbered source tail. */
@@ -367,6 +374,7 @@ export function downloadAnswerMarkdown(
   title: string,
   markdown: string,
   sources: Array<{ n: number; title: string; url: string }>,
+  labels?: ExportLabels,
 ): void {
   const safeTitle =
     title
@@ -376,7 +384,7 @@ export function downloadAnswerMarkdown(
   const lines: string[] = [`# ${title}`, "", `_zjsearch · ${new Date().toLocaleString()}_`, ""];
   lines.push(markdown.trim(), "");
   if (sources.length > 0) {
-    lines.push("**Sources**", "");
+    lines.push(`**${labels?.sources || "Sources"}**`, "");
     for (const source of [...sources].sort((a, b) => a.n - b.n)) {
       lines.push(`- [${source.n}] [${source.title || source.url}](${source.url})`);
     }
@@ -402,10 +410,24 @@ export interface MarkdownRun {
     them) and the run's source registry at its foot.  The gallery
     placeholders never appear on paper: each becomes its group's images
     as markdown figures (an empty group just vanishes). */
-export function buildThreadMarkdown(threadId: string, title: string, runs: MarkdownRun[], instance: string): string {
+export function buildThreadMarkdown(
+  threadId: string,
+  title: string,
+  runs: MarkdownRun[],
+  instance: string,
+  labels?: ExportLabels,
+): string {
   const lines: string[] = [`# ${title}`, "", `_${instance} · ${threadId} · ${new Date().toLocaleString()}_`];
   for (const run of runs) {
-    lines.push("", `## ${run.q}`, "");
+    // a run whose question IS the document title skips its section
+    // heading -- the injected document heading would read twice (the
+    // preview shows the title once)
+    const ownSection = run.q.trim() !== title.trim();
+    if (ownSection) {
+      lines.push("", `## ${run.q}`, "");
+    } else {
+      lines.push("");
+    }
     const answer = run.answer.replaceAll(/\{\{zjs-gallery:(\d+)\}\}/g, (_, index: string) => {
       const group = run.galleries?.[Number.parseInt(index, 10)] ?? [];
       return group.map((image) => `![${image.title ?? ""}](${image.url})`).join("\n");
@@ -417,7 +439,7 @@ export function buildThreadMarkdown(threadId: string, title: string, runs: Markd
     }
     const sources = run.sources ?? [];
     if (sources.length > 0) {
-      lines.push("**Sources**", "");
+      lines.push(`**${labels?.sources || "Sources"}**`, "");
       for (const source of [...sources].sort((a, b) => a.n - b.n)) {
         lines.push(`- [${source.n}] [${source.title || source.url}](${source.url})`);
       }

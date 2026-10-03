@@ -45,6 +45,14 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
         .composite([{ input: glyph, gravity: "centre" }])
         .png()
         .toFile(path.join(imgDir, "apple-touch-icon.png"));
+      // the PWA maskable variant: the same recipe at 512 (the mark holds the
+      // 80% safe zone; Android's circular mask crops the fixed base, not
+      // the mark)
+      const maskable = await sharp(src, { density: 300 }).resize(410, 410).png().toBuffer();
+      await sharp({ create: { width: 512, height: 512, channels: 4, background: "#faf9f6" } })
+        .composite([{ input: maskable, gravity: "centre" }])
+        .png()
+        .toFile(path.join(imgDir, "maskable-512.png"));
 
       // the app bundle URLs live at the static ROOT (/static/zjsearch.min.js —
       // webapp.custom_url_for only maps filenames that exist there), so

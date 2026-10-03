@@ -605,7 +605,9 @@ export function InspectorView({
   }));
   const answerText = item.kind === "answer" ? item.body : (body ?? "");
   const downloadMd = () => {
-    downloadAnswerMarkdown(item.title || item.url || t("knowledge_title"), answerText, exportSources);
+    downloadAnswerMarkdown(item.title || item.url || t("knowledge_title"), answerText, exportSources, {
+      sources: t("knowledge_inspector_sources"),
+    });
   };
   const printCard = () => {
     const card = bodyCardRef.current;
@@ -613,7 +615,16 @@ export function InspectorView({
       return;
     }
     const heading = item.title || item.url || t("knowledge_title");
-    printDocument({ heading, source: card, sources: exportSources, title: heading });
+    printDocument({
+      heading,
+      source: card,
+      sources: exportSources,
+      sourcesLabel: t("knowledge_inspector_sources"),
+      title: heading,
+      // the pane's own title heading would print twice (the injected
+      // heading IS the same line)
+      dropSelectors: ["[data-zjs-pane-title]"],
+    });
   };
   const bodyCardRef = useRef<HTMLDivElement>(null);
   return (
@@ -689,7 +700,7 @@ export function InspectorView({
           {/* the item's question/title is this reading pane's PAGE HEADING --
               the AI thread page's own h2 language (text-2xl medium), not a
               caption; the detail view never clamps it away */}
-          <h2 className="break-words font-medium leading-tight text-ink text-2xl" dir="auto">
+          <h2 className="break-words font-medium leading-tight text-ink text-2xl" data-zjs-pane-title dir="auto">
             {item.title || item.url}
           </h2>
           <div className="text-[13px] leading-relaxed text-ink-2">
