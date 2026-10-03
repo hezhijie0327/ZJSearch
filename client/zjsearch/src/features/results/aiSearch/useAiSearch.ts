@@ -60,7 +60,7 @@ export interface AiSearchCall {
     | "past_research"
     | "task_write"
     | "learnings"
-    | "system_one"
+    | "judge"
     | "ask_user";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
@@ -767,8 +767,8 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
                   ? ("task_write" as const)
                   : tool === "learnings"
                     ? ("learnings" as const)
-                    : tool === "system_one"
-                      ? ("system_one" as const)
+                    : tool === "judge" || tool === "system_one"
+                      ? ("judge" as const)
                       : tool === "ask_user"
                         ? ("ask_user" as const)
                         : ("web_search" as const),

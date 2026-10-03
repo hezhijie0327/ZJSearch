@@ -284,7 +284,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const isTask = call.tool === "task_write";
   const isLearnings = call.tool === "learnings";
   const isAsk = call.tool === "ask_user";
-  const isDecision = call.tool === "system_one";
+  const isDecision = call.tool === "judge";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
   // web_reader rows NEVER fold: the reading pane (scroll-capped inside)
   // renders below the row unconditionally -- the content is the row's

@@ -31,7 +31,7 @@ LEARNINGS_TOOL = "learnings"
 
 PAST_RESEARCH_TOOL = "past_research"
 
-DECISION_TOOL = "system_one"
+DECISION_TOOL = "judge"
 
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The verticals the model may pick; each has a dedicated client layout."""
