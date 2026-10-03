@@ -85,19 +85,22 @@ async function recordEmbedUsage(
     return;
   }
   try {
+    // the knowledge table's timestamps are epoch millis (double precision)
+    // -- SQL now() would collide with the column type
+    const now = Date.now();
     await pgQuery(
       `INSERT INTO knowledge (id, kind, title, body, status, meta, tags, search_text, created, updated, occurred_at)
        VALUES ('usage:embed', 'usage', 'embedding usage', '', 'done',
                jsonb_build_object('model', $1::text, 'input', $2::bigint, 'chars', $3::bigint, 'calls', 1),
-               '[]'::jsonb, '', now(), now(), now())
+               '[]'::jsonb, '', $4, $4, $4)
        ON CONFLICT (id) DO UPDATE SET
          meta = jsonb_build_object(
            'model', EXCLUDED.meta->'model',
            'input', (COALESCE(knowledge.meta->>'input', '0')::bigint + $2::bigint),
            'chars', (COALESCE(knowledge.meta->>'chars', '0')::bigint + $3::bigint),
            'calls', (COALESCE(knowledge.meta->>'calls', '0')::bigint + 1)),
-         updated = EXCLUDED.updated`,
-      [model, usage.input ?? 0, usage.chars ?? 0],
+         updated = $4`,
+      [model, usage.input ?? 0, usage.chars ?? 0, now],
     );
   } catch (err) {
     // the stats are best-effort -- but a silent failure reads as a broken
