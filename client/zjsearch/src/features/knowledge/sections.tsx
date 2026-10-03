@@ -941,31 +941,6 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                       </dl>
                     </div>
                   ) : null}
-                  {stats?.usage?.decision ? (
-                    <div>
-                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_decision")}</p>
-                      <dl className="mt-2 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <ArrowUp aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_input")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {stats.usage.decision.tokens.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <Scale aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_calls")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {stats.usage.decision.calls.toLocaleString()}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                  ) : null}
                   {stats?.usage?.rerank ? (
                     <div>
                       <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
@@ -986,6 +961,32 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                           </dt>
                           <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
                             {stats.usage.rerank.calls.toLocaleString()}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
+
+                  {stats?.usage?.decision ? (
+                    <div>
+                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_decision")}</p>
+                      <dl className="mt-2 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                          <dt className="flex items-center gap-1 text-xs text-ink-3">
+                            <ArrowUp aria-hidden="true" className="size-3" />
+                            {t("knowledge_usage_input")}
+                          </dt>
+                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                            {stats.usage.decision.tokens.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                          <dt className="flex items-center gap-1 text-xs text-ink-3">
+                            <Scale aria-hidden="true" className="size-3" />
+                            {t("knowledge_usage_calls")}
+                          </dt>
+                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                            {stats.usage.decision.calls.toLocaleString()}
                           </dd>
                         </div>
                       </dl>
