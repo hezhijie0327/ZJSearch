@@ -2,6 +2,7 @@
 
 import { Calculator } from "lucide-react";
 import { useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
 import {
   CallResults,
   CallRowShell,
@@ -19,14 +20,19 @@ import { useT } from "@/lib/i18n.ts";
     triggers). */
 export function CalcRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  const [debug, setDebug] = useState(false);
   const rawArgs = rawArgsOf(call);
-  const expandable = rawArgs !== null || Boolean(call.feed);
+  // the expression and its result sit in the row itself; the expansion is
+  // debug material only (a calculation never carries result cards) -- no
+  // chevron, just the bug
+  const debuggable = rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
         call={call}
-        expandable={expandable}
+        debuggable={debuggable}
+        debugOpen={debug}
+        expandable={false}
         icon={<Calculator aria-hidden="true" className="size-3 shrink-0" />}
         label={call.q}
         metric={
@@ -36,17 +42,16 @@ export function CalcRow({ call, results }: { call: AiSearchCall; results: AiSear
               ? `= ${call.result ?? "?"}`
               : settledCallText(call, t)
         }
-        onToggle={() => {
-          setOpen(!open);
+        onToggle={() => {}}
+        onToggleDebug={() => {
+          setDebug(!debug);
         }}
-        open={open}
+        open={false}
       />
-      {open && expandable ? (
-        <>
-          <DebugPanes call={call} rawArgs={rawArgs} />
-          <CallResults results={results} />
-        </>
-      ) : null}
+      <Collapse className={debug ? "mt-1" : ""} open={debug && debuggable}>
+        <DebugPanes call={call} rawArgs={rawArgs} />
+      </Collapse>
+      {results.length > 0 ? <CallResults results={results} /> : null}
     </div>
   );
 }

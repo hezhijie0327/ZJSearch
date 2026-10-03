@@ -2,6 +2,7 @@
 
 import { BookOpen } from "lucide-react";
 import { useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
 import {
   CallContent,
   CallResults,
@@ -37,15 +38,19 @@ function pageLabel(url: string | undefined): string {
 export function PageRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [debug, setDebug] = useState(false);
   const rawArgs = rawArgsOf(call);
   // web_reader rows never expand for call text (the shared hasText rule
-  // excludes them) -- the fold triggers are the reading pane, the raw
-  // arguments, the model receipt and colliding result sources
-  const expandable = Boolean(call.text) || results.length > 0 || rawArgs !== null || Boolean(call.feed);
+  // excludes them) -- the chevron reveals the reading pane and colliding
+  // result sources; the bug reveals the arguments and the receipt
+  const expandable = Boolean(call.text) || results.length > 0;
+  const debuggable = rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
         call={call}
+        debuggable={debuggable}
+        debugOpen={debug}
         expandable={expandable}
         icon={<BookOpen aria-hidden="true" className="size-3 shrink-0" />}
         label={pageLabel(call.url)}
@@ -59,17 +64,18 @@ export function PageRow({ call, results }: { call: AiSearchCall; results: AiSear
         onToggle={() => {
           setOpen(!open);
         }}
+        onToggleDebug={() => {
+          setDebug(!debug);
+        }}
         open={open}
       />
-      {open && expandable ? (
-        <>
-          {/* the READING PANE first: what the model actually read (the
-              row's point), then the debug contract */}
-          {call.text ? <CallContent call={call} /> : null}
-          <DebugPanes call={call} rawArgs={rawArgs} />
-          <CallResults results={results} />
-        </>
-      ) : null}
+      <Collapse className={debug ? "mt-1" : ""} open={debug && debuggable}>
+        <DebugPanes call={call} rawArgs={rawArgs} />
+      </Collapse>
+      <Collapse className={open ? "mt-1" : ""} open={open && expandable}>
+        {call.text ? <CallContent call={call} /> : null}
+        <CallResults results={results} />
+      </Collapse>
     </div>
   );
 }

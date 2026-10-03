@@ -219,8 +219,12 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
   if (decisions.length === 0) {
     return null;
   }
+  // the newest four lead; the OLDER tail sits inside a Collapse so the
+  // +N reveal (and the 收起) plays as a height animation
   const shown = expanded ? decisions : decisions.slice(-4);
+  const extra = expanded ? [] : decisions.slice(0, Math.max(0, decisions.length - 4));
   const view = [...shown].reverse();
+  const extraView = [...extra].reverse();
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
@@ -277,6 +281,54 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
           );
         })}
       </ul>
+      <Collapse className={expanded && extraView.length > 0 ? "mt-1" : ""} open={expanded && extraView.length > 0}>
+        <ul className="space-y-1">
+          {extraView.map((decision) => {
+            const label = PURPOSE_LABELS[decision.purpose] ?? "ai_decisions_card";
+            const idx = decisions.indexOf(decision);
+            const expandedRow = openIdx === idx;
+            return (
+              <li key={idx}>
+                <button
+                  aria-expanded={expandedRow}
+                  className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-xs transition-colors hover:bg-surface-2/50"
+                  onClick={() => {
+                    setOpenIdx(expandedRow ? null : idx);
+                  }}
+                  type="button"
+                >
+                  <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-[11px] leading-4 text-accent">
+                    {t(label as "ai_dec_judge")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-start text-[13px] text-ink-2" dir="auto">
+                    {decision.target || decision.question || decision.purpose}
+                  </span>
+                  {decision.ms ? (
+                    <span className="shrink-0 font-mono tabular-nums text-ink-3">{decision.ms}ms</span>
+                  ) : null}
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={`size-3 shrink-0 text-ink-3 transition-transform ${expandedRow ? "rotate-180" : ""}`}
+                  />
+                </button>
+                <Collapse className={expandedRow ? "mt-1" : ""} open={expandedRow}>
+                  <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
+                    {decision.question ? (
+                      <div className="flex items-start gap-1.5">
+                        <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
+                        <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
+                          {decision.question}
+                        </p>
+                      </div>
+                    ) : null}
+                    <DecisionBody decision={decision} />
+                  </div>
+                </Collapse>
+              </li>
+            );
+          })}
+        </ul>
+      </Collapse>
       <CapChip
         className="mt-1.5 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
         expanded={expanded}

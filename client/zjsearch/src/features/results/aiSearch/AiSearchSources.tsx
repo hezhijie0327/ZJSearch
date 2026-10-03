@@ -3,6 +3,7 @@
 import { Award, BookOpen, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
+import { Collapse } from "@/components/Collapse.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
@@ -103,7 +104,7 @@ function SourceCard({ source }: { source: AiSearchSource }) {
         </span>
       </div>
       <a
-        className="mt-1 line-clamp-2 block min-h-10 text-[13px] font-medium leading-5 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
+        className="mt-1 line-clamp-2 block text-[13px] font-medium leading-5 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
         dir="auto"
         href={source.url}
         rel="noreferrer"
@@ -200,7 +201,10 @@ export function AiSearchSources({
     return null;
   }
   const hidden = Math.max(0, sources.length - RAIL_CAP);
-  const view = [...(expanded ? sources : sources.slice(-RAIL_CAP))].reverse();
+  // the newest four lead; the older tail folds in a Collapse (the +N
+  // reveal plays as a height animation)
+  const view = [...sources.slice(-RAIL_CAP)].reverse();
+  const extra = [...sources.slice(0, Math.max(0, sources.length - RAIL_CAP))].reverse();
   return (
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
     // scroll); this section pins its heading and lists the cards
@@ -215,6 +219,13 @@ export function AiSearchSources({
           <SourceCard key={source.n} source={source} />
         ))}
       </div>
+      <Collapse className={expanded && extra.length > 0 ? "mt-2" : ""} open={expanded && extra.length > 0}>
+        <div className="flex flex-col gap-2 px-1">
+          {extra.map((source) => (
+            <SourceCard key={source.n} source={source} />
+          ))}
+        </div>
+      </Collapse>
       <CapChip
         className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
         expanded={expanded}

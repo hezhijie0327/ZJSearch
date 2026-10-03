@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ArrowUpRight, Check, ChevronDown, CircleAlert, Copy, Globe, LoaderCircle, Minus } from "lucide-react";
+import { ArrowUpRight, Bug, Check, ChevronDown, CircleAlert, Copy, Globe, LoaderCircle, Minus } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AiSearchCall, AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
@@ -44,9 +44,13 @@ export function settledCallText(call: AiSearchCall, t: Translate): string {
       : t("ai_search_row_failed");
 }
 
-/** The `<button>` row shell: status mark + the row's tool icon, label and
-    status metric, aria-expanded + the rotating chevron when the row can
-    fold.  Each per-tool row owns its `open` state and passes it in. */
+/** The row shell: status mark + the row's tool icon, label and status
+    metric behind the fold toggle (aria-expanded + the rotating chevron
+    when the row can fold), and -- beside the toggle, NOT nested in it --
+    the BUG chip that reveals the debug panes (raw arguments, the model's
+    receipt, the timing).  The chevron shows the RENDERED result; the bug
+    shows how it was made.  Each per-tool row owns both states and passes
+    them in. */
 export function CallRowShell({
   call,
   expandable,
@@ -55,6 +59,9 @@ export function CallRowShell({
   icon,
   label,
   metric,
+  debuggable = false,
+  debugOpen = false,
+  onToggleDebug,
 }: {
   call: AiSearchCall;
   expandable: boolean;
@@ -63,33 +70,58 @@ export function CallRowShell({
   icon: ReactNode;
   label: string;
   metric: string;
+  debuggable?: boolean;
+  debugOpen?: boolean;
+  onToggleDebug?: () => void;
 }) {
+  const t = useT();
   return (
-    <button
-      aria-expanded={expandable ? open : undefined}
-      className={`flex min-h-6 w-full items-center gap-1.5 px-1 text-xs ${
+    <div
+      className={`flex min-h-6 w-full items-center gap-1 px-1 text-xs ${
         call.status === "error" ? "text-danger" : "text-ink-3"
-      } ${expandable ? "transition-colors hover:text-ink" : ""}`}
-      onClick={() => {
-        if (expandable) {
-          onToggle();
-        }
-      }}
-      type="button"
+      }`}
     >
-      <CallStatusIcon call={call} />
-      {icon}
-      <span className="truncate" dir="auto">
-        {label}
-      </span>
-      <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">{metric}</span>
-      {expandable ? (
-        <ChevronDown
-          aria-hidden="true"
-          className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-        />
+      <button
+        aria-expanded={expandable ? open : undefined}
+        className={`flex min-w-0 flex-1 items-center gap-1.5 ${expandable ? "transition-colors hover:text-ink" : ""}`}
+        onClick={() => {
+          if (expandable) {
+            onToggle();
+          }
+        }}
+        type="button"
+      >
+        <CallStatusIcon call={call} />
+        {icon}
+        <span className="truncate" dir="auto">
+          {label}
+        </span>
+        <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">{metric}</span>
+        <span className="w-16 shrink-0 text-end font-mono tabular-nums opacity-70">
+          {call.ms !== undefined ? `${call.ms}ms` : ""}
+        </span>
+        {expandable ? (
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        ) : null}
+      </button>
+      {debuggable ? (
+        <button
+          aria-label={t("ai_debug")}
+          aria-pressed={debugOpen}
+          className={`grid size-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-surface-2/50 hover:text-ink ${
+            debugOpen ? "text-accent" : ""
+          }`}
+          onClick={onToggleDebug}
+          title={t("ai_debug")}
+          type="button"
+        >
+          <Bug aria-hidden="true" className="size-3" />
+        </button>
       ) : null}
-    </button>
+    </div>
   );
 }
 
@@ -171,9 +203,6 @@ export function DebugPanes({ call, rawArgs }: { call: AiSearchCall; rawArgs: str
     <>
       {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
       {call.feed ? <DebugFeed feed={call.feed} /> : null}
-      {call.ms !== undefined ? (
-        <div className="mt-1 px-1 font-mono text-[11px] tabular-nums text-ink-3">{call.ms} ms</div>
-      ) : null}
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { Search } from "lucide-react";
 import { useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
 import {
   CallResults,
   CallRowShell,
@@ -20,14 +21,21 @@ import { useT } from "@/lib/i18n.ts";
 export function SearchRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  // the debug panes (raw arguments, the model's receipt, the timing) ride
+  // their OWN toggle -- the chevron shows the rendered result, the bug
+  // shows how it was made
+  const [debug, setDebug] = useState(false);
   const rawArgs = rawArgsOf(call);
-  // a search row never carries call text -- its fold triggers are the
-  // result cards, the raw arguments and the model receipt
-  const expandable = results.length > 0 || rawArgs !== null || Boolean(call.feed);
+  // a search row never carries call text -- the chevron's fold trigger
+  // is the result cards; the raw arguments and the receipt ride the bug
+  const expandable = results.length > 0;
+  const debuggable = rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
         call={call}
+        debuggable={debuggable}
+        debugOpen={debug}
         expandable={expandable}
         icon={<Search aria-hidden="true" className="size-3 shrink-0" />}
         label={call.q}
@@ -41,14 +49,17 @@ export function SearchRow({ call, results }: { call: AiSearchCall; results: AiSe
         onToggle={() => {
           setOpen(!open);
         }}
+        onToggleDebug={() => {
+          setDebug(!debug);
+        }}
         open={open}
       />
-      {open && expandable ? (
-        <>
-          <DebugPanes call={call} rawArgs={rawArgs} />
-          <CallResults results={results} />
-        </>
-      ) : null}
+      <Collapse className={debug ? "mt-1" : ""} open={debug && debuggable}>
+        <DebugPanes call={call} rawArgs={rawArgs} />
+      </Collapse>
+      <Collapse className={open ? "mt-1" : ""} open={open && expandable}>
+        <CallResults results={results} />
+      </Collapse>
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { BookUser } from "lucide-react";
 import { useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
 import {
   CallContent,
   CallResults,
@@ -20,13 +21,19 @@ import { useT } from "@/lib/i18n.ts";
 export function MemoryRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [debug, setDebug] = useState(false);
   const rawArgs = rawArgsOf(call);
   const hasText = Boolean(call.text);
-  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null || Boolean(call.feed);
+  // the chevron reveals the rendered result (reading pane / result
+  // cards); the bug reveals the arguments and the receipt
+  const expandable = hasText ? true : results.length > 0;
+  const debuggable = rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
         call={call}
+        debuggable={debuggable}
+        debugOpen={debug}
         expandable={expandable}
         icon={<BookUser aria-hidden="true" className="size-3 shrink-0" />}
         label={`${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`}
@@ -36,14 +43,17 @@ export function MemoryRow({ call, results }: { call: AiSearchCall; results: AiSe
         onToggle={() => {
           setOpen(!open);
         }}
+        onToggleDebug={() => {
+          setDebug(!debug);
+        }}
         open={open}
       />
-      {open && expandable ? (
-        <>
-          <DebugPanes call={call} rawArgs={rawArgs} />
-          {hasText ? <CallContent call={call} /> : <CallResults results={results} />}
-        </>
-      ) : null}
+      <Collapse className={debug ? "mt-1" : ""} open={debug && debuggable}>
+        <DebugPanes call={call} rawArgs={rawArgs} />
+      </Collapse>
+      <Collapse className={open ? "mt-1" : ""} open={open && expandable}>
+        {hasText ? <CallContent call={call} /> : <CallResults results={results} />}
+      </Collapse>
     </div>
   );
 }

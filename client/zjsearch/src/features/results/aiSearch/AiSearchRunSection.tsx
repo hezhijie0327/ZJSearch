@@ -54,7 +54,7 @@ import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
-import { scrollIntoViewAnimated } from "@/lib/motion.ts";
+import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml } from "@/lib/print.ts";
 import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
 
@@ -205,7 +205,10 @@ function FindingsCard({
   }
   const active = learnings.filter((fact) => fact.status === "active");
   const factsHidden = Math.max(0, learnings.length - 4);
-  const factView = [...(expanded ? learnings : learnings.slice(-4))].reverse();
+  // the newest four lead; the OLDER tail sits inside a Collapse so the
+  // +N reveal (and the 收起) plays as a height animation
+  const factView = [...learnings.slice(-4)].reverse();
+  const factExtra = [...learnings.slice(0, Math.max(0, learnings.length - 4))].reverse();
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
@@ -249,6 +252,30 @@ function FindingsCard({
           </li>
         ))}
       </ul>
+      <Collapse className={expanded && factExtra.length > 0 ? "mt-1.5" : ""} open={expanded && factExtra.length > 0}>
+        <ul className="space-y-1.5">
+          {factExtra.map((fact) => (
+            <li className="flex items-start gap-2" key={fact.id}>
+              {fact.status === "active" ? (
+                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
+              ) : fact.status === "retracted" ? (
+                <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
+              ) : (
+                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div {...citeHandlers(onCiteN)}>
+                  <Snippet
+                    className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
+                    contentHtml={factHtml(fact.text)}
+                    textClass="text-[13px] leading-relaxed text-ink-2"
+                  />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Collapse>
       <CapChip
         className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
         expanded={expanded}
@@ -284,7 +311,8 @@ function GapsCard({
     return null;
   }
   const gapsHidden = Math.max(0, gaps.length - 4);
-  const gapView = [...(expanded ? gaps : gaps.slice(-4))].reverse();
+  const gapView = [...gaps.slice(-4)].reverse();
+  const gapExtra = [...gaps.slice(0, Math.max(0, gaps.length - 4))].reverse();
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
@@ -309,6 +337,25 @@ function GapsCard({
           </li>
         ))}
       </ul>
+      <Collapse className={expanded && gapExtra.length > 0 ? "mt-1.5" : ""} open={expanded && gapExtra.length > 0}>
+        <ul className="space-y-1.5">
+          {gapExtra.map((gap) => (
+            <li className="flex items-start gap-2" key={gap.id}>
+              {gap.status === "open" ? (
+                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+              ) : (
+                <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+              )}
+              <div className="min-w-0 flex-1" {...citeHandlers(onCiteN)}>
+                <Snippet
+                  contentHtml={gapHtml(gap)}
+                  textClass={`text-[13px] leading-relaxed ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Collapse>
       <CapChip
         className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
         expanded={expanded}
@@ -792,7 +839,8 @@ function AiSearchRunSectionImpl({
       if (rail && rail.scrollHeight > rail.clientHeight) {
         const railRect = rail.getBoundingClientRect();
         const cardRect = card.getBoundingClientRect();
-        rail.scrollTop += cardRect.top - railRect.top - railRect.height / 2 + cardRect.height / 2;
+        const target = rail.scrollTop + (cardRect.top - railRect.top - railRect.height / 2 + cardRect.height / 2);
+        animateScroll(rail, { top: target });
         flash();
         return;
       }
