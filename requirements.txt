@@ -16,10 +16,21 @@ isodate==0.7.2
 whitenoise==6.12.0
 typing-extensions==4.16.0
 
-# zjsearch theme: the AI answer SDK transports (searx/zjsearch_ai.py)
+# ── zjsearch theme: the AI SDK transports ──────────────────────────────
+# one family per SDK, registered in searx/zjsearch/ai/infra/sdk/__init__.py:
+#   openai            the openai family (2 chat wire shapes + embeddings)
+#   anthropic         the anthropic Messages family
+#   google-genai      the gemini family (chat + embed_content)
+#   dashscope         the alibaba native family (qwen chat /
+#                     TextEmbedding / TextReRank consumers ride it too)
+#   typesafe-sdk      the SystemOne decision-model surface
+# consumers: infra/sdk/*.py, infra/embed.py, infra/decision.py,
+# runtime/rank.py
 openai==3.20.0
 anthropic==1.9.0
 google-genai==2.25.0
+dashscope==1.27.7
+typesafe-sdk==0.7.2
 
 # zjsearch theme: the BM25 result reranker (searx/plugins/bm25_reranker.py)
 # -- Apache-2.0, numpy is its only runtime dependency
@@ -29,16 +40,6 @@ bm25s==0.3.11
 # (searx/zjsearch/ai/capabilities/reader/) -- MIT, zero runtime deps; without it
 # the reader degrades to the built-in walker
 html-to-markdown==3.15.1
-
-# zjsearch theme: the DashScope native transport (searx/zjsearch/ai/infra/sdk/
-# dashscope.py + infra/embed.py + runtime/rank.py) -- Apache-2.0; qwen chat /
-# TextEmbedding / TextReRank
-dashscope==1.27.7
-
-# zjsearch theme: the SystemOne decision-model transport
-# (searx/zjsearch/ai/infra/decision.py) -- the single-forward-pass
-# judgment surface (choice / score / noul)
-typesafe-sdk==0.7.2
 
 # zjsearch theme: the MCP tool-server bridge (searx/zjsearch/ai/capabilities/mcp.py)
 # -- MIT; streamable-HTTP client over the shared network loop; without it the
