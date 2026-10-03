@@ -18,7 +18,6 @@ import {
   Play,
   RefreshCw,
   Repeat2,
-  Scale,
   Waypoints,
   Zap,
 } from "lucide-react";
@@ -304,55 +303,6 @@ function ThinkSegment({
   );
 }
 
-function auditLabel(
-  verdict: string,
-): "ai_audit_verified" | "ai_audit_contradicted" | "ai_audit_unsupported" | "ai_audit_unverified" {
-  return verdict === "verified"
-    ? "ai_audit_verified"
-    : verdict === "contradicted"
-      ? "ai_audit_contradicted"
-      : verdict === "unsupported"
-        ? "ai_audit_unsupported"
-        : "ai_audit_unverified";
-}
-
-/** The citation audit's timeline card (the 核验 step): one row per graded
-    [n] -- the claim it checked, the verdict, the confidence -- the audit's
-    PROCESS lives in the research record, not just the cards' badges. */
-function AuditSegment({ step }: { step: Extract<AiSearchStep, { kind: "audit" }> }) {
-  const t = useT();
-  return (
-    <div className={`flex items-start gap-1.5 px-1 ${""}`}>
-      <Scale aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
-      <div className="min-w-0 flex-1 py-0.5">
-        <p className="text-[13px] font-medium text-ink-2">{t("ai_audit_segment", { n: String(step.items.length) })}</p>
-        <ul className="mt-1 space-y-1.5">
-          {step.items.map((item) => (
-            <li className="flex items-start gap-1.5 text-xs" key={item.n}>
-              <span className="shrink-0 font-mono tabular-nums text-ink-3">[{item.n}]</span>
-              <span
-                className={`shrink-0 ${item.verdict === "verified" ? "text-ok" : item.verdict === "contradicted" ? "text-warning" : "text-ink-3"}`}
-              >
-                {t(auditLabel(item.verdict))}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="line-clamp-2 break-words text-ink-2" dir="auto">
-                  {item.claim ?? ""}
-                </span>
-                {item.confidence > 0 ? (
-                  <span className="mt-0.5 block whitespace-nowrap text-[11px] tabular-nums text-ink-3">
-                    {t("ai_audit_confidence", { n: String(Math.round(item.confidence * 100)) })}
-                  </span>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
 function StepSegment({
   index,
   run,
@@ -377,13 +327,6 @@ function StepSegment({
           open={streaming ? index === run.steps.length - 1 : true}
           step={step}
         />
-      </div>
-    );
-  }
-  if (step.kind === "audit") {
-    return (
-      <div className={index > 0 ? "mt-2" : ""}>
-        <AuditSegment step={step} />
       </div>
     );
   }

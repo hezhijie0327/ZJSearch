@@ -101,13 +101,7 @@ export type AiSearchStep =
   | { kind: "think"; text: string; entry?: number }
   | { kind: "intent"; text: string; entry?: number }
   | { kind: "clarify"; pairs: Array<{ q: string; a: string }> }
-  | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] }
-  | {
-      kind: "audit";
-      /** one row per graded citation: the claim, the verdict, the
-          confidence -- the audit's PROCESS + RESULT in the timeline */
-      items: Array<{ n: number; verdict: string; confidence: number; claim?: string }>;
-    };
+  | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] };
 
 export interface AiSearchSource {
   /** global [n] citation number (contiguous from 1) */
@@ -534,27 +528,22 @@ export function applyEvent(
       return { ...core, runs };
     }
     case "audit": {
-      // the citation audit's process+result: the timeline gains the audit
-      // step AND the run carries the verdicts (the sources badges read
-      // the same payload)
-      const items = (Array.isArray(event.items) ? event.items : []).map((row) => {
-        const record = row as Record<string, unknown>;
-        return {
-          n: Number(record.n) || 0,
-          verdict: String(record.verdict ?? "unverified"),
-          confidence: Number(record.confidence) || 0,
-          claim: typeof record.claim === "string" ? record.claim : undefined,
-        };
-      });
+      // the citation audit's verdicts: the run carries them (the sources
+      // rail renders the badges, the per-card traceability blocks and the
+      // header's verdict summary) -- the timeline stays the model's record
       const citations: AiSearchAudit["citations"] = {};
-      for (const item of items) {
-        citations[String(item.n)] = { verdict: item.verdict, confidence: item.confidence };
+      for (const row of Array.isArray(event.items) ? event.items : []) {
+        const record = row as Record<string, unknown>;
+        const n = Number(record.n) || 0;
+        if (n > 0) {
+          citations[String(n)] = {
+            verdict: String(record.verdict ?? "unverified"),
+            confidence: Number(record.confidence) || 0,
+            claim: typeof record.claim === "string" ? record.claim : undefined,
+          };
+        }
       }
-      runs[lastIdx] = {
-        ...run,
-        audit: { citations },
-        steps: [...run.steps, { kind: "audit", items }],
-      };
+      runs[lastIdx] = { ...run, audit: { citations } };
       return { ...core, runs };
     }
     case "learnings": {

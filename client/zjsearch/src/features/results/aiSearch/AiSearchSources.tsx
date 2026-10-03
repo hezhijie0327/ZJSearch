@@ -270,7 +270,7 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
         );
       })()}
       {source.img ? (
-        <div className="relative mt-2 hidden shrink-0 self-start sm:block">
+        <div className="relative mt-2 hidden shrink-0 self-start sm:block lg:hidden">
           <Thumb alt="" className="h-20 w-28" src={source.img} />
           {isMedia && source.meta ? (
             <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
@@ -293,15 +293,65 @@ export function AiSearchSources({ sources, audit }: { sources: AiSearchSource[];
     // cap; this section pins its heading and scrolls the cards) -- no
     // expand/collapse toggle: every source is always one scroll away
     <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col lg:min-h-0 lg:flex-1">
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{sources.length}</span>
+        {(() => {
+          // the audit's verdict summary beside the count: ✓x ⚡y –z ?w --
+          // the rail answers "how trustworthy are these" at a glance
+          if (!audit) {
+            return null;
+          }
+          const counts: Record<string, number> = {};
+          for (const citation of Object.values(audit.citations)) {
+            counts[citation.verdict] = (counts[citation.verdict] ?? 0) + 1;
+          }
+          const chips: Array<{ key: string; icon: "ok" | "warn" | "none" | "help" }> = [];
+          if (counts.verified) {
+            chips.push({ key: "ai_audit_verified", icon: "ok" });
+          }
+          if (counts.contradicted) {
+            chips.push({ key: "ai_audit_contradicted", icon: "warn" });
+          }
+          if (counts.unsupported) {
+            chips.push({ key: "ai_audit_unsupported", icon: "none" });
+          }
+          if (counts.unverified) {
+            chips.push({ key: "ai_audit_unverified", icon: "help" });
+          }
+          if (chips.length === 0) {
+            return null;
+          }
+          return (
+            <span className="flex items-center gap-1">
+              {chips.map((chip) => (
+                <span
+                  className={`${CHIP} shrink-0 tabular-nums text-ink-3`}
+                  key={chip.key}
+                  title={t(chip.key as "ai_audit_verified")}
+                >
+                  {chip.icon === "ok" ? (
+                    <ShieldCheck aria-hidden="true" className="size-3 text-ok" />
+                  ) : chip.icon === "warn" ? (
+                    <Zap aria-hidden="true" className="size-3 text-warning" />
+                  ) : chip.icon === "none" ? (
+                    <Minus aria-hidden="true" className="size-3" />
+                  ) : (
+                    <CircleHelp aria-hidden="true" className="size-3" />
+                  )}
+                  {counts[chip.key.slice(9)] ?? 0}
+                </span>
+              ))}
+            </span>
+          );
+        })()}
       </div>
-      {/* ~4 cards visible, the rest scroll inside -- on every breakpoint;
-          on lg the section takes the rail's REMAINING height (the plan and
-          findings cards cap themselves) and scrolls ITS OWN cards only */}
-      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:min-h-0 lg:flex lg:flex-1 lg:flex-col">
+      {/* ~4 cards visible before the internal scroll takes over -- on every
+          breakpoint; on lg the section takes the rail's REMAINING height
+          (the plan and findings cards cap themselves) and scrolls ITS OWN
+          cards only */}
+      <div className="mt-3 grid max-h-[43rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:min-h-0 lg:flex lg:flex-1 lg:flex-col">
         {sources.map((source) => (
           <SourceCard audit={audit} key={source.n} source={source} />
         ))}
