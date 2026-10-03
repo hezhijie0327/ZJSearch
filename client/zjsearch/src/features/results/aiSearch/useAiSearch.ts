@@ -753,7 +753,7 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
     // the tool name carries no versioning -- browser-stored legacy threads
     // may still say "web_crawler": normalize it in
     tool:
-      tool === "web_reader" || tool === "web_crawler"
+      tool === "web_reader"
         ? ("web_reader" as const)
         : tool === "calculator"
           ? ("calculator" as const)
@@ -761,7 +761,7 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
             ? ("mcp" as const)
             : tool === "user_memory"
               ? ("user_memory" as const)
-              : tool === "past_research" || tool === "web_memory"
+              : tool === "past_research"
                 ? ("past_research" as const)
                 : tool === "task_write"
                   ? ("task_write" as const)
