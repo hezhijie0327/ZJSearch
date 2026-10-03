@@ -700,7 +700,11 @@ export function InspectorView({
           {/* the item's question/title is this reading pane's PAGE HEADING --
               the AI thread page's own h2 language (text-2xl medium), not a
               caption; the detail view never clamps it away */}
-          <h2 className="break-words font-medium leading-tight text-ink text-2xl" data-zjs-pane-title dir="auto">
+          <h2
+            className="mb-4 break-words border-b border-line pb-3 font-semibold leading-tight text-ink text-lg"
+            data-zjs-pane-title
+            dir="auto"
+          >
             {item.title || item.url}
           </h2>
           <div className="text-[13px] leading-relaxed text-ink-2">
