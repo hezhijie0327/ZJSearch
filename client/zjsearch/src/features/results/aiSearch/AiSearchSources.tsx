@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { BookOpen, Globe, History } from "lucide-react";
+import { Award, BookOpen, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
+import { CapChip } from "@/components/CapChip.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
-import { MONO_CHIP } from "@/lib/styles.ts";
+import { CHIP, CHIP_HOVER } from "@/lib/styles.ts";
+import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
@@ -49,29 +51,16 @@ function SourceFavicon({ source }: { source: AiSearchSource }) {
 
 function SourceCard({ source }: { source: AiSearchSource }) {
   const t = useT();
-  const open = () => {
-    window.open(source.url, "_blank", "noopener");
-  };
   // the traditional presentations' type adaptation: videos carry their
   // duration, torrents their filesize -- one badge string either way
   const isMedia = source.category === "videos" || source.category === "files";
+  const { expanded, toggle, hidden } = useCapExpand(source.engines?.length ?? 0, 1);
   return (
     // the REGULAR result card's chrome (rounded-2xl, borderless, p-3/4,
     // hover:bg-surface) and hierarchy (pretty-url line, title, snippet):
     // one design system -- the AI extras (category chip, read marks, #n)
     // and the engines/score row ride where the classic card puts them
-    <div
-      className="group relative rounded-2xl p-3 transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent sm:p-4"
-      data-ai-n={source.n}
-      onClick={open}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          open();
-        }
-      }}
-      role="link"
-      tabIndex={0}
-    >
+    <div className="group relative rounded-2xl p-3 transition-colors hover:bg-surface sm:p-4" data-ai-n={source.n}>
       <div className="flex gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
@@ -108,17 +97,38 @@ function SourceCard({ source }: { source: AiSearchSource }) {
           >
             <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
           </div>
-          <div className="mt-1.5 flex items-start gap-x-2 text-xs text-ink-3">
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
             {typeof source.score === "number" ? (
-              <span className={`${MONO_CHIP} shrink-0`} title={t("score")}>
+              <span className={`${CHIP} shrink-0 tabular-nums`} title={t("score")}>
+                <Award aria-hidden="true" className="size-3 shrink-0" />
                 {formatScore(source.score)}
               </span>
             ) : null}
             {source.engines && source.engines.length > 0 ? (
-              // the engines wrap INSIDE their flexible area -- the #n badge
-              // stays pinned at the row end and never orphans below
-              <span className="min-w-0 flex-1" title={source.engines.join(", ")}>
-                {source.engines.join(", ")}
+              // cap-and-expand (the EnginesLine language): the lead engine
+              // sits, "+N" folds the rest -- the reveal and its collapse
+              // travel as ONE wrapping unit so the chip never orphans
+              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className={`${CHIP} shrink-0`} title={source.engines.join(", ")}>
+                  <Server aria-hidden="true" className="size-3 shrink-0" />
+                  {source.engines[0]}
+                </span>
+                {expanded
+                  ? source.engines.slice(1).map((engine) => (
+                      <span className={`${CHIP} shrink-0`} key={engine}>
+                        <Server aria-hidden="true" className="size-3 shrink-0" />
+                        {engine}
+                      </span>
+                    ))
+                  : null}
+                {hidden > 0 ? (
+                  <CapChip
+                    className={`${CHIP} shrink-0 ${CHIP_HOVER}`}
+                    expanded={expanded}
+                    hidden={hidden}
+                    onToggle={toggle}
+                  />
+                ) : null}
               </span>
             ) : null}
             <span className="flex shrink-0 items-center gap-1.5 self-center">
