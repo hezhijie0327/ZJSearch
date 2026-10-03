@@ -767,7 +767,7 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
                   ? ("task_write" as const)
                   : tool === "learnings"
                     ? ("learnings" as const)
-                    : tool === "judge" || tool === "system_one"
+                    : tool === "judge"
                       ? ("judge" as const)
                       : tool === "ask_user"
                         ? ("ask_user" as const)
