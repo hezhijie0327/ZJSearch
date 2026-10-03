@@ -26,7 +26,7 @@ Wire mapping notes:
 import queue
 import typing as t
 
-from ..config import dimensions, embedding_passthrough, params
+from ..config import dimensions, embedding_passthrough, extra_body, extra_headers, params
 
 JSON_TIERS = 1
 """DashScope speaks the weaker native ``json_object`` constraint on the
@@ -123,6 +123,14 @@ def _mm_messages(messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
     return out
 
 
+def _call_extras(cfg: dict[str, t.Any]) -> tuple[dict[str, str], dict[str, t.Any]]:
+    """The deployment's escape hatches for one call: ``extra_headers``
+    ride the ``headers`` kwarg (the SDK pops it onto the HTTP request),
+    ``extra_body`` entries merge into the API parameters -- both verbatim,
+    the other families' pattern."""
+    return extra_headers(cfg) or {}, extra_body(cfg) or {}
+
+
 async def _pump(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
     sdk: "DashscopeSdk",
     messages: list[dict[str, t.Any]],
@@ -155,6 +163,11 @@ async def _pump(  # pylint: disable=too-many-locals, too-many-branches, too-many
         "result_format": "message",
         **params(cfg),
     }
+    headers, body_extras = _call_extras(cfg)
+    if body_extras:
+        call.update(body_extras)
+    if headers:
+        call["headers"] = headers
     if tools:
         call["tools"] = [{"type": "function", "function": tool} for tool in tools]
     # NOTE: the native family has no clean per-call custom-header hook (the
@@ -168,6 +181,16 @@ async def _pump(  # pylint: disable=too-many-locals, too-many-branches, too-many
     model: str | None = None
     try:
         async for response in responses:
+            # an ERROR rides the stream as a chunk (a gateway that does not
+            # proxy the native path answers "url error" with status 400):
+            # surface it LOUDLY -- a silent empty stream reads as a model
+            # outage and starves the loop's own fail-opens
+            status = getattr(response, "status_code", 200)
+            if status != 200:
+                raise RuntimeError(
+                    f"dashscope stream error {status}: {_field(response, 'code', '?')} "
+                    f"{str(_field(response, 'message', ''))[:200]}"
+                )
             if getattr(response, "usage", None) is not None:
                 usage_meta = _usage_of(response)
             reported = str(getattr(response, "model", "") or "") or None
@@ -253,12 +276,15 @@ class DashscopeSdk:
         cfg = self.cfg
         from dashscope import Generation  # pylint: disable=import-outside-toplevel
 
+        headers, body_extras = _call_extras(cfg)
         response = Generation.call(
             api_key=str(cfg.get("api_key") or ""),
             model=str(cfg.get("model")),
             messages=_wire_messages(messages),
             result_format="message",
             response_format={"type": "json_object"},
+            headers=headers or None,
+            **body_extras,
         )
         usage_meta = _usage_of(response)
         choices = getattr(getattr(response, "output", None), "choices", None) or []
@@ -275,6 +301,7 @@ class DashscopeSdk:
         total; ``(None, 0)`` on any failure (the caller's fail-open)."""
         from dashscope import TextReRank  # pylint: disable=import-outside-toplevel
 
+        headers, body_extras = _call_extras(self.cfg)
         response = TextReRank.call(
             api_key=str(self.cfg.get("api_key") or ""),
             model=str(self.cfg.get("model")),
@@ -282,6 +309,8 @@ class DashscopeSdk:
             documents=docs,
             top_n=len(docs),
             return_documents=False,
+            headers=headers or None,
+            **body_extras,
         )
         output = _field(response, "output")
         results = _field(output, "results") if isinstance(output, dict) else getattr(output, "results", None)
@@ -311,13 +340,17 @@ class DashscopeSdk:
         cfg = self.cfg
         from dashscope import TextEmbedding  # pylint: disable=import-outside-toplevel
 
+        headers, body_extras = _call_extras(cfg)
         call: dict[str, t.Any] = {
             **embedding_passthrough(cfg),
+            **body_extras,
             "api_key": str(cfg.get("api_key") or ""),
             "model": str(cfg.get("model")),
             "input": [text[:8000] for text in texts],
             "dimension": dimensions(cfg, "dashscope"),
         }
+        if headers:
+            call["headers"] = headers
         response = TextEmbedding.call(**call)
         output = getattr(response, "output", None) or {}
         embeddings = output.get("embeddings") if isinstance(output, dict) else None

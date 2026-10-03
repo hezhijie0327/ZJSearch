@@ -15,6 +15,7 @@ The call is a single synchronous HTTP round trip (tens of milliseconds)
 
 import typing as t
 
+from ..config import extra_body, extra_headers
 from .clients import sdk_timeout
 
 KIND = "typesafe"
@@ -42,7 +43,7 @@ def _plain(value: t.Any) -> t.Any:
     return value if isinstance(value, dict) else str(value)
 
 
-class TypesafeSdk:
+class TypesafeSdk:  # pylint: disable=too-few-public-methods
     """The bound typesafe family surface: one instance per (config, base)
     binding."""
 
@@ -69,12 +70,14 @@ class TypesafeSdk:
             base_url=(self.base.rstrip("/") if self.base else None) or None,
             model=str(self.cfg.get("model")),
             timeout=timeout or sdk_timeout(),
+            headers=extra_headers(self.cfg) or None,
         )
         response = client.system_one(
             state,
             questions,
             model=str(self.cfg.get("model")),
             timeout=timeout or sdk_timeout(),
+            extra_body=extra_body(self.cfg) or None,
         )
         answers = _field(response, "answers")
         if not isinstance(answers, dict) or not answers:

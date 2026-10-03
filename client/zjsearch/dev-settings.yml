@@ -186,6 +186,12 @@ zjsearch:
     # base_url: "https://dashscope.aliyuncs.com/api/v1"
     # api_key: ""                       # or ZJSEARCH_AI_KEY
     # model: "qwen-plus"
+    #
+    # NOTE: the native path needs a gateway that proxies it -- a dedicated
+    # MaaS workspace that answers ONLY the compatible paths takes
+    # sdk: openai.chat_completions with
+    # base_url: {workspace}/compatible-mode/v1 instead (the native path
+    # 400s "url error" there, surfaced loudly by the pump).
 
     # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
     # inferera's attribution header (discount eligibility rides on it):
