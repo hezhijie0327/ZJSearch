@@ -703,7 +703,7 @@ function AiSearchRunSectionImpl({
       {/* the run's macro-stage spine: the RUN's own line under the title --
           it covers 撰写/核验 which live outside the research box, so it
           must not read as part of the collapsible */}
-      <PhaseStrip done={run.status !== "streaming"} stage={run.stage} verifying={run.auditTotal} />
+      <PhaseStrip done={run.status !== "streaming"} stage={run.stage} />
 
       {/* the clarify modal floats OVER the page -- PORTALed to the body:
           the run section's animate-fade-up leaves a residual transform and

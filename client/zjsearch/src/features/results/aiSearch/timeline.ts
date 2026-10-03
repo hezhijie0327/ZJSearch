@@ -258,6 +258,9 @@ export interface AiDecision {
   answer?: unknown;
   raw?: unknown[];
   ms?: number;
+  /** the wire entry verbatim (structured renderers read purpose-specific
+      fields off it -- verdicts/citations/counts) */
+  record?: Record<string, unknown>;
 }
 
 /** One citation's audit verdict: verified / contradicted / unsupported /
@@ -573,6 +576,7 @@ export function applyEvent(
           target: typeof record.target === "string" ? record.target : undefined,
           answer: record.answer ?? record.raw ?? undefined,
           ms: typeof record.ms === "number" ? record.ms : undefined,
+          record,
         };
       });
       runs[lastIdx] = { ...run, decisions: [...(run.decisions ?? []), ...items] };

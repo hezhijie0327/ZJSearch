@@ -195,7 +195,6 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
       {/* the snippet's toggle stays off the card's link */}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
       <div
-        className="min-h-[4.5rem]"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Enter") {

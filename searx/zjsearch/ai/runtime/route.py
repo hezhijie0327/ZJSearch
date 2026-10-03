@@ -443,6 +443,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         self.state.judgments.append(
             {
                 "purpose": "audit",
+                "question": "逐条引用核验:声明与来源的关系(supports / contradicts / says_nothing)",
+                "target": f"答案引用 {len(verdicts)} 条",
                 "citations": len(verdicts),
                 "verdicts": counts,
                 "ms": int((time.monotonic() - started) * 1000),
@@ -513,6 +515,15 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 audit_payload = self._audit(audit_answer)
                 if audit_payload is not None:
                     self.buffer.append(wire.encode(self._audit_event(audit_payload)))
+                    if self.state.judgments and self.state.judgments[-1].get("purpose") == "audit":
+                        self.buffer.append(
+                            wire.encode(
+                                {
+                                    "e": "decisions",
+                                    "items": [dict(self.state.judgments[-1])],
+                                }
+                            )
+                        )
                 merged = self._merged_settle(event)
                 self.buffer.append(wire.encode(merged))
                 self.rest = self._late("".join(answer_parts).strip(), awaiting, related_seen)
@@ -561,6 +572,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         audit_payload = self._audit(audit_answer)
         if audit_payload is not None:
             yield wire.encode(self._audit_event(audit_payload))
+            if self.state.judgments and self.state.judgments[-1].get("purpose") == "audit":
+                yield wire.encode({"e": "decisions", "items": [dict(self.state.judgments[-1])]})
         merged = self._merged_settle(settle_event)
         yield wire.encode(merged)
         yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)

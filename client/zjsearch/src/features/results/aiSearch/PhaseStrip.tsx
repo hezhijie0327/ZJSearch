@@ -24,17 +24,7 @@ const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_
  * the timeline below remains the full record, this only tells the user
  * where in the research they are.
  */
-export function PhaseStrip({
-  stage,
-  done = false,
-  verifying,
-}: {
-  stage?: AiSearchStage;
-  /** the run settled: every segment reads done */
-  done?: boolean;
-  /** the audit's citation count while it runs (核验 · N 条) */
-  verifying?: number;
-}) {
+export function PhaseStrip({ stage, done = false }: { stage?: AiSearchStage; done?: boolean }) {
   const t = useT();
   if (!stage) {
     return null;
@@ -45,10 +35,7 @@ export function PhaseStrip({
       {ORDER.map((name, index) => {
         const isDone = done || index < active;
         const isActive = !done && index === active;
-        const label =
-          isActive && name === "audit" && verifying !== undefined
-            ? t("ai_phase_verifying", { n: String(verifying) })
-            : t(LABELS[name]);
+        const label = t(LABELS[name]);
         return (
           <span className="flex items-center gap-1.5" key={name}>
             {index > 0 ? <span aria-hidden="true" className="h-3 w-px bg-line" /> : null}
