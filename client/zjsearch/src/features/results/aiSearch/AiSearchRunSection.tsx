@@ -266,7 +266,8 @@ function FindingsCard({
     owed question, not an achievement), a closed one settles as a check
     with its answer as a muted tail.  The SAME row machinery as a fact:
     [n] chip buttons + the measured clamp-and-reveal, newest first,
-    capped at four; the header counts the OWED (open) questions. */
+    capped at four; the header counts the CARD'S rows (the per-row dot /
+    check already tells open from settled). */
 function GapsCard({
   gaps,
   expanded,
@@ -282,7 +283,6 @@ function GapsCard({
   if (gaps.length === 0) {
     return null;
   }
-  const openCount = gaps.filter((gap) => gap.status === "open").length;
   const gapsHidden = Math.max(0, gaps.length - 4);
   const gapView = [...(expanded ? gaps : gaps.slice(-4))].reverse();
   return (
@@ -290,7 +290,7 @@ function GapsCard({
       <div className="flex items-center gap-2 px-1">
         <CircleHelp aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_findings_gaps")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">{openCount}</span>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">{gaps.length}</span>
       </div>
       <ul className="mt-3 space-y-1.5">
         {gapView.map((gap) => (
