@@ -25,6 +25,7 @@ import {
   Plug,
   RefreshCw,
   Repeat2,
+  Scale,
   Search,
   Waypoints,
 } from "lucide-react";
@@ -283,6 +284,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   const isTask = call.tool === "task_write";
   const isLearnings = call.tool === "learnings";
   const isAsk = call.tool === "ask_user";
+  const isDecision = call.tool === "system_one";
   const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
   // web_reader rows NEVER fold: the reading pane (scroll-capped inside)
   // renders below the row unconditionally -- the content is the row's
@@ -327,6 +329,8 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
           <NotebookPen aria-hidden="true" className="size-3 shrink-0" />
         ) : isAsk ? (
           <MessageCircleQuestion aria-hidden="true" className="size-3 shrink-0" />
+        ) : isDecision ? (
+          <Scale aria-hidden="true" className="size-3 shrink-0" />
         ) : call.tool === "mcp" ? (
           <Plug aria-hidden="true" className="size-3 shrink-0" />
         ) : isPastResearch ? (
@@ -345,15 +349,17 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                 ? t("ai_learnings_row")
                 : isAsk
                   ? call.q || t("ai_ask_row")
-                  : call.tool === "mcp"
-                    ? call.name === "search_tools"
-                      ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
-                      : (call.name ?? t("ai_mcp_tool"))
-                    : isPastResearch
-                      ? call.q
-                      : isMemory
-                        ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
-                        : call.q}
+                  : isDecision
+                    ? call.q || t("ai_decision_row")
+                    : call.tool === "mcp"
+                      ? call.name === "search_tools"
+                        ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
+                        : (call.name ?? t("ai_mcp_tool"))
+                      : isPastResearch
+                        ? call.q
+                        : isMemory
+                          ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
+                          : call.q}
         </span>
         <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">
           {call.status === "pending"
@@ -367,13 +373,15 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                     ? t("ai_learnings_running")
                     : isAsk
                       ? t("ai_ask_awaiting")
-                      : call.tool === "mcp"
-                        ? t("ai_mcp_running")
-                        : isPastResearch
-                          ? t("ai_past_research_running")
-                          : isMemory
-                            ? t("ai_memory_running")
-                            : t("ai_search_running")
+                      : isDecision
+                        ? t("ai_decision_running")
+                        : call.tool === "mcp"
+                          ? t("ai_mcp_running")
+                          : isPastResearch
+                            ? t("ai_past_research_running")
+                            : isMemory
+                              ? t("ai_memory_running")
+                              : t("ai_search_running")
             : ok
               ? isPage
                 ? t("ai_page_chars", { n: String(call.chars ?? 0) })
@@ -385,13 +393,15 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                       ? t("ai_learnings_done", { n: String(call.n ?? 0) })
                       : isAsk
                         ? ""
-                        : call.tool === "mcp"
-                          ? t("ai_mcp_done")
-                          : isPastResearch
-                            ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
-                            : isMemory
-                              ? ""
-                              : t("ai_search_results", { n: String(call.n ?? 0) })
+                        : isDecision
+                          ? t("ai_decision_done", { n: String(call.n ?? 0) })
+                          : call.tool === "mcp"
+                            ? t("ai_mcp_done")
+                            : isPastResearch
+                              ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
+                              : isMemory
+                                ? ""
+                                : t("ai_search_results", { n: String(call.n ?? 0) })
               : call.status === "interrupted"
                 ? t("ai_search_row_interrupted")
                 : call.status === "duplicate"

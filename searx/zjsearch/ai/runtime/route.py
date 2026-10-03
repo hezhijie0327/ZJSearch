@@ -28,7 +28,7 @@ from searx.zjsearch.ai.framework import loop as engine
 from searx.zjsearch.ai.framework import wire
 from searx.zjsearch.ai.framework.fences import parse_fence_json
 from searx.zjsearch.ai.infra import config as llm_config
-from searx.zjsearch.ai.infra import http, jsongate
+from searx.zjsearch.ai.infra import decision, http, jsongate
 from searx.zjsearch.ai.infra import sdk as sdk_registry
 from searx.zjsearch.ai.infra.embed import cosine as _cosine
 from searx.zjsearch.ai.infra.embed import embed_texts
@@ -48,6 +48,7 @@ from searx.zjsearch.ai.runtime.tools import (
     display_item,
     learnings_spec,
     page_spec,
+    system_one_spec,
     task_write_spec,
     tool_spec,
 )
@@ -275,6 +276,11 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             user_memories=user_memories,
         ),
         tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec(), learnings_spec()]
+        + (
+            [system_one_spec()]
+            if decision.enabled() and decision.configured() and decision.sdk_missing() is None
+            else []
+        )
         + ([past_research_spec()] if past_research_entries else [])
         + ([page_spec()] if pages_on else [])
         + [ask_user_spec()]

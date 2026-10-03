@@ -27,17 +27,20 @@ from searx.zjsearch.ai.capabilities import calculator, mcp, reader
 from searx.zjsearch.ai.capabilities import past_research as past_research_cap
 from searx.zjsearch.ai.capabilities import user_memory as user_memory_cap
 from searx.zjsearch.ai.runtime.coverage import Coverage
+from searx.zjsearch.ai.infra import decision
 from searx.zjsearch.ai.runtime.feed import RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.runtime.prompts import STALL_NOTE
 from searx.zjsearch.ai.runtime.rank import RERANK_HEAD, bm25_order, rerank_doc, rerank_order
 from searx.zjsearch.ai.runtime.registry import SourcesRegistry
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
+    DECISION_TOOL,
     LEARNINGS_TOOL,
     PAGE_TOOL,
     parse_call,
     parse_learnings_call,
     parse_page_call,
+    parse_system_one_call,
     parse_task_call,
     TASK_TOOL,
 )
@@ -389,6 +392,33 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     " is marked done automatically."
                 )
                 continue
+            if tool_name == DECISION_TOOL:
+                parsed = parse_system_one_call(call)
+                if parsed is None:
+                    feeds[wire_id - 1] = (
+                        "error: system_one needs a compact state string and"
+                        " 1-4 named questions (type choice / score / noul)."
+                    )
+                    yield ("call", {"call": wire_id, "status": "error", "q": ""})
+                    continue
+                state, questions = parsed
+                out = decision.judge(state, questions, timeout=20.0)
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok" if out else "error",
+                        "q": " / ".join(questions)[:80],
+                        "n": len(questions),
+                    },
+                )
+                if out is None:
+                    feeds[wire_id - 1] = (
+                        "the decision model is unavailable -- make the judgment from the gathered evidence yourself."
+                    )
+                else:
+                    feeds[wire_id - 1] = self._system_one_feed(out)
+                continue
             if tool_name == LEARNINGS_TOOL:
                 # the findings ledger: the model's own distillation of what
                 # the sources established -- deduped, appended, snapshot to
@@ -642,6 +672,36 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         except ValueError:
             return {}
         return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _system_one_feed(out: dict[str, t.Any]) -> str:
+        """One SystemOne judgment as the tool feed: every named answer in
+        its own vocabulary (choice label + confidence, the score with its
+        nearest legend level, the yes probability) -- one signal among
+        many, never a citation."""
+        lines: list[str] = []
+        for name, answer in (out.get("answers") or {}).items():
+            if not isinstance(answer, dict):
+                continue
+            kind = answer.get("type")
+            if kind == "choice":
+                lines.append(f"{name}: {answer.get('choice')} (confidence {answer.get('confidence')})")
+            elif kind == "score":
+                try:
+                    level = (answer.get("legend") or {}).get(str(int(round(float(answer.get("score") or 0)))))
+                except (TypeError, ValueError):
+                    level = None
+                lines.append(f"{name}: {answer.get('score')} ({level})" if level else f"{name}: {answer.get('score')}")
+            else:
+                try:
+                    p = float(answer.get("noul"))
+                except (TypeError, ValueError):
+                    p = 0.0
+                lines.append(f"{name}: yes {round(p * 100)}% / no {round((1 - p) * 100)}%")
+        return (
+            "decision model:\n" + "\n".join(lines) + "\nTreat this as ONE signal -- it judged only the state you"
+            " handed it; facts still come from your cited sources."
+        )
 
     @staticmethod
     def _append_note(feeds: list[str | None], note: str) -> None:

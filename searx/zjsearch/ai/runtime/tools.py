@@ -31,6 +31,8 @@ LEARNINGS_TOOL = "learnings"
 
 PAST_RESEARCH_TOOL = "past_research"
 
+DECISION_TOOL = "system_one"
+
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The verticals the model may pick; each has a dedicated client layout."""
 
@@ -152,6 +154,110 @@ def page_spec() -> dict[str, t.Any]:
             "required": ["url"],
         },
     }
+
+
+def system_one_spec() -> dict[str, t.Any]:
+    """The SystemOne delegation tool: ONE decision-model forward pass
+    answers NAMED judgment questions about a state -- the tie-breaker for
+    torn calls (which of two sources is more authoritative, does this
+    snippet satisfy the subtask, is the claim supported), with a
+    probability distribution per answer instead of a guess.  It is NOT a
+    search substitute (it knows nothing beyond the state handed to it)
+    and never carries facts the sources must cite.  The question
+    vocabulary is the wire's own: ``choice`` (criteria = option name ->
+    description, add an ``other`` fallback), ``score`` (criteria = an
+    ordered legend array, 3-7 levels), ``noul`` (criteria optionally
+    {"true": ..., "false": ...})."""
+    return {
+        "name": DECISION_TOOL,
+        "description": (
+            "Delegate ONE structured judgment to a fast decision model"
+            " (no text generation, one forward pass).  Use it when YOU are"
+            " torn or a call is borderline: pick between candidates"
+            " (choice), grade something on an ordered scale (score), or"
+            " answer a yes/no question about the material (noul) -- each"
+            " with probabilities.  Examples: which of these two sources"
+            " better matches the subtask; is this snippet about X; does"
+            " the evidence support the claim.  It judges ONLY the state"
+            " you hand it -- it cannot search and knows no facts: never"
+            " use it to find information, and cite sources for facts"
+            " regardless of its verdict."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "state": {
+                    "type": "string",
+                    "description": (
+                        "The material to judge, COMPACT (a few hundred words"
+                        " at most): a source's title + snippet, the two"
+                        " candidate options side by side, the claim plus the"
+                        " passage that supports it."
+                    ),
+                },
+                "questions": {
+                    "type": "array",
+                    "description": "1-4 named judgment questions.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Short id for the answer, e.g. \"more_authoritative\".",
+                            },
+                            "type": {"type": "string", "enum": ["choice", "score", "noul"]},
+                            "instructions": {"type": "string", "description": "What to judge and by what standard."},
+                            "criteria": {
+                                "description": (
+                                    "choice: option name -> short description"
+                                    " (include an \"other\" fallback); score:"
+                                    " ordered legend array, 3-7 levels from"
+                                    " low to high; noul: optional"
+                                    " {\"true\": ..., \"false\": ...}."
+                                )
+                            },
+                        },
+                        "required": ["name", "type"],
+                    },
+                },
+            },
+            "required": ["state", "questions"],
+        },
+    }
+
+
+def parse_system_one_call(call: dict[str, t.Any]) -> tuple[str, dict[str, dict[str, t.Any]]] | None:
+    """``(state, wire questions)`` off the raw call arguments, or ``None``
+    when unusable: the array form normalizes into the wire's named-question
+    dict, types are whitelisted, the state and question caps keep the
+    forward pass fast."""
+    try:
+        args = _raw_args(call)
+    except Exception:  # pylint: disable=broad-except
+        return None
+    state = str(args.get("state") or "").strip()
+    raw_questions = args.get("questions")
+    if not state or not isinstance(raw_questions, list):
+        return None
+    questions: dict[str, dict[str, t.Any]] = {}
+    for raw in raw_questions[:4]:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()[:64]
+        qtype = str(raw.get("type") or "").strip()
+        if not name or qtype not in ("choice", "score", "noul"):
+            continue
+        question: dict[str, t.Any] = {"type": qtype}
+        instructions = str(raw.get("instructions") or "").strip()[:400]
+        if instructions:
+            question["instructions"] = instructions
+        criteria = raw.get("criteria")
+        if isinstance(criteria, (dict, list)) and criteria:
+            question["criteria"] = criteria
+        questions[name] = question
+    if not questions:
+        return None
+    return state[:6000], questions
 
 
 def ask_user_spec() -> dict[str, t.Any]:
@@ -406,6 +512,25 @@ def _raw_args(call: dict[str, t.Any]) -> dict[str, t.Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _decision_row(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The ``system_one`` timeline row: the label is the named questions
+    ("relevance / authority") -- the raw table rides the debug pane."""
+    try:
+        decision_args = _raw_args(call)
+    except Exception:  # pylint: disable=broad-except
+        decision_args = {}
+    raw_questions = decision_args.get("questions")
+    names = []
+    if isinstance(raw_questions, list):
+        names = [str(q.get("name") or "") for q in raw_questions if isinstance(q, dict) and q.get("name")]
+    return {
+        "id": idx,
+        "tool": DECISION_TOOL,
+        "q": " / ".join(name for name in names if name)[:120],
+        "args": decision_args,
+    }
+
+
 def display_item(  # pylint: disable=too-many-return-statements, too-many-branches
     idx: int, call: dict[str, t.Any]
 ) -> dict[str, t.Any]:
@@ -426,6 +551,8 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         # the findings ledger write: a fixed row label (the settlement's
         # label carries the count); the raw facts ride the debug pane
         return {"id": idx, "tool": LEARNINGS_TOOL, "q": "", "args": _raw_args(call)}
+    if call_name == DECISION_TOOL:
+        return _decision_row(idx, call)
     if call_name == ASK_TOOL:
         # the human-in-the-loop ask: the row's label is the question's
         # intro (falling back to the first question's text) -- the raw

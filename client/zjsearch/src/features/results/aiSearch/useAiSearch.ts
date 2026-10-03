@@ -60,6 +60,7 @@ export interface AiSearchCall {
     | "past_research"
     | "task_write"
     | "learnings"
+    | "system_one"
     | "ask_user";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
@@ -766,9 +767,11 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
                   ? ("task_write" as const)
                   : tool === "learnings"
                     ? ("learnings" as const)
-                    : tool === "ask_user"
-                      ? ("ask_user" as const)
-                      : ("web_search" as const),
+                    : tool === "system_one"
+                      ? ("system_one" as const)
+                      : tool === "ask_user"
+                        ? ("ask_user" as const)
+                        : ("web_search" as const),
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
     q: String(item.q ?? ""),
