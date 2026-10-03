@@ -154,6 +154,14 @@ function factHtml(text: string): string {
   });
 }
 
+/** One gap's snippet html: the question, and a CLOSED gap's settlement as
+    a muted tail -- both with the same [n] chip rendering as a fact. */
+function gapHtml(gap: LedgerGap): string {
+  const tail =
+    gap.status === "closed" && gap.close_as ? ` <span class="text-ink-3">${factHtml(gap.close_as)}</span>` : "";
+  return factHtml(gap.q) + tail;
+}
+
 function FindingsCard({
   learnings,
   gaps,
@@ -247,21 +255,38 @@ function FindingsCard({
           </p>
           <ul className="mt-1.5 space-y-1">
             {gapView.map((gap) => (
-              <li className="flex items-start gap-2 text-[13px]" key={gap.id}>
+              <li className="flex items-start gap-2" key={gap.id}>
                 {gap.status === "open" ? (
-                  <span aria-hidden="true" className="mt-[7px] size-1.5 shrink-0 rounded-full bg-accent" />
+                  <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
                 ) : (
                   <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
                 )}
-                <span
-                  className={`min-w-0 flex-1 break-words ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
-                  dir="auto"
+                {/* the SAME row machinery as a fact: [n] marks as chip
+                    buttons, the question + its settlement as one measured
+                    clamp-and-reveal -- a settled gap reads as a finding */}
+                {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only catches the gap's own [n] chip buttons */}
+                <div
+                  className="min-w-0 flex-1"
+                  onClick={(event) => {
+                    const chip = (event.target as HTMLElement).closest("[data-cite-n]");
+                    if (chip) {
+                      onCiteN(Number(chip.getAttribute("data-cite-n")));
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      const chip = (event.target as HTMLElement).closest("[data-cite-n]");
+                      if (chip) {
+                        onCiteN(Number(chip.getAttribute("data-cite-n")));
+                      }
+                    }
+                  }}
                 >
-                  {gap.q}
-                  {gap.status === "closed" && gap.close_as ? (
-                    <span className="ms-1.5 text-ink-3">{gap.close_as}</span>
-                  ) : null}
-                </span>
+                  <Snippet
+                    contentHtml={gapHtml(gap)}
+                    textClass={`text-[13px] leading-relaxed ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
+                  />
+                </div>
               </li>
             ))}
           </ul>
