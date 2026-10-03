@@ -637,6 +637,13 @@ the ANSWER sits on the plain ground at 14px `text-ink`.  A web_reader row
 folds to ONE LINE like a search row — the reading pane (scroll-capped in
 `CallContent`) opens on click beside the debug panes; an always-open pane
 shoved the whole timeline around (reversed doctrine: the fold came back).
+EVERY tool row splits RENDERED result from DEBUG material: the chevron
+reveals the rendered result (result cards / reading pane / plan items /
+ask spec / recorded facts), the BUG chip beside it reveals the debug
+panes (raw arguments + the model's receipt — the timing lives ON the row
+in a fixed-width column so all rows align); every fold plays through
+`Collapse`, and the rail's cap-and-expand lists reveal their older tail
+inside one too (the +N/收起 is a height animation, not a swap).
 In-card action ghosts are the 28px/14px `CHIP_BTN` tier (`ICON_BTN`'s
 36px stays chrome-level); hover-revealed corner chips must ALSO reveal
 on `focus-within` (keyboard users tab to invisible controls otherwise).
