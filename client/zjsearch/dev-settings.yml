@@ -174,6 +174,19 @@ zjsearch:
     #   thinking_config:
     #     thinking_budget: 4096
 
+    # ── DashScope native family (sdk: dashscope) ───────────────────────
+    # The alibaba native Generation API (qwen thinking/plugins): rides the
+    # PUBLIC endpoint by default (base_url omitted) or a DEDICATED
+    # workspace base VERBATIM (including its own /api/v1).  NOTE: a
+    # dedicated MaaS workspace may proxy only the OpenAI-COMPATIBLE paths
+    # -- LLM there = sdk: openai.chat_completions with
+    # base_url: {workspace}/compatible-mode/v1 (probed: the native
+    # text-generation path 400s "url error" on such gateways).
+    # sdk: dashscope
+    # base_url: "https://dashscope.aliyuncs.com/api/v1"
+    # api_key: ""                       # or ZJSEARCH_AI_KEY
+    # model: "qwen-plus"
+
     # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
     # inferera's attribution header (discount eligibility rides on it):
     extra_headers:
@@ -298,7 +311,14 @@ zjsearch:
     # extra_body:
     #   user: zjs-search
     #
-    # gemini example (sdk + base_url + key + model + params are one set):
+    # dashscope example (the native TextEmbedding path; a dedicated MaaS
+    # workspace proxies it under /api/v1/services/embeddings/...):
+    # sdk: dashscope
+    # base_url: "https://llm-xxx.cn-beijing.maas.aliyuncs.com/api/v1"
+    # model: "qwen3.7-text-embedding-flash"
+    # params:
+    #   dimension: 1024                 # DashScope's own width key
+
     # sdk: gemini
     # base_url: "https://api.inferera.com/gemini"   # empty = google default
     # api_key: "AIza..."
@@ -314,14 +334,31 @@ zjsearch:
   #    travel via the ZJSEARCH_RERANK_KEY env.
   rerank:
     enabled: true
-    base_url: "https://open.bigmodel.cn/api/paas/v4"   # {base_url}/rerank
+    # sdk: cohere (default -- ANY Cohere-shaped POST {base_url}/rerank:
+    # bigmodel / Jina / SiliconFlow) | dashscope (the native TextReRank
+    # SDK; base_url = the workspace base with its /api/v1 when dedicated)
+    sdk: dashscope
+    base_url: "https://llm-5e15apfxtagh13cv.cn-beijing.maas.aliyuncs.com/api/v1"
     api_key: ""                    # or the ZJSEARCH_RERANK_KEY env (the
                                    # key stays out of the repository)
-    model: "rerank"
+    model: "qwen3.7-text-rerank"
     # extra_headers / extra_body ride EVERY rerank request 1:1 (a gateway
     # header, a provider-private field like return_documents):
     # extra_body:
     #   return_documents: false
+
+  # ── the decision model (SystemOne class): ONE forward pass answers
+  # named questions about a state -- choice / score / noul, each with its
+  # probability distribution -- no text generation.  Triage, review,
+  # routing, verification.  Unconfigured = the route stays off.  The key
+  # travels via ZJSEARCH_DECISION_KEY.
+  decision:
+    enabled: true
+    sdk: typesafe                   # the first decision family (the
+                                   # registry pre-embeds the selection)
+    base_url: "https://llm-5e15apfxtagh13cv.cn-beijing.maas.aliyuncs.com/compatible-mode"
+    api_key: ""
+    model: "decision-model-preview"
   # ── MCP tool servers (streamable HTTP only) -- the model's tools gain
   #    everything these servers expose, namespaced mcp_<server>_<tool>.
   #    header carries whatever auth the server wants.  KEYS LIVE HERE AND

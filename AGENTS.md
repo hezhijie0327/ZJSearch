@@ -1286,6 +1286,38 @@ redundant, both fused into ONE post-run extractor:
   any resolve/fetch failure is silence.  The answer text doubles as the
   no-JS/RSS form of the quote.
 
+## DashScope + SystemOne decision surface (alibaba families)
+
+The SDK registry gained the DASHSCOPE family (``zjsearch.llm.sdk:
+dashscope``, `infra/sdk/dashscope.py`): the native qwen Generation API
+(thinking via ``reasoning_content``, function calling, mm auto-routing --
+a parts message carrying an image turns the call into
+MultiModalConversation) plus TextEmbedding through the same bound
+surface (``zjsearch.embedding.sdk: dashscope``, the width rides
+``params.dimension``).  base_url rides VERBATIM (a dedicated MaaS
+workspace includes its own ``/api/v1``).  Gateway reality, probed: a
+dedicated MaaS workspace proxies the COMPATIBLE chat path and the NATIVE
+embedding + rerank paths, but NOT the native text-generation path -- LLM
+on such a gateway = ``sdk: openai.chat_completions`` with
+``base_url: {workspace}/compatible-mode/v1``.
+
+RERANK (`zjsearch.rerank.sdk`): ``dashscope`` (native TextReRank leg)
+joins ``cohere`` (the default: any Cohere-shaped POST `{base_url}/
+rerank`).  The cohere PYTHON SDK was evaluated and REJECTED: its fixed
+/v1|v2 path convention misses every gateway shape we serve.
+
+The SystemOne DECISION capability (`zjsearch.decision`,
+`infra/decision.py` + `runtime/decision_route.py`: ``POST
+/zjsearch/ai/decision``, HMAC-gated like the embed proxy): one forward
+pass answers NAMED questions about a state -- choice / score / noul,
+each with its probability distribution -- no text generation.  SDK
+selection pre-embedded (`sdk: typesafe`, the registry + package gate are
+the seam for the next family); `judge()` returns JSON-safe answers (the
+SDK's typed models downgrade through model_dump).  The dedicated
+workspace serves it at ``{workspace}/compatible-mode/v1/systemone`` --
+``base_url`` ends at ``.../compatible-mode`` (the SDK appends
+``/v1/systemone``).
+
 ## Python CI (upstream gates for searx/ changes)
 
 The upstream Integration workflow (`.github/workflows/integration.yml`) is the

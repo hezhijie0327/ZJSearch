@@ -30,6 +30,16 @@ bm25s==0.3.11
 # the reader degrades to the built-in walker
 html-to-markdown==3.15.1
 
+# zjsearch theme: the DashScope native transport (searx/zjsearch/ai/infra/sdk/
+# dashscope.py + infra/embed.py + runtime/rank.py) -- Apache-2.0; qwen chat /
+# TextEmbedding / TextReRank
+dashscope==1.27.7
+
+# zjsearch theme: the SystemOne decision-model transport
+# (searx/zjsearch/ai/infra/decision.py) -- the single-forward-pass
+# judgment surface (choice / score / noul)
+typesafe-sdk==0.7.2
+
 # zjsearch theme: the MCP tool-server bridge (searx/zjsearch/ai/capabilities/mcp.py)
 # -- MIT; streamable-HTTP client over the shared network loop; without it the
 # mcp config degrades to silence

@@ -39,11 +39,11 @@ MAX_TEXT_CHARS = 8000
 """Per-text truncation (the thread payloads can be large; embeddings of
 8k chars are plenty for ranking)."""
 
-SDKS = ("openai", "gemini")
+SDKS = ("openai", "gemini", "dashscope")
 """The ``zjsearch.embedding.sdk`` values -- one SDK per embeddings API
 family, mirroring the chat transport's family registry."""
 
-SDK_PACKAGES = {"openai": "openai", "gemini": "google.genai"}
+SDK_PACKAGES = {"openai": "openai", "gemini": "google.genai", "dashscope": "dashscope"}
 """The import name of the SDK package each embedding sdk needs."""
 
 
@@ -83,7 +83,7 @@ def configured() -> bool:
     block = cfg()
     if not (block.get("model") and embedding_key(block)):
         return False
-    return bool(block.get("base_url")) or sdk(block) == "gemini"
+    return bool(block.get("base_url")) or sdk(block) in ("gemini", "dashscope")
 
 
 def dimensions_of(cfg_block: dict[str, t.Any] | None = None) -> int:

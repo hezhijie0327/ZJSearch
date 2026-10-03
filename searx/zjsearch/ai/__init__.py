@@ -56,11 +56,16 @@ def install(app: flask.Flask) -> None:
     (``searx.zjsearch``).  Task modules register their own routes and
     stay silent when not configured."""
     from searx.zjsearch.ai import runtime  # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.runtime import embed_route, overview  # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.runtime import (  # pylint: disable=import-outside-toplevel
+        decision_route,
+        embed_route,
+        overview,
+    )
 
     if llm_config.llm_cfg().get("enabled") and settings.get("server", {}).get("secret_key") == "ultrasecretkey":
         logger.warning("zjsearch.ai runs with the default server.secret_key -- answer tokens are forgeable")
     overview.install(app)
     runtime.install(app)
     embed_route.install(app)
+    decision_route.install(app)
     app.jinja_env.globals["zjs_ai_capabilities"] = _capabilities

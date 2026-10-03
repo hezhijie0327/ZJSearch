@@ -9,7 +9,7 @@ cached client.
 
 The ``zjsearch.llm.sdk`` values (canonical after ``config.SDK_ALIASES``):
 ``openai.chat_completions`` / ``openai.responses`` / ``anthropic`` /
-``gemini``.  Adding a family means adding one module here with a
+``gemini`` / ``dashscope``.  Adding a family means adding one module here with a
 ``factory(cfg, base, kind, family)`` plus one registry line in
 :py:func:`resolve`.
 """
@@ -19,6 +19,7 @@ import typing as t
 
 from .. import config
 from .anthropic import AnthropicSdk, factory as anthropic_factory
+from .dashscope import DashscopeSdk, factory as dashscope_factory
 from .gemini import GeminiSdk, factory as gemini_factory
 from .openai import OpenaiSdk, factory as openai_factory
 
@@ -85,6 +86,8 @@ def resolve(cfg: dict[str, t.Any], family: str | None = None) -> Sdk:
         impl = openai_factory(cfg, base, kind, family or "openai")
     elif kind == "anthropic":
         impl = anthropic_factory(cfg, base, kind, family or "anthropic")
+    elif kind == "dashscope":
+        impl = dashscope_factory(cfg, base, kind, family or "dashscope")
     else:
         impl = gemini_factory(cfg, base, kind, family or "gemini")
     return Sdk(impl, kind, base)
@@ -99,6 +102,7 @@ def sdk_missing(cfg: dict[str, t.Any]) -> str | None:
 __all__ = [
     "SDK_PACKAGES",
     "AnthropicSdk",
+    "DashscopeSdk",
     "GeminiSdk",
     "OpenaiSdk",
     "Sdk",

@@ -438,6 +438,17 @@ surface. Highlights that must not regress (the full fix list is in git:
   by side in ONE row -- each with its own title and plain 输入/调用
   tiles (the LLM group's language); score endpoints are input-only so
   the tile says 输入, never "Tokens".
+- **New AI families (2026-10 round)**: the dashscope family (LLM /
+  embedding / rerank) and the SystemOne decision route — all
+  LIVE-VERIFIED against a dedicated MaaS workspace (qwen3.8-flash /
+  qwen3.7-text-embedding-flash 1024d / qwen3.7-text-rerank /
+  decision-model-preview).  Regression vectors: the dashscope factory's
+  response payloads are DICT-shaped (attribute access silently misses --
+  `_field` reads both shapes); the mm pump auto-routes image turns
+  through MultiModalConversation; the rerank `sdk` dispatcher
+  (dashscope | cohere-HTTP).  The dedicated-MaaS gateway reality is a
+  test fixture of its own: compat chat + native embeddings + native
+  rerank proxied, native text-generation NOT.
 - Audit-methodology additions: settle-path checks (startRun's
   streaming row + the stale-run sweep), wire-LATE-event coverage, the
   gallery-whitelist-mirrors-feed invariant, and the icon-language sweep

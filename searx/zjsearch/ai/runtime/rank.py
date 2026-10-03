@@ -115,16 +115,66 @@ def _parse_rerank(payload: t.Any, docs: list[str]) -> tuple[list[int] | None, in
 
 
 def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
-    """The rerank-model leg: the deployment's ``zjsearch.rerank`` endpoint
-    re-scores ``docs`` against ``query``.  RETURNS ``(order, tokens)`` --
-    ``order`` maps rank position -> doc index (a full permutation: results
-    the endpoint dropped trail in their incoming order) and ``tokens`` is
-    the response's prompt-token count for the run's account (0 when the
+    """The rerank-model leg: the deployment's ``zjsearch.rerank`` provider
+    re-scores ``docs`` against ``query`` -- ``sdk`` picks the wire:
+    ``dashscope`` (Alibaba's native TextReRank) or ``cohere`` (the
+    default: any Cohere-shaped ``POST {base_url}/rerank`` -- bigmodel,
+    Jina, SiliconFlow).  RETURNS ``(order, tokens)`` -- ``order`` maps
+    rank position -> doc index (a full permutation: results the provider
+    dropped trail in their incoming order) and ``tokens`` is the
+    response's prompt-token count for the run's account (0 when the
     response carries none).  ``(None, 0)`` on any skip -- the feature
     unconfigured, a timeout, a non-200, a malformed body -- and the
     previous order stands (fail-open, one debug line)."""
     cfg = llm_config.rerank_cfg()
-    if not cfg.get("enabled") or not cfg.get("base_url") or not cfg.get("model"):
+    if not cfg.get("enabled") or not cfg.get("model"):
+        return None, 0
+    if str(cfg.get("sdk") or "cohere") == "dashscope":
+        return _rerank_dashscope(cfg, query, docs)
+    return _rerank_cohere(cfg, query, docs)
+
+
+def _rerank_dashscope(cfg: dict[str, t.Any], query: str, docs: list[str]) -> tuple[list[int] | None, int]:
+    """The native DashScope TextReRank leg (gte-rerank family): the SDK's
+    own HTTP client, called synchronously on THIS thread -- the same
+    blocking shape the openai-family pumps accept when their bridges wait.
+    Same fail-open contract as the HTTP leg."""
+    key = llm_config.rerank_key(cfg)
+    base = str(cfg.get("base_url") or "").strip()
+    try:
+        if base:
+            import dashscope  # pylint: disable=import-outside-toplevel
+
+            dashscope.base_http_api_url = base.rstrip("/")
+        from dashscope import TextReRank  # pylint: disable=import-outside-toplevel
+
+        response = TextReRank.call(
+            api_key=key or None,
+            model=str(cfg["model"]),
+            query=query,
+            documents=docs,
+            top_n=len(docs),
+            return_documents=False,
+        )
+        results = getattr(getattr(response, "output", None), "results", None) or []
+        order = [int(getattr(item, "index", -1)) for item in results]
+        order = [i for i in order if 0 <= i < len(docs)]
+        if not order:
+            logger.debug("zjsearch rerank: no usable indices, keeping the previous order")
+            return None, 0
+        order += [i for i in range(len(docs)) if i not in set(order)]
+        usage = getattr(response, "usage", None)
+        tokens = int(getattr(usage, "total_tokens", 0) or 0) if usage is not None else 0
+        return order, tokens
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("zjsearch rerank: dashscope failed, keeping the previous order: %r", exc)
+        return None, 0
+
+
+def _rerank_cohere(cfg: dict[str, t.Any], query: str, docs: list[str]) -> tuple[list[int] | None, int]:
+    """The Cohere-shaped HTTP leg (bigmodel / Jina / SiliconFlow gateways
+    speak it): one POST through the instance's network layer."""
+    if not cfg.get("base_url"):
         return None, 0
     if len(docs) < 2:
         return None, 0

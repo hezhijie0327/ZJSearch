@@ -18,7 +18,7 @@ from searx import settings
 
 from . import security
 
-ENDPOINT_KINDS = ("openai", "openai.chat_completions", "openai.responses", "anthropic", "gemini")
+ENDPOINT_KINDS = ("openai", "openai.chat_completions", "openai.responses", "anthropic", "gemini", "dashscope")
 """The canonical ``zjsearch.llm.sdk`` values -- ``SDK_ALIASES`` resolves
 shorthand / legacy inputs into one of these before validation."""
 
@@ -36,6 +36,7 @@ SDK_PACKAGES = {
     "openai.chat_completions": "openai",
     "anthropic": "anthropic",
     "gemini": "google.genai",
+    "dashscope": "dashscope",
 }
 """The import name of the SDK package each canonical dialect needs."""
 
@@ -119,7 +120,9 @@ def configured(cfg: dict[str, t.Any]) -> bool:
     if not cfg.get("enabled") or not cfg.get("model"):
         return False
     kind, base = endpoint(cfg)
-    return bool(base) or kind == "gemini"
+    # the native-SDK families may ride their official default endpoint:
+    # gemini via google-genai, dashscope via the SDK's own base
+    return bool(base) or kind in ("gemini", "dashscope")
 
 
 def capability() -> dict[str, str] | None:
@@ -227,7 +230,7 @@ def dimensions(cfg: dict[str, t.Any], family: str) -> int:
     MUST match the browser's pgvector column, which is created from THIS
     value (the capability payload carries it)."""
     block_params = cfg.get("params") if isinstance(cfg.get("params"), dict) else {}
-    override = "dimensions" if family == "openai" else "output_dimensionality"
+    override = "dimensions" if family in ("openai", "dashscope") else "output_dimensionality"
     try:
         return int(block_params.get(override))
     except (TypeError, ValueError):
