@@ -101,7 +101,13 @@ export type AiSearchStep =
   | { kind: "think"; text: string; entry?: number }
   | { kind: "intent"; text: string; entry?: number }
   | { kind: "clarify"; pairs: Array<{ q: string; a: string }> }
-  | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] };
+  | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] }
+  | {
+      kind: "audit";
+      /** one row per graded citation: the claim, the verdict, the
+          confidence -- the audit's PROCESS + RESULT in the timeline */
+      items: Array<{ n: number; verdict: string; confidence: number; claim?: string }>;
+    };
 
 export interface AiSearchSource {
   /** global [n] citation number (contiguous from 1) */
@@ -525,6 +531,30 @@ export function applyEvent(
     case "tasks": {
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
       runs[lastIdx] = { ...run, tasks: mergeTaskSnapshot(run.tasks, items) };
+      return { ...core, runs };
+    }
+    case "audit": {
+      // the citation audit's process+result: the timeline gains the audit
+      // step AND the run carries the verdicts (the sources badges read
+      // the same payload)
+      const items = (Array.isArray(event.items) ? event.items : []).map((row) => {
+        const record = row as Record<string, unknown>;
+        return {
+          n: Number(record.n) || 0,
+          verdict: String(record.verdict ?? "unverified"),
+          confidence: Number(record.confidence) || 0,
+          claim: typeof record.claim === "string" ? record.claim : undefined,
+        };
+      });
+      const citations: AiSearchAudit["citations"] = {};
+      for (const item of items) {
+        citations[String(item.n)] = { verdict: item.verdict, confidence: item.confidence };
+      }
+      runs[lastIdx] = {
+        ...run,
+        audit: { citations },
+        steps: [...run.steps, { kind: "audit", items }],
+      };
       return { ...core, runs };
     }
     case "learnings": {

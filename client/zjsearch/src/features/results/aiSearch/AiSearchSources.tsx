@@ -292,14 +292,16 @@ export function AiSearchSources({ sources, audit }: { sources: AiSearchSource[];
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
     // cap; this section pins its heading and scrolls the cards) -- no
     // expand/collapse toggle: every source is always one scroll away
-    <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col">
+    <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col lg:min-h-0 lg:flex-1">
       <div className="flex shrink-0 items-center gap-2">
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{sources.length}</span>
       </div>
-      {/* ~4 cards visible, the rest scroll inside -- on every breakpoint */}
-      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:max-h-[42rem] lg:flex lg:flex-col">
+      {/* ~4 cards visible, the rest scroll inside -- on every breakpoint;
+          on lg the section takes the rail's REMAINING height (the plan and
+          findings cards cap themselves) and scrolls ITS OWN cards only */}
+      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:min-h-0 lg:flex lg:flex-1 lg:flex-col">
         {sources.map((source) => (
           <SourceCard audit={audit} key={source.n} source={source} />
         ))}

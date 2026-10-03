@@ -399,6 +399,22 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         self.rest: t.Iterator[str] | None = None
         self.primed = False
 
+    def _audit_event(self, payload: dict[str, t.Any]) -> dict[str, t.Any]:
+        """The audit event: the graded citations as an ordered array (the
+        timeline's audit step) -- the process AND the result in the
+        研究过程, beside the badges the cards render."""
+        citations = payload.get("citations", {})
+        items = [
+            {
+                "n": int(n),
+                "verdict": entry.get("verdict", "unverified"),
+                "confidence": float(entry.get("confidence") or 0.0),
+                **({"claim": entry["claim"]} if entry.get("claim") else {}),
+            }
+            for n, entry in sorted(citations.items(), key=lambda pair: int(pair[0]))
+        ]
+        return {"e": "audit", "items": items}
+
     def _audit_total(self, answer: str) -> int:
         """The audit's workload (the cited-[n] count) -- zero when the
         audit cannot run (the phase event stays off and the strip never
@@ -495,8 +511,10 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 if audit_total:
                     self.buffer.append(wire.encode({"e": "phase", "name": "audit", "total": audit_total}))
                 audit_payload = self._audit(audit_answer)
+                if audit_payload is not None:
+                    self.buffer.append(wire.encode(self._audit_event(audit_payload)))
                 merged = self._merged_settle(event)
-                self.buffer.append(wire.encode({**merged, **({"audit": audit_payload} if audit_payload else {})}))
+                self.buffer.append(wire.encode(merged))
                 self.rest = self._late("".join(answer_parts).strip(), awaiting, related_seen)
                 self.primed = True
                 return
@@ -541,8 +559,10 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         if audit_total:
             yield wire.encode({"e": "phase", "name": "audit", "total": audit_total})
         audit_payload = self._audit(audit_answer)
+        if audit_payload is not None:
+            yield wire.encode(self._audit_event(audit_payload))
         merged = self._merged_settle(settle_event)
-        yield wire.encode({**merged, **({"audit": audit_payload} if audit_payload else {})})
+        yield wire.encode(merged)
         yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)
 
     def _late(self, answer: str, awaiting: bool, related_seen: bool) -> t.Iterator[str]:

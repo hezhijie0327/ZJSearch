@@ -299,6 +299,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_finding_retracted: "已被撤回",
   ai_findings_gaps: "未决缺口",
   ai_finding_conflict: "与其他发现相冲突",
+  ai_audit_segment: "核验引用 · {n} 条",
   ai_audit_confidence: "置信度 {n}%",
   ai_audit_verified: "已对照来源核实",
   ai_audit_contradicted: "与来源相悖",

@@ -18,6 +18,7 @@ import {
   Play,
   RefreshCw,
   Repeat2,
+  Scale,
   Waypoints,
   Zap,
 } from "lucide-react";
@@ -112,15 +113,15 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
   }
   const done = tasks.filter((task) => task.status === "done").length;
   return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2">
+    <div className="mb-4 lg:flex lg:max-h-[26vh] lg:min-h-0 lg:flex-col">
+      <div className="flex shrink-0 items-center gap-2">
         <ListTodo aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_task_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">
           {done}/{tasks.length}
         </span>
       </div>
-      <ul className="mt-3 space-y-1.5">
+      <ul className="mt-3 space-y-1.5 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
         {tasks.map((task, index) => (
           <TaskItem key={`${index}-${task.title}`} task={task} />
         ))}
@@ -148,70 +149,72 @@ function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: Ledg
   }
   const active = learnings.filter((fact) => fact.status === "active");
   return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2">
+    <div className="mb-4 lg:flex lg:max-h-[34vh] lg:min-h-0 lg:flex-col">
+      <div className="flex shrink-0 items-center gap-2">
         <NotebookPen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_findings_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{active.length}</span>
       </div>
-      <ul className="mt-3 space-y-1.5">
-        {learnings.map((fact) => (
-          <li className="flex items-start gap-2" key={fact.id}>
-            {fact.status === "active" ? (
-              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
-            ) : fact.status === "retracted" ? (
-              <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
-            ) : (
-              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
-            )}
-            <div className="min-w-0 flex-1">
-              <Snippet
-                className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
-                contentHtml={escapeHtml(fact.text)}
-              />
-              {fact.status !== "active" ? (
-                <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
-                  {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
-                </span>
-              ) : fact.conflict_with ? (
-                <span
-                  aria-label={t("ai_finding_conflict")}
-                  className="ms-1.5 inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
-                  role="img"
-                  title={t("ai_finding_conflict")}
-                >
-                  <Zap aria-hidden="true" className="size-2.5" />
-                </span>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
-      {gaps.length > 0 ? (
-        <div className="mt-3 border-t border-line pt-2.5">
-          <p className="px-1 text-xs font-medium text-ink-2">{t("ai_findings_gaps")}</p>
-          <ul className="mt-1.5 space-y-1">
-            {gaps.map((gap) => (
-              <li className="flex items-start gap-2 text-xs" key={gap.id}>
-                {gap.status === "open" ? (
-                  <CircleHelp aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-accent" />
-                ) : (
-                  <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
-                )}
-                <span
-                  className={`min-w-0 flex-1 break-words ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
-                  dir="auto"
-                >
-                  {gap.q}
-                  {gap.status === "closed" && gap.close_as ? (
-                    <span className="ms-1.5 text-ink-3">{gap.close_as}</span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <div className="lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+        <ul className="mt-3 space-y-1.5">
+          {learnings.map((fact) => (
+            <li className="flex items-start gap-2" key={fact.id}>
+              {fact.status === "active" ? (
+                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
+              ) : fact.status === "retracted" ? (
+                <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
+              ) : (
+                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
+              )}
+              <div className="min-w-0 flex-1">
+                <Snippet
+                  className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
+                  contentHtml={escapeHtml(fact.text)}
+                />
+                {fact.status !== "active" ? (
+                  <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
+                    {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
+                  </span>
+                ) : fact.conflict_with ? (
+                  <span
+                    aria-label={t("ai_finding_conflict")}
+                    className="ms-1.5 inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
+                    role="img"
+                    title={t("ai_finding_conflict")}
+                  >
+                    <Zap aria-hidden="true" className="size-2.5" />
+                  </span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+        {gaps.length > 0 ? (
+          <div className="mt-3 border-t border-line pt-2.5">
+            <p className="px-1 text-xs font-medium text-ink-2">{t("ai_findings_gaps")}</p>
+            <ul className="mt-1.5 space-y-1">
+              {gaps.map((gap) => (
+                <li className="flex items-start gap-2 text-xs" key={gap.id}>
+                  {gap.status === "open" ? (
+                    <CircleHelp aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-accent" />
+                  ) : (
+                    <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+                  )}
+                  <span
+                    className={`min-w-0 flex-1 break-words ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
+                    dir="auto"
+                  >
+                    {gap.q}
+                    {gap.status === "closed" && gap.close_as ? (
+                      <span className="ms-1.5 text-ink-3">{gap.close_as}</span>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -301,6 +304,55 @@ function ThinkSegment({
   );
 }
 
+function auditLabel(
+  verdict: string,
+): "ai_audit_verified" | "ai_audit_contradicted" | "ai_audit_unsupported" | "ai_audit_unverified" {
+  return verdict === "verified"
+    ? "ai_audit_verified"
+    : verdict === "contradicted"
+      ? "ai_audit_contradicted"
+      : verdict === "unsupported"
+        ? "ai_audit_unsupported"
+        : "ai_audit_unverified";
+}
+
+/** The citation audit's timeline card (the 核验 step): one row per graded
+    [n] -- the claim it checked, the verdict, the confidence -- the audit's
+    PROCESS lives in the research record, not just the cards' badges. */
+function AuditSegment({ step }: { step: Extract<AiSearchStep, { kind: "audit" }> }) {
+  const t = useT();
+  return (
+    <div className={`flex items-start gap-1.5 px-1 ${""}`}>
+      <Scale aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
+      <div className="min-w-0 flex-1 py-0.5">
+        <p className="text-[13px] font-medium text-ink-2">{t("ai_audit_segment", { n: String(step.items.length) })}</p>
+        <ul className="mt-1 space-y-1.5">
+          {step.items.map((item) => (
+            <li className="flex items-start gap-1.5 text-xs" key={item.n}>
+              <span className="shrink-0 font-mono tabular-nums text-ink-3">[{item.n}]</span>
+              <span
+                className={`shrink-0 ${item.verdict === "verified" ? "text-ok" : item.verdict === "contradicted" ? "text-warning" : "text-ink-3"}`}
+              >
+                {t(auditLabel(item.verdict))}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="line-clamp-2 break-words text-ink-2" dir="auto">
+                  {item.claim ?? ""}
+                </span>
+                {item.confidence > 0 ? (
+                  <span className="mt-0.5 block whitespace-nowrap text-[11px] tabular-nums text-ink-3">
+                    {t("ai_audit_confidence", { n: String(Math.round(item.confidence * 100)) })}
+                  </span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function StepSegment({
   index,
   run,
@@ -325,6 +377,13 @@ function StepSegment({
           open={streaming ? index === run.steps.length - 1 : true}
           step={step}
         />
+      </div>
+    );
+  }
+  if (step.kind === "audit") {
+    return (
+      <div className={index > 0 ? "mt-2" : ""}>
+        <AuditSegment step={step} />
       </div>
     );
   }
@@ -925,7 +984,7 @@ function AiSearchRunSectionImpl({
                 own scroll while the page scrolls (the old absolute pinning
                 squeezed to the answer column's height and collapsed during
                 the write phase).  Below lg it stacks under the answer. */}
-            <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:max-h-[calc(100vh-3.5rem)] lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-80">
+            <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:max-h-[calc(100vh-3.5rem)] lg:w-72 lg:shrink-0 lg:flex-col xl:w-80">
               {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
               {run.learnings || run.gaps ? (
                 <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />

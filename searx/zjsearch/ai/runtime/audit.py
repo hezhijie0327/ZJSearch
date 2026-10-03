@@ -29,7 +29,6 @@ import typing as t
 
 from searx.zjsearch.ai.infra import decision as decision_service
 from searx.zjsearch.ai.infra import embed as embed_service
-from searx.zjsearch.ai.infra import rerank as rerank_service
 from searx.zjsearch.ai.runtime.rank import has_cjk
 
 logger = logging.getLogger(__name__)
@@ -77,21 +76,6 @@ def _relation_question(is_zh: bool) -> dict[str, t.Any]:
             "says_nothing": "The passage does not address the claim",
         },
     }
-
-
-def _passes_prefloor(claim: str, passage: str) -> bool:
-    """The cross-encoder pre-floor: does the source passage even loosely
-    match the claim?  A pair the reranker cannot match at all never
-    addressed the claim -- graded ``unsupported`` WITHOUT spending a
-    decision call.  ``True`` when the rerank service is unconfigured
-    (no pre-floor -- every pair goes to the judge)."""
-    if not rerank_service.configured():
-        return True
-    try:
-        order, _tokens = rerank_service.rerank(claim, [passage])
-    except Exception:  # pylint: disable=broad-except
-        return True
-    return order == [1]
 
 
 def _grade_relation(claim: str, passage: str, is_zh: bool) -> tuple[str, float] | None:
@@ -142,9 +126,10 @@ def citation_verdicts(
     sources: dict[int, dict[str, str]],
 ) -> dict[int, dict[str, t.Any]]:
     """Every cited [n]'s verdict against its source: the claim (the
-    sentence carrying the mark) rides the rerank pre-floor, the
-    survivors get one ``choice`` judgment (supports / contradicts /
-    says_nothing).  Returns ``{n: {verdict, confidence}}`` with verdict
+    sentence carrying the mark) plus its passage get one ``choice``
+    judgment (supports / contradicts / says_nothing) -- CLAIM_MAX caps
+    the spend (12 judgments, pennies at the decision model's price).
+    Returns ``{n: {verdict, confidence, claim}}`` with verdict
     in ``verified | contradicted | unsupported | unverified``; an empty
     dict on any skip (both models off -- the badges simply do not
     render)."""
@@ -163,9 +148,6 @@ def citation_verdicts(
     for n, claim in list(claims.items())[:CLAIM_MAX]:
         source = sources[n]
         passage = f"{source.get('title', '')} - {source.get('snippet', '')}"[:800]
-        if not _passes_prefloor(claim, passage):
-            verdicts[n] = {"verdict": "unsupported", "confidence": 0.0, "claim": claim[:200]}
-            continue
         graded = _grade_relation(claim, passage, is_zh)
         if graded is not None:
             verdicts[n] = {"verdict": graded[0], "confidence": graded[1], "claim": claim[:200]}

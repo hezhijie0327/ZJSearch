@@ -23,6 +23,10 @@ bug and :py:func:`encode` refuses it):
                         research|write|audit}`` -- the timeline's one
                         coarse spine (Qwen Deep Research's phase
                         design); micro-activity stays with the entries.
+``audit``               the citation audit's PROCESS + RESULT, one row
+                        per graded [n]: ``{items: [{n, verdict,
+                        confidence, claim}]}`` -- the timeline renders
+                        it as the audit step's card.
 ``tasks``               the task card's AUTHORITATIVE snapshot.
 ``learnings``           the findings ledger's AUTHORITATIVE snapshot
                         (``items``: the facts so far) -- what the
@@ -60,6 +64,7 @@ EVENTS: frozenset[str] = frozenset(
         "tasks",
         "learnings",
         "sources",
+        "audit",
         "answer",
         "ask",
         "gallery",
