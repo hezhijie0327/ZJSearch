@@ -56,134 +56,129 @@ function SourceCard({ source }: { source: AiSearchSource }) {
   const isMedia = source.category === "videos" || source.category === "files";
   const { expanded, toggle, hidden } = useCapExpand(source.engines?.length ?? 0, 1);
   return (
-    // the REGULAR result card's chrome (rounded-2xl, borderless, p-3/4,
-    // hover:bg-surface) and hierarchy (pretty-url line, title, snippet):
-    // one design system -- the AI extras (category chip, read marks, #n)
-    // and the engines/score row ride where the classic card puts them
+    // REDESIGNED narrow-first: each row has ONE job --
+    //   identity row: favicon + netloc + read badges + #n (pinned right,
+    //   never wraps: netloc truncates)
+    //   title: the one and only link
+    //   snippet: the clamp-and-reveal
+    //   attribution row: the score / engines chips wrap as self-contained
+    //   units -- no bare numbers or badges to orphan on a narrow card
     <div className="group relative rounded-2xl p-3 transition-colors hover:bg-surface sm:p-4" data-ai-n={source.n}>
-      <div className="flex gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
-            <SourceFavicon source={source} />
-            <span className="truncate" dir="ltr">
-              {source.netloc}
-            </span>
-            {source.category && source.category !== "general" ? (
-              <span className="shrink-0 rounded-md bg-surface-2 px-1.5 text-[11px] leading-4 text-ink-3">
-                {categoryLabel(source.category, t)}
-              </span>
-            ) : null}
-          </div>
-          <a
-            className="mt-1 line-clamp-2 block min-h-12 text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
-            dir="auto"
-            href={source.url}
-            onClick={(event) => event.stopPropagation()}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {source.title}
-          </a>
-          {/* the snippet's toggle stays off the card's link */}
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
-          <div
-            className="min-h-[4.5rem]"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.stopPropagation();
-              }
-            }}
-          >
-            <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
-          </div>
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
-            {typeof source.score === "number" ? (
-              <span className={`${CHIP} shrink-0 tabular-nums`} title={t("score")}>
-                <Award aria-hidden="true" className="size-3 shrink-0" />
-                {formatScore(source.score)}
-              </span>
-            ) : null}
-            {source.engines && source.engines.length > 0 ? (
-              // cap-and-expand (the EnginesLine language): the lead engine
-              // sits, "+N" folds the rest -- the reveal and its collapse
-              // travel as ONE wrapping unit so the chip never orphans
-              <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-                <span className={`${CHIP} shrink-0`} title={source.engines.join(", ")}>
-                  <Server aria-hidden="true" className="size-3 shrink-0" />
-                  {source.engines[0]}
-                </span>
-                {expanded
-                  ? source.engines.slice(1).map((engine) => (
-                      <span className={`${CHIP} shrink-0`} key={engine}>
-                        <Server aria-hidden="true" className="size-3 shrink-0" />
-                        {engine}
-                      </span>
-                    ))
-                  : null}
-                {hidden > 0 ? (
-                  <CapChip
-                    className={`${CHIP} shrink-0 ${CHIP_HOVER}`}
-                    expanded={expanded}
-                    hidden={hidden}
-                    onToggle={toggle}
-                  />
-                ) : null}
-              </span>
-            ) : null}
-            <span className="flex shrink-0 items-center gap-1.5 self-center">
-              {/* the read marks ride a FIXED-WIDTH slot: with a badge
-                  present or not, the #n stays aligned across crawled,
-                  recalled and plain cards */}
-              <span className="flex w-4 shrink-0 items-center justify-end">
-                {source.crawled ? (
-                  <span
-                    aria-label={t("ai_source_crawled")}
-                    className="inline-flex size-4 items-center justify-center rounded-full bg-accent-soft text-accent"
-                    role="img"
-                    title={t("ai_source_crawled")}
-                  >
-                    <BookOpen aria-hidden="true" className="size-2.5" />
-                  </span>
-                ) : source.history ? (
-                  <span
-                    aria-label={t("ai_source_history")}
-                    className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
-                    role="img"
-                    title={t("ai_source_history")}
-                  >
-                    <History aria-hidden="true" className="size-2.5" />
-                  </span>
-                ) : source.pastRefs ? (
-                  <span
-                    className="inline-flex items-center gap-0.5"
-                    title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
-                  >
-                    <History aria-hidden="true" className="size-3" />
-                    {source.pastRefs}×
-                  </span>
-                ) : null}
-              </span>
-              <span>#{source.n}</span>
-            </span>
-          </div>
-        </div>
-        {source.img ? (
-          <div className="relative hidden shrink-0 self-start sm:block">
-            <img
-              alt=""
-              className="h-20 w-28 rounded-lg border border-line object-cover"
-              loading="lazy"
-              src={source.img}
-            />
-            {isMedia && source.meta ? (
-              <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
-                {source.meta}
-              </span>
-            ) : null}
-          </div>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
+        <SourceFavicon source={source} />
+        <span className="min-w-0 truncate" dir="ltr">
+          {source.netloc}
+        </span>
+        {source.category && source.category !== "general" ? (
+          <span className="shrink-0 rounded-md bg-surface-2 px-1.5 text-[11px] leading-4 text-ink-3">
+            {categoryLabel(source.category, t)}
+          </span>
         ) : null}
+        <span className="ms-auto flex shrink-0 items-center gap-1.5">
+          {source.crawled ? (
+            <span
+              aria-label={t("ai_source_crawled")}
+              className="inline-flex size-4 items-center justify-center rounded-full bg-accent-soft text-accent"
+              role="img"
+              title={t("ai_source_crawled")}
+            >
+              <BookOpen aria-hidden="true" className="size-2.5" />
+            </span>
+          ) : source.history ? (
+            <span
+              aria-label={t("ai_source_history")}
+              className="inline-flex size-4 items-center justify-center rounded-full bg-surface text-ink-3 ring-1 ring-line"
+              role="img"
+              title={t("ai_source_history")}
+            >
+              <History aria-hidden="true" className="size-2.5" />
+            </span>
+          ) : source.pastRefs ? (
+            <span
+              className="inline-flex items-center gap-0.5"
+              title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
+            >
+              <History aria-hidden="true" className="size-3" />
+              {source.pastRefs}×
+            </span>
+          ) : null}
+          <span className="shrink-0 tabular-nums text-ink-3">#{source.n}</span>
+        </span>
       </div>
+      <a
+        className="mt-1 line-clamp-2 block min-h-12 text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
+        dir="auto"
+        href={source.url}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {source.title}
+      </a>
+      {/* the snippet's toggle stays off the card's link */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps the snippet's toggle off the card's link */}
+      <div
+        className="min-h-[4.5rem]"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.stopPropagation();
+          }
+        }}
+      >
+        <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
+      </div>
+      {typeof source.score === "number" || (source.engines?.length ?? 0) > 0 ? (
+        // the attribution chips: score + engines (cap-and-expand -- the
+        // lead engine sits, "+N" folds the rest) -- chips wrap as
+        // self-contained units, nothing bare to orphan
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
+          {typeof source.score === "number" ? (
+            <span className={`${CHIP} shrink-0 tabular-nums`} title={t("score")}>
+              <Award aria-hidden="true" className="size-3 shrink-0" />
+              {formatScore(source.score)}
+            </span>
+          ) : null}
+          {source.engines && source.engines.length > 0 ? (
+            <>
+              <span className={`${CHIP} shrink-0`} title={source.engines.join(", ")}>
+                <Server aria-hidden="true" className="size-3 shrink-0" />
+                {source.engines[0]}
+              </span>
+              {expanded
+                ? source.engines.slice(1).map((engine) => (
+                    <span className={`${CHIP} shrink-0`} key={engine}>
+                      <Server aria-hidden="true" className="size-3 shrink-0" />
+                      {engine}
+                    </span>
+                  ))
+                : null}
+              {hidden > 0 ? (
+                <CapChip
+                  className={`${CHIP} shrink-0 ${CHIP_HOVER}`}
+                  expanded={expanded}
+                  hidden={hidden}
+                  onToggle={toggle}
+                />
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {source.img ? (
+        <div className="relative hidden shrink-0 self-start sm:block">
+          <img
+            alt=""
+            className="h-20 w-28 rounded-lg border border-line object-cover"
+            loading="lazy"
+            src={source.img}
+          />
+          {isMedia && source.meta ? (
+            <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
+              {source.meta}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
