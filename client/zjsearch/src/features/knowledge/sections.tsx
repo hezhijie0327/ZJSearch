@@ -907,7 +907,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
               {llmTiles.length > 0 ? (
                 <>
                   <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_group_llm")}</p>
-                  <dl className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
                     {llmTiles.map(([label, value, Icon]) => (
                       <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={label}>
                         <dt className="flex items-center gap-1 text-xs text-ink-3">
