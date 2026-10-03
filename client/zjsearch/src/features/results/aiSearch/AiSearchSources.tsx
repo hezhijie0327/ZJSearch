@@ -203,7 +203,21 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
           }
         }}
       >
-        <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
+        <div className="mt-1.5 flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <Snippet contentHtml={escapeHtml(source.content || t("no_description"))} />
+          </div>
+          {source.img ? (
+            <div className="relative hidden shrink-0 self-start sm:block">
+              <Thumb alt="" className="h-16 w-24" src={source.img} />
+              {isMedia && source.meta ? (
+                <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
+                  {source.meta}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
       {typeof source.score === "number" || (source.engines?.length ?? 0) > 0 ? (
         // the attribution chips: score + engines (cap-and-expand -- the
@@ -269,16 +283,6 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
           </div>
         );
       })()}
-      {source.img ? (
-        <div className="relative mt-2 hidden shrink-0 self-start sm:block lg:hidden">
-          <Thumb alt="" className="h-20 w-28" src={source.img} />
-          {isMedia && source.meta ? (
-            <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
-              {source.meta}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

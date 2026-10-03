@@ -25,8 +25,15 @@ bug and :py:func:`encode` refuses it):
                         design); micro-activity stays with the entries.
 ``audit``               the citation audit's PROCESS + RESULT, one row
                         per graded [n]: ``{items: [{n, verdict,
-                        confidence, claim}]}`` -- the timeline renders
-                        it as the audit step's card.
+                        confidence, claim}]}`` -- the sources rail
+                        renders the badges + traceability blocks.
+``decisions``           the run's DECISION RESULTS (framework gates +
+                        model-initiated judge + audit), one batch per
+                        round: ``{round, items: [{purpose, question,
+                        target, answer, ms}]}`` -- the sources rail's
+                        决策结果 card; ``answer`` is the RAW model
+                        answer (verdicts + probabilities) for
+                        click-through.
 ``tasks``               the task card's AUTHORITATIVE snapshot.
 ``learnings``           the findings ledger's AUTHORITATIVE snapshot
                         (``items``: the facts so far) -- what the
@@ -65,6 +72,7 @@ EVENTS: frozenset[str] = frozenset(
         "learnings",
         "sources",
         "audit",
+        "decisions",
         "answer",
         "ask",
         "gallery",

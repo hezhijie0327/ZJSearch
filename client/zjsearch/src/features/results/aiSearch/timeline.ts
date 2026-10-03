@@ -242,6 +242,22 @@ export interface AiSearchRun {
   /** the audit's workload (the phase event's ``total``): the strip's
       核验 · N 条 while the citations are being graded */
   auditTotal?: number;
+  /** the run's DECISION RESULTS (framework gates + model judge), one
+      entry per decision call -- the rail's 决策结果 card renders them
+      with click-through raw answers */
+  decisions: AiDecision[];
+}
+
+/** One decision-model call (loop gates or the model's judge tool): the
+    question asked, the target it was about, and the RAW answer
+    (verdicts + probabilities) for click-through. */
+export interface AiDecision {
+  purpose: string;
+  question?: string;
+  target?: string;
+  answer?: unknown;
+  raw?: unknown[];
+  ms?: number;
 }
 
 /** One citation's audit verdict: verified / contradicted / unsupported /
@@ -546,6 +562,22 @@ export function applyEvent(
       runs[lastIdx] = { ...run, audit: { citations } };
       return { ...core, runs };
     }
+    case "decisions": {
+      // the run's decision results (framework gates + model judge): the
+      // rail's 决策结果 card reads them -- raw answers included
+      const items = (Array.isArray(event.items) ? event.items : []).map((row) => {
+        const record = row as Record<string, unknown>;
+        return {
+          purpose: String(record.purpose ?? ""),
+          question: typeof record.question === "string" ? record.question : undefined,
+          target: typeof record.target === "string" ? record.target : undefined,
+          answer: record.answer ?? record.raw ?? undefined,
+          ms: typeof record.ms === "number" ? record.ms : undefined,
+        };
+      });
+      runs[lastIdx] = { ...run, decisions: [...(run.decisions ?? []), ...items] };
+      return { ...core, runs };
+    }
     case "learnings": {
       // the BELIEF LEDGER's AUTHORITATIVE snapshot -- replace, never
       // merge (the server's list is the truth, the writer read the same)
@@ -796,5 +828,6 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     mode,
     stages: [],
     gaps: [],
+    decisions: [],
   };
 }

@@ -38,6 +38,7 @@ import { PageRow } from "@/features/results/aiSearch/calls/PageRow.tsx";
 import { PastResearchRow } from "@/features/results/aiSearch/calls/PastResearchRow.tsx";
 import { SearchRow } from "@/features/results/aiSearch/calls/SearchRow.tsx";
 import { TaskRow } from "@/features/results/aiSearch/calls/TaskRow.tsx";
+import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
 import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
 import type {
@@ -927,12 +928,13 @@ function AiSearchRunSectionImpl({
                 own scroll while the page scrolls (the old absolute pinning
                 squeezed to the answer column's height and collapsed during
                 the write phase).  Below lg it stacks under the answer. */}
-            <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:max-h-[calc(100vh-3.5rem)] lg:w-72 lg:shrink-0 lg:flex-col xl:w-80">
+            <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:max-h-[calc(100vh-3.5rem)] lg:w-80 lg:shrink-0 lg:flex-col xl:w-96">
               {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
               {run.learnings || run.gaps ? (
                 <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />
               ) : null}
               {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
+              {(run.decisions ?? []).length > 0 ? <DecisionsCard decisions={run.decisions ?? []} /> : null}
               {run.sources.length > 0 ? (
                 <AiSearchSources audit={run.audit} sources={run.sources} />
               ) : (

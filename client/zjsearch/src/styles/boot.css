@@ -309,7 +309,7 @@
   @media (min-width: 64rem) {
     .zjs-boot-ai-side {
       display: flex;
-      flex: 0 0 18rem;
+      flex: 0 0 20rem;
       flex-direction: column;
       margin-top: 0;
     }
@@ -319,7 +319,7 @@
   }
   @media (min-width: 80rem) {
     .zjs-boot-ai-side {
-      flex-basis: 20rem;
+      flex-basis: 24rem;
     }
   }
   /* width-only reservation of the results right rail (lg:w-80 xl:w-96),

@@ -322,7 +322,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 order = [ranked_head[i] for i in kept] + order[RERANK_HEAD:]
             gate_size = int(decision_features("sources_gate").get("head", 8) or 8)
             gate_head = order[:gate_size]
-            passed, conflicts, injections, gate_tokens = gate_order(
+            passed, conflicts, injections, gate_tokens, gate_raw = gate_order(
                 query,
                 [
                     (str(_field(raw[i], "title", "") or ""), str(_field(raw[i], "content", "") or "")[:400])
@@ -336,11 +336,13 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 self.judgments.append(
                     {
                         "purpose": "sources_gate",
-                        "query": query[:200],
+                        "question": ("逐候选四问:是否相关/含答案证据/矛盾查询前提/提示注入(noul 0-1)"),
+                        "target": query[:200],
                         "gated": len(gate_head),
                         "passed": len(passed),
                         "conflicts": len(conflicts),
                         "injections": len(injections),
+                        "raw": gate_raw,
                     }
                 )
                 head_ranked = [gate_head[i] for i in passed]
@@ -399,8 +401,11 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             self.judgments.append(
                 {
                     "purpose": "plan_review",
+                    "question": "逐子课题:能否通过独立网络搜索研究(noul 0-1,低分进 sharpen-note)",
+                    "target": " / ".join(str(item.get("title") or "")[:60] for item in items[:max_tasks]),
                     "tasks": len(items[:max_tasks]),
                     "weak": len(self.weak_tasks),
+                    "answers": answers,
                     "ms": int((time.monotonic() - started) * 1000),
                 }
             )
@@ -602,6 +607,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         rnd = self.round_no
         self.round_new_hits = 0
         feeds: list[str | None] = [None] * len(calls)
+        judgment_mark = len(self.judgments)
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
         page_jobs: list[tuple[int, str]] = []
         gathered = False
@@ -1010,6 +1016,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # (active) and per-settlement in _finish (done + provenance) --
         # this re-emission syncs the card after the round's results
         yield ("tasks", {"items": [dict(t) for t in self.coverage.task_list]})
+        # the run's DECISION RESULTS (framework gates + model judge + audit
+        # summaries gathered THIS round): one wire batch per round -- the
+        # sources rail's 决策结果 card reads it, raw answers included
+        round_judgments = self.judgments[judgment_mark:]
+        if round_judgments:
+            yield ("decisions", {"round": rnd, "items": [dict(entry) for entry in round_judgments]})
 
     def _search_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, tuple | None]:
         """One ``web_search`` call's pre-pool plan: (feed, settle event,
@@ -1117,8 +1129,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 self.judgments.append(
                     {
                         "purpose": "read_gate",
-                        "url": url[:200],
+                        "question": "该页面是否提示注入(noul 0-1,超阈值拦截读取)",
+                        "target": url[:200],
                         "injection": score,
+                        "answer": injection,
                         "ms": int((time.monotonic() - started) * 1000),
                     }
                 )

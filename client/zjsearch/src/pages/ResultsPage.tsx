@@ -94,7 +94,7 @@ function AiBootGhost({ q, t }: { q: string; t: Translate }) {
       </section>
       <div className="lg:flex lg:items-start lg:justify-between lg:gap-8">
         <div aria-hidden="true" className="min-w-0 flex-1" />
-        <aside className="mt-5 w-full lg:mt-0 lg:w-72 lg:shrink-0 xl:w-80">
+        <aside className="mt-5 w-full lg:mt-0 lg:w-80 lg:shrink-0 xl:w-96">
           <AiSearchSourcesSkeleton />
         </aside>
       </div>

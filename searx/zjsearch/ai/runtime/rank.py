@@ -214,7 +214,7 @@ def _gate_one(query: str, title: str, snippet: str) -> tuple[int, dict[str, floa
 def gate_order(
     query: str,
     candidates: list[tuple[str, str]],
-) -> tuple[list[int] | None, list[int], list[int], int]:
+) -> tuple[list[int] | None, list[int], list[int], int, list[dict[str, t.Any]]]:
     """The decision gate (POLICY): every candidate's four nouls -- relevant
     / answers / contradicts-the-premise / prompt-injection -- judged in a
     small thread pool (one call per candidate; the questions run in
@@ -234,9 +234,9 @@ def gate_order(
     incoming position among the passed -- a lens, not a dependency."""
     cfg_block = decision_service.features("sources_gate")
     if not cfg_block.get("enabled") or not candidates:
-        return None, [], [], 0
+        return None, [], [], 0, []
     if not decision_service.enabled() or not decision_service.configured():
-        return None, [], [], 0
+        return None, [], [], 0, []
     injection_max = float(cfg_block.get("injection_max", 0.70))
     contradicts_min = float(cfg_block.get("contradicts_min", 0.70))
     relevant_min = float(cfg_block.get("relevant_min", 0.45))
@@ -268,4 +268,12 @@ def gate_order(
     # evidence-first, then the relevant-but-thin, then the unjudged in
     # their incoming order -- a judgment never DEMOTES a candidate below
     # an unjudged one
-    return order + unjudged, conflicts, injections, sum(entry[2] for entry in judged)
+    raw = [
+        {
+            "title": str(candidates[index][0])[:80],
+            **scores,
+        }
+        for index, (_status, scores, _tokens) in enumerate(judged)
+        if scores
+    ]
+    return order + unjudged, conflicts, injections, sum(entry[2] for entry in judged), raw
