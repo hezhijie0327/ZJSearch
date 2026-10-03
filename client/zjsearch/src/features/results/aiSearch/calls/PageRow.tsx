@@ -6,7 +6,7 @@ import {
   CallContent,
   CallResults,
   CallRowShell,
-  DebugArgs,
+  DebugPanes,
   rawArgsOf,
   settledCallText,
 } from "@/features/results/aiSearch/calls/rowBase.tsx";
@@ -32,17 +32,16 @@ function pageLabel(url: string | undefined): string {
 /** The web_reader row: the read url and its character count.  The reading
     pane NEVER folds -- a settled read shows its content right under the
     row (scroll-capped inside CallContent); a second click to see what was
-    read is friction.  A read can still grow a chevron when result sources
-    collide with its call position (the shared expandable formula), and
-    then folds open like any row. */
+    read is friction.  The debug panes (raw arguments + the model's
+    receipt) join the expandable area beside colliding result sources. */
 export function PageRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
   // web_reader rows never expand for call text (the shared hasText rule
-  // excludes them) nor for raw arguments (!isPage) -- the only fold
-  // trigger left is colliding result sources
-  const expandable = results.length > 0;
+  // excludes them) -- the fold triggers are the raw arguments, the model
+  // receipt and colliding result sources
+  const expandable = results.length > 0 || rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -67,7 +66,7 @@ export function PageRow({ call, results }: { call: AiSearchCall; results: AiSear
       {call.text ? <CallContent call={call} /> : null}
       {open && expandable ? (
         <>
-          {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+          <DebugPanes call={call} rawArgs={rawArgs} />
           <CallResults results={results} />
         </>
       ) : null}

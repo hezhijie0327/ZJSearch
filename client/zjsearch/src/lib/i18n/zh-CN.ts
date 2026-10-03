@@ -317,6 +317,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_elapsed_seconds: "已调研 {n} 秒",
   ai_elapsed_minutes: "已调研 {n} 分 {s} 秒",
   ai_search_row_duplicate: "重复",
+  ai_debug_args: "原始参数",
+  ai_debug_feed: "模型回执",
   ai_clarify_more: "补充说明（可选）",
   ai_clarify_answer_line: "{n}. {q}：{a}",
   ai_clarify_options_join: "、",

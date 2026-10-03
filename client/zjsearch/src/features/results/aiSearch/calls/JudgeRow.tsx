@@ -6,7 +6,7 @@ import {
   CallContent,
   CallResults,
   CallRowShell,
-  DebugArgs,
+  DebugPanes,
   rawArgsOf,
   settledCallText,
 } from "@/features/results/aiSearch/calls/rowBase.tsx";
@@ -16,13 +16,13 @@ import { useT } from "@/lib/i18n.ts";
 /** The judge (SystemOne decision) row: the question and the settled
     verdict; a settled row with returned content opens it as a reading
     pane (the shared hasText rule), otherwise it falls through to the
-    args/results body. */
+    args/receipt/results body. */
 export function JudgeRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
   const hasText = Boolean(call.text);
-  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null;
+  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -44,7 +44,7 @@ export function JudgeRow({ call, results }: { call: AiSearchCall; results: AiSea
       />
       {open && expandable ? (
         <>
-          {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+          <DebugPanes call={call} rawArgs={rawArgs} />
           {hasText ? <CallContent call={call} /> : <CallResults results={results} />}
         </>
       ) : null}

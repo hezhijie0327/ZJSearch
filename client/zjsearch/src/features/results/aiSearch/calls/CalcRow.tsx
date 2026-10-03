@@ -5,7 +5,7 @@ import { useState } from "react";
 import {
   CallResults,
   CallRowShell,
-  DebugArgs,
+  DebugPanes,
   rawArgsOf,
   settledCallText,
 } from "@/features/results/aiSearch/calls/rowBase.tsx";
@@ -13,14 +13,15 @@ import type { AiSearchCall, AiSearchSource } from "@/features/results/aiSearch/u
 import { useT } from "@/lib/i18n.ts";
 
 /** The calculator row: the expression, the `= result` metric, and an
-    expansion of the raw arguments only (a calculation never carries
-    result cards, so the shared expandable formula's first disjunct is
-    false for it -- the args are the sole fold trigger). */
+    expansion of the raw arguments + the model receipt (a calculation
+    never carries result cards, so the shared expandable formula's first
+    disjunct is false for it -- the args and the receipt are the fold
+    triggers). */
 export function CalcRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
-  const expandable = rawArgs !== null;
+  const expandable = rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -42,7 +43,7 @@ export function CalcRow({ call, results }: { call: AiSearchCall; results: AiSear
       />
       {open && expandable ? (
         <>
-          {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+          <DebugPanes call={call} rawArgs={rawArgs} />
           <CallResults results={results} />
         </>
       ) : null}

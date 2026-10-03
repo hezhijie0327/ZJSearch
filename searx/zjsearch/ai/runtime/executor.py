@@ -300,8 +300,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             raw = fut.result()[:RESULTS_CAP]
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch_ai_search: search %d/%d failed: %r", rnd, idx, exc)
-            feeds[idx - 1] = "error: the search failed"
-            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms})
+            feed_text = "error: the search failed"
+            feeds[idx - 1] = feed_text
+            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
             return
         # the dedup mark lands on COMPLETION, never at plan time: a query
         # whose engines errored stays retryable (an executed query -- empty
@@ -317,8 +318,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             # remaining calls still settle (the loop's own catch is the
             # last resort, and it kills the whole batch)
             logger.warning("zjsearch_ai_search: search %d/%d settlement failed: %r", rnd, idx, exc)
-            feeds[idx - 1] = "error: the search failed"
-            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms})
+            feed_text = "error: the search failed"
+            feeds[idx - 1] = feed_text
+            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
             return
         if items:
             self.round_new_hits += 1
@@ -334,7 +336,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         if self.coverage.task_list:
             titles = [str(entry.get("title") or "") for entry in entries]
             self.coverage.track(query, titles, [int(entry["n"]) for entry in entries])
-        yield ("call", {"call": idx, "status": "ok", "n": len(items), "ms": ms})
+        yield ("call", {"call": idx, "status": "ok", "n": len(items), "ms": ms, "feed": feed_block[:800]})
         if entries:
             yield ("sources", {"items": entries})
 
@@ -359,8 +361,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             # PageReadError or a worker-level surprise -- one dead-end line
             # for the model, an error row for the client
             logger.warning("zjsearch_ai_search: page %d/%d failed (%s): %r", rnd, idx, url[:120], exc)
-            feeds[idx - 1] = f"error: {str(exc)[:300] or type(exc).__name__}"
-            yield ("call", {"call": idx, "status": "error", "url": url, "ms": ms})
+            feed_text = f"error: {str(exc)[:300] or type(exc).__name__}"
+            feeds[idx - 1] = feed_text
+            yield ("call", {"call": idx, "status": "error", "url": url, "ms": ms, "feed": feed_text[:800]})
             return
         norm = reader.normalize_url(url)
         # the read's dedup mark lands on COMPLETION, never at plan time: a
@@ -375,7 +378,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             self.reg.note_url(norm, n)
             cite = f"NEW source [{n}] -- cite it as [{n}]"
         netloc = urlsplit(url).netloc
-        feeds[idx - 1] = f'Opened {url} (title: "{title}"; {cite}):\n\n{text}'
+        feed_text = f'Opened {url} (title: "{title}"; {cite}):\n\n{text}'
+        feeds[idx - 1] = feed_text
         self.feed.append(feeds[idx - 1])
         self.feed_chars += len(feeds[idx - 1])
         self.round_new_hits += 1
@@ -431,6 +435,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 "ms": ms,
                 "chars": len(text),
                 "text": text,
+                "feed": feed_text[:800],
             },
         )
 
@@ -444,10 +449,14 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         already-read pages settle instantly as ``duplicate`` -- they never
         hit the engines or the browser again; their feed tells the model
         to move on (the dedup marks are taken at COMPLETION: a failed
-        search or read stays retryable).  The round's tool results also
-        carry the budget / context-pressure / progress notes: that is how
-        the MODEL learns where the run stands (the static system prompt
-        only states the policy once)."""
+        search or read stays retryable).  EVERY ``call`` settlement carries
+        the debug contract: ``ms`` (the call's wall time in milliseconds;
+        pooled calls time submit -> settlement, inline branches time
+        themselves) and ``feed`` (the head, 800 chars, of the exact
+        tool-result text the model receives -- its receipt).  The round's
+        tool results also carry the budget / context-pressure / progress
+        notes: that is how the MODEL learns where the run stands (the
+        static system prompt only states the policy once)."""
         self.round_no += 1
         rnd = self.round_no
         self.round_new_hits = 0
@@ -456,21 +465,41 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         page_jobs: list[tuple[int, str]] = []
         gathered = False
         for wire_id, call in enumerate(calls, 1):
+            started = time.monotonic()
             tool_name = str(call.get("name") or "")
             if tool_name == ASK_TOOL:
                 # the ask intercept in the loop handles a SOLO ask call (the
                 # prompted shape); one mixed into a parallel batch lands here
                 # -- settle the row honestly instead of letting it fall
                 # through to the web_search branch's empty-query error
-                feeds[wire_id - 1] = (
+                feed_text = (
                     "error: the ask_user tool must be the ONLY call of its turn -- ask again alone in the next turn."
                 )
-                yield ("call", {"call": wire_id, "status": "error", "q": ""})
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "error",
+                        "q": "",
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                    },
+                )
                 continue
             if tool_name == CALCULATOR_TOOL:
                 feed, event = calculator.evaluate_call(call, rnd, wire_id)
                 feeds[wire_id - 1] = feed
-                yield ("call", {"call": wire_id, "status": event.get("status", "ok"), "result": event.get("result")})
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": event.get("status", "ok"),
+                        "result": event.get("result"),
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed[:800],
+                    },
+                )
                 continue
             if tool_name == TASK_TOOL:
                 items = parse_task_call(call)
@@ -483,11 +512,21 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 summary = f"{done}/{len(items)}"
                 # the row settles like every other (a plan write is instant
                 # work -- leaving it pending read as 已中断 at the settle)
-                yield ("call", {"call": wire_id, "status": "ok", "q": summary})
-                feeds[wire_id - 1] = (
+                feed_text = (
                     f"plan written: {done}/{len(items)} subtasks covered."
                     " Search each subtask's keywords; a subtask with sources"
                     " is marked done automatically."
+                )
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "q": summary,
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                    },
                 )
                 continue
             if tool_name == DECISION_TOOL:
@@ -497,18 +536,31 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         "zjsearch_decision: unusable call arguments: %.200s",
                         str(call.get("arguments") or ""),
                     )
-                    feeds[wire_id - 1] = (
+                    feed_text = (
                         "error: system_one needs a compact state string and"
                         " 1-4 named questions (type choice / score / noul)."
                         "  Do NOT invent a verdict and do not attribute one"
                         " to system_one -- if you must conclude, present the"
                         " conclusion as your own judgment."
                     )
-                    yield ("call", {"call": wire_id, "status": "error", "q": ""})
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "q": "",
+                            "ms": int((time.monotonic() - started) * 1000),
+                            "feed": feed_text[:800],
+                        },
+                    )
                     continue
                 state, questions = parsed
                 started = time.monotonic()
                 out = decision.judge(state, questions, timeout=20.0)
+                # ONE timing for the branch: the judgment ledger's latency IS
+                # the row settlement's ``ms`` (never double-timed)
+                ms = int((time.monotonic() - started) * 1000)
                 if out is not None:
                     usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
                     self.decision_usage["calls"] += 1
@@ -525,10 +577,20 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                                 for name, q in questions.items()
                             ],
                             "verdicts": out.get("answers") if isinstance(out.get("answers"), dict) else {},
-                            "ms": int((time.monotonic() - started) * 1000),
+                            "ms": ms,
                         }
                     )
                 verdict = self._system_one_answers(out) if out is not None else None
+                if out is None:
+                    feed_text = (
+                        "the decision model is unavailable -- make the judgment from the gathered evidence yourself."
+                    )
+                else:
+                    feed_text = (
+                        verdict + "\nTreat this as ONE signal -- it judged only the state you"
+                        " handed it; facts still come from your cited sources."
+                    )
+                feeds[wire_id - 1] = feed_text
                 yield (
                     "call",
                     {
@@ -539,18 +601,11 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         )[:120],
                         "result": self._system_one_result(out, self.lang) if out is not None else "",
                         "n": len(questions),
+                        "ms": ms,
+                        "feed": feed_text[:800],
                         **({"preview": verdict} if verdict else {}),
                     },
                 )
-                if out is None:
-                    feeds[wire_id - 1] = (
-                        "the decision model is unavailable -- make the judgment from the gathered evidence yourself."
-                    )
-                else:
-                    feeds[wire_id - 1] = (
-                        verdict + "\nTreat this as ONE signal -- it judged only the state you"
-                        " handed it; facts still come from your cited sources."
-                    )
                 continue
             if tool_name == LEARNINGS_TOOL:
                 # the BELIEF LEDGER: facts (with revision ops) + gaps -- the
@@ -566,13 +621,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # the row settles like every other instant write (n = the
                 # active-fact count -- the client renders it localized)
                 active = sum(1 for fact in self.facts if fact["status"] == "active")
-                yield ("call", {"call": wire_id, "status": "ok", "n": active})
                 parts = [f"wrote {written} fact(s)"]
                 if opened:
                     parts.append(f"opened {opened} gap(s)")
                 if closed:
                     parts.append(f"closed {closed} gap(s)")
-                feeds[wire_id - 1] = (
+                feed_text = (
                     "ledger updated: "
                     + ", ".join(parts)
                     + ".\n"
@@ -580,6 +634,17 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     + "\nFact texts stay self-contained and [n]-cited; the"
                     " writer reads the active facts, your next rounds chase"
                     " the open gaps."
+                )
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "n": active,
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                    },
                 )
                 continue
             if tool_name == PAST_RESEARCH_TOOL:
@@ -620,20 +685,24 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                                 "history": True,
                             }
                         )
-                    feeds[wire_id - 1] = (
+                    feed_text = (
                         "from the user's PAST research (may be outdated --"
                         " live sources take precedence):\n\n" + "\n\n".join(blocks)
                     )
+                    feeds[wire_id - 1] = feed_text
                     if events:
                         yield ("sources", {"items": events})
                 else:
-                    feeds[wire_id - 1] = "(no page in the user's past research matches -- continue with live search)"
+                    feed_text = "(no page in the user's past research matches -- continue with live search)"
+                    feeds[wire_id - 1] = feed_text
                 yield (
                     "call",
                     {
                         "call": wire_id,
                         "status": "ok",
                         "n": len(matches),
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
                         **(
                             {
                                 "preview": "\n".join(
@@ -650,13 +719,21 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             if tool_name == USER_MEMORY_TOOL:
                 feed, event = user_memory_cap.evaluate_call(call, self.user_memories)
                 feeds[wire_id - 1] = feed
+                ms = int((time.monotonic() - started) * 1000)
                 if event:
                     # a save: the row event settles the timeline AND the
                     # late memory event persists the fact client-side
                     save_event = event
                     yield (
                         "call",
-                        {"call": wire_id, "status": "ok", "action": "save", "label": save_event["content"]},
+                        {
+                            "call": wire_id,
+                            "status": "ok",
+                            "action": "save",
+                            "label": save_event["content"],
+                            "ms": ms,
+                            "feed": feed[:800],
+                        },
                     )
                     yield ("memory", save_event)
                 else:
@@ -668,6 +745,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                             "action": "search",
                             "label": str(self._raw_json(call).get("query") or ""),
                             "preview": feed[:600],
+                            "ms": ms,
+                            "feed": feed[:800],
                         },
                     )
                 continue
@@ -675,8 +754,18 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # progressive disclosure: the discovery tool returns the
                 # matched tools' full schemas (a text result like any other)
                 gathered = True
-                feeds[wire_id - 1] = mcp.search_mcp_tools(str(self._raw_json(call).get("query") or ""))
-                yield ("call", {"call": wire_id, "status": "ok", "preview": ""})
+                feed_text = mcp.search_mcp_tools(str(self._raw_json(call).get("query") or ""))
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "preview": "",
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                    },
+                )
                 continue
             if tool_name.startswith("mcp_"):
                 gathered = True
@@ -686,7 +775,14 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # what came back (the full text rode the feed to the model)
                 yield (
                     "call",
-                    {"call": wire_id, "status": "ok", "name": tool_name, "preview": feed[:600]},
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "name": tool_name,
+                        "preview": feed[:600],
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed[:800],
+                    },
                 )
                 continue
             if str(call.get("name") or "") == PAGE_TOOL:
@@ -757,11 +853,13 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         """One ``web_search`` call's pre-pool plan: (feed, settle event,
         pool job) -- an empty query errors here, an exact repeat of an
         earlier round's query (site filters included) settles as a
-        duplicate, a fresh query is queued; the dedup mark itself is taken
-        at completion (a failed search stays retryable)."""
+        duplicate, a fresh query is queued; the settle event carries its
+        ``ms``/``feed`` (the debug contract).  The dedup mark itself is
+        taken at completion (a failed search stays retryable)."""
         query, category, time_range, include, exclude = parse_call(call)
         if not query:
-            return "error: empty query", {"call": wire_id, "status": "error", "n": 0, "ms": 0}, None
+            feed_text = "error: empty query"
+            return feed_text, {"call": wire_id, "status": "error", "n": 0, "ms": 0, "feed": feed_text[:800]}, None
         # the key must describe the search AS EXECUTED: exclude hosts wear
         # their operator (a role swap is a different search), and the
         # category/time_range ride along -- the prompt's own recovery
@@ -781,31 +879,39 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             .split()
         )
         if dedup_key in self.reg.ran:
-            return (
+            feed_text = (
                 "duplicate: this exact query already ran in an earlier"
                 " round and its outcome is already in the conversation"
                 " (possibly empty) -- do not repeat it; search a DIFFERENT"
-                " facet or write the answer from the sources you have.",
-                {"call": wire_id, "status": "duplicate", "n": 0, "ms": 0},
+                " facet or write the answer from the sources you have."
+            )
+            return (
+                feed_text,
+                {"call": wire_id, "status": "duplicate", "n": 0, "ms": 0, "feed": feed_text[:800]},
                 None,
             )
         return "", None, (wire_id, query, category, time_range, include, exclude, dedup_key)
 
     def _page_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, str | None]:
         """One ``web_reader`` call's pre-pool plan: (feed, settle event,
-        url-to-read) -- errors and duplicates settle here, a fresh url is
+        url-to-read) -- errors and duplicates settle here (the event
+        carries its ``ms``/``feed``, the debug contract), a fresh url is
         queued; the read's dedup mark is taken at completion (a failed
         read stays retryable)."""
         raw_url = parse_page_call(call)
         url = reader.normalize_url(raw_url)
         if not raw_url:
-            return "error: empty url", {"call": wire_id, "status": "error", "url": "", "ms": 0}, None
+            feed_text = "error: empty url"
+            return feed_text, {"call": wire_id, "status": "error", "url": "", "ms": 0, "feed": feed_text[:800]}, None
         if url in self.reg.read_urls:
-            return (
+            feed_text = (
                 "duplicate: this exact page was already opened in an"
                 " earlier round and its content is already in the"
-                " conversation -- do not re-read it.",
-                {"call": wire_id, "status": "duplicate", "url": url, "ms": 0},
+                " conversation -- do not re-read it."
+            )
+            return (
+                feed_text,
+                {"call": wire_id, "status": "duplicate", "url": url, "ms": 0, "feed": feed_text[:800]},
                 None,
             )
         # NO dedup mark here: completion-time marking (_finish_page) is the
@@ -907,6 +1013,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             # stores the request proxy and search() copies the context again
             # for each of its engine threads (mirrors the webapp view thread)
             worker = flask.copy_current_request_context(self._search_one)
+            # the call's wall clock starts AT SUBMIT (queue wait included):
+            # the settlement's ``ms`` is the wire's debug timing
             futures[pool.submit(worker, query, category, time_range, include, exclude)] = (
                 "search",
                 wire_id,

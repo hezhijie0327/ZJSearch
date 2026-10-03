@@ -5,7 +5,7 @@ import { useState } from "react";
 import {
   CallResults,
   CallRowShell,
-  DebugArgs,
+  DebugPanes,
   rawArgsOf,
   settledCallText,
 } from "@/features/results/aiSearch/calls/rowBase.tsx";
@@ -13,16 +13,17 @@ import type { AiSearchCall, AiSearchSource } from "@/features/results/aiSearch/u
 import { useT } from "@/lib/i18n.ts";
 
 /** The web_search row (and the unknown-tool fallback): the query, the
-    result count, and an expansion of raw arguments + the result-card
-    strip.  Also the DEFAULT branch: every tool without a row of its own
-    lands here (a search-shaped row is the honest fallback). */
+    result count, and an expansion of raw arguments + the model receipt +
+    the result-card strip.  Also the DEFAULT branch: every tool without a
+    row of its own lands here (a search-shaped row is the honest
+    fallback). */
 export function SearchRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
   // a search row never carries call text -- its fold triggers are the
-  // result cards and the raw arguments
-  const expandable = results.length > 0 || rawArgs !== null;
+  // result cards, the raw arguments and the model receipt
+  const expandable = results.length > 0 || rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -44,7 +45,7 @@ export function SearchRow({ call, results }: { call: AiSearchCall; results: AiSe
       />
       {open && expandable ? (
         <>
-          {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+          <DebugPanes call={call} rawArgs={rawArgs} />
           <CallResults results={results} />
         </>
       ) : null}

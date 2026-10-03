@@ -6,7 +6,7 @@ import {
   CallContent,
   CallResults,
   CallRowShell,
-  DebugArgs,
+  DebugPanes,
   rawArgsOf,
   settledCallText,
 } from "@/features/results/aiSearch/calls/rowBase.tsx";
@@ -15,13 +15,14 @@ import { useT } from "@/lib/i18n.ts";
 
 /** The user_memory row: the save/search action + its label; a settled
     row with returned content opens it as a reading pane (the shared
-    hasText rule), otherwise it falls through to the args/results body. */
+    hasText rule), otherwise it falls through to the args/receipt/results
+    body. */
 export function MemoryRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
   const hasText = Boolean(call.text);
-  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null;
+  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -39,7 +40,7 @@ export function MemoryRow({ call, results }: { call: AiSearchCall; results: AiSe
       />
       {open && expandable ? (
         <>
-          {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+          <DebugPanes call={call} rawArgs={rawArgs} />
           {hasText ? <CallContent call={call} /> : <CallResults results={results} />}
         </>
       ) : null}

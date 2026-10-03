@@ -81,6 +81,14 @@ export interface AiSearchCall {
   /** the model's RAW tool-call arguments (q / category / ...) -- the
       timeline row's debug expansion shows exactly what was passed */
   args?: Record<string, unknown>;
+  /** the model's RECEIPT: the head (800 chars) of the exact tool-result
+      text the executor put in the round's feeds -- the debug expansion's
+      second pane (empty dropped) */
+  feed?: string;
+  /** the call's wall time in milliseconds (the executor's settlement:
+      pooled calls time submit -> settlement, inline branches time
+      themselves) */
+  ms?: number;
 }
 
 /** One chronological segment of a run's research timeline, mirroring one
@@ -472,7 +480,8 @@ export function applyEvent(
                   ...call,
                   status: (event.status as AiSearchCall["status"]) ?? "error",
                   ...(event.n !== undefined ? { n: Number(event.n) || 0 } : {}),
-                  ...(event.ms !== undefined ? {} : {}),
+                  ...(event.ms !== undefined ? { ms: Number(event.ms) || 0 } : {}),
+                  ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
                   ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
                   ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
                   ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
@@ -722,6 +731,8 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
     url: item.url ? String(item.url) : undefined,
     category: String(item.category ?? ""),
     args: (item.args as Record<string, unknown>) ?? undefined,
+    feed: typeof item.feed === "string" && item.feed ? item.feed : undefined,
+    ms: typeof item.ms === "number" ? item.ms : undefined,
     status: "pending" as const,
   };
 }

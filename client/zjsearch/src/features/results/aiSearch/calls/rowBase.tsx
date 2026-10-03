@@ -93,31 +93,88 @@ export function CallRowShell({
   );
 }
 
+/** The tiny muted label above a debug pane. */
+function DebugLabel({ label }: { label: string }) {
+  return <div className="px-1 pb-1 text-[11px] font-medium text-ink-3">{label}</div>;
+}
+
 /** The DEBUG pane: the model's raw tool-call arguments, exactly as
     passed -- mono, scroll-capped, copyable. */
 export function DebugArgs({ rawArgs }: { rawArgs: string }) {
   const t = useT();
   const copyToast = useCopyToast();
   return (
-    <div className="group relative mt-1">
-      <div
-        className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
-        dir="ltr"
-      >
-        {rawArgs}
+    <div className="mt-1">
+      <DebugLabel label={t("ai_debug_args")} />
+      <div className="group relative">
+        <div
+          className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+          dir="ltr"
+        >
+          {rawArgs}
+        </div>
+        <button
+          aria-label={t("copy")}
+          className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+          onClick={() => {
+            copyToast(rawArgs);
+          }}
+          title={t("copy")}
+          type="button"
+        >
+          <Copy aria-hidden="true" className="size-3.5" />
+        </button>
       </div>
-      <button
-        aria-label={t("copy")}
-        className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
-        onClick={() => {
-          copyToast(rawArgs);
-        }}
-        title={t("copy")}
-        type="button"
-      >
-        <Copy aria-hidden="true" className="size-3.5" />
-      </button>
     </div>
+  );
+}
+
+/** The model's RECEIPT pane: the head of the exact tool-result text the
+    executor fed back (what the model actually saw).  Same visual language
+    as the args pane -- mono, scroll-capped, copyable -- with `dir="auto"`
+    (feed text is prose, often CJK). */
+export function DebugFeed({ feed }: { feed: string }) {
+  const t = useT();
+  const copyToast = useCopyToast();
+  return (
+    <div className="mt-1">
+      <DebugLabel label={t("ai_debug_feed")} />
+      <div className="group relative">
+        <div
+          className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+          dir="auto"
+        >
+          {feed}
+        </div>
+        <button
+          aria-label={t("copy")}
+          className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+          onClick={() => {
+            copyToast(feed);
+          }}
+          title={t("copy")}
+          type="button"
+        >
+          <Copy aria-hidden="true" className="size-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The row's debug expansion composition: the raw-arguments pane, the
+    model-receipt pane and the call's wall time, in contract order.  Rows
+    render it inside their fold when ANY piece exists -- the expandable
+    conditions OR the pieces (rawArgs / call.feed / results). */
+export function DebugPanes({ call, rawArgs }: { call: AiSearchCall; rawArgs: string | null }) {
+  return (
+    <>
+      {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+      {call.feed ? <DebugFeed feed={call.feed} /> : null}
+      {call.ms !== undefined ? (
+        <div className="mt-1 px-1 font-mono text-[11px] tabular-nums text-ink-3">{call.ms} ms</div>
+      ) : null}
+    </>
   );
 }
 

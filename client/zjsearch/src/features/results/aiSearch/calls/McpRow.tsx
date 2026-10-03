@@ -6,7 +6,7 @@ import {
   CallContent,
   CallResults,
   CallRowShell,
-  DebugArgs,
+  DebugPanes,
   rawArgsOf,
   settledCallText,
 } from "@/features/results/aiSearch/calls/rowBase.tsx";
@@ -17,13 +17,13 @@ import { useT } from "@/lib/i18n.ts";
     stripped, underscores spelled out; the discovery tool keeps its
     keyword query); a settled row with returned content opens it as a
     reading pane (the shared hasText rule), otherwise it falls through to
-    the args/results body. */
+    the args/receipt/results body. */
 export function McpRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
   const hasText = Boolean(call.text);
-  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null;
+  const expandable = (hasText ? true : results.length > 0) || rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -49,7 +49,7 @@ export function McpRow({ call, results }: { call: AiSearchCall; results: AiSearc
       />
       {open && expandable ? (
         <>
-          {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
+          <DebugPanes call={call} rawArgs={rawArgs} />
           {hasText ? <CallContent call={call} /> : <CallResults results={results} />}
         </>
       ) : null}

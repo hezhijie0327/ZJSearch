@@ -2,19 +2,20 @@
 
 import { NotebookPen } from "lucide-react";
 import { useState } from "react";
-import { CallRowShell, DebugArgs, rawArgsOf, settledCallText } from "@/features/results/aiSearch/calls/rowBase.tsx";
+import { CallRowShell, DebugPanes, rawArgsOf, settledCallText } from "@/features/results/aiSearch/calls/rowBase.tsx";
 import type { AiSearchCall } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useT } from "@/lib/i18n.ts";
 
 /** The learnings row: the ledger-write label and the recorded-fact count;
-    its only expansion is the raw arguments (the facts render as the
-    findings card, never inside the row -- the shared expandable formula
-    excludes result cards for it, so the row takes no results at all). */
+    its expansion is the raw arguments + the model receipt (the facts
+    render as the findings card, never inside the row -- the shared
+    expandable formula excludes result cards for it, so the row takes no
+    results at all). */
 export function LearningsRow({ call }: { call: AiSearchCall }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
-  const expandable = rawArgs !== null;
+  const expandable = rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -34,7 +35,7 @@ export function LearningsRow({ call }: { call: AiSearchCall }) {
         }}
         open={open}
       />
-      {open && expandable ? rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null : null}
+      {open && expandable ? <DebugPanes call={call} rawArgs={rawArgs} /> : null}
     </div>
   );
 }
