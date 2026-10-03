@@ -164,11 +164,14 @@ def reasoning_passback(cfg: dict[str, t.Any]) -> bool:
     """The ``zjsearch.llm.reasoning_passback`` setting: whether a model's
     reasoning echoes back on replayed history (the openai chat dialect's
     tool-call loops -- several families REJECT the request without the
-    echo, Moonshot's kimi among them).  The transport configures ONE
-    model, so the flag is simply global for the endpoint: ``true``
-    enables the echo, absent or ``false`` keeps the history clean (the
-    safe default -- endpoints that forbid echoed reasoning would error
-    on it)."""
+    echo, Moonshot's kimi among them; the native dashscope family the
+    same way: qwen3.8's ``preserve_thinking`` defaults true and REQUIRES
+    the full history echo, GLM's preserved thinking likewise -- the
+    ``preserve_thinking`` / ``clear_thinking`` knobs themselves ride
+    ``params`` verbatim).  The transport configures ONE model, so the
+    flag is simply global for the endpoint: ``true`` enables the echo,
+    absent or ``false`` keeps the history clean (the safe default --
+    endpoints that forbid echoed reasoning would error on it)."""
     return cfg.get("reasoning_passback") is True
 
 
@@ -205,12 +208,13 @@ def embedding_passthrough(cfg: dict[str, t.Any]) -> dict[str, t.Any]:
 
 def dimensions(cfg: dict[str, t.Any], family: str) -> int:
     """The effective embedding width for ONE embedding block: the sdk's own
-    ``params`` key (openai ``params.dimensions`` / gemini
-    ``params.output_dimensionality``), default :data:`EMBED_DEFAULT_WIDTH`.
-    MUST match the browser's pgvector column, which is created from THIS
-    value (the capability payload carries it)."""
+    params key (openai ``params.dimensions`` / dashscope ``params.dimension``
+    -- DashScope's native kwarg -- / gemini ``params.output_dimensionality``),
+    default :data:`EMBED_DEFAULT_WIDTH`.  MUST match the browser's pgvector
+    column, which is created from THIS value (the capability payload carries
+    it)."""
     block_params = cfg.get("params") if isinstance(cfg.get("params"), dict) else {}
-    override = "dimensions" if family in ("openai", "dashscope") else "output_dimensionality"
+    override = {"gemini": "output_dimensionality", "dashscope": "dimension"}.get(family, "dimensions")
     try:
         return int(block_params.get(override))
     except (TypeError, ValueError):

@@ -30,6 +30,7 @@ import os
 import typing as t
 
 from searx import settings
+from searx.zjsearch.ai.infra.config import extra_body, extra_headers
 from searx.zjsearch.ai.infra.sdk.dashscope import factory as dashscope_factory
 
 logger = logging.getLogger(__name__)
@@ -95,23 +96,29 @@ def rerank(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
 def _openai(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tuple[list[int] | None, int]:
     """The OpenAI-SDK leg: ONE generic ``client.post(<path>)`` serves every
     HTTP-shape gateway (the path rides ``zjsearch.rerank.path``).
-    ``cast_to=object``: the response parses generically."""
+    ``cast_to=object``: the response parses generically.  ``extra_headers``
+    ride the client's default headers, ``extra_body`` merges into the
+    request body 1:1 (a gateway header, a provider-private field like
+    ``return_documents``)."""
     from openai import OpenAI  # pylint: disable=import-outside-toplevel
 
     client = OpenAI(
         api_key=rerank_key(cfg_block),
         base_url=str(cfg_block.get("base_url") or "").rstrip("/") or None,
+        default_headers=extra_headers(cfg_block) or None,
     )
     path = str(cfg_block.get("path") or DEFAULT_PATH)
+    body: dict[str, t.Any] = {
+        "model": str(cfg_block["model"]),
+        "query": query,
+        "documents": docs,
+        "top_n": len(docs),
+        **(extra_body(cfg_block) or {}),
+    }
     try:
         response = client.post(
             path,
-            body={
-                "model": str(cfg_block["model"]),
-                "query": query,
-                "documents": docs,
-                "top_n": len(docs),
-            },
+            body=body,
             cast_to=object,
         )
     except Exception as exc:  # pylint: disable=broad-except
@@ -144,8 +151,11 @@ def _dashscope(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tupl
     """The native DashScope TextReRank leg: the FAMILY surface
     (``sdk.dashscope`` -- TextReRank is a DashscopeSdk method like
     Generation / TextEmbedding), bound to this block's key / model /
-    base.  The base_http_api_url override rides the factory."""
+    base.  The base_http_api_url override rides the factory; the whole
+    block travels so its ``extra_headers`` / ``extra_body`` reach the
+    family surface's ``_call_extras``."""
     bound = {
+        **cfg_block,
         "api_key": rerank_key(cfg_block),
         "model": str(cfg_block["model"]),
         "base_url": str(cfg_block.get("base_url") or "").strip(),

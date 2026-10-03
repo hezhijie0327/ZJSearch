@@ -177,21 +177,24 @@ zjsearch:
     # ── DashScope native family (sdk: dashscope) ───────────────────────
     # The alibaba native Generation API (qwen thinking/plugins): rides the
     # PUBLIC endpoint by default (base_url omitted) or a DEDICATED
-    # workspace base VERBATIM (including its own /api/v1).  NOTE: a
-    # dedicated MaaS workspace may proxy only the OpenAI-COMPATIBLE paths
-    # -- LLM there = sdk: openai.chat_completions with
-    # base_url: {workspace}/compatible-mode/v1 (probed: the native
-    # text-generation path 400s "url error" on such gateways).
+    # workspace base VERBATIM (including its own /api/v1).  This workspace
+    # proxies the native text-generation path for its deployed models
+    # (qwen-plus / qwen-flash / qwen-turbo / qwen-max probed live) plus
+    # the native embedding + rerank paths.
+    # The qwen3.8/3.7 plus/flash models are MULTIMODAL-NATIVE: even
+    # text-only turns serve on the multimodal-generation endpoint (the
+    # text-generation path answers them with a 400 "url error") -- point
+    # the family at that surface with `surface: multimodal`.
     # sdk: dashscope
     # base_url: "https://dashscope.aliyuncs.com/api/v1"
     # api_key: ""                       # or ZJSEARCH_AI_KEY
     # model: "qwen-plus"
-    #
-    # NOTE: the native path needs a gateway that proxies it -- a dedicated
-    # MaaS workspace that answers ONLY the compatible paths takes
-    # sdk: openai.chat_completions with
-    # base_url: {workspace}/compatible-mode/v1 instead (the native path
-    # 400s "url error" there, surfaced loudly by the pump).
+    # surface: multimodal               # mm-native models (qwen3.8/3.7
+    #                                   # plus/flash) need this even for
+    #                                   # text-only chat
+    # reasoning echo-back (interleaved thinking; kimi/minimax/mimo 等
+    # 家族拒绝没有回传思考的工具循环):
+    # reasoning_passback: true
 
     # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
     # inferera's attribution header (discount eligibility rides on it):
@@ -324,6 +327,13 @@ zjsearch:
     # model: "qwen3.7-text-embedding-flash"
     # params:
     #   dimension: 1024                 # DashScope's own width key
+    #   text_type: document             # query|document (asymmetric search)
+    #   output_type: dense              # dense|sparse|dense&sparse
+    # Multimodal-Embedding models (tongyi-embedding-vision-*) ride
+    # surface: multimodal -- input items become {"text": ...} parts and
+    # the results key on `index`; there the dimension kwarg goes out only
+    # when params set one (tongyi-embedding-vision-plus fixes 1152 and
+    # rejects the parameter).
 
     # sdk: gemini
     # base_url: "https://api.inferera.com/gemini"   # empty = google default

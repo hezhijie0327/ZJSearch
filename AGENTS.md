@@ -1293,14 +1293,57 @@ dashscope``, `infra/sdk/dashscope.py`) and the TYPEsafe decision family
 (`infra/sdk/typesafe.py`): the native qwen Generation API
 (thinking via ``reasoning_content``, function calling, mm auto-routing --
 a parts message carrying an image turns the call into
-MultiModalConversation) plus TextEmbedding through the same bound
+MultiModalConversation, and ``zjsearch.llm.surface: multimodal`` forces
+that surface for every turn) plus TextEmbedding through the same bound
 surface (``zjsearch.embedding.sdk: dashscope``, the width rides
 ``params.dimension``).  base_url rides VERBATIM (a dedicated MaaS
-workspace includes its own ``/api/v1``).  Gateway reality, probed: a
-dedicated MaaS workspace proxies the COMPATIBLE chat path and the NATIVE
-embedding + rerank paths, but NOT the native text-generation path -- LLM
-on such a gateway = ``sdk: openai.chat_completions`` with
-``base_url: {workspace}/compatible-mode/v1``.
+workspace includes its own ``/api/v1``).  Wire facts, probed LIVE on a
+dedicated workspace (2026-10):
+
+- The workspace proxies the native text-generation path for its DEPLOYED
+  models (qwen-plus / qwen-flash / qwen-turbo / qwen-max) plus the
+  native embedding + rerank paths; a model it does not deploy answers
+  the native path with a 400 ``url error`` (surfaced loudly by the
+  pump).  A workspace without the native chat path still takes
+  ``sdk: openai.chat_completions`` with
+  ``base_url: {workspace}/compatible-mode/v1``.
+- The qwen3.8/3.7 **plus/flash models are MULTIMODAL-NATIVE**: even
+  text-only turns serve ONLY on the multimodal-generation endpoint (the
+  text-generation path 400s ``url error`` for them) -- set
+  ``surface: multimodal``.  The mm surface's native parts are
+  ``{"text": ...}`` / ``{"image": <url>}`` (NO ``type`` discriminator --
+  the openai-style part shape is the COMPATIBLE API's), its stream
+  chunks carry ``content`` as a parts list, and it speaks tools +
+  ``response_format`` + thinking natively.
+- Stream fragments accumulate on ``choices[0].MESSAGE`` (never a
+  ``delta``): first fragment carries id+name, later ones the
+  ``arguments`` increment plus ``index``.  Idle chunks say the STRING
+  ``finish_reason: "null"``.  Usage: the cache hit rides
+  ``prompt_tokens_details.cached_tokens`` and a reasoning model's
+  thinking spend ``output_tokens_details.reasoning_tokens`` (the
+  canonical ``thoughts`` bucket).
+- The reasoning echo rides the shared ``zjsearch.llm.reasoning_passback``
+  flag: qwen3.8's ``preserve_thinking`` defaults true and REQUIRES the
+  full history ``reasoning_content`` echo (GLM's preserved thinking the
+  same; the ``preserve_thinking`` / ``clear_thinking`` knobs themselves
+  ride ``params`` verbatim).
+- Embeddings: the native TextEmbedding path (``params.dimension`` is
+  DashScope's width key -- ``infra/config.dimensions`` reads it per
+  family; ``text_type`` / ``output_type`` / ``instruct`` ride the params
+  passthrough) and the MultiModal-Embedding path via
+  ``zjsearch.embedding.surface: multimodal`` (input items become
+  ``{"text": ...}`` parts, results key on ``index`` not ``text_index``,
+  the dimension kwarg goes out only when the params set one -- several
+  mm models fix their width and reject the parameter).  ``instruct`` on
+  TextReRank rides ``zjsearch.rerank.extra_body``; both rerank legs
+  (openai + dashscope) honor the block's ``extra_headers`` /
+  ``extra_body``.
+- qwen-family models IMITATE transcript-style few-shots: a
+  ``User:/You:/Action:`` example block teaches them to WRITE the calls
+  into their text output (ReAct text, zero native calls -- probed).
+  The researcher's ``<examples>`` block is therefore RECIPES (situation +
+  calls as tool semantics) plus an explicit "a call written in text
+  executes nothing" line; with it qwen-plus/3.8-flash call natively 3/3.
 
 RERANK (`zjsearch.rerank.sdk`): THREE wires -- ``dashscope`` (native
 TextReRank leg, living on the DashscopeSdk family surface like
