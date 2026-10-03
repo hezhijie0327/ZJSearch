@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Lightbulb, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
@@ -11,8 +11,8 @@ import { Shell } from "@/components/Shell.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
-import { useT } from "@/lib/i18n.ts";
-import { reducedMotion } from "@/lib/motion.ts";
+import { type StringKey, useT } from "@/lib/i18n.ts";
+import {} from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
 import type { BasicPageData } from "@/lib/types.ts";
@@ -110,21 +110,11 @@ export function IndexPage({ data }: { data: IndexData }) {
   const settings = useSettings();
   const t = useT();
 
-  // the hero's rotating taglines (per locale): a steady 5s cadence;
-  // reduced-motion visitors get the first line, static
-  const taglines = t("hero_taglines")
-    .split("|")
-    .filter((line) => line.trim());
-  const [taglineIndex, setTaglineIndex] = useState(0);
-  useEffect(() => {
-    if (taglines.length < 2 || reducedMotion()) {
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setTaglineIndex((index) => (index + 1) % taglines.length);
-    }, 5000);
-    return () => window.clearInterval(timer);
-  }, [taglines.length]);
+  // the hero's greeting: ONE line, by time of day (computed at mount --
+  // the hero is a transient landing, nobody needs it to roll over live)
+  const hour = new Date().getHours();
+  const greetingKey = hour < 5 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const greeting = t(`hero_greeting_${greetingKey}` as StringKey);
 
   // "?" opens the shortcuts help on the home page too; the result-navigation
   // keys have nothing to act on here
@@ -143,17 +133,16 @@ export function IndexPage({ data }: { data: IndexData }) {
     <Shell globals={globals} variant="hero">
       <main className="mx-auto flex w-full max-w-2xl flex-col items-center px-4 pb-24">
         {/* the brand lives in the top bar now (unified with every page);
-            the hero leads with a ROTATING TAGLINE instead of the giant
-            wordmark.  The block keeps a fixed height so the mode flip and
-            the tagline rotation cannot jump the layout. */}
+            the hero leads with a time-of-day GREETING instead of the giant
+            wordmark.  The block keeps a fixed height so the mode flip
+            cannot jump the layout. */}
         <h1 className="sr-only">{globals.instance_name}</h1>
         <div className="flex h-16 items-center justify-center sm:h-20">
           <p
-            className="animate-fade-in break-words text-center font-serif text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
+            className="break-words text-center font-serif text-2xl font-semibold tracking-tight text-ink sm:text-3xl"
             dir="auto"
-            key={taglineIndex}
           >
-            {taglines[taglineIndex]}
+            {greeting}
           </p>
         </div>
         {/* ONE ask-card for both modes (morphic's ask-anything): the input

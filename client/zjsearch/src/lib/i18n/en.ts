@@ -291,8 +291,10 @@ export const EN = {
   related: "Related",
   ai_hero_ask: "Ask anything...",
   ai_hero_search: "Search for anything...",
-  hero_taglines:
-    "Ask anything -- an AI answer with live, cited sources|Every claim grounded -- the sources ride with the answer|From one question to a researched, cited brief|Search less, understand more",
+  hero_greeting_morning: "Good morning. What would you like to know?",
+  hero_greeting_afternoon: "Good afternoon. What would you like to know?",
+  hero_greeting_evening: "Good evening. What would you like to know?",
+  hero_greeting_night: "Working late? What would you like to know?",
   ai_search_thinking_plan: "Planning the searches…",
   ai_source_crawled: "Read in full",
   ai_source_history: "Recalled from your past research (not re-verified this run)",
