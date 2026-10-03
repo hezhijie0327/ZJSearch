@@ -921,39 +921,51 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                 </>
               ) : null}
               {embed || stats?.usage?.rerank || stats?.usage?.decision ? (
-                // 嵌入 / 重排 / 决策: the score endpoints are input-only, so
-                // ONE 输入 tile per model -- the three fit ONE row (they
-                // wrap below sm).  The tile label names the model.
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                // 嵌入 / 重排 / 决策: the LLM group's language -- one group
+                // title per model, ONE 输入 tile inside (the score
+                // endpoints are input-only); the three groups share ONE
+                // row (they stack below sm).
+                <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-3">
                   {embed ? (
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <ArrowUp aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_embedding")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.input.toLocaleString()}</dd>
+                    <div>
+                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
+                      <div className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <ArrowUp aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_input")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {embed.input.toLocaleString()}
+                        </dd>
+                      </div>
                     </div>
                   ) : null}
                   {stats?.usage?.rerank ? (
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <ArrowUp aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_rerank")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                        {stats.usage.rerank.tokens.toLocaleString()}
-                      </dd>
+                    <div>
+                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
+                      <div className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <ArrowUp aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_input")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {stats.usage.rerank.tokens.toLocaleString()}
+                        </dd>
+                      </div>
                     </div>
                   ) : null}
                   {stats?.usage?.decision ? (
-                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                      <dt className="flex items-center gap-1 text-xs text-ink-3">
-                        <ArrowUp aria-hidden="true" className="size-3" />
-                        {t("knowledge_usage_decision")}
-                      </dt>
-                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                        {stats.usage.decision.tokens.toLocaleString()}
-                      </dd>
+                    <div>
+                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_decision")}</p>
+                      <div className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5">
+                        <dt className="flex items-center gap-1 text-xs text-ink-3">
+                          <ArrowUp aria-hidden="true" className="size-3" />
+                          {t("knowledge_usage_input")}
+                        </dt>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {stats.usage.decision.tokens.toLocaleString()}
+                        </dd>
+                      </div>
                     </div>
                   ) : null}
                 </div>
