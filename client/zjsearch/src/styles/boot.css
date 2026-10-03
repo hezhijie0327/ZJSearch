@@ -241,6 +241,32 @@
     width: 4rem;
     height: 1rem;
   }
+  /* the phase strip's ghost: mirrors the real PhaseStrip row (mt-2 + a
+     1rem text-xs line) so the boot → React swap never shifts */
+  .zjs-boot-ai-phases {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0 0.25rem;
+    height: 1rem;
+  }
+  .zjs-boot-ai-phase {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  .zjs-boot-ai-phase-dot {
+    flex: none;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--ink-3) 50%, transparent);
+  }
+  .zjs-boot-ai-phase-bar {
+    width: 2.5rem;
+    height: 0.5rem;
+  }
   .zjs-boot-ai-box {
     margin-top: 0.75rem;
     border: 1px solid var(--line);

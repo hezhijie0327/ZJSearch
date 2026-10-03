@@ -42,6 +42,15 @@
         <span class="zjs-skeleton zjs-boot-ai-label"></span>
         <span class="zjs-skeleton zjs-boot-ai-count"></span>
       </div>
+      {#- the phase strip's ghost: four dot+bar segments at the exact
+          height of the real strip's text-xs row (the labels are
+          locale-owned, the geometry is not) -#}
+      <div aria-hidden="true" class="zjs-boot-ai-phases">
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+      </div>
       <div aria-hidden="true" class="zjs-boot-ai-box">
         <div class="zjs-skeleton zjs-boot-ai-note"></div>
         <div class="zjs-skeleton zjs-boot-ai-row"></div>

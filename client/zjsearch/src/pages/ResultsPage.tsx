@@ -77,6 +77,17 @@ function AiBootGhost({ q, t }: { q: string; t: Translate }) {
           <span className="text-xl font-medium text-ink">{t("ai_search_process")}</span>
           <span className="text-xs text-ink-3">{t("ai_elapsed_seconds", { n: "0" })}</span>
         </div>
+        {/* the phase strip's ghost: the four-segment spine paints the
+            moment the first phase event lands -- the ghost holds its line
+            so the swap never shifts */}
+        <div aria-hidden="true" className="mt-2 flex items-center gap-2 px-1 text-xs">
+          {["ai_phase_plan", "ai_phase_research", "ai_phase_write", "ai_phase_audit"].map((key) => (
+            <span className="flex items-center gap-1.5" key={key}>
+              <span className="size-1.5 shrink-0 rounded-full bg-ink-3/50" />
+              <span className="whitespace-nowrap text-ink-3">{t(key as "ai_phase_plan")}</span>
+            </span>
+          ))}
+        </div>
         <div className="mt-3 rounded-lg border border-line p-3">
           <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
         </div>

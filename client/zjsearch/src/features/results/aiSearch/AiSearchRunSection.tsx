@@ -36,6 +36,7 @@ import { PageRow } from "@/features/results/aiSearch/calls/PageRow.tsx";
 import { PastResearchRow } from "@/features/results/aiSearch/calls/PastResearchRow.tsx";
 import { SearchRow } from "@/features/results/aiSearch/calls/SearchRow.tsx";
 import { TaskRow } from "@/features/results/aiSearch/calls/TaskRow.tsx";
+import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
 import type {
   AiAskQuestion,
   AiSearchCall,
@@ -606,6 +607,10 @@ function AiSearchRunSectionImpl({
   const [researchForced, setResearchForced] = useState<boolean | null>(null);
   const streaming = run.status === "streaming" && live;
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
+  // the round counter (第 N 轮): the executed steps' count -- while a
+  // round streams, its calls step already exists, so N names the round
+  // in flight
+  const roundCount = run.steps.filter((step) => step.kind === "calls").length;
   // the process timeline is the record of how the report was made: OPEN
   // through the research phase, FOLDED once the writer takes over (the
   // answer becomes the focus; the record is one click away) -- an explicit
@@ -676,6 +681,11 @@ function AiSearchRunSectionImpl({
             <span className="shrink-0 text-xs text-ink-3">{t("ai_search_calls_count", { n: String(totalCalls) })}</span>
           ) : null}
           <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
+          {streaming && roundCount > 0 ? (
+            <span className="shrink-0 text-xs tabular-nums text-ink-3">
+              {t("ai_phase_round", { n: String(roundCount) })}
+            </span>
+          ) : null}
           {streaming ? (
             <button
               aria-label={t("stop")}
@@ -688,6 +698,9 @@ function AiSearchRunSectionImpl({
             </button>
           ) : null}
         </div>
+        {/* the macro-stage spine: visible even when the timeline folds --
+            this is the orientation element for a ~10-minute deep run */}
+        <PhaseStrip stage={run.stage} />
         <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
           <div className="break-words rounded-lg border border-line p-3">
             {run.steps.map((step, index) => (

@@ -10,12 +10,14 @@ import typing as t
 
 from searx.zjsearch.ai.infra import config as llm_config
 
-SEARCH_MODES = ("speed", "balanced", "quality", "goal")
+SEARCH_MODES = ("speed", "balanced", "deep", "goal")
 
 _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # speed: ONE focused round (Morphic's quick discipline); balanced: main
-    # facets, optional gap-filler; quality: multi-round deep research with
-    # cross-verification; goal: THE LOOP MODE -- the question is a target
+    # facets plus a gap-filler pass; deep: THE ~10-minute research --
+    # breadth (8 subtasks) and depth (real page reads) under a ledger that
+    # must CLOSE, not a model that got bored; goal: THE LOOP MODE -- the
+    # question is a target
     # and the run iterates through its tools until the evidence ledger
     # closes.  "Infinite" means the loop ends on COMPLETION, not on a
     # small count: max_rounds is the runaway guard (the client-visible
@@ -25,14 +27,14 @@ _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # rounds end the research.  Per-round call counts are the MODEL's call
     # (uncapped); every engine request carries its own per-request timeout.
     "speed": {"max_rounds": 1, "stall_rounds": 1},
-    "balanced": {"max_rounds": 4, "stall_rounds": 2},
-    "quality": {"max_rounds": 8, "stall_rounds": 2},
+    "balanced": {"max_rounds": 6, "stall_rounds": 3},
+    "deep": {"max_rounds": 18, "stall_rounds": 4},
     "goal": {"max_rounds": 32, "stall_rounds": 3},
 }
 
-CLARIFY_MODES = ("quality", "goal")
+CLARIFY_MODES = ("deep", "goal")
 
-PLAN_MODES = ("quality", "goal")
+PLAN_MODES = ("deep", "goal")
 """The tiers whose structured \"##\"-section answers are worth a planning
 turn: the plan tool is registered only here (speed's one dense paragraph
 and balanced's short prose never need it)."""

@@ -24,7 +24,12 @@ import {
  * no-op persistence -- a stored run and a live run hit one renderer.
  */
 
-export type AiSearchMode = "speed" | "balanced" | "quality" | "goal";
+export type AiSearchMode = "speed" | "balanced" | "deep" | "goal";
+
+/** The run's macro stages (the wire's ``phase`` events -- Qwen Deep
+    Research's spine): one value active at a time, the history kept for
+    the run_summary record. */
+export type AiSearchStage = "plan" | "research" | "write" | "audit";
 /** "awaiting": the clarify gate asked for the user's direction -- the run
     lives on until they answer (or skip) via submitClarify. */
 export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error";
@@ -209,6 +214,12 @@ export interface AiSearchRun {
       what the researcher recorded as established -- the findings card
       renders it, the writer received the same list as <findings> */
   learnings?: string[];
+  /** the macro stage the run is in right now (the wire's ``phase``
+      events) -- the PhaseStrip renders it; undefined = no phase events
+      (legacy threads) and the strip stays hidden */
+  stage?: AiSearchStage;
+  /** every stage the run walked, in order -- the run_summary record */
+  stages: AiSearchStage[];
 }
 
 /** The fold's state: the threaded runs plus the thread-wide surfaces
@@ -374,6 +385,17 @@ export function applyEvent(
       }
       const flagged = runs.map((item, index) => (index === lastIdx ? { ...item, stopped: true } : item));
       return { ...settle({ ...core, runs: flagged }, null, true, fx.now()), phase: "done" };
+    }
+    case "phase": {
+      // the macro-stage spine: one value active, the history kept (the
+      // run_summary record replays it); unknown names ignore
+      const name = String(event.name ?? "") as AiSearchStage;
+      if (!["plan", "research", "write", "audit"].includes(name)) {
+        return core;
+      }
+      const stages = run.stages[run.stages.length - 1] === name ? run.stages : [...run.stages, name];
+      runs[lastIdx] = { ...run, stage: name, stages };
+      return { ...core, runs };
     }
     case "open": {
       if (String(event.kind) === "write") {
@@ -712,5 +734,6 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     startedAt: Date.now(),
     endedAt: null,
     mode,
+    stages: [],
   };
 }

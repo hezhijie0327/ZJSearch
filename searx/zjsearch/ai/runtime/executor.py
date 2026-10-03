@@ -131,6 +131,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # system_one delegation + its input tokens -- the settle folds it
         # into ``usage.decision`` beside the rerank bucket
         self.decision_usage = {"calls": 0, "tokens": 0}
+        # the judgment ledger: EVERY structured verdict the run hands down
+        # (the model-initiated ``judge`` calls today; the framework gates
+        # join in later milestones) -- purpose, the questions asked, the
+        # verdicts with their confidences and the latency, folded into the
+        # settled run's meta so any decision is explainable and replayable
+        self.judgments: list[dict[str, t.Any]] = []
         # the run's findings ledger (the learnings tool): what the sources
         # ESTABLISHED, the model's own distillation -- the writer reads it
         # as <findings> alongside the raw source feed
@@ -419,11 +425,27 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     yield ("call", {"call": wire_id, "status": "error", "q": ""})
                     continue
                 state, questions = parsed
+                started = time.monotonic()
                 out = decision.judge(state, questions, timeout=20.0)
                 if out is not None:
                     usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
                     self.decision_usage["calls"] += 1
                     self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
+                    self.judgments.append(
+                        {
+                            "purpose": "judge",
+                            "questions": [
+                                {
+                                    "name": name,
+                                    "instructions": str(q.get("instructions") or "")[:200],
+                                    "type": q.get("type"),
+                                }
+                                for name, q in questions.items()
+                            ],
+                            "verdicts": out.get("answers") if isinstance(out.get("answers"), dict) else {},
+                            "ms": int((time.monotonic() - started) * 1000),
+                        }
+                    )
                 verdict = self._system_one_answers(out) if out is not None else None
                 yield (
                     "call",

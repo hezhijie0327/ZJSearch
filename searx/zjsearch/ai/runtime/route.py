@@ -273,7 +273,9 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
     )
-    return _respond(_Ndjson(events, cfg, research_q, lang, gate_usage, state.rerank_usage, state.decision_usage))
+    return _respond(
+        _Ndjson(events, cfg, research_q, lang, gate_usage, state.rerank_usage, state.decision_usage, state.judgments)
+    )
 
 
 def _respond(stream: "_Ndjson") -> flask.Response:
@@ -314,6 +316,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         gate_usage: list[dict[str, t.Any]],
         rerank_usage: dict[str, int] | None = None,
         decision_usage: dict[str, int] | None = None,
+        judgments: list[dict[str, t.Any]] | None = None,
     ):
         self.events = events
         self.cfg = cfg
@@ -325,6 +328,10 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         self.rerank_usage = rerank_usage
         # the decision model's account, same live-dict pattern
         self.decision_usage = decision_usage
+        # the judgment ledger (the executor's structured verdicts) -- the
+        # settle carries it verbatim so the knowledge base's run meta is
+        # the one explainable record of every decision
+        self.judgments = judgments or []
         self.buffer: list[str] = []
         self.rest: t.Iterator[str] | None = None
         self.primed = False
@@ -370,6 +377,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                     "tokens": int(decision_spend.get("tokens") or 0),
                 }
             event = {**event, "usage": usage}
+        if self.judgments:
+            event = {**event, "judgments": self.judgments}
         return event
 
     def prime(self) -> None:

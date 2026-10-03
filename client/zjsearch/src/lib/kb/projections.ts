@@ -54,9 +54,9 @@ export interface RunSnapshot {
   /** the user's answered clarify text ("" = skipped) */
   clarify?: string | null;
   tags?: string[];
-  /** the macro phases the run walked (the wire's ``phase`` events, in
+  /** the macro stages the run walked (the wire's ``phase`` events, in
       order) -- the run_summary row replays them for the directory */
-  phases?: string[];
+  stages?: string[];
   steps?: Array<{
     kind: string;
     round?: number;
@@ -349,7 +349,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           (run.sources ?? []).length,
           String(run.answer ?? ""),
           run.usage ? JSON.stringify(run.usage) : null,
-          JSON.stringify(run.phases ?? []),
+          JSON.stringify(run.stages ?? []),
           Number(run.startedAt ?? now) || now,
           now,
         ],

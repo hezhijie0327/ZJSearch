@@ -238,6 +238,13 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     carried_error: str | None = None
 
     if researching:
+        # the coarse phase spine (the closed set's one coarse event): the
+        # run opens in "plan" -- the first turn reads the material and
+        # lays out the approach -- and flips to "research" the moment a
+        # round's calls actually execute (micro-activity belongs to the
+        # entries; this spine only tells the user where they are)
+        current_phase = "plan"
+        yield {"e": "phase", "name": current_phase}
         while rounds < max_rounds and halt_message is None:
             entry = run_state.next_entry()
             yield {"e": "open", "id": entry, "kind": _RESEARCH, "round": rounds + 1}
@@ -270,6 +277,9 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 break
             rounds += 1
             yield {"e": "calls", "id": entry, "round": rounds, "items": (display or _noop_display)(calls)}
+            if current_phase == "plan":
+                current_phase = "research"
+                yield {"e": "phase", "name": current_phase}
             filled: list[tuple[dict[str, t.Any], str] | None] = [None] * len(calls)
             try:
                 for event in executor(calls):
@@ -308,6 +318,8 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             # sources fly as one sources event (numbered AFTER the live
             # feed's final [n], so the answer can cite them), then a FRESH
             # completion writes the reader-facing answer
+            current_phase = "write"
+            yield {"e": "phase", "name": current_phase}
             if writer_sources is not None:
                 try:
                     entries = writer_sources()

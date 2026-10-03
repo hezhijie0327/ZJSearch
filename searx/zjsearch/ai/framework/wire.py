@@ -19,6 +19,10 @@ bug and :py:func:`encode` refuses it):
 ``call``                ONE call settled: ``{id, call, status, ...}``
                         (n/ms/chars/text/result/preview per tool kind).
 ``close``               entry ``id`` is final.
+``phase``               the run's macro stage: ``{name: plan|
+                        research|write|audit}`` -- the timeline's one
+                        coarse spine (Qwen Deep Research's phase
+                        design); micro-activity stays with the entries.
 ``tasks``               the task card's AUTHORITATIVE snapshot.
 ``learnings``           the findings ledger's AUTHORITATIVE snapshot
                         (``items``: the facts so far) -- what the
@@ -47,6 +51,7 @@ import typing as t
 EVENTS: frozenset[str] = frozenset(
     {
         "open",
+        "phase",
         "think",
         "say",
         "calls",
