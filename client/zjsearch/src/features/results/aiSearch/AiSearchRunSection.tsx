@@ -697,6 +697,11 @@ function AiSearchRunSectionImpl({
         {run.q}
       </h2>
 
+      {/* the run's macro-stage spine: the RUN's own line under the title --
+          it covers 撰写/核验 which live outside the research box, so it
+          must not read as part of the collapsible */}
+      <PhaseStrip done={run.status !== "streaming"} stage={run.stage} verifying={run.auditTotal} />
+
       {/* the clarify modal floats OVER the page -- PORTALed to the body:
           the run section's animate-fade-up leaves a residual transform and
           a fixed child of a transformed ancestor positions (and clips)
@@ -716,74 +721,6 @@ function AiSearchRunSectionImpl({
           )
         : null}
 
-      {/* research: think stream + intent + parallel tool calls */}
-      <section aria-busy={streaming} aria-label={t("ai_search_process")}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Waypoints
-            aria-hidden="true"
-            className={`size-5 shrink-0 ${streaming ? "animate-pulse text-ink-2" : "text-ink-3"}`}
-          />
-          <button
-            aria-expanded={researchOpen}
-            className="inline-flex min-h-6 items-center gap-1.5 text-xl font-medium text-ink transition-colors hover:text-ink-2"
-            onClick={() => {
-              setResearchForced(!researchOpen);
-            }}
-            type="button"
-          >
-            {t("ai_search_process")}
-            <ChevronDown
-              aria-hidden="true"
-              className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
-            />
-          </button>
-          {/* the research shape at a glance (morphic/Vane carry a step
-                  count in the collapsed label too) */}
-          {totalCalls > 0 ? (
-            <span className="shrink-0 text-xs text-ink-3">{t("ai_search_calls_count", { n: String(totalCalls) })}</span>
-          ) : null}
-          <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
-          {streaming && roundCount > 0 ? (
-            <span className="shrink-0 text-xs tabular-nums text-ink-3">
-              {t("ai_phase_round", { n: String(roundCount) })}
-            </span>
-          ) : null}
-          {streaming ? (
-            <button
-              aria-label={t("stop")}
-              className={`${CHIP_BTN} shrink-0`}
-              onClick={onStop}
-              title={t("stop")}
-              type="button"
-            >
-              <CircleStop className="size-3.5" />
-            </button>
-          ) : null}
-        </div>
-        {/* the macro-stage spine: visible even when the timeline folds --
-            this is the orientation element for a ~10-minute deep run */}
-        <PhaseStrip done={run.status !== "streaming"} stage={run.stage} verifying={run.auditTotal} />
-        <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
-          <div className="break-words rounded-lg border border-line p-3">
-            {run.steps.map((step, index) => (
-              <StepSegment index={index} key={`${step.kind}-${index}`} run={run} step={step} streaming={streaming} />
-            ))}
-            {streaming && !run.steps.length ? (
-              <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
-            ) : null}
-          </div>
-        </Collapse>
-      </section>
-
-      {/* the budget took the tools away: the model was told to summarize
-          and is rewriting the complete answer (partial prose discarded) */}
-      {run.wrappingUp && streaming ? (
-        <p className="flex items-center gap-1.5 text-xs text-ink-3">
-          <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
-          {t("ai_wrapup")}
-        </p>
-      ) : null}
-
       {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
               the prose keeps its reading measure on the left, the run's
               source cards become a sticky rail on the right; below lg
@@ -792,6 +729,80 @@ function AiSearchRunSectionImpl({
               compact line covers the writer's silent start. */}
       <div className="relative lg:flex lg:items-start lg:justify-between lg:gap-8">
         <div className="min-w-0 flex-1 space-y-5 lg:max-w-3xl">
+          {/* research: think stream + intent + parallel tool calls */}
+          <section aria-busy={streaming} aria-label={t("ai_search_process")}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Waypoints
+                aria-hidden="true"
+                className={`size-5 shrink-0 ${streaming ? "animate-pulse text-ink-2" : "text-ink-3"}`}
+              />
+              <button
+                aria-expanded={researchOpen}
+                className="inline-flex min-h-6 items-center gap-1.5 text-xl font-medium text-ink transition-colors hover:text-ink-2"
+                onClick={() => {
+                  setResearchForced(!researchOpen);
+                }}
+                type="button"
+              >
+                {t("ai_search_process")}
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`size-4 transition-transform ${researchOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              {/* the research shape at a glance (morphic/Vane carry a step
+                  count in the collapsed label too) */}
+              {totalCalls > 0 ? (
+                <span className="shrink-0 text-xs text-ink-3">
+                  {t("ai_search_calls_count", { n: String(totalCalls) })}
+                </span>
+              ) : null}
+              <ElapsedTimer endedAt={run.endedAt} startedAt={run.startedAt} />
+              {streaming && roundCount > 0 ? (
+                <span className="shrink-0 text-xs tabular-nums text-ink-3">
+                  {t("ai_phase_round", { n: String(roundCount) })}
+                </span>
+              ) : null}
+              {streaming ? (
+                <button
+                  aria-label={t("stop")}
+                  className={`${CHIP_BTN} shrink-0`}
+                  onClick={onStop}
+                  title={t("stop")}
+                  type="button"
+                >
+                  <CircleStop className="size-3.5" />
+                </button>
+              ) : null}
+            </div>
+            {/* the macro-stage spine: visible even when the timeline folds --
+            this is the orientation element for a ~10-minute deep run */}
+            <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
+              <div className="break-words rounded-lg border border-line p-3">
+                {run.steps.map((step, index) => (
+                  <StepSegment
+                    index={index}
+                    key={`${step.kind}-${index}`}
+                    run={run}
+                    step={step}
+                    streaming={streaming}
+                  />
+                ))}
+                {streaming && !run.steps.length ? (
+                  <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
+                ) : null}
+              </div>
+            </Collapse>
+          </section>
+          {/* the budget took the tools away: the model was told to summarize
+          and is rewriting the complete answer (partial prose discarded) */}
+          {run.wrappingUp && streaming ? (
+            <p className="flex items-center gap-1.5 text-xs text-ink-3">
+              <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
+              {t("ai_wrapup")}
+            </p>
+          ) : null}
+          {/* the answer column continues below */}
           {streaming &&
           !run.answer &&
           (run.wrappingUp || run.direct || run.steps.some((step) => step.kind === "calls")) ? (
@@ -909,12 +920,12 @@ function AiSearchRunSectionImpl({
             never get content: a settled no-source run) */}
         {run.sources.length > 0 || streaming ? (
           <>
-            {/* the rail is ABSOLUTE on lg (top-0/bottom-0 of the wrapper):
-                its bottom pins to the answer column's usage row exactly and
-                its content never stretches the section -- a spacer keeps the
-                column width reserved.  Below lg it stacks under the answer. */}
-            <div aria-hidden="true" className="hidden lg:block lg:w-72 lg:shrink-0 xl:w-80" />
-            <aside className="mt-5 w-full lg:absolute lg:bottom-0 lg:right-0 lg:top-0 lg:mt-0 lg:w-72 lg:overflow-y-auto lg:overscroll-contain xl:w-80">
+            {/* the rail is a STATIC STICKY column on lg: top-aligned beside
+                the research box / answer, pinned under the appbar with its
+                own scroll while the page scrolls (the old absolute pinning
+                squeezed to the answer column's height and collapsed during
+                the write phase).  Below lg it stacks under the answer. */}
+            <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:max-h-[calc(100vh-3.5rem)] lg:w-72 lg:shrink-0 lg:overflow-y-auto lg:overscroll-contain xl:w-80">
               {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
               {run.learnings || run.gaps ? (
                 <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />

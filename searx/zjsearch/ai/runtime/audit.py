@@ -164,11 +164,11 @@ def citation_verdicts(
         source = sources[n]
         passage = f"{source.get('title', '')} - {source.get('snippet', '')}"[:800]
         if not _passes_prefloor(claim, passage):
-            verdicts[n] = {"verdict": "unsupported", "confidence": 0.0}
+            verdicts[n] = {"verdict": "unsupported", "confidence": 0.0, "claim": claim[:200]}
             continue
         graded = _grade_relation(claim, passage, is_zh)
         if graded is not None:
-            verdicts[n] = {"verdict": graded[0], "confidence": graded[1]}
+            verdicts[n] = {"verdict": graded[0], "confidence": graded[1], "claim": claim[:200]}
     return verdicts
 
 

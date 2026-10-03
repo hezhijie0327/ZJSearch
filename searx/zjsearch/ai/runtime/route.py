@@ -14,6 +14,7 @@ settles as an error BEFORE any content event becomes the plain-text 502
 
 import logging
 import re
+import time
 import typing as t
 
 import flask
@@ -411,11 +412,27 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         source (citation_verdicts -- rerank pre-floor + decision choice).
         ``None`` when the audit cannot run (decision off/unconfigured,
         empty answer/registry) -- the settle carries nothing and the
-        client renders no badges (a lens, not a dependency)."""
+        client renders no badges (a lens, not a dependency).  The summary
+        joins the judgment ledger (purpose ``audit``): the knowledge
+        base's run meta carries WHAT was audited and what came of it."""
         if not answer or self.state is None:
             return None
+        started = time.monotonic()
         verdicts = audit.citation_verdicts(answer, self.state.entries)
-        return {"citations": verdicts} if verdicts else None
+        if not verdicts:
+            return None
+        counts: dict[str, int] = {}
+        for entry in verdicts.values():
+            counts[entry["verdict"]] = counts.get(entry["verdict"], 0) + 1
+        self.state.judgments.append(
+            {
+                "purpose": "audit",
+                "citations": len(verdicts),
+                "verdicts": counts,
+                "ms": int((time.monotonic() - started) * 1000),
+            }
+        )
+        return {"citations": verdicts}
 
     def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
         """The settle with the GATES' token account folded into its usage:

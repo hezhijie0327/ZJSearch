@@ -245,9 +245,11 @@ export interface AiSearchRun {
 }
 
 /** One citation's audit verdict: verified / contradicted / unsupported /
-    unverified, with the decision model's confidence. */
+    unverified, with the decision model's confidence and the audited
+    CLAIM (the sentence that carried the [n] -- the traceability
+    payload; the judged passage is the card's own source). */
 export interface AiSearchAudit {
-  citations: Record<string, { verdict: string; confidence: number }>;
+  citations: Record<string, { verdict: string; confidence: number; claim?: string }>;
 }
 
 /** The fold's state: the threaded runs plus the thread-wide surfaces

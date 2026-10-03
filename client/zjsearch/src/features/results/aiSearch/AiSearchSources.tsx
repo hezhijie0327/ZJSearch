@@ -111,6 +111,18 @@ function AuditBadge({ verdict }: { verdict: string }) {
   );
 }
 
+function auditLabel(
+  verdict: string,
+): "ai_audit_verified" | "ai_audit_contradicted" | "ai_audit_unsupported" | "ai_audit_unverified" {
+  return verdict === "verified"
+    ? "ai_audit_verified"
+    : verdict === "contradicted"
+      ? "ai_audit_contradicted"
+      : verdict === "unsupported"
+        ? "ai_audit_unsupported"
+        : "ai_audit_unverified";
+}
+
 function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearchAudit }) {
   const t = useT();
   // the traditional presentations' type adaptation: videos carry their
@@ -230,6 +242,33 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
           ) : null}
         </div>
       ) : null}
+      {(() => {
+        const citation = audit?.citations[String(source.n)];
+        if (!citation) {
+          return null;
+        }
+        // the citation AUDIT's traceability: what was checked (the claim
+        // that carried this [n]), what came of it (verdict + confidence)
+        // -- the judged passage is this card's own snippet above
+        return (
+          <div className="mt-2 border-t border-line pt-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <AuditBadge verdict={citation.verdict} />
+              <span className="font-medium text-ink-2">{t(auditLabel(citation.verdict))}</span>
+              {citation.confidence > 0 ? (
+                <span className="tabular-nums text-ink-3">
+                  {t("ai_audit_confidence", { n: String(Math.round(citation.confidence * 100)) })}
+                </span>
+              ) : null}
+            </div>
+            {citation.claim ? (
+              <p className="mt-1 line-clamp-2 break-words text-ink-3" dir="auto">
+                {citation.claim}
+              </p>
+            ) : null}
+          </div>
+        );
+      })()}
       {source.img ? (
         <div className="relative mt-2 hidden shrink-0 self-start sm:block">
           <Thumb alt="" className="h-20 w-28" src={source.img} />
