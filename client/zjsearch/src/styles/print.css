@@ -73,6 +73,7 @@
 
   /* ── chrome: gone on paper ──────────────────────────────────────── */
   .zjs-print-hide,
+  .zjs-appbar,
   /* header action circles, drawers, floating pills, export chips,
      back-to-top, follow-up composer, autocomplete, toasts */
   [data-dialog-close],

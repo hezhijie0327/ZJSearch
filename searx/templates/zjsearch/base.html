@@ -21,7 +21,9 @@ module script tag.  See ``client/zjsearch/`` for the UI implementation. -#}
 <html lang="{{ locale_rfc5646 }}"{% if rtl %} dir="rtl"{% endif %}{% if html_classes %} class="{{ html_classes|join(' ') }}"{% endif %}>
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  {%- set theme_bg = {'': '#faf9f6', 'dark': '#1b1a18', 'black': '#000000'}.get(preferences.get_value('simple_style'), '#faf9f6') -%}
+  <meta name="theme-color" content="{{ theme_bg }}">
   <meta name="endpoint" content="{{ endpoint }}">
   <meta name="description" content="{{ instance_name }} — a privacy-respecting, open metasearch engine">
   <meta name="generator" content="searxng/{{ searxng_version }}">

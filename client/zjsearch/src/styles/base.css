@@ -97,3 +97,24 @@
     background-color: transparent;
   }
 }
+
+/* ── PWA standalone adaptation ────────────────────────────────────────
+   viewport-fit=cover exposes the notched-corner insets; the sticky app
+   bar lifts below the status bar and page bottoms keep clear of the
+   home indicator. */
+
+.zjs-appbar {
+  padding-top: env(safe-area-inset-top);
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* the citation / hotkey jumps land their target below the sticky app
+   bar (scrollIntoViewAnimated reads the target's scroll-margin-top) */
+[data-hotkey-index],
+[data-ai-n],
+[data-ai-cited] {
+  scroll-margin-top: 4.5rem;
+}

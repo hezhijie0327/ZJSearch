@@ -36,6 +36,10 @@ export function applyThemeStyle(style: ThemeStyle) {
   }
   root.classList.toggle("dark", dark);
   root.classList.toggle("black", style === "black");
+  /* the browser UI (installed-PWA title bar) follows the live palette */
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", style === "black" ? "#000000" : dark ? "#1b1a18" : "#faf9f6");
 }
 
 let paletteAnimTimer: number | undefined;

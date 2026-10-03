@@ -791,7 +791,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
 
   return (
     <Shell globals={globals} hideTopNav>
-      <header>
+      <header className="zjs-appbar sticky top-0 z-30 border-b border-line/60 bg-surface/95 backdrop-blur-sm">
         {!aiMode ? (
           // classic header: brand + query pill + mode switch + actions
           <>
