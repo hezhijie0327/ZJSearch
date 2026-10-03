@@ -291,6 +291,8 @@ export const EN = {
   related: "Related",
   ai_hero_ask: "Ask anything...",
   ai_hero_search: "Search for anything...",
+  hero_taglines:
+    "Ask anything -- an AI answer with live, cited sources|Every claim grounded -- the sources ride with the answer|From one question to a researched, cited brief|Search less, understand more",
   ai_search_thinking_plan: "Planning the searches…",
   ai_source_crawled: "Read in full",
   ai_source_history: "Recalled from your past research (not re-verified this run)",

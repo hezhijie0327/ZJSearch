@@ -170,19 +170,15 @@ export function HeaderActions({ globals }: { globals: GlobalData }) {
 }
 
 /** Standalone top bar used by full pages (preferences/stats/info/404). */
-function TopNav({ globals, hideBrand = false }: { globals: GlobalData; hideBrand?: boolean }) {
+function TopNav({ globals }: { globals: GlobalData }) {
   return (
     <nav className="zjs-appbar sticky top-0 z-50 flex h-14 items-center justify-between gap-3 border-b border-line/80 bg-bg/80 px-4 backdrop-blur-md sm:px-6">
-      {hideBrand ? (
-        <span aria-hidden="true" />
-      ) : (
-        <Link ariaLabel={globals.instance_name} className="shrink-0 select-none" href="/" title={globals.instance_name}>
-          <span className="font-serif text-2xl font-semibold tracking-tight text-ink">
-            {globals.instance_name}
-            <BrandDot />
-          </span>
-        </Link>
-      )}
+      <Link ariaLabel={globals.instance_name} className="shrink-0 select-none" href="/" title={globals.instance_name}>
+        <span className="font-serif text-2xl font-semibold tracking-tight text-ink">
+          {globals.instance_name}
+          <BrandDot />
+        </span>
+      </Link>
       <HeaderActions globals={globals} />
     </nav>
   );
@@ -240,7 +236,7 @@ export function Shell({
     return (
       <div className="flex h-dvh flex-col overflow-hidden">
         <ProgressBar active={loading} />
-        <TopNav globals={globals} hideBrand />
+        <TopNav globals={globals} />
         {/* app-shell scroll area: hidden scrollbar, contained overscroll; the
             footer rides inside so it scrolls away with overflowing content */}
         <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain ${SCROLLBAR_NONE}`}>
@@ -253,7 +249,7 @@ export function Shell({
   return (
     <div className="flex min-h-dvh flex-col">
       <ProgressBar active={loading} />
-      {hideTopNav ? null : <TopNav globals={globals} hideBrand={false} />}
+      {hideTopNav ? null : <TopNav globals={globals} />}
       <div className="flex flex-1 flex-col">{children}</div>
       <Footer />
     </div>

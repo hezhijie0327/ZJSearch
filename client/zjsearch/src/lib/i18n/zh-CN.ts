@@ -292,6 +292,8 @@ export const ZH_CN: Record<StringKey, string> = {
   related: "相关",
   ai_hero_ask: "随便问点什么…",
   ai_hero_search: "随便搜点什么…",
+  hero_taglines:
+    "随意一问 —— AI 回答，来源实时可查|每个论断都有出处 —— 来源随答案同行|从一个问题，到一份有据可查的调研|少一点检索，多一点理解",
   ai_search_thinking_plan: "正在规划搜索…",
   ai_source_crawled: "已读全文",
   ai_source_history: "召回自你的历史研究(本次未重新验证)",
