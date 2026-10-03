@@ -1,25 +1,30 @@
 {
-  "name": "{{ instance_name }}",
-  "short_name": "{{ instance_name }}",
+  "name": {{ instance_name|tojson }},
+  "short_name": {{ instance_name|tojson }},
+  "description": {{ (instance_name ~ ' — a privacy-respecting, open metasearch engine')|tojson }},
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf9f6",
+  "theme_color": "#faf9f6",
   "icons": [
     {
-      "src": "{{ url_for('static', filename='img/favicon.svg', _external=True) }}",
+      "src": "{{ url_for('static', filename='img/favicon.svg') }}",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
-      "src": "{{ url_for('static', filename='img/192.png', _external=True) }}",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "{{ url_for('static', filename='img/favicon.svg') }}",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     },
     {
-      "src": "{{ url_for('static', filename='img/512.png', _external=True) }}",
-      "sizes": "512x512",
-      "type": "image/png"
+      "src": "{{ url_for('static', filename='img/apple-touch-icon.png') }}",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
-  ],
-  "start_url": "{{ url_for('index') }}",
-  "theme_color": "{{ theme_color }}" ,
-  "background_color": "{{ background_color }}",
-  "display": "standalone"
+  ]
 }

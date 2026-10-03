@@ -96,3 +96,12 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap();
+
+/* PWA: the pass-through service worker (offline fallback for navigations,
+   cache-free by design) makes the manifest installable.  Registered after
+   load -- it never gates the boot. */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

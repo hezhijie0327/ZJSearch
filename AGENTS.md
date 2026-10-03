@@ -895,6 +895,28 @@ never shifts the chips; uncapped — paging handles any count, honors
 Query-term highlighting (`.highlight` in `styles/base.css`) is a tinted
 background only — color marks the term, no bold.
 
+## PWA layer (standalone adaptation)
+
+The installable-app layer: `.zjs-appbar` (Shell TopNav + the results
+page's two header variants) pins the top bar (`sticky top-0 z-50
+h-14`, the ZJBlog Navigation's frosted recipe -- `bg-bg/80
+backdrop-blur-md`, `border-line/80`; z-50 matches the overlay drawer,
+DOM-later wins).  `viewport-fit=cover` + the `zjs-appbar` top inset and
+the body bottom inset keep standalone clear of the notch / home
+indicator; jump targets carry `scroll-margin-top` (base.css, read by
+`scrollIntoViewAnimated`); the bar hides on paper.  `theme-color` is
+rendered per `simple_style` server-side and follows the live palette
+flip in `applyThemeStyle`.  The manifest override lives at
+`searx/templates/zjsearch/manifest.json` (upstream `/manifest.json`
+resolves per theme -- no python change); icons reuse the theme's
+favicon.svg (any + maskable) and apple-touch-icon.png.  The service
+worker (`searx/zjsearch/pwa.py`, served at the scope root `/sw.js`) is
+DELIBERATELY cache-free: a pass-through with an offline fallback for
+navigations -- static caching through a SW would outlive WhiteNoise's
+30-second staleness window and revive stale bundles; caching policy is
+a later, explicit opt-in.  Touch devices hold every editable control at
+16px (the iOS focus-zoom floor; desktop keeps the designed sizes).
+
 ## NoJS / RSS surface (same brand, own tokens)
 
 `noscript.html` + the `.zjs-noscript` block in `styles/noscript.css` and `rss.xsl`

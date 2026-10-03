@@ -23,6 +23,8 @@ def install(app: flask.Flask) -> None:
     any cycle with webapp."""
     from searx.zjsearch import stream  # pylint: disable=import-outside-toplevel,cyclic-import
     from searx.zjsearch.ai import install as ai_install  # pylint: disable=import-outside-toplevel,cyclic-import
+    from searx.zjsearch.pwa import install as pwa_install  # pylint: disable=import-outside-toplevel,cyclic-import
 
     stream.install(app)
     ai_install(app)
+    pwa_install(app)

@@ -118,3 +118,14 @@ body {
 [data-ai-cited] {
   scroll-margin-top: 4.5rem;
 }
+
+/* standalone PWA: iOS zooms a focused input whose font-size sits under
+   16px -- touch devices keep every editable control at the iOS floor
+   (desktop keeps the designed sizes) */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
