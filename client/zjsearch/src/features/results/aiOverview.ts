@@ -24,6 +24,9 @@ export interface AiSourceMeta {
       head) — no in-page result card exists, so the citation chip opens
       the url instead of scrolling */
   history?: boolean;
+  /** the result's snippet — the knowledge base archives it as an
+      uncrawled source's searchable body (the run path's parity) */
+  content?: string;
 }
 
 /** Favicon + domain per result (citation order) — the AI overview chips
@@ -40,6 +43,7 @@ export function aiSourceMeta(
       favicon: result.favicon || "",
       t: result.title_text.slice(0, 200),
       u: result.url,
+      content: result.content_text.slice(0, 500),
     });
   }
   // the recalled knowledge-base pages CONTINUE the [n] sequence (their

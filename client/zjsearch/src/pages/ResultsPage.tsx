@@ -709,6 +709,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         model: runMeta?.model ?? null,
         query: data.q,
         sources: aiMeta.map((meta, index) => ({
+          content: meta.content,
           domain: meta.domain,
           favicon: meta.favicon,
           n: index + 1,

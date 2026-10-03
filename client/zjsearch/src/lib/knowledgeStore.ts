@@ -320,7 +320,7 @@ export function saveOverview(input: {
   markdown: string;
   model?: string | null;
   usage?: OverviewUsage | null;
-  sources?: Array<{ n: number; url: string; title: string; favicon?: string; domain?: string }>;
+  sources?: Array<{ n: number; url: string; title: string; favicon?: string; domain?: string; content?: string }>;
 }): void {
   const now = Date.now();
   // the streaming client synthesizes a trailing meta sentinel into its raw
@@ -382,12 +382,14 @@ export function saveOverview(input: {
       if ((inserted ?? []).length === 0) {
         continue; // this query already counted this source
       }
+      const snippet = String(source.content ?? "").slice(0, 500);
       const meta = source.favicon ? { favicon: source.favicon } : {};
       await pgQuery(
         `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, refs, cited, tags, search_text, created, updated, occurred_at)
-         VALUES ($1, 'source', $2, $3, $4, $5, '', $6::jsonb, 1, 1, '{}'::jsonb, $7, $8, $8, $8)
+         VALUES ($1, 'source', $2, $3, $4, $5, $6, $7::jsonb, 1, 1, '{}'::jsonb, $8, $9, $9, $9)
          ON CONFLICT (id) DO UPDATE SET refs = knowledge.refs + 1, cited = knowledge.cited + 1,
            title = CASE WHEN EXCLUDED.title <> '' THEN EXCLUDED.title ELSE knowledge.title END,
+           body = CASE WHEN EXCLUDED.body <> '' THEN EXCLUDED.body ELSE knowledge.body END,
            meta = CASE WHEN EXCLUDED.meta <> '{}'::jsonb THEN EXCLUDED.meta ELSE knowledge.meta END,
            updated = EXCLUDED.updated`,
         [
@@ -396,8 +398,9 @@ export function saveOverview(input: {
           String(source.url),
           String(source.domain ?? ""),
           String(source.title ?? "").slice(0, 300),
+          snippet,
           JSON.stringify(meta),
-          segmentKeywords(String(source.title ?? ""), String(source.domain ?? "")).slice(0, 4000),
+          segmentKeywords(String(source.title ?? ""), String(source.domain ?? ""), snippet).slice(0, 4000),
           now,
         ],
       );
