@@ -248,7 +248,6 @@ export const EN = {
   knowledge_usage_cached: "Cached",
   knowledge_usage_cache_write: "Cache write",
   knowledge_admin_usage_title: "Model usage",
-  knowledge_usage_calls: "Calls",
   knowledge_usage_empty: "No model calls recorded yet -- they appear after your first AI search or overview.",
   knowledge_usage_group_llm: "Large Language Model",
   knowledge_usage_embedding: "Embedding Model",

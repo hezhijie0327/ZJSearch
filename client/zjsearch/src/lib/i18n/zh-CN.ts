@@ -250,7 +250,6 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_usage_cached: "缓存命中",
   knowledge_usage_cache_write: "缓存写入",
   knowledge_admin_usage_title: "模型用量",
-  knowledge_usage_calls: "调用",
   knowledge_usage_empty: "还没有模型调用记录——使用一次 AI 搜索或概览后出现在这里。",
   knowledge_usage_group_llm: "大语言模型",
   knowledge_usage_embedding: "嵌入模型",

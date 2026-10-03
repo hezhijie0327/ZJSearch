@@ -23,7 +23,6 @@ import {
   MemoryStick,
   MessageCircleQuestion,
   Pencil,
-  Repeat,
   Search,
   Sparkles,
   Star,
@@ -922,86 +921,39 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                 </>
               ) : null}
               {embed || stats?.usage?.rerank || stats?.usage?.decision ? (
-                // 嵌入 and 重排序: the LLM group's language -- one title per
-                // group, plain 输入/调用 tiles inside; the two groups share
-                // ONE row (they stack below sm).  Both score input-only, so
-                // the endpoint's prompt_tokens IS its total ("Tokens" would
-                // imply an output half that does not exist).
-                <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                // 嵌入 / 重排 / 决策: the score endpoints are input-only, so
+                // ONE 输入 tile per model -- the three fit ONE row (they
+                // wrap below sm).  The tile label names the model.
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {embed ? (
-                    <div>
-                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
-                      <dl className="mt-2 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <ArrowUp aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_input")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {embed.input.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <Repeat aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_calls")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {embed.calls.toLocaleString()}
-                          </dd>
-                        </div>
-                      </dl>
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <ArrowUp aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_embedding")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{embed.input.toLocaleString()}</dd>
                     </div>
                   ) : null}
                   {stats?.usage?.rerank ? (
-                    <div>
-                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
-                      <dl className="mt-2 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <ArrowUp aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_input")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {stats.usage.rerank.tokens.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <Repeat aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_calls")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {stats.usage.rerank.calls.toLocaleString()}
-                          </dd>
-                        </div>
-                      </dl>
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <ArrowUp aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_rerank")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                        {stats.usage.rerank.tokens.toLocaleString()}
+                      </dd>
                     </div>
                   ) : null}
-
                   {stats?.usage?.decision ? (
-                    <div>
-                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_decision")}</p>
-                      <dl className="mt-2 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <ArrowUp aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_input")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {stats.usage.decision.tokens.toLocaleString()}
-                          </dd>
-                        </div>
-                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
-                          <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <Repeat aria-hidden="true" className="size-3" />
-                            {t("knowledge_usage_calls")}
-                          </dt>
-                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                            {stats.usage.decision.calls.toLocaleString()}
-                          </dd>
-                        </div>
-                      </dl>
+                    <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                      <dt className="flex items-center gap-1 text-xs text-ink-3">
+                        <ArrowUp aria-hidden="true" className="size-3" />
+                        {t("knowledge_usage_decision")}
+                      </dt>
+                      <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                        {stats.usage.decision.tokens.toLocaleString()}
+                      </dd>
                     </div>
                   ) : null}
                 </div>
