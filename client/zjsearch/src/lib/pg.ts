@@ -83,7 +83,37 @@ export async function resetDatabase(): Promise<void> {
 
 const LEGACY_TABLES = ["run_sources", "runs", "threads", "sources", "reader_cache", "memories", "searches"] as const;
 
-async function boot(): Promise<Pg> {
+async function bootWorker(): Promise<Pg> {
+  // the engine lives in a WEB WORKER (pg.worker.ts holds the WASM and the
+  // data extensions): a boot or a heavy query cannot eat the main thread's
+  // render budget -- the AI surfaces' performance floors paid for exactly
+  // that.  The relay speaks the full surface (query / transaction / live);
+  // only the LIVE plugin passes main-side (its polling wraps the relayed
+  // queries), the DATA extensions ride inside the worker.
+  const [{ PGliteWorker }, { live }] = await Promise.all([
+    import("@electric-sql/pglite/worker"),
+    import("@electric-sql/pglite/live"),
+  ]);
+  const worker = new Worker(new URL("./pg.worker.ts", import.meta.url), { type: "module" });
+  // a hang is a REAL outcome in restricted webviews (module workers are a
+  // compatibility gap in some of them): race the readiness and fall back
+  // rather than wedging the whole store
+  const created = PGliteWorker.create(worker, {
+    dataDir: "idb://zjs-ai",
+    extensions: { live },
+  });
+  const raced = await Promise.race([
+    created,
+    new Promise((resolve) => setTimeout(() => resolve("WORKER_TIMEOUT"), 10_000)),
+  ]);
+  if (raced === "WORKER_TIMEOUT") {
+    worker.terminate();
+    throw new Error("the worker engine did not become ready in 10s");
+  }
+  return raced as unknown as Pg;
+}
+
+async function bootMain(): Promise<Pg> {
   const [{ PGlite }, { vector }, { pg_textsearch }, { live }, { pg_trgm }] = await Promise.all([
     import("@electric-sql/pglite"),
     import("@electric-sql/pglite-pgvector"),
@@ -98,6 +128,20 @@ async function boot(): Promise<Pg> {
   await db.query("CREATE EXTENSION IF NOT EXISTS vector");
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_textsearch");
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+  return db;
+}
+
+async function boot(): Promise<Pg> {
+  let db: Pg;
+  try {
+    db = await bootWorker();
+  } catch (err) {
+    // a hostile environment for module workers (CSP, ancient webview):
+    // fall back to the main-thread engine -- the render-budget win is
+    // lost, the DATA survives
+    console.warn("zjsearch pg: the worker engine failed -- falling back to the main thread", err);
+    db = await bootMain();
+  }
   // the v2-and-older databases die wholesale (the v1 drop was the
   // precedent): detect ANY legacy table before the new schema exists.
   // CASCADE because the old live-query views / bm25 internals can hold

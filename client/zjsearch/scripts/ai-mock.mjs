@@ -223,6 +223,15 @@ function gate(name, messages, res) {
     jsonCompletion(res, { questions: RELATED });
     return;
   }
+  if (name === "user_memory_extract") {
+    // the post-settle extractor: exercises the LATE memory + tags events
+    // (the client persists the facts, the run parks the tags) offline
+    jsonCompletion(res, {
+      facts: ["The zjaudit fixture corpus answers fixture-token queries offline."],
+      tags: ["zjaudit", "fixture"],
+    });
+    return;
+  }
   // research_gate and anything unknown: research on (the fail-open verdict)
   jsonCompletion(res, { research: true });
 }
@@ -357,6 +366,40 @@ function researcher(answered, messages, res, tools = []) {
               arguments:
                 '{"items": [{"title": "Fixture subtask A", "status": "done"}, {"title": "Fixture subtask B", "status": "done"}]}'.slice(
                   30,
+                ),
+            },
+          },
+        ],
+      },
+      // the findings ledger: exercises the learnings tool, the wire
+      // snapshot event and the client's findings card offline
+      {
+        tool_calls: [
+          { index: 6, id: "call-zjaudit-7", type: "function", function: { name: "learnings", arguments: "" } },
+        ],
+      },
+      {
+        tool_calls: [
+          {
+            index: 6,
+            function: {
+              arguments:
+                '{"facts": ["The zjaudit fixture page is served at https://example.com/zjaudit/general/1."]}'.slice(
+                  0,
+                  40,
+                ),
+            },
+          },
+        ],
+      },
+      {
+        tool_calls: [
+          {
+            index: 6,
+            function: {
+              arguments:
+                '{"facts": ["The zjaudit fixture page is served at https://example.com/zjaudit/general/1."]}'.slice(
+                  40,
                 ),
             },
           },

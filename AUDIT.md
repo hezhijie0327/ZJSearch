@@ -444,24 +444,29 @@ surface. Highlights that must not regress (the full fix list is in git:
   (same concept = same icon; X = dismiss only; sizes on the 12/14/18/20
   tiers).
 
-Lighthouse outcome (round record, the ONE open item): the CLASSIC
-surfaces regressed GREEN (the 10-01 knowledge wave had put PGlite's
-16MB boot inside every search page's load window through the overview
-recall -- the recall now prewarms on the user's INTENT (pointerenter/
-focusin/touchstart; the ai_overview=1 deep link recalls immediately),
-and every non-AI page is back above its floor).  The AI SURFACES stay
-below their calibrated floors (perf 37-61 vs 80; variance run-to-run is
-high): root cause is the same store -- the takeover's knowledge
-persistence (startRun + the 1.5s evt flush) boots the WASM inside the
-STREAMED window, by design (the crash window the continue feature
-stands on).  Three ways out, a deliberate decision, not an audit
-accident: (a) move PGlite into a Web Worker (the store's API already
-funnels through knowledgeStore.ts -- the boot + queries leave the main
-thread, floors re-earnable, real effort); (b) weaken the crash window
-(flush at settle only -- continue's mid-run storage degrades); (c)
-recalibrate the AI floors to the knowledge-era reality (gaming the gate
--- last resort).  Until one lands, the AI pages' perf floors are the
-audit's known-red.
+Lighthouse outcome (round record): RESOLVED via option (a) -- the
+database engine now lives in a WEB WORKER (`src/lib/pg.worker.ts`: the
+WASM + the data extensions; `pg.ts` boots the `PGliteWorker` relay with
+the live plugin main-side, and a 10s readiness race falls back to the
+main-thread engine in webviews where module workers hang).  With the
+boot + every query off the main thread the AI surfaces re-earned their
+floors outright (ai=1: perf 96 / agentic 100; ai_overview: 91/96 -- the
+09-29 levels), the classic pages stay green (the overview recall
+prewarms on USER INTENT: pointerenter/focusin/touchstart; the
+ai_overview=1 deep link recalls immediately), and no floor was
+recalibrated.  Option (b) is moot (the crash window stands).
+
+Known-red (ONE page): the AI THREAD page fails Lighthouse with
+"unable to reliably load" -- no scores, the navigation never settles.
+Predates the worker (it failed identically in every same-day pre-worker
+run); the server answers in 75ms and a real browser renders the page
+fine, so the trace hangs client-side.  Needs a dedicated
+`--save-assets` trace to name the never-settling request; the gate
+stays red on this page until then.  (Also: the audit mock's fixture
+coverage grew -- the researcher fixture now drives a `learnings` call
+(the findings card + wire snapshot) and the insights gate answers
+`user_memory_extract` (the LATE memory/tags events + the memory tab),
+so the audited timeline exercises both new surfaces offline.)
 
 ## 8. Known environment traps
 
