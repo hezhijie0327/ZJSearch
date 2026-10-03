@@ -205,7 +205,6 @@ export const EN = {
   ai_ask_awaiting: "Awaiting answer",
   ai_decision_row: "Decision model",
   ai_decision_running: "Judging…",
-  ai_decision_done: "{n} judgments",
   knowledge_tab_memory: "Memory",
   knowledge_title: "Knowledge",
   knowledge_page_subtitle: "Past research, sources and documents -- browser-local.",
@@ -258,6 +257,7 @@ export const EN = {
   knowledge_usage_group_llm: "LLM",
   knowledge_usage_embedding: "Embedding",
   knowledge_usage_rerank: "Rerank",
+  knowledge_usage_decision: "Decision",
   knowledge_admin_embed_usage: "Embedding totals",
   knowledge_memory_add: "Add memory",
   knowledge_memory_save: "Save",
@@ -331,6 +331,7 @@ export const EN = {
 
   ai_usage_cache_write_title: "Cache-write tokens",
   ai_usage_rerank_title: "Rerank tokens",
+  ai_usage_decision_title: "Decision model",
   open_in_new_tab: "Open page",
   ai_pdf_working: "Generating PDF…",
   knowledge_open: "Knowledge",

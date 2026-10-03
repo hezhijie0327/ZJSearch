@@ -11,6 +11,7 @@ import {
   Database,
   DatabaseZap,
   Repeat,
+  Scale,
   ShieldAlert,
   Wrench,
 } from "lucide-react";
@@ -44,6 +45,7 @@ export interface AiUsage {
   gates?: (AiUsagePhase & { calls: number }) | null;
   /** the ranking cascade's endpoint spend (NOT LLM tokens) */
   rerank?: { calls: number; tokens: number };
+  decision?: { calls: number; tokens: number };
 }
 
 /** The run's quiet meta line at the END of the answer (lobehub's message
@@ -97,6 +99,9 @@ export function AiRunFooter({
           : []),
         ...(usage.rerank
           ? [{ icon: Repeat, title: t("ai_usage_rerank_title"), value: formatTokens(usage.rerank.tokens) }]
+          : []),
+        ...(usage.decision
+          ? [{ icon: Scale, title: t("ai_usage_decision_title"), value: formatTokens(usage.decision.tokens) }]
           : []),
       ]
     : [];

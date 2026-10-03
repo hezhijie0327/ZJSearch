@@ -289,13 +289,9 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
   // web_reader rows NEVER fold: the reading pane (scroll-capped inside)
   // renders below the row unconditionally -- the content is the row's
   // point, and a second click to see what was read is friction
+  const hasText = Boolean(call.text) && (call.tool === "mcp" || isDecision || isMemory || isPastResearch);
   const expandable =
-    (call.tool === "mcp"
-      ? Boolean(call.text)
-      : isCalc || isMemory || isPastResearch || isLearnings
-        ? false
-        : results.length > 0) ||
-    (Boolean(rawArgs) && !isPage);
+    (hasText ? true : isCalc || isLearnings ? false : results.length > 0) || (Boolean(rawArgs) && !isPage);
   return (
     <div>
       <button
@@ -354,7 +350,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                     : call.tool === "mcp"
                       ? call.name === "search_tools"
                         ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
-                        : (call.name ?? t("ai_mcp_tool"))
+                        : (call.name?.replace(/^mcp_/, "").replace(/_/g, " ") ?? t("ai_mcp_tool"))
                       : isPastResearch
                         ? call.q
                         : isMemory
@@ -394,7 +390,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
                       : isAsk
                         ? ""
                         : isDecision
-                          ? t("ai_decision_done", { n: String(call.n ?? 0) })
+                          ? (call.result ?? "")
                           : call.tool === "mcp"
                             ? t("ai_mcp_done")
                             : isPastResearch
@@ -443,7 +439,7 @@ function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSourc
               </button>
             </div>
           ) : null}
-          {call.tool === "mcp" ? (
+          {hasText ? (
             <CallContent call={call} />
           ) : isTask || isAsk || isLearnings ? null : (
             <CallResults results={results} />

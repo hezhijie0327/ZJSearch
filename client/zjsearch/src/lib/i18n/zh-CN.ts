@@ -208,7 +208,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_ask_awaiting: "等待回答",
   ai_decision_row: "决策模型",
   ai_decision_running: "判定中…",
-  ai_decision_done: "{n} 项判定",
   knowledge_tab_memory: "记忆",
   knowledge_title: "知识库",
   knowledge_page_subtitle: "过去的研究、来源与文献 —— 仅存于本浏览器。",
@@ -260,6 +259,7 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_usage_group_llm: "LLM",
   knowledge_usage_embedding: "嵌入",
   knowledge_usage_rerank: "重排",
+  knowledge_usage_decision: "决策",
   knowledge_admin_embed_usage: "嵌入累计",
   knowledge_memory_add: "添加记忆",
   knowledge_memory_save: "保存",
@@ -332,6 +332,7 @@ export const ZH_CN: Record<StringKey, string> = {
 
   ai_usage_cache_write_title: "缓存写入词元",
   ai_usage_rerank_title: "重排序词元",
+  ai_usage_decision_title: "决策模型",
   open_in_new_tab: "打开网页",
   ai_pdf_working: "正在生成 PDF…",
   knowledge_open: "知识库",

@@ -228,15 +228,18 @@ def system_one_spec() -> dict[str, t.Any]:
 
 def parse_system_one_call(call: dict[str, t.Any]) -> tuple[str, dict[str, dict[str, t.Any]]] | None:
     """``(state, wire questions)`` off the raw call arguments, or ``None``
-    when unusable: the array form normalizes into the wire's named-question
-    dict, types are whitelisted, the state and question caps keep the
-    forward pass fast."""
+    when unusable: the questions arrive as the spec's array OR as the
+    wire's named-question dict (models echo both shapes -- both
+    normalize), types are whitelisted, the state and question caps keep
+    the forward pass fast."""
     try:
         args = _raw_args(call)
     except Exception:  # pylint: disable=broad-except
         return None
     state = str(args.get("state") or "").strip()
     raw_questions = args.get("questions")
+    if isinstance(raw_questions, dict):
+        raw_questions = [{**(q if isinstance(q, dict) else {}), "name": name} for name, q in raw_questions.items()]
     if not state or not isinstance(raw_questions, list):
         return None
     questions: dict[str, dict[str, t.Any]] = {}
@@ -513,20 +516,28 @@ def _raw_args(call: dict[str, t.Any]) -> dict[str, t.Any]:
 
 
 def _decision_row(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The ``system_one`` timeline row: the label is the named questions
-    ("relevance / authority") -- the raw table rides the debug pane."""
+    """The ``system_one`` timeline row: the label is the judgment STANDARD
+    (the questions' instructions -- model-written, usually the user's own
+    language), never the raw question ids ("most_worth_first_choice");
+    the raw table rides the debug pane."""
     try:
         decision_args = _raw_args(call)
     except Exception:  # pylint: disable=broad-except
         decision_args = {}
     raw_questions = decision_args.get("questions")
-    names = []
+    instructions, names = [], []
     if isinstance(raw_questions, list):
-        names = [str(q.get("name") or "") for q in raw_questions if isinstance(q, dict) and q.get("name")]
+        for question in raw_questions:
+            if not isinstance(question, dict):
+                continue
+            if str(question.get("name") or ""):
+                names.append(str(question["name"]))
+            if str(question.get("instructions") or "").strip():
+                instructions.append(str(question["instructions"]).strip())
     return {
         "id": idx,
         "tool": DECISION_TOOL,
-        "q": " / ".join(name for name in names if name)[:120],
+        "q": (" / ".join(instructions) or " / ".join(names))[:120],
         "args": decision_args,
     }
 

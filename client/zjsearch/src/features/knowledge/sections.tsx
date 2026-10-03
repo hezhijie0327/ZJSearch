@@ -24,6 +24,7 @@ import {
   MessageCircleQuestion,
   Pencil,
   Repeat,
+  Scale,
   Search,
   Sparkles,
   Star,
@@ -733,6 +734,7 @@ export function InspectorView({
                     output: usage.output ?? 0,
                     thoughts: usage.thoughts ?? null,
                     rerank: usage.rerank,
+                    decision: usage.decision,
                   } satisfies AiUsage)
                 : null
             }
@@ -939,6 +941,31 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                       </dl>
                     </div>
                   ) : null}
+                  {stats?.usage?.decision ? (
+                    <div>
+                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_decision")}</p>
+                      <dl className="mt-2 grid grid-cols-2 gap-2">
+                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                          <dt className="flex items-center gap-1 text-xs text-ink-3">
+                            <ArrowUp aria-hidden="true" className="size-3" />
+                            {t("knowledge_usage_input")}
+                          </dt>
+                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                            {stats.usage.decision.tokens.toLocaleString()}
+                          </dd>
+                        </div>
+                        <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
+                          <dt className="flex items-center gap-1 text-xs text-ink-3">
+                            <Scale aria-hidden="true" className="size-3" />
+                            {t("knowledge_usage_calls")}
+                          </dt>
+                          <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                            {stats.usage.decision.calls.toLocaleString()}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
                   {stats?.usage?.rerank ? (
                     <div>
                       <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
@@ -966,7 +993,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   ) : null}
                 </div>
               ) : null}
-              {llmTiles.length === 0 && !embed.calls && !stats?.usage?.rerank ? (
+              {llmTiles.length === 0 && !embed.calls && !stats?.usage?.rerank && !stats?.usage?.decision ? (
                 <p className="mt-4 text-[13px] text-ink-3">{t("knowledge_usage_empty")}</p>
               ) : null}
             </div>

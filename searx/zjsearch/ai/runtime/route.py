@@ -296,7 +296,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
     )
-    return _respond(_Ndjson(events, cfg, research_q, lang, gate_usage, state.rerank_usage))
+    return _respond(_Ndjson(events, cfg, research_q, lang, gate_usage, state.rerank_usage, state.decision_usage))
 
 
 def _respond(stream: "_Ndjson") -> flask.Response:
@@ -336,6 +336,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         lang: str,
         gate_usage: list[dict[str, t.Any]],
         rerank_usage: dict[str, int] | None = None,
+        decision_usage: dict[str, int] | None = None,
     ):
         self.events = events
         self.cfg = cfg
@@ -345,6 +346,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # the executor's rerank-model account (a LIVE dict -- the settle
         # reads it after the run's searches have mutated it)
         self.rerank_usage = rerank_usage
+        # the decision model's account, same live-dict pattern
+        self.decision_usage = decision_usage
         self.buffer: list[str] = []
         self.rest: t.Iterator[str] | None = None
         self.primed = False
@@ -357,7 +360,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         died) must not silently drop the ranking cascade's spend."""
         usage = event.get("usage")
         rerank_spend = bool(self.rerank_usage and self.rerank_usage.get("calls"))
-        if self.gate_usage or isinstance(usage, dict) or rerank_spend:
+        decision_spend = bool(self.decision_usage and self.decision_usage.get("calls"))
+        if self.gate_usage or isinstance(usage, dict) or rerank_spend or decision_spend:
             usage = (
                 dict(usage)
                 if isinstance(usage, dict)
@@ -379,6 +383,15 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 # the ranking cascade's endpoint spend, its own bucket (the
                 # model stats page sums it separately from the LLM tokens)
                 usage["rerank"] = {"calls": int(rerank["calls"]), "tokens": int(rerank.get("tokens") or 0)}
+            decision_spend = self.decision_usage
+            if decision_spend and decision_spend.get("calls"):
+                # the system_one delegations' spend, its own bucket beside
+                # the rerank one (input-only -- the decision model does
+                # not generate)
+                usage["decision"] = {
+                    "calls": int(decision_spend["calls"]),
+                    "tokens": int(decision_spend.get("tokens") or 0),
+                }
             event = {**event, "usage": usage}
         return event
 

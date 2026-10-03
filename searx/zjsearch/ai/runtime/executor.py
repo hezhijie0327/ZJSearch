@@ -121,6 +121,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # endpoint call + its prompt tokens -- the settle folds it into
         # ``usage.rerank`` and the knowledge base's model stats sum it
         self.rerank_usage = {"calls": 0, "tokens": 0}
+        # the decision model's account (zjsearch.decision): one entry per
+        # system_one delegation + its input tokens -- the settle folds it
+        # into ``usage.decision`` beside the rerank bucket
+        self.decision_usage = {"calls": 0, "tokens": 0}
         # the run's findings ledger (the learnings tool): what the sources
         # ESTABLISHED, the model's own distillation -- the writer reads it
         # as <findings> alongside the raw source feed
@@ -395,21 +399,37 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             if tool_name == DECISION_TOOL:
                 parsed = parse_system_one_call(call)
                 if parsed is None:
+                    logger.debug(
+                        "zjsearch_decision: unusable call arguments: %.200s",
+                        str(call.get("arguments") or ""),
+                    )
                     feeds[wire_id - 1] = (
                         "error: system_one needs a compact state string and"
                         " 1-4 named questions (type choice / score / noul)."
+                        "  Do NOT invent a verdict and do not attribute one"
+                        " to system_one -- if you must conclude, present the"
+                        " conclusion as your own judgment."
                     )
                     yield ("call", {"call": wire_id, "status": "error", "q": ""})
                     continue
                 state, questions = parsed
                 out = decision.judge(state, questions, timeout=20.0)
+                if out is not None:
+                    usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+                    self.decision_usage["calls"] += 1
+                    self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
+                verdict = self._system_one_answers(out) if out is not None else None
                 yield (
                     "call",
                     {
                         "call": wire_id,
                         "status": "ok" if out else "error",
-                        "q": " / ".join(questions)[:80],
+                        "q": " / ".join(
+                            str(q.get("instructions") or "").strip() or name for name, q in questions.items()
+                        )[:120],
+                        "result": self._system_one_result(out, self.lang) if out is not None else "",
                         "n": len(questions),
+                        **({"preview": verdict} if verdict else {}),
                     },
                 )
                 if out is None:
@@ -417,7 +437,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         "the decision model is unavailable -- make the judgment from the gathered evidence yourself."
                     )
                 else:
-                    feeds[wire_id - 1] = self._system_one_feed(out)
+                    feeds[wire_id - 1] = (
+                        verdict + "\nTreat this as ONE signal -- it judged only the state you"
+                        " handed it; facts still come from your cited sources."
+                    )
                 continue
             if tool_name == LEARNINGS_TOOL:
                 # the findings ledger: the model's own distillation of what
@@ -487,7 +510,24 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         yield ("sources", {"items": events})
                 else:
                     feeds[wire_id - 1] = "(no page in the user's past research matches -- continue with live search)"
-                yield ("call", {"call": wire_id, "status": "ok", "n": len(matches)})
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "n": len(matches),
+                        **(
+                            {
+                                "preview": "\n".join(
+                                    f"{entry.get('title') or ''} -- {entry.get('url') or ''}".strip(" -")
+                                    for entry in matches
+                                )[:600]
+                            }
+                            if matches
+                            else {}
+                        ),
+                    },
+                )
                 continue
             if tool_name == user_memory_cap.USER_MEMORY_TOOL:
                 feed, event = user_memory_cap.evaluate_call(call, self.user_memories)
@@ -509,6 +549,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                             "status": "ok",
                             "action": "search",
                             "label": str(self._raw_json(call).get("query") or ""),
+                            "preview": feed[:600],
                         },
                     )
                 continue
@@ -674,12 +715,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         return value if isinstance(value, dict) else {}
 
     @staticmethod
-    def _system_one_feed(out: dict[str, t.Any]) -> str:
-        """One SystemOne judgment as the tool feed: every named answer in
-        its own vocabulary (choice label + confidence, the score with its
-        nearest legend level, the yes probability) -- one signal among
-        many, never a citation."""
-        lines: list[str] = []
+    def _system_one_answers(out: dict[str, t.Any]) -> str:
+        """One SystemOne judgment as per-question verdict lines (choice
+        label + confidence, the score with its nearest legend level, the
+        yes probability) -- the tool feed's payload AND the timeline row's
+        debug preview."""
+        lines: list[str] = ["decision model:"]
         for name, answer in (out.get("answers") or {}).items():
             if not isinstance(answer, dict):
                 continue
@@ -698,10 +739,36 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 except (TypeError, ValueError):
                     p = 0.0
                 lines.append(f"{name}: yes {round(p * 100)}% / no {round((1 - p) * 100)}%")
-        return (
-            "decision model:\n" + "\n".join(lines) + "\nTreat this as ONE signal -- it judged only the state you"
-            " handed it; facts still come from your cited sources."
-        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _system_one_result(out: dict[str, t.Any], lang: str) -> str:
+        """One compact verdict line for the row's meta slot (the
+        calculator's ``= result`` pattern): the answer VALUE per question
+        -- the question text is the row's label, never repeated here."""
+        values: list[str] = []
+        for answer in (out.get("answers") or {}).values():
+            if not isinstance(answer, dict):
+                continue
+            kind = answer.get("type")
+            if kind == "choice":
+                values.append(str(answer.get("choice") or ""))
+            elif kind == "score":
+                try:
+                    level = (answer.get("legend") or {}).get(str(int(round(float(answer.get("score") or 0)))))
+                except (TypeError, ValueError):
+                    level = None
+                values.append(str(level or answer.get("score") or ""))
+            else:
+                try:
+                    p = float(answer.get("noul"))
+                except (TypeError, ValueError):
+                    p = 0.0
+                if lang.startswith("zh"):
+                    values.append(f"{'是' if p >= 0.5 else '否'} {round(p * 100)}%")
+                else:
+                    values.append(f"yes {round(p * 100)}%")
+        return " · ".join(v for v in values if v)[:80]
 
     @staticmethod
     def _append_note(feeds: list[str | None], note: str) -> None:

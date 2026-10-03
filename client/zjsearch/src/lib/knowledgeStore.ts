@@ -312,6 +312,7 @@ export interface OverviewUsage {
   cached?: number | null;
   cache_write?: number | null;
   rerank?: { calls: number; tokens: number };
+  decision?: { calls: number; tokens: number };
 }
 
 export function saveOverview(input: {
@@ -1269,6 +1270,7 @@ export interface KnowledgeStats {
     cached: number;
     cache_write: number;
     rerank?: { calls: number; tokens: number };
+    decision?: { calls: number; tokens: number };
   } | null;
 }
 
@@ -1281,6 +1283,7 @@ async function usageTotals(): Promise<{
   cached: number;
   cache_write: number;
   rerank?: { calls: number; tokens: number };
+  decision?: { calls: number; tokens: number };
 } | null> {
   await pg();
   const rows = await pgQuery<{
@@ -1291,6 +1294,8 @@ async function usageTotals(): Promise<{
     cache_write: string;
     rerank_calls: string;
     rerank_tokens: string;
+    decision_calls: string;
+    decision_tokens: string;
     any: string;
   }>(
     `SELECT
@@ -1301,6 +1306,8 @@ async function usageTotals(): Promise<{
        COALESCE(sum(COALESCE((meta->'usage'->>'cache_write')::bigint, 0)), 0) AS cache_write,
        COALESCE(sum(COALESCE((meta->'usage'->'rerank'->>'calls')::bigint, 0)), 0) AS rerank_calls,
        COALESCE(sum(COALESCE((meta->'usage'->'rerank'->>'tokens')::bigint, 0)), 0) AS rerank_tokens,
+       COALESCE(sum(COALESCE((meta->'usage'->'decision'->>'calls')::bigint, 0)), 0) AS decision_calls,
+       COALESCE(sum(COALESCE((meta->'usage'->'decision'->>'tokens')::bigint, 0)), 0) AS decision_tokens,
        count(*) AS any
      FROM knowledge WHERE kind IN ('run', 'answer') AND meta->'usage' IS NOT NULL`,
   );
@@ -1317,6 +1324,10 @@ async function usageTotals(): Promise<{
     rerank:
       Number(row.rerank_calls) > 0
         ? { calls: Number(row.rerank_calls) || 0, tokens: Number(row.rerank_tokens) || 0 }
+        : undefined,
+    decision:
+      Number(row.decision_calls) > 0
+        ? { calls: Number(row.decision_calls) || 0, tokens: Number(row.decision_tokens) || 0 }
         : undefined,
   };
 }
