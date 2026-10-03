@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
+  CircleHelp,
   CircleStop,
   Compass,
   Copy,
@@ -162,30 +163,49 @@ function gapHtml(gap: LedgerGap): string {
   return factHtml(gap.q) + tail;
 }
 
+/** The [n]-chip click delegation shared by every ledger row (the chips
+    live INSIDE the snippet html, so the wrapper catches them). */
+function citeHandlers(onCiteN: (n: number) => void) {
+  const locate = (event: { target: EventTarget | null }) => {
+    const chip = (event.target as HTMLElement).closest("[data-cite-n]");
+    if (chip) {
+      onCiteN(Number(chip.getAttribute("data-cite-n")));
+    }
+  };
+  return {
+    onClick: locate,
+    onKeyDown: (event: ReactKeyboardEvent) => {
+      if (event.key === "Enter") {
+        locate(event);
+      }
+    },
+  };
+}
+
+/** The BELIEF LEDGER card (研究发现): what the sources ESTABLISHED --
+    active facts carry the accent dot, superseded stay struck, retracted
+    ones drop their claim; each fact renders through the SAME measured
+    clamp-and-reveal with inline [n] chip buttons, NEWEST-FIRST, capped
+    at four. */
 function FindingsCard({
   learnings,
-  gaps,
   expanded,
   onToggleExpanded,
   onCiteN,
 }: {
   learnings: LedgerFact[];
-  gaps: LedgerGap[];
   /** CONTROLLED cap state (a [n] click expands it; the chip may fold) */
   expanded: boolean;
   onToggleExpanded: (next: boolean) => void;
   onCiteN: (n: number) => void;
 }) {
   const t = useT();
-  if (learnings.length === 0 && gaps.length === 0) {
+  if (learnings.length === 0) {
     return null;
   }
   const active = learnings.filter((fact) => fact.status === "active");
-  const openGaps = gaps.filter((gap) => gap.status === "open");
   const factsHidden = Math.max(0, learnings.length - 4);
-  const gapsHidden = Math.max(0, gaps.length - 4);
   const factView = [...(expanded ? learnings : learnings.slice(-4))].reverse();
-  const gapView = [...(expanded ? gaps : gaps.slice(-4))].reverse();
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
@@ -204,25 +224,7 @@ function FindingsCard({
               <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
             )}
             <div className="min-w-0 flex-1">
-              {/* the [n] marks ride INSIDE the snippet's html as chip
-                  buttons; the delegated click locates the source */}
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only catches the fact's own [n] chip buttons */}
-              <div
-                onClick={(event) => {
-                  const chip = (event.target as HTMLElement).closest("[data-cite-n]");
-                  if (chip) {
-                    onCiteN(Number(chip.getAttribute("data-cite-n")));
-                  }
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    const chip = (event.target as HTMLElement).closest("[data-cite-n]");
-                    if (chip) {
-                      onCiteN(Number(chip.getAttribute("data-cite-n")));
-                    }
-                  }
-                }}
-              >
+              <div {...citeHandlers(onCiteN)}>
                 <Snippet
                   className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
                   contentHtml={factHtml(fact.text)}
@@ -247,55 +249,70 @@ function FindingsCard({
           </li>
         ))}
       </ul>
-      {gaps.length > 0 ? (
-        <div className="mt-3 border-t border-line px-1 pt-2.5">
-          <p className="text-xs font-medium text-ink-2">
-            {t("ai_findings_gaps")}
-            {openGaps.length > 0 ? <span className="ms-1.5 tabular-nums text-ink-3">{openGaps.length}</span> : null}
-          </p>
-          <ul className="mt-1.5 space-y-1">
-            {gapView.map((gap) => (
-              <li className="flex items-start gap-2" key={gap.id}>
-                {gap.status === "open" ? (
-                  <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
-                ) : (
-                  <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
-                )}
-                {/* the SAME row machinery as a fact: [n] marks as chip
-                    buttons, the question + its settlement as one measured
-                    clamp-and-reveal -- a settled gap reads as a finding */}
-                {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only catches the gap's own [n] chip buttons */}
-                <div
-                  className="min-w-0 flex-1"
-                  onClick={(event) => {
-                    const chip = (event.target as HTMLElement).closest("[data-cite-n]");
-                    if (chip) {
-                      onCiteN(Number(chip.getAttribute("data-cite-n")));
-                    }
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      const chip = (event.target as HTMLElement).closest("[data-cite-n]");
-                      if (chip) {
-                        onCiteN(Number(chip.getAttribute("data-cite-n")));
-                      }
-                    }
-                  }}
-                >
-                  <Snippet
-                    contentHtml={gapHtml(gap)}
-                    textClass={`text-[13px] leading-relaxed ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       <CapChip
         className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
         expanded={expanded}
-        hidden={factsHidden + gapsHidden}
+        hidden={factsHidden}
+        onToggle={() => {
+          onToggleExpanded(!expanded);
+        }}
+      />
+    </div>
+  );
+}
+
+/** The OPEN QUESTIONS card (未决缺口): the ledger's gap partition as its
+    own section beside the findings -- an open gap is a colored dot (an
+    owed question, not an achievement), a closed one settles as a check
+    with its answer as a muted tail.  The SAME row machinery as a fact:
+    [n] chip buttons + the measured clamp-and-reveal, newest first,
+    capped at four; the header counts the OWED (open) questions. */
+function GapsCard({
+  gaps,
+  expanded,
+  onToggleExpanded,
+  onCiteN,
+}: {
+  gaps: LedgerGap[];
+  expanded: boolean;
+  onToggleExpanded: (next: boolean) => void;
+  onCiteN: (n: number) => void;
+}) {
+  const t = useT();
+  if (gaps.length === 0) {
+    return null;
+  }
+  const openCount = gaps.filter((gap) => gap.status === "open").length;
+  const gapsHidden = Math.max(0, gaps.length - 4);
+  const gapView = [...(expanded ? gaps : gaps.slice(-4))].reverse();
+  return (
+    <div className="mb-5">
+      <div className="flex items-center gap-2 px-1">
+        <CircleHelp aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
+        <h3 className="text-base font-semibold text-ink">{t("ai_findings_gaps")}</h3>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">{openCount}</span>
+      </div>
+      <ul className="mt-3 space-y-1.5">
+        {gapView.map((gap) => (
+          <li className="flex items-start gap-2" key={gap.id}>
+            {gap.status === "open" ? (
+              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent" />
+            ) : (
+              <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+            )}
+            <div className="min-w-0 flex-1" {...citeHandlers(onCiteN)}>
+              <Snippet
+                contentHtml={gapHtml(gap)}
+                textClass={`text-[13px] leading-relaxed ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
+              />
+            </div>
+          </li>
+        ))}
+      </ul>
+      <CapChip
+        className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        expanded={expanded}
+        hidden={gapsHidden}
         onToggle={() => {
           onToggleExpanded(!expanded);
         }}
@@ -337,12 +354,15 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
             <span aria-hidden="true" className="size-1.5 rounded-full bg-ink-3/50" />
           )}
         </span>
-        <span className={`min-w-0 flex-1 break-words ${task.status === "done" ? "text-ink-3" : "text-ink"}`} dir="auto">
-          {task.title}
+        <div className="min-w-0 flex-1">
+          <Snippet
+            contentHtml={escapeHtml(task.title)}
+            textClass={`text-[13px] leading-relaxed ${task.status === "done" ? "text-ink-3" : "text-ink"}`}
+          />
           {task.status === "missed" ? (
-            <span className="ms-1.5 whitespace-nowrap text-[11px] text-warning">{t("ai_task_missed")}</span>
+            <span className="whitespace-nowrap text-[11px] text-warning">{t("ai_task_missed")}</span>
           ) : null}
-        </span>
+        </div>
         {task.status === "done" && (task.sources?.length ?? 0) > 0 ? (
           <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
             {t((task.sources?.length ?? 0) === 1 ? "ai_task_source_one" : "ai_task_sources", {
@@ -732,6 +752,7 @@ function AiSearchRunSectionImpl({
   const [locate, setLocate] = useState<{ n: number; seq: number } | null>(null);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [findingsExpanded, setFindingsExpanded] = useState(false);
+  const [gapsExpanded, setGapsExpanded] = useState(false);
   const locateSeq = useRef(0);
   const handleCite = (n: number) => {
     // a cited [n] this run never gathered (a past-research recall, a
@@ -745,6 +766,7 @@ function AiSearchRunSectionImpl({
     setLocate({ n, seq: locateSeq.current });
     setSourcesExpanded(true);
     setFindingsExpanded(true);
+    setGapsExpanded(true);
   };
   useEffect(() => {
     if (!locate) {
@@ -1057,14 +1079,22 @@ function AiSearchRunSectionImpl({
                 an ordinary block (cap-4 each), and the pb-44 keeps the
                 last card reachable above the follow-up box. */}
             {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
+            <DecisionsCard decisions={run.decisions ?? []} />
             {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
-            {(run.learnings ?? []).length > 0 || (run.gaps ?? []).length > 0 ? (
+            {(run.learnings ?? []).length > 0 ? (
               <FindingsCard
                 expanded={findingsExpanded}
-                gaps={run.gaps ?? []}
                 learnings={run.learnings ?? []}
                 onCiteN={handleCite}
                 onToggleExpanded={setFindingsExpanded}
+              />
+            ) : null}
+            {(run.gaps ?? []).length > 0 ? (
+              <GapsCard
+                expanded={gapsExpanded}
+                gaps={run.gaps ?? []}
+                onCiteN={handleCite}
+                onToggleExpanded={setGapsExpanded}
               />
             ) : null}
             {run.sources.length > 0 ? (
@@ -1072,7 +1102,6 @@ function AiSearchRunSectionImpl({
             ) : (
               <AiSearchSourcesSkeleton />
             )}
-            <DecisionsCard decisions={run.decisions ?? []} />
           </aside>
         ) : null}
       </div>
