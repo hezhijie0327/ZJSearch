@@ -30,6 +30,7 @@ from searx.zjsearch.ai.infra import decision, http, jsongate
 from searx.zjsearch.ai.infra import sdk as sdk_registry
 from searx.zjsearch.ai.runtime.context import _relevance_order
 from searx.zjsearch.ai.runtime.executor import Searches
+from searx.zjsearch.ai.runtime import audit
 from searx.zjsearch.ai.runtime.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runtime.gates import (
     clarify_gate,
@@ -285,7 +286,17 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         gallery_validator=gallery_validator,
     )
     return _respond(
-        _Ndjson(events, cfg, research_q, lang, gate_usage, state.rerank_usage, state.decision_usage, state.judgments)
+        _Ndjson(
+            events,
+            cfg,
+            research_q,
+            lang,
+            gate_usage,
+            state.rerank_usage,
+            state.decision_usage,
+            state.judgments,
+            state,
+        )
     )
 
 
@@ -318,7 +329,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
     writer skipped the in-stream fence) and the memory extraction -- both
     suppressed on an ``awaiting`` run."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         events: t.Iterator[dict[str, t.Any]],
         cfg: dict[str, t.Any],
@@ -328,6 +339,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         rerank_usage: dict[str, int] | None = None,
         decision_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
+        state: t.Any = None,
     ):
         self.events = events
         self.cfg = cfg
@@ -343,9 +355,24 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
         self.judgments = judgments or []
+        # the run's live Searches (the audit phase reads its numbered
+        # entries) -- a cheap ref, the executor is done mutating by the
+        # time the settle passes through here
+        self.state = state
         self.buffer: list[str] = []
         self.rest: t.Iterator[str] | None = None
         self.primed = False
+
+    def _audit(self, answer: str) -> dict[str, t.Any] | None:
+        """The audit phase's payload: every cited [n] graded against its
+        source (citation_verdicts -- rerank pre-floor + decision choice).
+        ``None`` when the audit cannot run (decision off/unconfigured,
+        empty answer/registry) -- the settle carries nothing and the
+        client renders no badges (a lens, not a dependency)."""
+        if not answer or self.state is None:
+            return None
+        verdicts = audit.citation_verdicts(answer, self.state.entries)
+        return {"citations": verdicts} if verdicts else None
 
     def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
         """The settle with the GATES' token account folded into its usage:
@@ -403,7 +430,11 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             if kind == "settle":
                 if str(event.get("status") or "") == "error":
                     raise _UpstreamDead(str(event.get("halt") or "upstream returned an empty stream"))
-                self.buffer.append(wire.encode(self._merged_settle(event)))
+                audit_payload = self._audit("".join(answer_parts).strip())
+                if audit_payload is not None:
+                    self.buffer.append(wire.encode({"e": "phase", "name": "audit"}))
+                merged = self._merged_settle(event)
+                self.buffer.append(wire.encode({**merged, **({"audit": audit_payload} if audit_payload else {})}))
                 self.rest = self._late("".join(answer_parts).strip(), awaiting, related_seen)
                 self.primed = True
                 return
@@ -439,7 +470,11 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             # the loop guarantees exactly one settle; a missing one is a
             # protocol bug -- fail loudly rather than hang the client
             raise _UpstreamDead("the run ended without a settle event")
-        yield wire.encode(self._merged_settle(settle_event))
+        audit_payload = self._audit("".join(answer_parts).strip())
+        if audit_payload is not None:
+            yield wire.encode({"e": "phase", "name": "audit"})
+        merged = self._merged_settle(settle_event)
+        yield wire.encode({**merged, **({"audit": audit_payload} if audit_payload else {})})
         yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)
 
     def _late(self, answer: str, awaiting: bool, related_seen: bool) -> t.Iterator[str]:

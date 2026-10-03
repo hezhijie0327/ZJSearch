@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Repeat2,
   Waypoints,
+  Zap,
 } from "lucide-react";
 import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -171,6 +172,15 @@ function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: Ledg
               {fact.status !== "active" ? (
                 <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
                   {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
+                </span>
+              ) : fact.conflict_with ? (
+                <span
+                  aria-label={t("ai_finding_conflict")}
+                  className="ms-1.5 inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
+                  role="img"
+                  title={t("ai_finding_conflict")}
+                >
+                  <Zap aria-hidden="true" className="size-2.5" />
                 </span>
               ) : null}
             </div>
@@ -905,7 +915,11 @@ function AiSearchRunSectionImpl({
                 <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />
               ) : null}
               {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
-              {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
+              {run.sources.length > 0 ? (
+                <AiSearchSources audit={run.audit} sources={run.sources} />
+              ) : (
+                <AiSearchSourcesSkeleton />
+              )}
             </aside>
           </>
         ) : null}

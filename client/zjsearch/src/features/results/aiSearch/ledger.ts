@@ -64,6 +64,9 @@ export interface LedgerFact {
   refs: number[];
   status: "active" | "superseded" | "retracted";
   round?: number;
+  /** the id of an established fact this one CONFLICTS with (the audit's
+      consistency scan) -- the findings card renders the ⚡ */
+  conflict_with?: number;
 }
 
 /** One ledger GAP: the open questions the research still owes an answer
@@ -105,6 +108,7 @@ export function learningFacts(items: unknown): LedgerFact[] {
         refs: Array.isArray(record.refs) ? record.refs.map((n) => Number(n) || 0).filter((n) => n > 0) : [],
         status: record.status === "superseded" || record.status === "retracted" ? record.status : "active",
         round: typeof record.round === "number" ? record.round : undefined,
+        conflict_with: typeof record.conflict_with === "number" ? record.conflict_with : undefined,
       };
     })
     .filter((fact): fact is LedgerFact => fact !== null);

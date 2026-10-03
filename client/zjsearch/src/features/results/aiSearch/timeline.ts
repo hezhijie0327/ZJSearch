@@ -235,6 +235,16 @@ export interface AiSearchRun {
   stage?: AiSearchStage;
   /** every stage the run walked, in order -- the run_summary record */
   stages: AiSearchStage[];
+  /** the audit phase's citation verdicts (the settle carries them):
+      [n] -> verdict + confidence -- the sources card renders the badges;
+      absent = no audit ran (decision off, or a legacy thread) */
+  audit?: AiSearchAudit;
+}
+
+/** One citation's audit verdict: verified / contradicted / unsupported /
+    unverified, with the decision model's confidence. */
+export interface AiSearchAudit {
+  citations: Record<string, { verdict: string; confidence: number }>;
 }
 
 /** The fold's state: the threaded runs plus the thread-wide surfaces
@@ -652,6 +662,7 @@ export function applyEvent(
       // error) -- no client inference
       const status = String(event.status ?? "done");
       const usage = event.usage as AiSearchRun["usage"];
+      const audit = event.audit as AiSearchAudit | undefined;
       const halt = typeof event.halt === "string" && event.halt ? event.halt : null;
       let next: AiSearchRun = {
         ...run,
@@ -672,6 +683,7 @@ export function applyEvent(
             }
           : (run.usage ?? null),
         halt,
+        audit,
       };
       if (status === "awaiting") {
         next = { ...next, status: "awaiting", endedAt: null };

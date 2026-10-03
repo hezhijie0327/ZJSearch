@@ -31,6 +31,7 @@ from searx.zjsearch.ai.capabilities import user_memory as user_memory_cap
 from searx.zjsearch.ai.runtime.coverage import Coverage
 from searx.zjsearch.ai.infra import decision
 from searx.zjsearch.ai.runtime.feed import RESULTS_CAP, build_search_feed, serialize_results
+from searx.zjsearch.ai.runtime import audit
 from searx.zjsearch.ai.runtime.progress import BUDGET_LAST_ROUND_NOTE, FEED_CONVERGE_NOTE
 from searx.plugins.bm25_reranker import _field
 from searx.zjsearch.ai.infra.decision import features as decision_features
@@ -157,6 +158,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         self._ledger_seq = 0
         # the run's wall clock (the max_seconds budget reads it)
         self.started_at = time.monotonic()
+        # the numbered entries' identity (n -> title + snippet) -- the
+        # audit phase's citation sources
+        self.entries: dict[int, dict[str, str]] = {}
 
     def ledger_open_items(self) -> tuple[list[str], list[str]]:
         """The ledger's OPEN items: (open subtask titles, open gap
@@ -398,6 +402,13 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         if self.coverage.task_list:
             titles = [str(entry.get("title") or "") for entry in entries]
             self.coverage.track(query, titles, [int(entry["n"]) for entry in entries])
+        for entry in entries:
+            n = int(entry.get("n") or 0)
+            if n:
+                self.entries[n] = {
+                    "title": str(entry.get("title") or ""),
+                    "snippet": str(entry.get("content") or "")[:500],
+                }
         yield ("call", {"call": idx, "status": "ok", "n": len(items), "ms": ms, "feed": feed_block[:800]})
         if entries:
             yield ("sources", {"items": entries})
@@ -676,6 +687,16 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # the active facts, the next rounds chase the open gaps
                 ops = parse_learnings_call(call)
                 written, opened, closed = self.apply_learnings(ops, rnd)
+                # the conflict scan: each NEW fact vs the previously
+                # established ones (embedding nearest-neighbour + one
+                # consistency noul) -- a flagged pair rides the fact and
+                # the findings card renders the ⚡ (fail-open: an
+                # unconfigured model simply never flags)
+                established = [str(fact.get("text") or "") for fact in self.facts[:-written]] if written else []
+                for fact in self.facts[-written:] if written else []:
+                    conflict = audit.finding_conflict(str(fact.get("text") or ""), established)
+                    if conflict is not None:
+                        fact["conflict_with"] = self.facts[conflict].get("id")
                 yield (
                     "learnings",
                     {"round": rnd, "id": wire_id, "items": list(self.facts), "gaps": list(self.gaps)},

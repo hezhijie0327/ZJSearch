@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Award, BookOpen, Globe, History, Server } from "lucide-react";
+import { Award, BookOpen, CircleHelp, Globe, History, Minus, Server, ShieldCheck, Zap } from "lucide-react";
 import { useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
+import type { AiSearchAudit } from "@/features/results/aiSearch/timeline.ts";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
@@ -49,7 +50,68 @@ function SourceFavicon({ source }: { source: AiSearchSource }) {
   );
 }
 
-function SourceCard({ source }: { source: AiSearchSource }) {
+/** The citation audit's verdict badge: a checked claim in this source
+    (✓ verified / ⚡ contradicted / – the source does not address it /
+    ? torn), title-carried so the row stays clean. */
+function AuditBadge({ verdict }: { verdict: string }) {
+  const t = useT();
+  const key =
+    verdict === "verified"
+      ? "ai_audit_verified"
+      : verdict === "contradicted"
+        ? "ai_audit_contradicted"
+        : verdict === "unsupported"
+          ? "ai_audit_unsupported"
+          : "ai_audit_unverified";
+  if (verdict === "verified") {
+    return (
+      <span
+        aria-label={t(key)}
+        className="inline-flex size-4 items-center justify-center rounded-full bg-ok/15 text-ok"
+        role="img"
+        title={t(key)}
+      >
+        <ShieldCheck aria-hidden="true" className="size-2.5" />
+      </span>
+    );
+  }
+  if (verdict === "contradicted") {
+    return (
+      <span
+        aria-label={t(key)}
+        className="inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
+        role="img"
+        title={t(key)}
+      >
+        <Zap aria-hidden="true" className="size-2.5" />
+      </span>
+    );
+  }
+  if (verdict === "unsupported") {
+    return (
+      <span
+        aria-label={t(key)}
+        className="inline-flex size-4 items-center justify-center rounded-full bg-surface-2 text-ink-3"
+        role="img"
+        title={t(key)}
+      >
+        <Minus aria-hidden="true" className="size-2.5" />
+      </span>
+    );
+  }
+  return (
+    <span
+      aria-label={t(key)}
+      className="inline-flex size-4 items-center justify-center rounded-full bg-surface-2 text-ink-3"
+      role="img"
+      title={t(key)}
+    >
+      <CircleHelp aria-hidden="true" className="size-2.5" />
+    </span>
+  );
+}
+
+function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearchAudit }) {
   const t = useT();
   // the traditional presentations' type adaptation: videos carry their
   // duration, torrents their filesize -- one badge string either way
@@ -75,6 +137,10 @@ function SourceCard({ source }: { source: AiSearchSource }) {
           </span>
         ) : null}
         <span className="ms-auto flex shrink-0 items-center gap-1.5">
+          {(() => {
+            const citation = audit?.citations[String(source.n)];
+            return citation ? <AuditBadge verdict={citation.verdict} /> : null;
+          })()}
           {source.crawled ? (
             <span
               aria-label={t("ai_source_crawled")}
@@ -178,7 +244,7 @@ function SourceCard({ source }: { source: AiSearchSource }) {
   );
 }
 
-export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
+export function AiSearchSources({ sources, audit }: { sources: AiSearchSource[]; audit?: AiSearchAudit }) {
   const t = useT();
   if (sources.length === 0) {
     return null;
@@ -196,7 +262,7 @@ export function AiSearchSources({ sources }: { sources: AiSearchSource[] }) {
       {/* ~4 cards visible, the rest scroll inside -- on every breakpoint */}
       <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:max-h-[42rem] lg:flex lg:flex-col">
         {sources.map((source) => (
-          <SourceCard key={source.n} source={source} />
+          <SourceCard audit={audit} key={source.n} source={source} />
         ))}
       </div>
     </section>
