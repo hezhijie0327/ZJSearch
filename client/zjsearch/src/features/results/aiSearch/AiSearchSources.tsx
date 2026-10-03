@@ -2,6 +2,7 @@
 
 import { BookOpen, Globe, History } from "lucide-react";
 import { useState } from "react";
+import { CapChip } from "@/components/CapChip.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
@@ -9,6 +10,7 @@ import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
 import { MONO_CHIP } from "@/lib/styles.ts";
+import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
@@ -56,7 +58,9 @@ function SourceCard({ source }: { source: AiSearchSource }) {
   // duration, torrents their filesize -- one badge string either way
   const isMedia = source.category === "videos" || source.category === "files";
   const engineFirst = source.engines?.[0];
-  const engineRest = source.engines ? source.engines.length - 1 : 0;
+  // cap-and-expand (the EnginesLine language): the lead engine sits,
+  // "+N" reveals the rest inline
+  const { expanded, toggle, hidden } = useCapExpand(source.engines?.length ?? 0, 1);
   return (
     // the REGULAR result card's chrome (rounded-2xl, borderless, p-3/4,
     // hover:bg-surface) and hierarchy (pretty-url line, title, snippet):
@@ -119,9 +123,16 @@ function SourceCard({ source }: { source: AiSearchSource }) {
             {engineFirst ? (
               <span className="inline-flex min-w-0 items-center gap-1" title={source.engines?.join(", ")}>
                 <span className="truncate">{engineFirst}</span>
-                {engineRest > 0 ? <span className="shrink-0 text-ink-3">+{engineRest}</span> : null}
               </span>
             ) : null}
+            {expanded
+              ? (source.engines ?? []).slice(1).map((engine) => (
+                  <span className="shrink-0" key={engine}>
+                    {engine}
+                  </span>
+                ))
+              : null}
+            {hidden > 0 ? <CapChip className="shrink-0" expanded={expanded} hidden={hidden} onToggle={toggle} /> : null}
             <span className="ms-auto flex shrink-0 items-center gap-1.5">
               {/* the read marks ride a FIXED-WIDTH slot: with a badge
                   present or not, the #n stays aligned across crawled,
