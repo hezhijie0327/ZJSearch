@@ -21,7 +21,7 @@ import {
   Waypoints,
   Zap,
 } from "lucide-react";
-import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
@@ -50,7 +50,7 @@ import type {
   AiSearchStep,
 } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
-import { citeToLinks } from "@/lib/citations.ts";
+import { citedSourceNumbers, citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -852,6 +852,9 @@ function AiSearchRunSectionImpl({
     };
   }, [locate, run.runNo]);
   const streaming = run.status === "streaming" && live;
+  // the sources the ANSWER actually cites wear the same dashed frame the
+  // AI Overview draws on the classic page (data-ai-cited in base.css)
+  const citedSet = useMemo(() => new Set(citedSourceNumbers(run.answer)), [run.answer]);
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
   // the round counter (第 N 轮): the executed steps' count -- while a
   // round streams, its calls step already exists, so N names the round
@@ -1146,7 +1149,12 @@ function AiSearchRunSectionImpl({
               />
             ) : null}
             {run.sources.length > 0 ? (
-              <AiSearchSources expanded={sourcesExpanded} onToggleExpanded={setSourcesExpanded} sources={run.sources} />
+              <AiSearchSources
+                cited={citedSet}
+                expanded={sourcesExpanded}
+                onToggleExpanded={setSourcesExpanded}
+                sources={run.sources}
+              />
             ) : (
               <AiSearchSourcesSkeleton />
             )}

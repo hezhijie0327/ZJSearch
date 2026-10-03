@@ -47,7 +47,7 @@ function SourceFavicon({ source }: { source: AiSearchSource }) {
   );
 }
 
-function SourceCard({ source }: { source: AiSearchSource }) {
+function SourceCard({ cited, source }: { cited: boolean; source: AiSearchSource }) {
   const t = useT();
   // the traditional presentations' type adaptation: videos carry their
   // duration, torrents their filesize -- one badge string either way
@@ -61,7 +61,11 @@ function SourceCard({ source }: { source: AiSearchSource }) {
     //   snippet: the clamp-and-reveal
     //   attribution row: the score / engines chips wrap as self-contained
     //   units -- no bare numbers or badges to orphan on a narrow card
-    <div className="group relative rounded-2xl p-3 transition-colors hover:bg-surface sm:p-4" data-ai-n={source.n}>
+    <div
+      className="group relative rounded-2xl p-3 transition-colors hover:bg-surface sm:p-4"
+      data-ai-cited={cited || undefined}
+      data-ai-n={source.n}
+    >
       <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
         <SourceFavicon source={source} />
         <span className="min-w-0 truncate" dir="ltr">
@@ -186,11 +190,15 @@ const RAIL_CAP = 4;
 /** The rail list's default footprint: the four newest cards. */
 
 export function AiSearchSources({
+  cited,
   sources,
   expanded,
   onToggleExpanded,
 }: {
   sources: AiSearchSource[];
+  /** the [n] numbers the ANSWER cites -- those cards wear the dashed
+      frame (the AI Overview's own cited-source marking) */
+  cited: Set<number>;
   /** CONTROLLED cap state (the parent expands it on a citation click and
       may clear it when the user folds the list again) */
   expanded: boolean;
@@ -216,13 +224,13 @@ export function AiSearchSources({
       </div>
       <div className="mt-3 flex flex-col gap-2 px-1">
         {view.map((source) => (
-          <SourceCard key={source.n} source={source} />
+          <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
         ))}
       </div>
       <Collapse className={expanded && extra.length > 0 ? "mt-2" : ""} open={expanded && extra.length > 0}>
         <div className="flex flex-col gap-2 px-1">
           {extra.map((source) => (
-            <SourceCard key={source.n} source={source} />
+            <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
           ))}
         </div>
       </Collapse>

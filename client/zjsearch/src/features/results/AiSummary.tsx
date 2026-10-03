@@ -855,17 +855,17 @@ export function AiAnswerCard({
             previewPx={OVERVIEW_PREVIEW_PX}
           >
             <MarkdownAnswer markdown={markdown} meta={sourceMeta} onCite={onCite} settled={state.phase === "done"} />
+            {/* the run's meta line folds INTO 查看更多 (the transport
+                outcome is detail, not headline) */}
+            {!streaming && !failed && meta ? (
+              <div className="mt-2">
+                <AiRunFooter finish={meta.finish ?? null} model={meta.model ?? null} usage={meta.usage ?? null} />
+              </div>
+            ) : null}
           </ClampReveal>
         </div>
       ) : streaming && !hasThink ? (
         <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>
-      ) : null}
-      {/* the run's meta line at the END of the output (lobehub's message
-          footer): model + tokens + transport outcome */}
-      {!streaming && !failed && meta ? (
-        <div className="mt-2">
-          <AiRunFooter finish={meta.finish ?? null} model={meta.model ?? null} usage={meta.usage ?? null} />
-        </div>
       ) : null}
       {failed ? (
         <div className="mt-2 text-xs text-danger">

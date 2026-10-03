@@ -221,10 +221,8 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
   }
   // the newest four lead; the OLDER tail sits inside a Collapse so the
   // +N reveal (and the 收起) plays as a height animation
-  const shown = expanded ? decisions : decisions.slice(-4);
-  const extra = expanded ? [] : decisions.slice(0, Math.max(0, decisions.length - 4));
-  const view = [...shown].reverse();
-  const extraView = [...extra].reverse();
+  const view = [...decisions.slice(-4)].reverse();
+  const extraView = [...decisions.slice(0, Math.max(0, decisions.length - 4))].reverse();
   return (
     <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
