@@ -40,7 +40,10 @@ import { type EmbedUsageTotals, readEmbedUsage } from "@/lib/embed.ts";
 import { downloadAnswerMarkdown } from "@/lib/exporters.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import type { KnowledgeItem, KnowledgeStats, MemoryRow, OverviewUsage, ThreadSummary } from "@/lib/knowledgeStore.ts";
+import type { MemoryRow, OverviewUsage } from "@/lib/kb/projections.ts";
+import type { ThreadSummary } from "@/lib/kb/recall.ts";
+import type { KnowledgeItem } from "@/lib/kb/shared.ts";
+import type { KnowledgeStats } from "@/lib/kb/stats.ts";
 import { printDocument } from "@/lib/print.ts";
 
 export function formatBytesLocal(bytes: number): string {

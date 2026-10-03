@@ -9,7 +9,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import { translateFor } from "@/lib/i18n.ts";
-import { configureKnowledge } from "@/lib/knowledgeStore.ts";
+import { configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractBootPageData, extractPageData, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { buildSearchUrl, type SearchParams, searchParamEntries, urlThemeOverride } from "@/lib/searchParams.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";

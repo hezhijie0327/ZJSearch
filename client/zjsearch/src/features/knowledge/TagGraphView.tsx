@@ -4,7 +4,8 @@ import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import { graphSnapshot, itemsByTag, type KnowledgeItem, type TagGraph } from "@/lib/knowledgeStore.ts";
+import { graphSnapshot, itemsByTag, type TagGraph } from "@/lib/kb/recall.ts";
+import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 
 /**
  * The knowledge page's TAG GRAPH (the GraphRAG view): nodes are concept

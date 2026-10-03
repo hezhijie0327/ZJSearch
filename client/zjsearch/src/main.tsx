@@ -3,7 +3,8 @@
 import { createRoot } from "react-dom/client";
 import { App } from "@/app.tsx";
 import { configureEmbeddings } from "@/lib/embed.ts";
-import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/knowledgeStore.ts";
+import "@/lib/kb/debug.ts";
+import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { initPwaInstall } from "@/lib/pwa.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";

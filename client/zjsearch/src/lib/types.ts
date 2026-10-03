@@ -545,7 +545,7 @@ export interface ErrorPageData {
 /** The standalone AI thread page (`/zjsearch/ai/thread/<uuid>`): the
     payload carries
     the thread identity plus fresh capability tokens -- the conversation
-    itself lives in the browser's storage (see lib/knowledgeStore). */
+    itself lives in the browser's storage (see lib/kb). */
 export interface AiThreadPageData {
   globals: GlobalData;
   thread: string;
@@ -553,7 +553,7 @@ export interface AiThreadPageData {
 
 /** The knowledge-base page (`/zjsearch/knowledge`): the payload carries
     the globals (page identity + capability tokens) -- the library itself
-    lives in the browser's PGlite store (see lib/knowledgeStore). */
+    lives in the browser's PGlite store (see lib/kb). */
 export interface KnowledgePageData {
   globals: GlobalData;
 }

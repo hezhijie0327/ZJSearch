@@ -29,31 +29,23 @@ import {
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
+import { loadDocument, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
+import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
   deleteItem,
   deleteSource,
   deleteThread,
   forgetMemory,
-  type KnowledgeItem,
-  type KnowledgeStats,
-  knowledgeStats,
-  listKind,
-  loadDocument,
-  loadThreadAnswer,
   type MemoryRow,
   resetAll,
-  type StoreSubscription,
   saveMemory,
-  searchKnowledge,
-  subscribeMemories,
-  subscribeThreads,
-  type ThreadAnswer,
-  type ThreadSummary,
-  threadUrl,
   toggleItemPin,
   toggleThreadPin,
   updateMemory,
-} from "@/lib/knowledgeStore.ts";
+} from "@/lib/kb/projections.ts";
+import { listKind, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
+import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
+import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { SEGMENT, SEGMENT_ACTIVE, SEGMENT_IDLE } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";

@@ -12,7 +12,6 @@ import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotk
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
-import {} from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
 import type { BasicPageData } from "@/lib/types.ts";

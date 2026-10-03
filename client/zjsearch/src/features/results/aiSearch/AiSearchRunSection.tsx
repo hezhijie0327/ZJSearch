@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import {
-  ArrowUpRight,
-  BookMarked,
-  BookOpen,
-  BookUser,
   Brain,
-  Calculator,
   Check,
   ChevronDown,
   CircleAlert,
@@ -14,19 +9,14 @@ import {
   Compass,
   Copy,
   CornerDownRight,
-  Globe,
   Lightbulb,
   ListTodo,
   LoaderCircle,
   MessageCircleQuestion,
-  Minus,
   NotebookPen,
   Play,
-  Plug,
   RefreshCw,
   Repeat2,
-  Scale,
-  Search,
   Waypoints,
 } from "lucide-react";
 import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
@@ -36,6 +26,16 @@ import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
+import { AskRow } from "@/features/results/aiSearch/calls/AskRow.tsx";
+import { CalcRow } from "@/features/results/aiSearch/calls/CalcRow.tsx";
+import { JudgeRow } from "@/features/results/aiSearch/calls/JudgeRow.tsx";
+import { LearningsRow } from "@/features/results/aiSearch/calls/LearningsRow.tsx";
+import { McpRow } from "@/features/results/aiSearch/calls/McpRow.tsx";
+import { MemoryRow } from "@/features/results/aiSearch/calls/MemoryRow.tsx";
+import { PageRow } from "@/features/results/aiSearch/calls/PageRow.tsx";
+import { PastResearchRow } from "@/features/results/aiSearch/calls/PastResearchRow.tsx";
+import { SearchRow } from "@/features/results/aiSearch/calls/SearchRow.tsx";
+import { TaskRow } from "@/features/results/aiSearch/calls/TaskRow.tsx";
 import type {
   AiAskQuestion,
   AiSearchCall,
@@ -49,7 +49,7 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
-import { CHIP_BTN, HOVER_CHIP, META_TOGGLE, READ_PANE, SCROLLBAR_NONE } from "@/lib/styles.ts";
+import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
 
 /**
  * One threaded Q&A section of the AI Search page: the question as a
@@ -65,98 +65,35 @@ import { CHIP_BTN, HOVER_CHIP, META_TOGGLE, READ_PANE, SCROLLBAR_NONE } from "@/
  * thread divider.
  */
 
-/** One settled search's result cards (DeltaV's expandable tool row): a
-    swipe strip of small title + favicon + domain cards, each opening the
-    result page.  Fed from the run's [n] registry slice for that call. */
-function CallResults({ results }: { results: AiSearchSource[] }) {
-  return (
-    <div className={`mt-1 flex gap-2 overflow-x-auto pb-1 ${SCROLLBAR_NONE} [&>*]:shrink-0`}>
-      {results.map((source) => (
-        <a
-          className="w-44 rounded-lg bg-surface-2/70 p-2 transition-colors hover:bg-surface-2"
-          href={source.url}
-          key={source.n}
-          rel="noreferrer"
-          target="_blank"
-        >
-          <p className="line-clamp-2 text-xs font-medium leading-snug text-ink" dir="auto">
-            {source.title}
-          </p>
-          <span className="mt-1.5 flex min-w-0 items-center gap-1">
-            {source.favicon ? (
-              <img alt="" aria-hidden="true" className="size-3.5 rounded object-contain" src={source.favicon} />
-            ) : (
-              <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
-            )}
-            <span className="truncate text-xs text-ink-3">{source.netloc}</span>
-          </span>
-        </a>
-      ))}
-    </div>
-  );
-}
-
-/** Compact label for an web_reader row: host + trimmed path -- the url is
-    what identifies the read (two pages on one site must look different);
-    a malformed url shows as-is. */
-function pageLabel(url: string | undefined): string {
-  if (!url) {
-    return "?";
+/** One tool-call row: status + query/url + result/char count, EXPANDABLE --
+    a search row reveals its raw arguments (debug: exactly what the model
+    passed) plus its result cards, a page read reveals the READING PANE
+    (the crawled content itself).  The per-tool rows live in `calls/`;
+    this is only the tool → row dispatch (an unknown tool falls through to
+    the search-shaped row). */
+function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
+  switch (call.tool) {
+    case "web_reader":
+      return <PageRow call={call} results={results} />;
+    case "calculator":
+      return <CalcRow call={call} results={results} />;
+    case "user_memory":
+      return <MemoryRow call={call} results={results} />;
+    case "past_research":
+      return <PastResearchRow call={call} results={results} />;
+    case "task_write":
+      return <TaskRow call={call} results={results} />;
+    case "learnings":
+      return <LearningsRow call={call} />;
+    case "ask_user":
+      return <AskRow call={call} results={results} />;
+    case "judge":
+      return <JudgeRow call={call} results={results} />;
+    case "mcp":
+      return <McpRow call={call} results={results} />;
+    default:
+      return <SearchRow call={call} results={results} />;
   }
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname === "/" ? "" : parsed.pathname + parsed.search;
-    return parsed.hostname + path;
-  } catch {
-    return url;
-  }
-}
-
-/** A tool row's content pane (the web_reader page markdown, an MCP
-    result) under PROGRESSIVE DISCLOSURE: a fixed-height preview first --
-    bottom-faded, one 展开全文 pill -- expanding into the scroll-capped
-    full text on demand.  Short content skips the staging entirely.
-    The corner chips (hover, the CodeBlock pattern) carry the
-    external-open and copy paths. */
-function CallContent({ call }: { call: AiSearchCall }) {
-  const t = useT();
-  const copyToast = useCopyToast();
-  const text = call.text ?? "";
-  // NO progressive disclosure: the pane is the row's point and it scrolls
-  // INTERNALLY (max-h-96) -- a preview-then-expand second fold is friction
-  // the internal scroll already solves
-  return (
-    <div className="group relative mt-1">
-      <div className={`relative ${READ_PANE} max-h-96 overflow-y-auto overscroll-contain`} dir="auto">
-        {text}
-      </div>
-      <div className="absolute end-2 top-2 flex gap-0.5">
-        {call.url ? (
-          <a
-            aria-label={t("open_source")}
-            className={`${HOVER_CHIP} hover:text-accent`}
-            href={call.url}
-            rel="noreferrer"
-            target="_blank"
-            title={t("open_source")}
-          >
-            <ArrowUpRight aria-hidden="true" className="size-3.5" />
-          </a>
-        ) : null}
-        <button
-          aria-label={t("copy")}
-          className={HOVER_CHIP}
-          onClick={() => {
-            copyToast(text);
-          }}
-          title={t("copy")}
-          type="button"
-        >
-          <Copy aria-hidden="true" className="size-3.5" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /** The living task list (the task_write tool maintains it): a STATUS-ONLY
@@ -265,188 +202,6 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
         ) : null}
       </div>
     </li>
-  );
-}
-
-/** One tool-call row: status + query/url + result/char count, EXPANDABLE --
-    a search row reveals its raw arguments (debug: exactly what the model
-    passed) plus its result cards, a page read reveals the READING PANE
-    (the crawled content itself). */
-function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
-  const t = useT();
-  const copyToast = useCopyToast();
-  const [open, setOpen] = useState(false);
-  const ok = call.status === "ok";
-  const isPage = call.tool === "web_reader";
-  const isCalc = call.tool === "calculator";
-  const isMemory = call.tool === "user_memory";
-  const isPastResearch = call.tool === "past_research";
-  const isTask = call.tool === "task_write";
-  const isLearnings = call.tool === "learnings";
-  const isAsk = call.tool === "ask_user";
-  const isDecision = call.tool === "judge";
-  const rawArgs = call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
-  // web_reader rows NEVER fold: the reading pane (scroll-capped inside)
-  // renders below the row unconditionally -- the content is the row's
-  // point, and a second click to see what was read is friction
-  const hasText = Boolean(call.text) && (call.tool === "mcp" || isDecision || isMemory || isPastResearch);
-  const expandable =
-    (hasText ? true : isCalc || isLearnings ? false : results.length > 0) || (Boolean(rawArgs) && !isPage);
-  return (
-    <div>
-      <button
-        aria-expanded={expandable ? open : undefined}
-        className={`flex min-h-6 w-full items-center gap-1.5 px-1 text-xs ${
-          call.status === "error" ? "text-danger" : "text-ink-3"
-        } ${expandable ? "transition-colors hover:text-ink" : ""}`}
-        onClick={() => {
-          if (expandable) {
-            setOpen(!open);
-          }
-        }}
-        type="button"
-      >
-        {call.status === "pending" ? (
-          <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
-        ) : ok ? (
-          <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
-        ) : call.status === "interrupted" || call.status === "duplicate" ? (
-          <Minus aria-hidden="true" className="size-3 shrink-0" />
-        ) : (
-          <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
-        )}
-        {isPage ? (
-          <BookOpen aria-hidden="true" className="size-3 shrink-0" />
-        ) : isCalc ? (
-          <Calculator aria-hidden="true" className="size-3 shrink-0" />
-        ) : isTask ? (
-          <ListTodo aria-hidden="true" className="size-3 shrink-0" />
-        ) : isLearnings ? (
-          <NotebookPen aria-hidden="true" className="size-3 shrink-0" />
-        ) : isAsk ? (
-          <MessageCircleQuestion aria-hidden="true" className="size-3 shrink-0" />
-        ) : isDecision ? (
-          <Scale aria-hidden="true" className="size-3 shrink-0" />
-        ) : call.tool === "mcp" ? (
-          <Plug aria-hidden="true" className="size-3 shrink-0" />
-        ) : isPastResearch ? (
-          <BookMarked aria-hidden="true" className="size-3 shrink-0" />
-        ) : isMemory ? (
-          <BookUser aria-hidden="true" className="size-3 shrink-0" />
-        ) : (
-          <Search aria-hidden="true" className="size-3 shrink-0" />
-        )}
-        <span className="truncate" dir="auto">
-          {isPage
-            ? pageLabel(call.url)
-            : isTask
-              ? t("ai_task_row")
-              : isLearnings
-                ? t("ai_learnings_row")
-                : isAsk
-                  ? call.q || t("ai_ask_row")
-                  : isDecision
-                    ? call.q || t("ai_decision_row")
-                    : call.tool === "mcp"
-                      ? call.name === "search_tools"
-                        ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
-                        : (call.name?.replace(/^mcp_/, "").replace(/_/g, " ") ?? t("ai_mcp_tool"))
-                      : isPastResearch
-                        ? call.q
-                        : isMemory
-                          ? `${call.name === "save" ? t("ai_memory_save") : t("ai_memory_search")}${call.label ? `: ${call.label}` : ""}`
-                          : call.q}
-        </span>
-        <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">
-          {call.status === "pending"
-            ? isPage
-              ? t("ai_page_reading")
-              : isCalc
-                ? t("ai_calc_running")
-                : isTask
-                  ? t("ai_task_writing")
-                  : isLearnings
-                    ? t("ai_learnings_running")
-                    : isAsk
-                      ? t("ai_ask_awaiting")
-                      : isDecision
-                        ? t("ai_decision_running")
-                        : call.tool === "mcp"
-                          ? t("ai_mcp_running")
-                          : isPastResearch
-                            ? t("ai_past_research_running")
-                            : isMemory
-                              ? t("ai_memory_running")
-                              : t("ai_search_running")
-            : ok
-              ? isPage
-                ? t("ai_page_chars", { n: String(call.chars ?? 0) })
-                : isCalc
-                  ? `= ${call.result ?? "?"}`
-                  : isTask
-                    ? (call.q ?? "")
-                    : isLearnings
-                      ? t("ai_learnings_done", { n: String(call.n ?? 0) })
-                      : isAsk
-                        ? ""
-                        : isDecision
-                          ? (call.result ?? "")
-                          : call.tool === "mcp"
-                            ? t("ai_mcp_done")
-                            : isPastResearch
-                              ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
-                              : isMemory
-                                ? ""
-                                : t("ai_search_results", { n: String(call.n ?? 0) })
-              : call.status === "interrupted"
-                ? t("ai_search_row_interrupted")
-                : call.status === "duplicate"
-                  ? t("ai_search_row_duplicate")
-                  : t("ai_search_row_failed")}
-        </span>
-        {expandable ? (
-          <ChevronDown
-            aria-hidden="true"
-            className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        ) : null}
-      </button>
-      {/* the reading pane NEVER folds: a settled read shows its content
-          right under the row (scroll-capped inside CallContent) */}
-      {isPage && call.text ? <CallContent call={call} /> : null}
-      {open && expandable ? (
-        <>
-          {rawArgs ? (
-            // the DEBUG pane: the model's raw tool-call arguments, exactly
-            // as passed -- mono, scroll-capped, copyable
-            <div className="group relative mt-1">
-              <div
-                className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
-                dir="ltr"
-              >
-                {rawArgs}
-              </div>
-              <button
-                aria-label={t("copy")}
-                className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
-                onClick={() => {
-                  copyToast(rawArgs);
-                }}
-                title={t("copy")}
-                type="button"
-              >
-                <Copy aria-hidden="true" className="size-3.5" />
-              </button>
-            </div>
-          ) : null}
-          {hasText ? (
-            <CallContent call={call} />
-          ) : isTask || isAsk || isLearnings ? null : (
-            <CallResults results={results} />
-          )}
-        </>
-      ) : null}
-    </div>
   );
 }
 
