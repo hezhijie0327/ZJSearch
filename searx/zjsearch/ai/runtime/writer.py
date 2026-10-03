@@ -99,7 +99,8 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     galleries_on: bool = False,
     past_sources: list[dict[str, t.Any]] | None = None,
     relevance: list[int] | None = None,
-    learnings: list[str] | None = None,
+    learnings: list[dict[str, t.Any]] | None = None,
+    gaps: list[dict[str, t.Any]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The WRITER's fresh conversation (Vane's writer): a system prompt of
     XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
@@ -153,19 +154,33 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
         lines.append(f"<research_note>\n{halt}\n</research_note>")
     elif budget_truncated:
         lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
-    if learnings:
+    active = [fact for fact in learnings or [] if fact.get("status") == "active"]
+    if active:
         # the researcher's own distillation (dzhng's writeFinalReport
-        # pattern): a pre-digested evidence trail beside the raw sources
-        # -- support, never substitute (the citation contract still binds
-        # every claim to its numbered source)
-        findings = "\n".join(f"- {fact}" for fact in learnings)
+        # pattern): a pre-digested, REVISABLE evidence trail beside the raw
+        # sources -- support, never substitute (the citation contract still
+        # binds every claim to its numbered source)
+        findings = "\n".join(f"- {fact.get('text', '')}" for fact in active)
         lines.append(
             "<findings>\nThe research agent recorded these findings as it"
             " worked -- its distillation of what the sources below"
-            " established.  Use them as your map of the material: they"
-            " carry the agent's [n] labels and every claim still cites"
-            " its numbered source; when a finding and a source disagree,"
-            " the source wins.\n" + findings + "\n</findings>"
+            " established, revised as evidence moved (superseded and"
+            " retracted facts are already filtered out).  Use them as your"
+            " map of the material: they carry the agent's [n] labels and"
+            " every claim still cites its numbered source; when a finding"
+            " and a source disagree, the source wins.\n" + findings + "\n</findings>"
+        )
+    open_gaps = [gap for gap in gaps or [] if gap.get("status") == "open"]
+    if open_gaps:
+        # the ledger's own honesty note: what the research still owes --
+        # the answer names these openly instead of papering over them
+        shown = "\n".join(f"- {gap.get('q', '')}" for gap in open_gaps[:5])
+        lines.append(
+            "<open_gaps>\nThe research ledger still carries these OPEN"
+            " questions it could not settle.  If the answer cannot close"
+            " one from the gathered sources, say so plainly in its own"
+            " sentence (what is missing and why) instead of guessing."
+            "\n" + shown + "\n</open_gaps>"
         )
     if past_sources:
         # the browser's research memory (writer-phase ONLY -- the

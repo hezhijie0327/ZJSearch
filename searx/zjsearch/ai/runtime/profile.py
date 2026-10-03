@@ -14,30 +14,25 @@ SEARCH_MODES = ("speed", "balanced", "deep", "goal")
 
 _MODE_BUDGETS: dict[str, dict[str, int]] = {
     # speed: ONE focused round (Morphic's quick discipline); balanced: main
-    # facets plus a gap-filler pass; deep: THE ~10-minute research --
-    # breadth (8 subtasks) and depth (real page reads) under a ledger that
-    # must CLOSE, not a model that got bored; goal: THE LOOP MODE -- the
-    # question is a target
+    # facets plus a gap-filler pass (~3 minutes); deep: THE ~10-minute
+    # research -- breadth (8 subtasks) and depth (real page reads) under a
+    # ledger that must CLOSE, not a model that got bored; goal: THE LOOP
+    # MODE -- the question is a target
     # and the run iterates through its tools until the evidence ledger
     # closes.  "Infinite" means the loop ends on COMPLETION, not on a
     # small count: max_rounds is the runaway guard (the client-visible
     # contract is "researches until the goal is met"), the REAL plan is
     # PROGRESS -- a round that adds no new information (only repeats or
     # empty results) is stalled, and stall_rounds consecutive stalled
-    # rounds end the research.  Per-round call counts are the MODEL's call
+    # rounds end the research.  max_seconds is the wall-clock budget the
+    # round detector also honors (0 = unlimited -- speed's single round
+    # needs no clock).  Per-round call counts are the MODEL's call
     # (uncapped); every engine request carries its own per-request timeout.
-    "speed": {"max_rounds": 1, "stall_rounds": 1},
-    "balanced": {"max_rounds": 6, "stall_rounds": 3},
-    "deep": {"max_rounds": 18, "stall_rounds": 4},
-    "goal": {"max_rounds": 32, "stall_rounds": 3},
+    "speed": {"max_rounds": 1, "stall_rounds": 1, "max_seconds": 0},
+    "balanced": {"max_rounds": 6, "stall_rounds": 3, "max_seconds": 240},
+    "deep": {"max_rounds": 18, "stall_rounds": 4, "max_seconds": 600},
+    "goal": {"max_rounds": 32, "stall_rounds": 3, "max_seconds": 900},
 }
-
-CLARIFY_MODES = ("deep", "goal")
-
-PLAN_MODES = ("deep", "goal")
-"""The tiers whose structured \"##\"-section answers are worth a planning
-turn: the plan tool is registered only here (speed's one dense paragraph
-and balanced's short prose never need it)."""
 
 
 def _cfg() -> dict[str, t.Any]:

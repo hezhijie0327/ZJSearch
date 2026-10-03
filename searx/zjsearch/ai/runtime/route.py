@@ -30,7 +30,7 @@ from searx.zjsearch.ai.infra import decision, http, jsongate
 from searx.zjsearch.ai.infra import sdk as sdk_registry
 from searx.zjsearch.ai.runtime.context import _relevance_order
 from searx.zjsearch.ai.runtime.executor import Searches
-from searx.zjsearch.ai.runtime.progress import round_progress
+from searx.zjsearch.ai.runtime.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runtime.gates import (
     clarify_gate,
     related_questions,
@@ -38,7 +38,7 @@ from searx.zjsearch.ai.runtime.gates import (
     sanitize_questions,
     standalone_question,
 )
-from searx.zjsearch.ai.runtime.profile import CLARIFY_MODES, PLAN_MODES, budget, enabled, SEARCH_MODES
+from searx.zjsearch.ai.runtime.profile import budget, enabled, SEARCH_MODES
 from searx.zjsearch.ai.runtime.researcher import initial_messages
 from searx.zjsearch.ai.runtime.writer import writer_messages
 from searx.zjsearch.ai.runtime.tools import (
@@ -150,9 +150,11 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # research); everything else passes one small completion that skips
     # research only for greetings, chat and writing tasks
     research_needed = bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
-    # the clarify gate fires on the FIRST run of a gated mode only: a
-    # follow-up's history already disambiguates the direction
-    if research_needed and mode in CLARIFY_MODES and clarify_state == "ask" and not history:
+    # the clarify gate fires on the FIRST run of any mode: a follow-up's
+    # history already disambiguates the direction (the gate's own prompt
+    # carries the restraint -- speed's behavior note tells the model the
+    # run has no time for a round-trip)
+    if research_needed and clarify_state == "ask" and not history:
         gate = clarify_gate(cfg, q, lang, mode, gate_usage)
         if gate:
             stream = _Ndjson(_clarify_events(gate), cfg, q, lang, gate_usage)
@@ -173,10 +175,10 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         stream = _Ndjson(events, cfg, q, lang, gate_usage)
         return _respond(stream)
 
-    # the structured tiers decompose the request through the living task
-    # list (the task card); every research run registers the mid-run
-    # ask_user escape hatch
-    register_tasks = mode in PLAN_MODES
+    # 万物皆工具: the task list registers for EVERY mode -- the mode's
+    # BEHAVIOR note (speed's "do not bother") shapes its use, the surface
+    # never gates it
+    register_tasks = True
     research_q = (standalone_question(cfg, q, history, lang, gate_usage) if history else "") or q
     state = Searches(
         sxng_request.preferences,
@@ -220,8 +222,16 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             galleries_on=bool(state.reg.gallery_pool),
             past_sources=assign_past_sources(),
             relevance=await _relevance_order(research_q, state.feed),
-            learnings=state.learnings,
+            learnings=state.facts,
+            gaps=state.gaps,
         )
+
+    def continuation() -> str | None:
+        # the ledger-closure contract: a run may stop researching only
+        # when BOTH open lists are empty -- otherwise the note names them
+        # and the loop runs another turn (the loop caps the nudges)
+        tasks, gaps = state.ledger_open_items()
+        return continuation_note(tasks, gaps) if tasks or gaps else None
 
     def gallery_validator(body: str) -> list[dict[str, t.Any]]:
         """The zjs-images fence body -> validated gallery items: every URL
@@ -265,7 +275,8 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         + mcp_tools,
         executor=state.execute,
         max_rounds=max_rounds,
-        round_progress=round_progress(state, budget("stall_rounds", mode, 2)),
+        round_progress=round_progress(state, budget("stall_rounds", mode, 2), budget("max_seconds", mode, 0)),
+        continuation=continuation,
         ask_tool=ASK_TOOL,
         ask_shape=_ask_shape,
         display=lambda calls: [display_item(idx, call) for idx, call in enumerate(calls, 1)],

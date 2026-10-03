@@ -56,10 +56,85 @@ export function mergeTaskSnapshot(
   });
 }
 
-/** The findings ledger's facts off a `learnings` wire event (the items
-    array may be absent -- an absent list is an empty ledger). */
-export function learningFacts(items: unknown): string[] {
-  return Array.isArray(items) ? (items as unknown[]).map((fact) => String(fact ?? "")).filter(Boolean) : [];
+/** One ledger FACT (the learnings tool's v2 shape): revisable -- a later
+    fact may supersede or retract it; only active facts reach the writer. */
+export interface LedgerFact {
+  id: number;
+  text: string;
+  refs: number[];
+  status: "active" | "superseded" | "retracted";
+  round?: number;
+}
+
+/** One ledger GAP: the open questions the research still owes an answer
+    to -- the findings card renders them under the facts, the continue
+    brief hands them to the resumed run. */
+export interface LedgerGap {
+  id: number;
+  q: string;
+  why?: string;
+  status: "open" | "closed";
+  close_as?: string;
+  round?: number;
+}
+
+/** The findings ledger off a `learnings` wire event: the v2 items are
+    fact objects (with ids/revision status); a stored legacy thread's
+    plain-string facts type-dispatch into bare active facts.  An absent
+    list is an empty ledger. */
+export function learningFacts(items: unknown): LedgerFact[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return (items as unknown[])
+    .map((fact, index): LedgerFact | null => {
+      if (typeof fact === "string") {
+        return fact.trim() ? { id: index + 1, text: fact, refs: [], status: "active" as const } : null;
+      }
+      if (!fact || typeof fact !== "object") {
+        return null;
+      }
+      const record = fact as Record<string, unknown>;
+      const text = String(record.text ?? "").trim();
+      if (!text) {
+        return null;
+      }
+      return {
+        id: Number(record.id) || index + 1,
+        text,
+        refs: Array.isArray(record.refs) ? record.refs.map((n) => Number(n) || 0).filter((n) => n > 0) : [],
+        status: record.status === "superseded" || record.status === "retracted" ? record.status : "active",
+        round: typeof record.round === "number" ? record.round : undefined,
+      };
+    })
+    .filter((fact): fact is LedgerFact => fact !== null);
+}
+
+/** The ledger's gaps partition off a `learnings` wire event. */
+export function learningGaps(gaps: unknown): LedgerGap[] {
+  if (!Array.isArray(gaps)) {
+    return [];
+  }
+  return (gaps as unknown[])
+    .map((gap, index): LedgerGap | null => {
+      if (!gap || typeof gap !== "object") {
+        return null;
+      }
+      const record = gap as Record<string, unknown>;
+      const q = String(record.q ?? "").trim();
+      if (!q) {
+        return null;
+      }
+      return {
+        id: Number(record.id) || index + 1,
+        q,
+        why: String(record.why ?? "") || undefined,
+        status: record.status === "closed" ? ("closed" as const) : ("open" as const),
+        close_as: String(record.close_as ?? "") || undefined,
+        round: typeof record.round === "number" ? record.round : undefined,
+      };
+    })
+    .filter((gap): gap is LedgerGap => gap !== null);
 }
 
 /** The task card's settle completion, HONESTLY: a subtask with sources
@@ -72,14 +147,23 @@ export function completeTasks(tasks: AiSearchRun["tasks"]): AiSearchRun["tasks"]
   );
 }
 
-/** The continue run's clarified direction: the interrupted run's question
-    plus its recorded findings as the resume brief -- the researcher
-    picks up the gaps instead of restarting. */
-export function continueBrief(q: string, learnings: string[]): string {
-  const findings = learnings.map((fact) => `- ${fact}`).join("\n");
+/** The continue run's clarified direction: the interrupted run's question,
+    its recorded facts AND its open gaps as the resume brief -- the
+    researcher picks up exactly where the ledger stands instead of
+    restarting. */
+export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGap[] = []): string {
+  const findings = learnings
+    .filter((fact) => fact.status === "active")
+    .map((fact) => `- ${fact.text}`)
+    .join("\n");
+  const open = gaps
+    .filter((gap) => gap.status === "open")
+    .map((gap) => `- ${gap.q}`)
+    .join("\n");
   return (
     `这是对上一轮被中断调研的继续(同一问题,不要从头开始):「${q}」。` +
     `中断前已确立的研究发现:\n${findings || "(暂无记录)"}\n` +
+    (open ? `尚未解决的缺口:\n${open}\n` : "") +
     `从中断处继续:覆盖尚未研究的面,不要重复已搜索过的角度。`.slice(0, 2000)
   );
 }

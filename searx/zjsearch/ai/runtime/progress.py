@@ -11,6 +11,7 @@ turn before the detector would end the research, and the detector ends
 it when the rounds stay unproductive.
 """
 
+import time
 import typing as t
 
 from searx.zjsearch.ai.runtime.researcher import STALL_NOTE
@@ -31,17 +32,42 @@ FEED_CONVERGE_NOTE = (
 crosses the executor's soft limit -- the signal reaches the MODEL (not
 only the writer's input shaping)."""
 
+TIME_BUDGET_NOTE = (
+    "(budget note: the run's time budget is spent -- wrap up the research"
+    " this round: one or two targeted calls at most, then stop calling"
+    " tools so the writer can answer.)"
+)
+"""The wall-clock verdict: the run's ``max_seconds`` elapsed.  One more
+turn of grace (the note reaches the model through this round's feeds),
+then the time check ends the research regardless of productivity."""
 
-def round_progress(state: Searches, stall_rounds: int) -> t.Callable[[int], str | None]:
+
+def round_progress(
+    state: Searches,
+    stall_rounds: int,
+    max_seconds: int = 0,
+) -> t.Callable[[int], str | None]:
     """The progress-based termination policy: called by the agent loop
     after each executed round.  A round is PRODUCTIVE when at least one
     fresh query returned results; ``stall_rounds`` consecutive
     unproductive rounds end the research (the returned message explains
     the staleness to the model).  Productive research is UNLIMITED; a
     round of pure bookkeeping (plan writes, memory saves) is neither
-    progress nor stall."""
+    progress nor stall.  ``max_seconds`` (0 = unlimited) is the run's
+    wall-clock budget: the FIRST expiry returns the grace note (the
+    model wraps up), the second ends the research regardless of
+    productivity."""
+
+    expired = False
 
     def verdict(_round_no: int) -> str | None:
+        nonlocal expired
+        elapsed = time.monotonic() - state.started_at
+        if 0 < max_seconds <= elapsed:
+            if expired:
+                return STALL_NOTE
+            expired = True
+            return TIME_BUDGET_NOTE
         if not state.round_gathered:
             return None
         if state.round_new_hits > 0:
@@ -53,3 +79,32 @@ def round_progress(state: Searches, stall_rounds: int) -> t.Callable[[int], str 
         return STALL_NOTE
 
     return verdict
+
+
+def continuation_note(open_tasks: list[str], open_gaps: list[str]) -> str:
+    """The zero-calls continuation: the model stopped calling tools while
+    the ledger still carries open items -- ONE nudge naming them (the
+    honest exit is spelled out too: close the gap as unanswerable, or
+    stop again and the writer reports the residue).  The loop caps the
+    nudges (twice) so a model that genuinely has nothing never gets
+    trapped in the run."""
+    lines = [
+        "(progress note: you stopped calling tools, but the research"
+        " ledger is not closed -- the question is not fully covered yet.",
+    ]
+    if open_tasks:
+        shown = "; ".join(f"『{title}』" for title in open_tasks[:4])
+        lines.append(f"Open subtasks: {shown}.")
+    if open_gaps:
+        shown = "; ".join(f"『{q}』" for q in open_gaps[:4])
+        lines.append(f"Open gaps: {shown}.")
+    lines.append(
+        "Pick the most important one and run this round against it --"
+        " change the keyword angle, read the promising page, or compute"
+        " the missing figure.  If the evidence genuinely does not exist,"
+        " record that with learnings (close_gaps, close_as = the honest"
+        " reason) and stop calling tools again -- the writer will report"
+        " the residue.  A bare restatement of the question is NOT a"
+        " round.)"
+    )
+    return "\n".join(lines)

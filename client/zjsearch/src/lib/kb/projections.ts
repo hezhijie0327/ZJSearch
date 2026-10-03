@@ -51,6 +51,10 @@ export interface RunSnapshot {
     content?: string;
   }>;
   tasks?: Array<{ title?: string; status?: string }>;
+  /** the belief ledger's facts + gaps (the learnings tool's snapshots) --
+      the run row's meta carries them for the inspector */
+  learnings?: unknown[];
+  gaps?: unknown[];
   /** the user's answered clarify text ("" = skipped) */
   clarify?: string | null;
   tags?: string[];

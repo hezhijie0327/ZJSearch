@@ -5,6 +5,7 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
+  CircleHelp,
   CircleStop,
   Compass,
   Copy,
@@ -36,6 +37,7 @@ import { PageRow } from "@/features/results/aiSearch/calls/PageRow.tsx";
 import { PastResearchRow } from "@/features/results/aiSearch/calls/PastResearchRow.tsx";
 import { SearchRow } from "@/features/results/aiSearch/calls/SearchRow.tsx";
 import { TaskRow } from "@/features/results/aiSearch/calls/TaskRow.tsx";
+import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
 import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
 import type {
   AiAskQuestion,
@@ -133,28 +135,73 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
     snippet (the 查看更多 language) -- nothing is folded away unreadable.
     The plan card above says what the run intends; this card says what it
     already has. */
-function FindingsCard({ learnings }: { learnings: string[] }) {
+/** The BELIEF LEDGER card: active facts carry the accent dot; superseded
+    facts stay visible (retired, struck) and retracted ones drop their
+    claim (struck, warning) -- the revision history IS the honesty; the
+    gaps partition renders under the facts (open = the question chip,
+    closed = its settlement). */
+function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: LedgerGap[] }) {
   const t = useT();
-  if (learnings.length === 0) {
+  if (learnings.length === 0 && gaps.length === 0) {
     return null;
   }
+  const active = learnings.filter((fact) => fact.status === "active");
   return (
     <div className="mb-4">
       <div className="flex items-center gap-2">
         <NotebookPen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_findings_card")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">{learnings.length}</span>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">{active.length}</span>
       </div>
       <ul className="mt-3 space-y-1.5">
-        {learnings.map((fact, index) => (
-          <li className="flex items-start gap-2" key={`${index}-${fact}`}>
-            <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
+        {learnings.map((fact) => (
+          <li className="flex items-start gap-2" key={fact.id}>
+            {fact.status === "active" ? (
+              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
+            ) : fact.status === "retracted" ? (
+              <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
+            ) : (
+              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
+            )}
             <div className="min-w-0 flex-1">
-              <Snippet contentHtml={escapeHtml(fact)} />
+              <Snippet
+                className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
+                contentHtml={escapeHtml(fact.text)}
+              />
+              {fact.status !== "active" ? (
+                <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
+                  {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
+                </span>
+              ) : null}
             </div>
           </li>
         ))}
       </ul>
+      {gaps.length > 0 ? (
+        <div className="mt-3 border-t border-line pt-2.5">
+          <p className="px-1 text-xs font-medium text-ink-2">{t("ai_findings_gaps")}</p>
+          <ul className="mt-1.5 space-y-1">
+            {gaps.map((gap) => (
+              <li className="flex items-start gap-2 text-xs" key={gap.id}>
+                {gap.status === "open" ? (
+                  <CircleHelp aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-accent" />
+                ) : (
+                  <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+                )}
+                <span
+                  className={`min-w-0 flex-1 break-words ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
+                  dir="auto"
+                >
+                  {gap.q}
+                  {gap.status === "closed" && gap.close_as ? (
+                    <span className="ms-1.5 text-ink-3">{gap.close_as}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -854,7 +901,9 @@ function AiSearchRunSectionImpl({
             <div aria-hidden="true" className="hidden lg:block lg:w-72 lg:shrink-0 xl:w-80" />
             <aside className="mt-5 w-full lg:absolute lg:bottom-0 lg:right-0 lg:top-0 lg:mt-0 lg:w-72 lg:overflow-y-auto lg:overscroll-contain xl:w-80">
               {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
-              {run.learnings && run.learnings.length > 0 ? <FindingsCard learnings={run.learnings} /> : null}
+              {run.learnings || run.gaps ? (
+                <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />
+              ) : null}
               {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
               {run.sources.length > 0 ? <AiSearchSources sources={run.sources} /> : <AiSearchSourcesSkeleton />}
             </aside>

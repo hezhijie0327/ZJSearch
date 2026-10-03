@@ -206,6 +206,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     executor: t.Any = None,
     max_rounds: int = 1,
     round_progress: t.Callable[[int], str | None] | None = None,
+    continuation: t.Callable[[], str | None] | None = None,
     ask_tool: str | None = None,
     ask_shape: t.Callable[[str], dict[str, t.Any] | None] | None = None,
     display: t.Callable[[list[dict[str, t.Any]]], list[dict[str, t.Any]]] | None = None,
@@ -222,6 +223,12 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       without them the run is a single WRITE turn, the AI Overview shape).
     - ``round_progress(executed_rounds)``: the stall detector -- ``None``
       keeps researching, a string explains the halt and ends the phase.
+    - ``continuation()``: the LEDGER-CLOSE contract -- consulted when a
+      turn ends with ZERO calls (the model "stopped researching").
+      ``None`` (or a missing callback) lets the run end; a string is the
+      continuation note that goes back as a user message and the loop
+      runs another turn (capped at two nudges -- a model with genuinely
+      nothing left must never be trapped).
     - ``ask_tool`` + ``ask_shape(arguments) -> {intro, questions} | None``:
       the human-in-the-loop escape hatch; an unusable ask degrades to an
       error settle.
@@ -236,6 +243,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     rounds = 0
     halt_message: str | None = None
     carried_error: str | None = None
+    refusals = 0
 
     if researching:
         # the coarse phase spine (the closed set's one coarse event): the
@@ -272,8 +280,22 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     yield wire.settle("error", halt="the model asked an unusable question")
                 return
             if not calls:
-                # the model stopped researching: the phase is over
+                # the model stopped researching: the phase is over --
+                # UNLESS the ledger-closure contract says otherwise (the
+                # run ends when the LEDGER closes, not when the model got
+                # bored): the continuation note goes back as a user
+                # message and the loop runs another turn
                 yield {"e": "close", "id": entry}
+                if continuation is not None and refusals < 2:
+                    try:
+                        note = continuation()
+                    except Exception as exc:  # pylint: disable=broad-except
+                        logger.warning("zjsearch loop: continuation check failed: %r", exc)
+                        note = None
+                    if note:
+                        refusals += 1
+                        messages.append({"role": "user", "content": note})
+                        continue
                 break
             rounds += 1
             yield {"e": "calls", "id": entry, "round": rounds, "items": (display or _noop_display)(calls)}

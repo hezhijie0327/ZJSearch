@@ -137,10 +137,92 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # verdicts with their confidences and the latency, folded into the
         # settled run's meta so any decision is explainable and replayable
         self.judgments: list[dict[str, t.Any]] = []
-        # the run's findings ledger (the learnings tool): what the sources
-        # ESTABLISHED, the model's own distillation -- the writer reads it
-        # as <findings> alongside the raw source feed
-        self.learnings: list[str] = []
+        # the BELIEF LEDGER (the learnings tool): facts the sources
+        # ESTABLISHED -- revisable ({id, text, refs, status}) -- and the
+        # GAPS partition (the open questions the research still owes).
+        # The writer reads the active facts; the next rounds chase the
+        # open gaps; the loop ends when the ledger closes.
+        self.facts: list[dict[str, t.Any]] = []
+        self.gaps: list[dict[str, t.Any]] = []
+        self._ledger_seq = 0
+        # the run's wall clock (the max_seconds budget reads it)
+        self.started_at = time.monotonic()
+
+    def ledger_open_items(self) -> tuple[list[str], list[str]]:
+        """The ledger's OPEN items: (open subtask titles, open gap
+        questions).  The loop's continuation contract reads this -- a run
+        may stop researching only when BOTH lists are empty (or the
+        budget says otherwise)."""
+        tasks = [str(task.get("title") or "") for task in self.coverage.task_list if task.get("status") != "done"]
+        gaps = [str(gap.get("q") or "") for gap in self.gaps if gap.get("status") == "open"]
+        return tasks, gaps
+
+    def apply_learnings(self, ops: dict[str, t.Any], rnd: int) -> tuple[int, int, int]:
+        """Apply one ``learnings`` call's operations to the belief ledger:
+        new/superseding/retracting facts and opened/closed gaps.  Returns
+        ``(facts_written, gaps_opened, gaps_closed)`` for the row's feed
+        echo.  Superseding/retracting RETIRES the old fact (status flips,
+        history stays -- the wire snapshot carries the full ledger)."""
+        written = 0
+        by_id = {fact["id"]: fact for fact in self.facts}
+        for op in ops.get("facts") or []:
+            self._ledger_seq += 1
+            fact = {
+                "id": self._ledger_seq,
+                "text": str(op.get("text") or ""),
+                "refs": op.get("refs") or [],
+                "status": "active",
+                "round": rnd,
+            }
+            for key in ("supersedes", "retracts"):
+                target = by_id.get(op.get(key))
+                if target is not None and target["status"] == "active":
+                    target["status"] = "superseded" if key == "supersedes" else "retracted"
+            self.facts.append(fact)
+            by_id[fact["id"]] = fact
+            written += 1
+        opened = 0
+        known_gaps = {str(gap.get("q") or "").lower() for gap in self.gaps}
+        for op in ops.get("open_gaps") or []:
+            q = str(op.get("q") or "")
+            if q.lower() in known_gaps:
+                continue
+            known_gaps.add(q.lower())
+            self._ledger_seq += 1
+            self.gaps.append(
+                {
+                    "id": self._ledger_seq,
+                    "q": q,
+                    "why": str(op.get("why") or ""),
+                    "status": "open",
+                    "close_as": "",
+                    "round": rnd,
+                }
+            )
+            opened += 1
+        closed = 0
+        for op in ops.get("close_gaps") or []:
+            q = str(op.get("q") or "").lower()
+            for gap in self.gaps:
+                if str(gap.get("q") or "").lower() == q and gap["status"] == "open":
+                    gap["status"] = "closed"
+                    gap["close_as"] = str(op.get("close_as") or "")
+                    closed += 1
+        return written, opened, closed
+
+    def ledger_echo(self) -> str:
+        """The tool feed's ledger summary -- the per-round injection that
+        keeps the model aiming at its own gaps (the researcher reads this
+        result before the next turn composes)."""
+        active = sum(1 for fact in self.facts if fact["status"] == "active")
+        open_gaps = [gap for gap in self.gaps if gap["status"] == "open"]
+        lines = [f"LEDGER: {active} active fact(s)."]
+        if open_gaps:
+            shown = "\n".join(f"  {index}. {gap['q']}" for index, gap in enumerate(open_gaps[:5], 1))
+            lines.append(f"Open gaps ({len(open_gaps)}):\n{shown}")
+        else:
+            lines.append("Open gaps: none.")
+        return "\n".join(lines)
 
     @property
     def next_n(self) -> int:
@@ -471,25 +553,33 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     )
                 continue
             if tool_name == LEARNINGS_TOOL:
-                # the findings ledger: the model's own distillation of what
-                # the sources established -- deduped, appended, snapshot to
-                # the client (the writer reads it as <findings>)
-                fresh: list[str] = []
-                known = {fact.lower() for fact in self.learnings}
-                for fact in parse_learnings_call(call):
-                    if fact.lower() not in known:
-                        known.add(fact.lower())
-                        fresh.append(fact)
-                        self.learnings.append(fact)
-                yield ("learnings", {"round": rnd, "id": wire_id, "items": list(self.learnings)})
+                # the BELIEF LEDGER: facts (with revision ops) + gaps -- the
+                # model revises what it believes and tracks what it still
+                # owes; the snapshot flies to the client, the writer reads
+                # the active facts, the next rounds chase the open gaps
+                ops = parse_learnings_call(call)
+                written, opened, closed = self.apply_learnings(ops, rnd)
+                yield (
+                    "learnings",
+                    {"round": rnd, "id": wire_id, "items": list(self.facts), "gaps": list(self.gaps)},
+                )
                 # the row settles like every other instant write (n = the
-                # ledger size -- the client renders it localized)
-                yield ("call", {"call": wire_id, "status": "ok", "n": len(self.learnings)})
+                # active-fact count -- the client renders it localized)
+                active = sum(1 for fact in self.facts if fact["status"] == "active")
+                yield ("call", {"call": wire_id, "status": "ok", "n": active})
+                parts = [f"wrote {written} fact(s)"]
+                if opened:
+                    parts.append(f"opened {opened} gap(s)")
+                if closed:
+                    parts.append(f"closed {closed} gap(s)")
                 feeds[wire_id - 1] = (
-                    f"recorded {len(fresh)} new finding(s); the ledger now"
-                    f" holds {len(self.learnings)}.  Keep each fact"
-                    " self-contained and [n]-cited -- the writer reads it"
-                    " alongside your sources."
+                    "ledger updated: "
+                    + ", ".join(parts)
+                    + ".\n"
+                    + self.ledger_echo()
+                    + "\nFact texts stay self-contained and [n]-cited; the"
+                    " writer reads the active facts, your next rounds chase"
+                    " the open gaps."
                 )
                 continue
             if tool_name == PAST_RESEARCH_TOOL:

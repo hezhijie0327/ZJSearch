@@ -3,7 +3,10 @@
 import type { AiSearchGallery } from "@/features/results/aiOverview.ts";
 import {
   completeTasks,
+  type LedgerFact,
+  type LedgerGap,
   learningFacts,
+  learningGaps,
   mergeTaskSnapshot,
   parseClarifyPairs,
 } from "@/features/results/aiSearch/ledger.ts";
@@ -210,10 +213,14 @@ export interface AiSearchRun {
     steps: AiSearchStep[];
     findings?: string;
   }>;
-  /** the findings ledger (the learnings tool's authoritative snapshots):
-      what the researcher recorded as established -- the findings card
-      renders it, the writer received the same list as <findings> */
-  learnings?: string[];
+  /** the BELIEF LEDGER's facts (the learnings tool's authoritative
+      snapshots): what the researcher recorded as established, WITH the
+      revision history (superseded/retracted stay visible on the card) --
+      the writer received the active list as <findings> */
+  learnings?: LedgerFact[];
+  /** the ledger's gaps partition: the open questions the research still
+      owed -- the findings card renders them under the facts */
+  gaps?: LedgerGap[];
   /** the macro stage the run is in right now (the wire's ``phase``
       events) -- the PhaseStrip renders it; undefined = no phase events
       (legacy threads) and the strip stays hidden */
@@ -495,9 +502,13 @@ export function applyEvent(
       return { ...core, runs };
     }
     case "learnings": {
-      // the findings ledger's AUTHORITATIVE snapshot -- replace, never
+      // the BELIEF LEDGER's AUTHORITATIVE snapshot -- replace, never
       // merge (the server's list is the truth, the writer read the same)
-      runs[lastIdx] = { ...run, learnings: learningFacts(event.items) };
+      runs[lastIdx] = {
+        ...run,
+        learnings: learningFacts(event.items),
+        gaps: learningGaps(event.gaps),
+      };
       return { ...core, runs };
     }
     case "sources": {
@@ -735,5 +746,6 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     endedAt: null,
     mode,
     stages: [],
+    gaps: [],
   };
 }

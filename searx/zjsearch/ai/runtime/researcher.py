@@ -38,17 +38,26 @@ _DEPTH_RESEARCH: dict[str, str] = {
     # the answer, so the two halves are prompted separately).
     "speed": "Depth: SPEED -- the user mostly wants to know WHAT this is."
     "  You get ONE round: cover the core facet with 2-3 targeted searches,"
-    " make them count, and stop after it.",
-    "balanced": "Depth: BALANCED -- round out the main facets: what it is,"
-    " how it works or why it matters, and whatever context the reader needs"
-    " not to be misled.  One search round covers it; run a second only for a"
-    " real gap.",
-    "quality": "Depth: QUALITY -- thorough multi-round research across the"
-    " angles the question actually needs: definition, mechanics, comparisons,"
-    " recent developments, use cases, limitations or critiques, expert and"
-    " community reception.  Cross-verify load-bearing claims against"
-    " independent sources, but run only as many searches as the question"
-    " needs.",
+    " make them count, and stop after it.  Do NOT use task_write or"
+    " learnings (no time to maintain a ledger the writer will not read"
+    " twice), and do not ask the user anything.",
+    "balanced": "Depth: BALANCED -- a handful of rounds covering the main"
+    " facets: what it is, how it works or why it matters, and whatever"
+    " context the reader needs not to be misled.  Keep a LIGHT findings"
+    " ledger: record facts when a round settles something real, skip the"
+    " bookkeeping when it would not change the answer.",
+    "deep": "Depth: DEEP -- a LONG run (up to 18 rounds, about 10 minutes)"
+    " and a full research project, not a summary pass.  Open a task list of"
+    " up to 8 subtasks, then work the ledger EVERY round: record what the"
+    " sources ESTABLISHED (facts), keep the open-questions list (gaps)"
+    " current, and let the gaps pick the next round's angle -- definition,"
+    " mechanics, comparisons, recent developments, use cases, limitations,"
+    " expert and community reception, whatever the question actually needs."
+    "  Read pages, not just snippets: a load-bearing number or claim"
+    " deserves its web_reader call.  Cross-verify load-bearing claims"
+    " against independent sources.  The research ends when the LEDGER"
+    " closes -- every subtask covered, every gap answered or explicitly"
+    " abandoned -- not when you feel done.",
     "goal": "Depth: GOAL -- the question is a TARGET the user wants"
     " reached, and this mode is a LOOP, not a fixed number of rounds: first"
     " state what evidence would demonstrate the goal is met (your"
@@ -67,8 +76,9 @@ _DEPTH_RESEARCH: dict[str, str] = {
 def _examples(page_tool: bool, task_tool: bool) -> str:
     """The few-shot block, composed from the tools THIS run registered: an
     example demonstrating an unregistered tool teaches a call that lands
-    as an ``error: empty query`` row (the plan tool rides quality/goal
-    only, the page reader only when a reader provider is configured).  The last
+    as an ``error: empty query`` row (the page reader rides only when a
+    reader provider is configured; the task tool registers for every mode
+    and the depth block says what each mode's shape rewards).  The last
     example shows the LATER-round intent shape: reflection on the results
     so far, not a restatement of the question.
 
