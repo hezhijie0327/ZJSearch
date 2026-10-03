@@ -20,8 +20,6 @@ import type { AiThreadPageData } from "@/lib/types.ts";
     server endpoint stays stateless) and follow-ups append to it.  A missing
     store entry (another browser, quota eviction) renders the empty state. */
 
-const EMPTY_META: AiSourceMeta[] = [];
-
 /** The thread page's resume ghost (page-private): while the async resume
     reads the store (the per-tab mirror may miss; PGlite is the fallback)
     the main column rendered BLANK -- a shared thread link read as dead.
@@ -126,8 +124,35 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                 isLast={index === aiSearch.runs.length - 1}
                 key={run.runNo}
                 live={index === aiSearch.runs.length - 1 && aiSearch.phase === "streaming"}
-                onCite={() => {
-                  return undefined;
+                onCite={(n) => {
+                  // locate the cited source card in this run's grid (the
+                  // takeover's jump language, scoped to the thread page).
+                  // The lg rail is its own scroll container AND an absolute
+                  // full-height column that contributes no page height --
+                  // the WINDOW cannot scroll its content into view, so the
+                  // card centers by the rail's own scrollTop (a static
+                  // mobile rail falls back to the page scroll)
+                  const root = document.getElementById(`ai-run-${run.runNo}`);
+                  const card = root?.querySelector<HTMLElement>(`[data-ai-n="${n}"]`);
+                  const rail = root?.parentElement?.querySelector("aside");
+                  if (!card) {
+                    return;
+                  }
+                  const flash = () => {
+                    card.removeAttribute("data-ai-flash");
+                    void card.offsetWidth;
+                    card.setAttribute("data-ai-flash", "");
+                    window.setTimeout(() => card.removeAttribute("data-ai-flash"), 1900);
+                  };
+                  if (rail && rail.scrollHeight > rail.clientHeight) {
+                    const railRect = rail.getBoundingClientRect();
+                    const cardRect = card.getBoundingClientRect();
+                    rail.scrollTop += cardRect.top - railRect.top - railRect.height / 2 + cardRect.height / 2;
+                    flash();
+                    return;
+                  }
+                  scrollIntoViewAnimated(card, "center");
+                  flash();
                 }}
                 onContinue={() => {
                   aiSearch.continue(aiLang, researchMode, "");
@@ -150,7 +175,14 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
                   aiSearch.submitClarify(text, aiLang, researchMode);
                 }}
                 run={run}
-                sourceMeta={EMPTY_META}
+                sourceMeta={
+                  run.sources.map((source) => ({
+                    favicon: source.favicon ?? "",
+                    domain: source.netloc ?? "",
+                    t: source.title,
+                    u: source.url,
+                  })) as AiSourceMeta[]
+                }
               />
             ))}
             {aiSearch.phase !== "idle" && aiSearch.phase !== "error" ? (

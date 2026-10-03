@@ -460,15 +460,21 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
     }
     // the card may sit outside the bounded sources box's viewport: bring
-    // it into the box's view first (the box scrolls independently of the
+    // it into the box's view first (the rail scrolls independently of the
     // page scroll the animated jump below drives)
-    const box = card?.closest<HTMLElement>("[role='region']");
-    if (card && box) {
+    const box = card?.closest<HTMLElement>("[role='region']") ?? card?.closest("aside");
+    if (card && box && box.scrollHeight > box.clientHeight) {
+      // the lg rail is an absolute full-height column that contributes no
+      // page height -- the WINDOW cannot scroll its content into view, so
+      // the box's own scrollTop IS the whole jump there; only a static
+      // (mobile) rail falls back to the page scroll
       const boxRect = box.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
       if (cardRect.top < boxRect.top || cardRect.bottom > boxRect.bottom) {
         box.scrollTop += cardRect.top - boxRect.top - 12;
       }
+    } else if (card) {
+      scrollIntoViewAnimated(card, "center");
     }
     if (!card || hrefRef.current !== startHref) {
       if (hrefRef.current === startHref) {
@@ -476,7 +482,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       }
       return;
     }
-    scrollIntoViewAnimated(card, "center");
     if (flashTimer.current !== null) {
       window.clearTimeout(flashTimer.current);
     }

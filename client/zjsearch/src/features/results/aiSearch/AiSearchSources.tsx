@@ -2,15 +2,13 @@
 
 import { BookOpen, Globe, History } from "lucide-react";
 import { useState } from "react";
-import { CapChip } from "@/components/CapChip.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
-import { MONO_CHIP } from "@/lib/styles.ts";
-import { useCapExpand } from "@/lib/useCapExpand.ts";
+import { MONO_CHIP, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
@@ -57,10 +55,6 @@ function SourceCard({ source }: { source: AiSearchSource }) {
   // the traditional presentations' type adaptation: videos carry their
   // duration, torrents their filesize -- one badge string either way
   const isMedia = source.category === "videos" || source.category === "files";
-  const engineFirst = source.engines?.[0];
-  // cap-and-expand (the EnginesLine language): the lead engine sits,
-  // "+N" reveals the rest inline
-  const { expanded, toggle, hidden } = useCapExpand(source.engines?.length ?? 0, 1);
   return (
     // the REGULAR result card's chrome (rounded-2xl, borderless, p-3/4,
     // hover:bg-surface) and hierarchy (pretty-url line, title, snippet):
@@ -120,24 +114,19 @@ function SourceCard({ source }: { source: AiSearchSource }) {
                 {formatScore(source.score)}
               </span>
             ) : null}
-            {engineFirst ? (
-              <span className="inline-flex min-w-0 items-center gap-1" title={source.engines?.join(", ")}>
-                <span className="truncate">{engineFirst}</span>
-              </span>
-            ) : null}
-            {hidden > 0 || expanded ? (
-              // the reveal + its collapse travel as ONE unit: on the rail's
-              // narrow cards the pair wraps to its own line together --
-              // a lone 收起 at a line start read as a stray chip
-              <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                {expanded
-                  ? (source.engines ?? []).slice(1).map((engine) => (
-                      <span className="shrink-0" key={engine}>
-                        {engine}
-                      </span>
-                    ))
-                  : null}
-                <CapChip className="shrink-0" expanded={expanded} hidden={hidden} onToggle={toggle} />
+            {source.engines && source.engines.length > 0 ? (
+              // ONE line, swiped horizontally (no scrollbar): the rail's
+              // cards are too narrow to wrap engines -- the tile rows' own
+              // language, the whole line swipes left-right
+              <span
+                className={`-mx-1 inline-flex min-w-0 items-center gap-x-2 overflow-x-auto px-1 ${SCROLLBAR_NONE}`}
+                title={source.engines.join(", ")}
+              >
+                {source.engines.map((engine) => (
+                  <span className="shrink-0" key={engine}>
+                    {engine}
+                  </span>
+                ))}
               </span>
             ) : null}
             <span className="ms-auto flex shrink-0 items-center gap-1.5">
