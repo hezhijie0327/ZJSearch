@@ -109,6 +109,14 @@ zjsearch:
       X-ZJS-Test: "1"
     extra_body:
       user: zjs-audit
+  # the decision model rides the SAME mock server (the /systemone
+  # fixture above): every framework gate exercises its PASS path offline
+  decision:
+    enabled: true
+    sdk: typesafe
+    base_url: "http://127.0.0.1:8909"
+    api_key: "zjaudit"
+    model: "zjaudit-decision"
   reader:
     base_url: "http://127.0.0.1:8909/browserless"
     api_key: "zjaudit"

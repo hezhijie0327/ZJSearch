@@ -99,6 +99,38 @@ def capability() -> dict[str, str] | None:
     return {"tk": security.issue_token(), "model": str(cfg().get("model"))}
 
 
+FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
+    # the framework-side judgment gates (v5's model funnel): every gate
+    # FAILS OPEN -- an unconfigured decision model, a timeout or a low
+    # confidence simply leaves the previous behavior standing.  The
+    # thresholds are starting points (the RAG-gate cookbook's), to be
+    # tuned against real runs.
+    "sources_gate": {
+        "enabled": True,
+        "head": 8,
+        "injection_max": 0.70,
+        "contradicts_min": 0.70,
+        "relevant_min": 0.45,
+        "evidence_min": 0.55,
+    },
+    "read_gate": {"enabled": True, "injection_max": 0.70, "relevant_min": 0.45},
+    "diversity": {"enabled": True, "cosine": 0.92},
+    "coverage": {"enabled": True},
+}
+
+
+def features(key: str) -> dict[str, t.Any]:
+    """One framework gate's merged config: ``zjsearch.decision.features.
+    <key>`` over :py:data:`FEATURE_DEFAULTS` -- unknown keys fall back to
+    the defaults wholesale (a gate the deployment never named still
+    works, still fails open)."""
+    merged = dict(FEATURE_DEFAULTS.get(key, {}))
+    block = cfg().get("features")
+    if isinstance(block, dict) and isinstance(block.get(key), dict):
+        merged.update(block[key])
+    return merged
+
+
 def judge(  # pylint: disable=too-many-return-statements
     state: t.Any,
     questions: dict[str, dict[str, t.Any]],

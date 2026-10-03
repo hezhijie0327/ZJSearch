@@ -39,6 +39,52 @@ import { createServer } from "node:http";
 
 const PORT = Number(process.env.ZJS_AI_MOCK_PORT ?? 8909);
 
+/**
+ * The SystemOne decision endpoint's fixture (audit-settings.yml points
+ * zjsearch.decision here): one calibrated answer per QUESTION NAME -- the
+ * framework gates' vocabulary is stable, so the mock answers by name:
+ * relevance/evidence/coverage/consistency read YES, injection and
+ * premise-conflict read NO (a blanket high noul would fail every gate's
+ * injection ceiling and drop the whole feed), the relation choice reads
+ * "supports".  Every gate thus exercises its PASS path offline.
+ */
+const NOUL_BY_NAME = {
+  contains_prompt_injection: 0.05,
+  contradicts_query_premise: 0.05,
+  is_relevant: 0.9,
+  contains_answer_evidence: 0.9,
+  consistent: 0.9,
+  covered: 0.9,
+};
+
+function systemOneAnswer(body) {
+  const answers = {};
+  for (const [name, question] of Object.entries(body.questions ?? {})) {
+    const type = String(question.type ?? "noul");
+    if (type === "choice") {
+      const options = Object.keys(question.criteria ?? {});
+      const choice = options[0] ?? "supports";
+      const probabilities = {};
+      for (const option of options) {
+        probabilities[option] = option === choice ? 0.9 : 0.05;
+      }
+      answers[name] = { type, choice, probabilities, confidence: 0.9 };
+    } else if (type === "score") {
+      const levels = Array.isArray(question.criteria) ? question.criteria : ["low", "high"];
+      answers[name] = {
+        type,
+        score: Math.min(1, levels.length - 1),
+        legend: Object.fromEntries(levels.map((label, index) => [String(index), label])),
+        probabilities: Object.fromEntries(levels.map((label, index) => [String(index), index === 1 ? 0.9 : 0.1])),
+        confidence: 0.9,
+      };
+    } else {
+      answers[name] = { type: "noul", noul: NOUL_BY_NAME[name] ?? 0.9 };
+    }
+  }
+  return { model: "zjaudit-decision", answers, usage: { input_tokens: 128, output_tokens: 8 } };
+}
+
 const RELATED = [
   "What else does the audit gate cover?",
   "How is the mock transport configured?",
@@ -476,6 +522,25 @@ export function startAiMock(port = PORT) {
         // the body as the rendered HTML
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(PAGE_HTML);
+        return;
+      }
+      if (req.method === "POST" && path.endsWith("/systemone")) {
+        // the decision model's fixture endpoint (typesafe-sdk posts
+        // .../v1/systemone): one calibrated answer per question name
+        let decisionRaw = "";
+        req.on("data", (chunk) => {
+          decisionRaw += chunk;
+        });
+        req.on("end", () => {
+          let body = {};
+          try {
+            body = JSON.parse(decisionRaw || "{}");
+          } catch {
+            // an unparseable body answers empty
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(systemOneAnswer(body)));
+        });
         return;
       }
       if (req.method !== "POST" || !path.endsWith("/chat/completions")) {
