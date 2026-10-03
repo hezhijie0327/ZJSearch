@@ -125,14 +125,21 @@ function SourceCard({ source }: { source: AiSearchSource }) {
                 <span className="truncate">{engineFirst}</span>
               </span>
             ) : null}
-            {expanded
-              ? (source.engines ?? []).slice(1).map((engine) => (
-                  <span className="shrink-0" key={engine}>
-                    {engine}
-                  </span>
-                ))
-              : null}
-            {hidden > 0 ? <CapChip className="shrink-0" expanded={expanded} hidden={hidden} onToggle={toggle} /> : null}
+            {hidden > 0 || expanded ? (
+              // the reveal + its collapse travel as ONE unit: on the rail's
+              // narrow cards the pair wraps to its own line together --
+              // a lone 收起 at a line start read as a stray chip
+              <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                {expanded
+                  ? (source.engines ?? []).slice(1).map((engine) => (
+                      <span className="shrink-0" key={engine}>
+                        {engine}
+                      </span>
+                    ))
+                  : null}
+                <CapChip className="shrink-0" expanded={expanded} hidden={hidden} onToggle={toggle} />
+              </span>
+            ) : null}
             <span className="ms-auto flex shrink-0 items-center gap-1.5">
               {/* the read marks ride a FIXED-WIDTH slot: with a badge
                   present or not, the #n stays aligned across crawled,
