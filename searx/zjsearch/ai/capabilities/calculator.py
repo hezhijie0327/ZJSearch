@@ -15,19 +15,20 @@ The tool is registered for EVERY research run: arithmetic is cheap, an
 unsound number in a cited answer is not."""
 
 import ast
-import json
 import math
 import operator
 import statistics
 import typing as t
 
-CALCULATOR_TOOL = "calculator"
+from searx.zjsearch.ai.runtime.tools.calculator import parse_calculator_call
 
-_MAX_EXPRESSION = 500
-"""Expression length cap -- the model writes one-liners, not programs."""
 _MAX_NODES = 200
 """AST size cap: a pathological deep-nesting bomb dies here before it
 can burn cycles."""
+_MAX_EXPRESSION = 500
+"""The evaluator's OWN input guard -- ``calculate`` is also the classic
+instant-answer path, called directly with user query text that never
+passed the wire parser's cap (same value, different layer)."""
 _MAX_PRECISION = 12
 
 _FUNCTIONS: dict[str, t.Callable[..., t.Any]] = {
@@ -172,44 +173,6 @@ def calculate(expression: str, precision: int = 10) -> str:
     return str(result)
 
 
-def calculator_spec() -> dict[str, t.Any]:
-    """The ``calculator`` tool spec -- one api, the model writes ONE
-    expression per call (substituting variables itself; no variable
-    binding surface)."""
-    return {
-        "name": CALCULATOR_TOOL,
-        "description": (
-            "Evaluate ONE mathematical expression exactly -- arithmetic,"
-            " powers, roots, logs, trig (radians), factorials, min/max/sum"
-            " over lists, and statistics (mean, median, mode, stdev,"
-            " variance, harmonic_mean).  Use it for EVERY non-trivial"
-            " number the answer reports: sums, differences, ratios,"
-            " percentages, averages, growth rates -- never compute in your"
-            " head, the result comes back exact.  Syntax: python-like"
-            ' ("2 + 3 * 4", "sqrt(2)**2", "round(10/3, 2)",'
-            ' "mean([1, 2, 3, 4])", "35 * 1.08").'
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "expression": {
-                    "type": "string",
-                    "description": (
-                        "One mathematical expression, python-like syntax:"
-                        ' "2 + 3 * 4", "sqrt(1764)", "35 * 1.08",'
-                        ' "mean([12.5, 13.2, 11.9])", "round(10 / 3, 4)".'
-                    ),
-                },
-                "precision": {
-                    "type": "number",
-                    "description": "Optional decimal places (0-12, default 10).",
-                },
-            },
-            "required": ["expression"],
-        },
-    }
-
-
 def evaluate_call(call: dict[str, t.Any], rnd: int, wire_id: int) -> tuple[str, dict[str, t.Any]]:
     """One tool call -> (model feed, wire event): the expression is
     evaluated HERE (instant, no pool slot) and the ``calc`` event carries
@@ -223,20 +186,3 @@ def evaluate_call(call: dict[str, t.Any], rnd: int, wire_id: int) -> tuple[str, 
         f'{{"expression": {expression!r}, "result": "{result}"}}',
         {"round": rnd, "id": wire_id, "expression": expression, "result": result, "status": "ok"},
     )
-
-
-def parse_calculator_call(call: dict[str, t.Any]) -> tuple[str, int]:
-    """(expression, precision) of one ``calculator`` call -- sanitized:
-    the expression is capped, the precision clamped to the legal range."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
-    expression = str(args.get("expression") or "").strip()[:_MAX_EXPRESSION]
-    try:
-        precision = max(0, min(int(args.get("precision")), _MAX_PRECISION))
-    except (TypeError, ValueError):
-        precision = 10
-    return expression, precision

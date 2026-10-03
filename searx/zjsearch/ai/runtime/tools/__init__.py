@@ -8,10 +8,12 @@ turn untrusted call arguments into executed / displayed values (Vane's
 researcher/actions split, Morphic's lib/tools -- schema, description
 and parsing live with the tool).  The SHARED infrastructure (the
 raw-args reader, :py:mod:`args`, and the ``calls``-event dispatch,
-:py:mod:`rows`) lives beside the families; the capabilities that are
+:py:mod:`rows`) lives beside the families; the capabilities that back
 full tool implementations elsewhere (``calculator``, ``user_memory``,
-``past_research``) contribute their name constants so prompt and rows
-speak the registered strings, never literals.
+``past_research``) keep their evaluators in
+:py:mod:`searx.zjsearch.ai.capabilities` while their names, specs and
+call parsers live here -- a tool answers "what the model sees and
+says", a capability answers "what actually happens".
 
 Consumers (``runtime.executor``, ``runtime.route``,
 ``runtime.researcher``) import from the package root -- the re-exports
@@ -21,11 +23,15 @@ executor branch, never an edit to the importers.
 
 from searx.zjsearch.ai.runtime.tools.args import raw_args
 from searx.zjsearch.ai.runtime.tools.ask_user import ASK_TOOL, ask_user_spec
-from searx.zjsearch.ai.runtime.tools.calculator import CALCULATOR_TOOL_NAME
+from searx.zjsearch.ai.runtime.tools.calculator import CALCULATOR_TOOL, calculator_spec, parse_calculator_call
 from searx.zjsearch.ai.runtime.tools.judge import DECISION_TOOL, decision_row, parse_system_one_call, system_one_spec
 from searx.zjsearch.ai.runtime.tools.learnings import LEARNINGS_TOOL, learnings_spec, parse_learnings_call
-from searx.zjsearch.ai.runtime.tools.memory import USER_MEMORY_TOOL
-from searx.zjsearch.ai.runtime.tools.past_research import PAST_RESEARCH_TOOL
+from searx.zjsearch.ai.runtime.tools.memory import USER_MEMORY_TOOL, user_memory_spec
+from searx.zjsearch.ai.runtime.tools.past_research import (
+    PAST_RESEARCH_TOOL,
+    parse_query,
+    past_research_spec,
+)
 from searx.zjsearch.ai.runtime.tools.rows import display_item
 from searx.zjsearch.ai.runtime.tools.tasks import TASK_TOOL, parse_task_call, task_write_spec
 from searx.zjsearch.ai.runtime.tools.web_reader import PAGE_TOOL, parse_page_call, page_spec
@@ -33,7 +39,7 @@ from searx.zjsearch.ai.runtime.tools.web_search import SEARCH_CATEGORIES, TOOL_N
 
 __all__ = [
     "ASK_TOOL",
-    "CALCULATOR_TOOL_NAME",
+    "CALCULATOR_TOOL",
     "DECISION_TOOL",
     "LEARNINGS_TOOL",
     "PAGE_TOOL",
@@ -43,17 +49,22 @@ __all__ = [
     "TOOL_NAME",
     "USER_MEMORY_TOOL",
     "ask_user_spec",
+    "calculator_spec",
     "decision_row",
     "display_item",
     "learnings_spec",
     "page_spec",
     "parse_call",
+    "parse_calculator_call",
     "parse_learnings_call",
     "parse_page_call",
+    "parse_query",
     "parse_system_one_call",
     "parse_task_call",
+    "past_research_spec",
     "raw_args",
     "system_one_spec",
     "task_write_spec",
     "tool_spec",
+    "user_memory_spec",
 ]

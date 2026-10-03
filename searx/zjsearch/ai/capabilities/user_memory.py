@@ -15,8 +15,6 @@ import json
 import re
 import typing as t
 
-USER_MEMORY_TOOL = "user_memory"
-
 MAX_MEMORIES = 50
 """The pre-send cap -- facts beyond this are the oldest's problem (the
 preferences surface prunes; the model is told to update, not append)."""
@@ -37,47 +35,6 @@ def parse_memories(raw: t.Any) -> list[dict[str, str]]:
                     }
                 )
     return out
-
-
-def user_memory_spec() -> dict[str, t.Any]:
-    """The ``user_memory`` tool spec."""
-    return {
-        "name": USER_MEMORY_TOOL,
-        "description": (
-            "Remember durable facts about the user across sessions"
-            " (action=save) or look up what is already stored"
-            " (action=search).  Save ONLY lasting facts -- the user's"
-            " city, occupation, standing preferences (answer style,"
-            ' source preferences) -- e.g. {"action": "save", "content":'
-            ' "用户常住杭州"} -- NEVER one-off conversation details.  The'
-            " facts the user already has stored are listed in the"
-            " <user_memory> context block: search is for checking before"
-            " a save that might duplicate, not for re-reading what you"
-            " can already see."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["search", "save"],
-                    "description": "search = look up stored facts; save = store one new fact.",
-                },
-                "query": {
-                    "type": "string",
-                    "description": "search: keywords for the facts you are looking for.",
-                },
-                "content": {
-                    "type": "string",
-                    "description": (
-                        "save: ONE self-contained fact in the user's language"
-                        ' (e.g. "用户常住杭州, 关注本地房产政策").'
-                    ),
-                },
-            },
-            "required": ["action"],
-        },
-    }
 
 
 def search_memories(query: str, memories: list[dict[str, str]]) -> str:

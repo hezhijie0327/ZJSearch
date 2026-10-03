@@ -18,7 +18,7 @@ import typing as t
 from searx.zjsearch.ai.runtime import spine as shared
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
-    CALCULATOR_TOOL_NAME,
+    CALCULATOR_TOOL,
     LEARNINGS_TOOL,
     PAGE_TOOL,
     TASK_TOOL,
@@ -219,7 +219,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     )
     calculator_block = (
         "<calculator>\n"
-        f"The {CALCULATOR_TOOL_NAME} tool evaluates ONE mathematical"
+        f"The {CALCULATOR_TOOL} tool evaluates ONE mathematical"
         " expression EXACTLY (python-like syntax: \"2 + 3 * 4\","
         ' \"sqrt(1764)\", \"35 * 1.08\", \"mean([12.5, 13.2, 11.9])\",'
         ' \"round(10 / 3, 4)\").  Route EVERY non-trivial number through'

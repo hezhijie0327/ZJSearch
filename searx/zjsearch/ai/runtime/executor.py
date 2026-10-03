@@ -39,12 +39,16 @@ from searx.zjsearch.ai.runtime.tools import (
     DECISION_TOOL,
     LEARNINGS_TOOL,
     PAGE_TOOL,
+    CALCULATOR_TOOL,
     parse_call,
     parse_learnings_call,
     parse_page_call,
+    parse_query,
     parse_system_one_call,
     parse_task_call,
+    PAST_RESEARCH_TOOL,
     TASK_TOOL,
+    USER_MEMORY_TOOL,
 )
 
 logger = logging.getLogger(__name__)
@@ -375,7 +379,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 )
                 yield ("call", {"call": wire_id, "status": "error", "q": ""})
                 continue
-            if tool_name == calculator.CALCULATOR_TOOL:
+            if tool_name == CALCULATOR_TOOL:
                 feed, event = calculator.evaluate_call(call, rnd, wire_id)
                 feeds[wire_id - 1] = feed
                 yield ("call", {"call": wire_id, "status": event.get("status", "ok"), "result": event.get("result")})
@@ -466,8 +470,8 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     " alongside your sources."
                 )
                 continue
-            if tool_name == past_research_cap.PAST_RESEARCH_TOOL:
-                query = past_research_cap.parse_query(call)
+            if tool_name == PAST_RESEARCH_TOOL:
+                query = parse_query(call)
                 matches = past_research_cap.rank(self.past_research_entries, query)
                 gathered = True
                 if matches:
@@ -531,7 +535,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     },
                 )
                 continue
-            if tool_name == user_memory_cap.USER_MEMORY_TOOL:
+            if tool_name == USER_MEMORY_TOOL:
                 feed, event = user_memory_cap.evaluate_call(call, self.user_memories)
                 feeds[wire_id - 1] = feed
                 if event:

@@ -14,7 +14,7 @@ import typing as t
 from searx.zjsearch.ai.capabilities import mcp
 from searx.zjsearch.ai.runtime.tools.args import raw_args
 from searx.zjsearch.ai.runtime.tools.ask_user import ASK_TOOL
-from searx.zjsearch.ai.runtime.tools.calculator import CALCULATOR_TOOL_NAME
+from searx.zjsearch.ai.runtime.tools.calculator import CALCULATOR_TOOL
 from searx.zjsearch.ai.runtime.tools.judge import DECISION_TOOL, decision_row
 from searx.zjsearch.ai.runtime.tools.learnings import LEARNINGS_TOOL
 from searx.zjsearch.ai.runtime.tools.memory import USER_MEMORY_TOOL
@@ -113,7 +113,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "name": call_name.split("_", 2)[-1] if call_name.count("_") >= 2 else call_name,
             "args": raw_args(call),
         }
-    if str(call.get("name") or "") == CALCULATOR_TOOL_NAME:
+    if str(call.get("name") or "") == CALCULATOR_TOOL:
         try:
             calc_args = raw_args(call)
         except Exception:  # pylint: disable=broad-except
@@ -125,7 +125,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             precision = 10
         return {
             "id": idx,
-            "tool": CALCULATOR_TOOL_NAME,
+            "tool": CALCULATOR_TOOL,
             # the expression IS the row's label (the result rides the right
             # side as "= x") -- the client renders `expr = result`
             "q": expression,

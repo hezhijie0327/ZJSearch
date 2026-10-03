@@ -20,10 +20,8 @@ import flask
 
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai.capabilities import mcp, reader
-from searx.zjsearch.ai.capabilities.calculator import calculator_spec
 from searx.zjsearch.ai.capabilities.past_research import parse_entries as parse_past_research
-from searx.zjsearch.ai.capabilities.past_research import past_research_spec
-from searx.zjsearch.ai.capabilities.user_memory import extract_insights, parse_memories, user_memory_spec
+from searx.zjsearch.ai.capabilities.user_memory import extract_insights, parse_memories
 from searx.zjsearch.ai.framework import loop as engine
 from searx.zjsearch.ai.framework import wire
 from searx.zjsearch.ai.framework.fences import parse_fence_json
@@ -46,12 +44,15 @@ from searx.zjsearch.ai.runtime.writer import writer_messages
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
     ask_user_spec,
+    calculator_spec,
     display_item,
     learnings_spec,
     page_spec,
+    past_research_spec,
     system_one_spec,
     task_write_spec,
     tool_spec,
+    user_memory_spec,
 )
 
 logger = logging.getLogger(__name__)
