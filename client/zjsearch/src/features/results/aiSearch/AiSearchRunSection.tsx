@@ -695,11 +695,11 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
           <li className="flex items-start gap-2 text-[13px]" key={`${item.q}-${item.a}`}>
             <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
             <span className="min-w-0 flex-1 break-words">
-              <span className="block text-ink" dir="auto">
-                {item.a}
-              </span>
               <span className="block text-ink-3" dir="auto">
                 {item.q}
+              </span>
+              <span className="block text-ink" dir="auto">
+                {item.a}
               </span>
             </span>
           </li>
