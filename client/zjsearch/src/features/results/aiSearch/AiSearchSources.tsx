@@ -8,7 +8,7 @@ import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { escapeHtml } from "@/lib/print.ts";
-import { MONO_CHIP, SCROLLBAR_NONE } from "@/lib/styles.ts";
+import { MONO_CHIP } from "@/lib/styles.ts";
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
@@ -108,28 +108,20 @@ function SourceCard({ source }: { source: AiSearchSource }) {
           >
             <Snippet className="mt-1.5" contentHtml={escapeHtml(source.content || t("no_description"))} />
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3">
+          <div className="mt-1.5 flex items-start gap-x-2 text-xs text-ink-3">
             {typeof source.score === "number" ? (
-              <span className={MONO_CHIP} title={t("score")}>
+              <span className={`${MONO_CHIP} shrink-0`} title={t("score")}>
                 {formatScore(source.score)}
               </span>
             ) : null}
             {source.engines && source.engines.length > 0 ? (
-              // ONE line, swiped horizontally (no scrollbar): the rail's
-              // cards are too narrow to wrap engines -- the tile rows' own
-              // language, the whole line swipes left-right
-              <span
-                className={`-mx-1 inline-flex min-w-0 items-center gap-x-2 overflow-x-auto px-1 ${SCROLLBAR_NONE}`}
-                title={source.engines.join(", ")}
-              >
-                {source.engines.map((engine) => (
-                  <span className="shrink-0" key={engine}>
-                    {engine}
-                  </span>
-                ))}
+              // the engines wrap INSIDE their flexible area -- the #n badge
+              // stays pinned at the row end and never orphans below
+              <span className="min-w-0 flex-1" title={source.engines.join(", ")}>
+                {source.engines.join(", ")}
               </span>
             ) : null}
-            <span className="ms-auto flex shrink-0 items-center gap-1.5">
+            <span className="flex shrink-0 items-center gap-1.5 self-center">
               {/* the read marks ride a FIXED-WIDTH slot: with a badge
                   present or not, the #n stays aligned across crawled,
                   recalled and plain cards */}
