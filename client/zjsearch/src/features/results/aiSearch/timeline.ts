@@ -574,7 +574,7 @@ export function applyEvent(
           purpose: String(record.purpose ?? ""),
           question: typeof record.question === "string" ? record.question : undefined,
           target: typeof record.target === "string" ? record.target : undefined,
-          answer: record.answer ?? record.raw ?? undefined,
+          answer: record.answer ?? record.answers ?? record.raw ?? undefined,
           ms: typeof record.ms === "number" ? record.ms : undefined,
           record,
         };

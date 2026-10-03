@@ -113,15 +113,15 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
   }
   const done = tasks.filter((task) => task.status === "done").length;
   return (
-    <div className="mb-4 lg:flex lg:max-h-[26vh] lg:min-h-0 lg:flex-col">
-      <div className="flex shrink-0 items-center gap-2">
+    <div className="mb-4">
+      <div className="flex items-center gap-2 px-1">
         <ListTodo aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_task_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">
           {done}/{tasks.length}
         </span>
       </div>
-      <ul className="mt-3 space-y-1.5 lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+      <ul className="mt-3 space-y-1.5">
         {tasks.map((task, index) => (
           <TaskItem key={`${index}-${task.title}`} task={task} />
         ))}
@@ -149,72 +149,72 @@ function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: Ledg
   }
   const active = learnings.filter((fact) => fact.status === "active");
   return (
-    <div className="mb-4 lg:flex lg:max-h-[34vh] lg:min-h-0 lg:flex-col">
-      <div className="flex shrink-0 items-center gap-2">
+    <div className="mb-4">
+      <div className="flex items-center gap-2 px-1">
         <NotebookPen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_findings_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{active.length}</span>
       </div>
-      <div className="lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
-        <ul className="mt-3 space-y-1.5">
-          {learnings.map((fact) => (
-            <li className="flex items-start gap-2" key={fact.id}>
-              {fact.status === "active" ? (
-                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
-              ) : fact.status === "retracted" ? (
-                <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
-              ) : (
-                <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
-              )}
-              <div className="min-w-0 flex-1">
-                <Snippet
-                  className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
-                  contentHtml={escapeHtml(fact.text)}
-                />
-                {fact.status !== "active" ? (
-                  <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
-                    {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
-                  </span>
-                ) : fact.conflict_with ? (
-                  <span
-                    aria-label={t("ai_finding_conflict")}
-                    className="ms-1.5 inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
-                    role="img"
-                    title={t("ai_finding_conflict")}
-                  >
-                    <Zap aria-hidden="true" className="size-2.5" />
-                  </span>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-        {gaps.length > 0 ? (
-          <div className="mt-3 border-t border-line pt-2.5">
-            <p className="px-1 text-xs font-medium text-ink-2">{t("ai_findings_gaps")}</p>
-            <ul className="mt-1.5 space-y-1">
-              {gaps.map((gap) => (
-                <li className="flex items-start gap-2 text-xs" key={gap.id}>
-                  {gap.status === "open" ? (
-                    <CircleHelp aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-accent" />
-                  ) : (
-                    <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
-                  )}
-                  <span
-                    className={`min-w-0 flex-1 break-words ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
-                    dir="auto"
-                  >
-                    {gap.q}
-                    {gap.status === "closed" && gap.close_as ? (
-                      <span className="ms-1.5 text-ink-3">{gap.close_as}</span>
-                    ) : null}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
+      {/* the facts cap + scroll INTERNALLY; 未决缺口 renders BELOW the scroll
+          area -- always visible, never occluded by a long facts list */}
+      <ul className="mt-3 space-y-1.5 lg:max-h-[30vh] lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+        {learnings.map((fact) => (
+          <li className="flex items-start gap-2" key={fact.id}>
+            {fact.status === "active" ? (
+              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
+            ) : fact.status === "retracted" ? (
+              <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
+            ) : (
+              <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
+            )}
+            <div className="min-w-0 flex-1">
+              <Snippet
+                className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
+                contentHtml={escapeHtml(fact.text)}
+              />
+              {fact.status !== "active" ? (
+                <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
+                  {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
+                </span>
+              ) : fact.conflict_with ? (
+                <span
+                  aria-label={t("ai_finding_conflict")}
+                  className="ms-1.5 inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
+                  role="img"
+                  title={t("ai_finding_conflict")}
+                >
+                  <Zap aria-hidden="true" className="size-2.5" />
+                </span>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+      {gaps.length > 0 ? (
+        <div className="mt-3 border-t border-line px-1 pt-2.5">
+          <p className="text-xs font-medium text-ink-2">{t("ai_findings_gaps")}</p>
+          <ul className="mt-1.5 space-y-1">
+            {gaps.map((gap) => (
+              <li className="flex items-start gap-2 text-xs" key={gap.id}>
+                {gap.status === "open" ? (
+                  <CircleHelp aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-accent" />
+                ) : (
+                  <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+                )}
+                <span
+                  className={`min-w-0 flex-1 break-words ${gap.status === "open" ? "text-ink" : "text-ink-3"}`}
+                  dir="auto"
+                >
+                  {gap.q}
+                  {gap.status === "closed" && gap.close_as ? (
+                    <span className="ms-1.5 text-ink-3">{gap.close_as}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
