@@ -49,6 +49,10 @@ utils/lib_sxng_vite.sh
 # lighthouse gate archives (raw LHR reports + scores, compared across commits)
 client/zjsearch/.lighthouse-archive/
 
+# local dev instance settings carrying REAL KEYS (the tracked dev-settings.yml
+# carries empty api_key fields + placeholders only -- keys never enter git)
+client/zjsearch/dev-settings.local.yml
+
 # lighthouse gate materialised no-JS page (transient)
 /searx/static/audit-nojs.html
 gui-test-screenshots/
