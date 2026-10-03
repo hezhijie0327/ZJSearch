@@ -165,7 +165,7 @@ function SourceCard({ source }: { source: AiSearchSource }) {
         </div>
       ) : null}
       {source.img ? (
-        <div className="relative hidden shrink-0 self-start sm:block">
+        <div className="relative mt-2 hidden shrink-0 self-start sm:block">
           <Thumb alt="" className="h-20 w-28" src={source.img} />
           {isMedia && source.meta ? (
             <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
