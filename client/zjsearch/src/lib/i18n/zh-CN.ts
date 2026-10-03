@@ -9,6 +9,8 @@ import type { StringKey } from "@/lib/i18n/en.ts";
 export const ZH_CN: Record<StringKey, string> = {
   donate: "捐助",
   preferences: "偏好设置",
+  install_app: "安装应用",
+  install_app_done: "应用已安装",
   search_placeholder: "搜索...",
   clear: "清空",
   search: "搜索",

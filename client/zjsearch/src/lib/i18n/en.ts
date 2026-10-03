@@ -7,6 +7,8 @@
 export const EN = {
   donate: "Donate",
   preferences: "Preferences",
+  install_app: "Install app",
+  install_app_done: "App installed",
   search_placeholder: "Search for...",
   clear: "clear",
   search: "search",

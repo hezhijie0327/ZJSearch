@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChartColumn, Info, LibraryBig, SlidersHorizontal } from "lucide-react";
+import { ChartColumn, Info, LibraryBig, MonitorDown, SlidersHorizontal } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { BrandDot } from "@/components/Brand.tsx";
 import { siteConfig } from "@/config/site.ts";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { isModifiedClick, newTabLinkProps } from "@/lib/link.ts";
+import { canPromptInstall, onPwaInstallChange, promptInstall } from "@/lib/pwa.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { ICON_BTN, SCROLLBAR_NONE } from "@/lib/styles.ts";
+import { flashToast } from "@/lib/toast.ts";
 import type { GlobalData } from "@/lib/types.ts";
 
 /** Anchor that performs SPA navigation for internal URLs. */
@@ -96,8 +98,35 @@ function KnowledgeButton({ globals }: { globals: GlobalData }) {
 export function HeaderActions({ globals }: { globals: GlobalData }) {
   const t = useT();
   const { openOverlay } = useOverlay();
+  const [installable, setInstallable] = useState(false);
+  useEffect(() => {
+    setInstallable(canPromptInstall());
+    return onPwaInstallChange(() => {
+      setInstallable(canPromptInstall());
+    });
+  }, []);
+  const installApp = async () => {
+    const outcome = await promptInstall();
+    setInstallable(canPromptInstall());
+    if (outcome === "accepted") {
+      flashToast(t("install_app_done"), { tone: "ok" });
+    }
+  };
   return (
     <div className="zjs-print-hide flex items-center gap-0.5 sm:gap-1">
+      {installable ? (
+        <button
+          aria-label={t("install_app")}
+          className={ICON_BTN}
+          onClick={() => {
+            void installApp();
+          }}
+          title={t("install_app")}
+          type="button"
+        >
+          <MonitorDown className="size-4.5" />
+        </button>
+      ) : null}
       <KnowledgeButton globals={globals} />
       {globals.about_url ? (
         <button

@@ -5,6 +5,7 @@ import { App } from "@/app.tsx";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/knowledgeStore.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
+import { initPwaInstall } from "@/lib/pwa.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 import "./styles/global.css";
@@ -105,3 +106,6 @@ if ("serviceWorker" in navigator) {
     void navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
 }
+
+/* PWA: capture beforeinstallprompt for the header's install action */
+initPwaInstall();
