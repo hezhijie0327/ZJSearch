@@ -12,6 +12,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   plan_review: "ai_dec_plan_review",
   judge: "ai_dec_judge",
   audit: "ai_dec_audit",
+  evidence: "ai_dec_evidence_check",
 };
 
 function auditLabelOf(verdict: string): string {

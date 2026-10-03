@@ -27,8 +27,11 @@ def task_write_spec() -> dict[str, t.Any]:
             " round: decompose the request into 2-4 concrete, independent"
             " subtasks (each answerable by its own focused research)."
             " Afterwards: update statuses as subtasks complete"
-            ' ({"title": ..., "status": "done"}).  The list is rendered'
-            " to the user as your research plan -- keep it current."
+            ' ({"title": ..., "status": "done"}), and whenever the research'
+            " uncovers an IMPORTANT new facet (a gap in the ledger), APPEND"
+            " it as a new subtask -- the plan grows with the findings."
+            "  The list is rendered to the user as your research plan --"
+            " keep it current."
         ),
         "parameters": {
             "type": "object",

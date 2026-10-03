@@ -117,6 +117,7 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
     "diversity": {"enabled": True, "cosine": 0.92},
     "coverage": {"enabled": True},
     "plan_review": {"enabled": True, "max_tasks": 4},
+    "evidence_check": {"enabled": True, "head": 8, "pass_min": 0.45},
     "clarify_gate": {
         "enabled": True,
         # the noul floor: BELOW it the query is genuinely

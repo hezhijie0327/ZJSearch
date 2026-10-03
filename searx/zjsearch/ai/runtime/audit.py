@@ -29,7 +29,6 @@ import typing as t
 
 from searx.zjsearch.ai.infra import decision as decision_service
 from searx.zjsearch.ai.infra import embed as embed_service
-from searx.zjsearch.ai.runtime.rank import has_cjk
 
 logger = logging.getLogger(__name__)
 
@@ -54,19 +53,9 @@ _AUTO_ACCEPT = 0.50
 the citation renders as ``unverified`` (the model was torn)."""
 
 
-def _relation_question(is_zh: bool) -> dict[str, t.Any]:
-    """The citation relation's choice question, in the answer's own
-    language (the decision model grades best in the material's)."""
-    if is_zh:
-        return {
-            "type": "choice",
-            "instructions": "这段话是否被来源支持？",
-            "criteria": {
-                "supports": "来源明确陈述或支持该说法",
-                "contradicts": "来源与该说法相矛盾",
-                "says_nothing": "来源未谈及该说法",
-            },
-        }
+def _relation_question() -> dict[str, t.Any]:
+    """The citation relation's choice question.  Prompts are
+    ENGLISH-ONLY; the claim/passage carry their own language."""
     return {
         "type": "choice",
         "instructions": "Is the claim supported by this source passage?",
@@ -78,14 +67,14 @@ def _relation_question(is_zh: bool) -> dict[str, t.Any]:
     }
 
 
-def _grade_relation(claim: str, passage: str, is_zh: bool) -> tuple[str, float] | None:
+def _grade_relation(claim: str, passage: str) -> tuple[str, float] | None:
     """One claim-vs-passage ``choice`` judgment ->
     ``(verdict, confidence)``; ``None`` on any failure (the citation
     simply goes unaudited -- no badge, no invented verdict)."""
     try:
         out = decision_service.judge(
             {"claim": claim, "source": passage},
-            {"relation": _relation_question(is_zh)},
+            {"relation": _relation_question()},
             timeout=AUDIT_TIMEOUT,
         )
     except Exception as exc:  # pylint: disable=broad-except
@@ -143,12 +132,11 @@ def citation_verdicts(
             n = int(match.group(1))
             if n in sources and n not in claims:
                 claims[n] = sentence.strip()[:400]
-    is_zh = has_cjk(answer)
     verdicts: dict[int, dict[str, t.Any]] = {}
     for n, claim in list(claims.items())[:CLAIM_MAX]:
         source = sources[n]
         passage = f"{source.get('title', '')} - {source.get('snippet', '')}"[:800]
-        graded = _grade_relation(claim, passage, is_zh)
+        graded = _grade_relation(claim, passage)
         if graded is not None:
             verdicts[n] = {"verdict": graded[0], "confidence": graded[1], "claim": claim[:200]}
     return verdicts
@@ -188,17 +176,12 @@ def finding_conflict(fact_text: str, established: list[str]) -> int | None:
         best = _nearest_fact(fact_text, established)
         if best is None:
             return None
-        is_zh = has_cjk(fact_text)
         out = decision_service.judge(
             {"new_fact": fact_text, "established_fact": established[best]},
             {
                 "consistent": {
                     "type": "noul",
-                    "instructions": (
-                        "新说法与已有事实是否一致（可以同真）？"
-                        if is_zh
-                        else "Are the new fact and the established fact consistent (both can be true)?"
-                    ),
+                    "instructions": ("Are the new fact and the established fact consistent (both can be true)?"),
                 }
             },
             timeout=AUDIT_TIMEOUT,
@@ -224,18 +207,17 @@ def subtask_gaps(answer: str, open_tasks: list[str]) -> list[str]:
         return []
     if not decision_service.enabled() or not decision_service.configured():
         return []
-    is_zh = has_cjk(answer)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         judged = list(
             pool.map(
-                lambda task: _covered(answer, task, is_zh),
+                lambda task: _covered(answer, task),
                 open_tasks[:6],
             )
         )
     return [task for task, covered in zip(open_tasks[:6], judged) if not covered]
 
 
-def _covered(answer: str, task: str, is_zh: bool) -> bool:
+def _covered(answer: str, task: str) -> bool:
     """One subtask's coverage noul (``True`` = the answer covers it; a
     failed judgment counts as covered -- fail-open)."""
     try:
@@ -245,9 +227,7 @@ def _covered(answer: str, task: str, is_zh: bool) -> bool:
                 "covered": {
                     "type": "noul",
                     "instructions": (
-                        "这份回答是否实质回应了该子课题（给出了事实、数据或明确结论）？"
-                        if is_zh
-                        else "Does this answer substantively address the subtask (facts, data, or a clear conclusion)?"
+                        "Does this answer substantively address the subtask (facts, data, or a clear conclusion)?"
                     ),
                 }
             },

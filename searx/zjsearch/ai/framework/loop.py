@@ -207,6 +207,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     max_rounds: int = 1,
     round_progress: t.Callable[[int], str | None] | None = None,
     continuation: t.Callable[[], str | None] | None = None,
+    pre_write: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     ask_tool: str | None = None,
     ask_shape: t.Callable[[str], dict[str, t.Any] | None] | None = None,
     display: t.Callable[[list[dict[str, t.Any]]], list[dict[str, t.Any]]] | None = None,
@@ -223,6 +224,11 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       without them the run is a single WRITE turn, the AI Overview shape).
     - ``round_progress(executed_rounds)``: the stall detector -- ``None``
       keeps researching, a string explains the halt and ends the phase.
+    - ``pre_write()``: the PRE-WRITE verification pass (the strip's 核验
+      stage) -- runs AFTER the research ends and BEFORE the write opens;
+      the returned events stream under the ``audit`` phase (evidence
+      checks, final gates), so the writer only consumes verified
+      material.
     - ``continuation()``: the LEDGER-CLOSE contract -- consulted when a
       turn ends with ZERO calls (the model "stopped researching").
       ``None`` (or a missing callback) lets the run end; a string is the
@@ -336,6 +342,18 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     halt_message = None
 
         if writer is not None:
+            # the PRE-WRITE verification pass (核验): runs under its own
+            # phase BEFORE the write opens -- the writer consumes verified
+            # material only
+            if pre_write is not None:
+                try:
+                    pre_events = pre_write()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("zjsearch loop: pre-write pass failed: %r", exc)
+                    pre_events = []
+                if pre_events:
+                    yield {"e": "phase", "name": "audit"}
+                    yield from pre_events
             # the researcher/writer handoff: the recalled past-research
             # sources fly as one sources event (numbered AFTER the live
             # feed's final [n], so the answer can cite them), then a FRESH

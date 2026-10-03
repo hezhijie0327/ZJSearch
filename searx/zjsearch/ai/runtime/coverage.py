@@ -47,28 +47,26 @@ class Coverage:
                     terms.extend(token[i : i + 4] for i in range(len(token) - 3))
         return terms
 
-    def track(self, query: str, source_titles: list[str] | None = None, source_ns: list[int] | None = None) -> None:
-        """Map one search/page read against the task list: query terms
-        matching a subtask's title mark it ACTIVE (being researched);
-        source titles matching mark it DONE (that facet has sources -- the
-        matching sources' [n] numbers ride the task card's per-subtask
-        source count).  Terms match by BIDIRECTIONAL CONTAINMENT, not
-        exact equality -- an English query must still light up a Chinese
-        subtask title ("Next.js" vs "Next.js 16 发布与特性调研") and CJK
-        phrases have no word boundaries to intersect on."""
+    def track(  # pylint: disable=unused-argument
+        self, query: str, source_titles: list[str] | None = None, source_ns: list[int] | None = None
+    ) -> None:
+        """Map one search/page read against the task list for PROVENANCE
+        ONLY: source titles matching a subtask merge their [n] numbers
+        into the task card's per-subtask source count.  Statuses are
+        NEVER written here -- the task_write TOOL is the plan's single
+        writer (the model updates statuses; the round referee only
+        advises via notes).  Terms match by BIDIRECTIONAL CONTAINMENT,
+        not exact equality -- an English query must still light up a
+        Chinese subtask title ("Next.js" vs "Next.js 16 发布与特性调研")
+        and CJK phrases have no word boundaries to intersect on."""
         if not self.task_list:
             return
-        query_terms = self.match_terms(query)
         source_terms: list[str] = []
         for title in source_titles or []:
             source_terms.extend(self.match_terms(title))
         for task in self.task_list:
             title_terms = self.match_terms(task["title"])
-            if task["status"] == "pending" and any(a in b or b in a for a in query_terms for b in title_terms):
-                task["status"] = "active"
             source_hit = bool(source_terms) and any(a in b or b in a for a in source_terms for b in title_terms)
-            if task["status"] == "active" and source_hit:
-                task["status"] = "done"
-                if source_ns:
-                    merged = list(dict.fromkeys([*task.get("sources", []), *source_ns]))[:12]
-                    task["sources"] = merged
+            if source_hit and source_ns:
+                merged = list(dict.fromkeys([*task.get("sources", []), *source_ns]))[:12]
+                task["sources"] = merged

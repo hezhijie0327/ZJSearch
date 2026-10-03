@@ -34,7 +34,6 @@ from searx.zjsearch.ai.runtime.executor import Searches
 from searx.zjsearch.ai.infra.decision import features as decision_features
 from searx.zjsearch.ai.runtime import audit
 from searx.zjsearch.ai.runtime.progress import continuation_note, round_progress
-from searx.zjsearch.ai.runtime.rank import has_cjk
 from searx.zjsearch.ai.runtime.gates import (
     clarify_gate,
     related_questions,
@@ -163,22 +162,15 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         pre = decision_features("clarify_gate")
         if pre.get("enabled") and decision.enabled() and decision.configured():
             try:
-                is_zh = has_cjk(q)
                 pre_out = decision.judge(
                     q,
                     {
                         "ambiguous": {
                             "type": "noul",
                             "instructions": (
-                                (
-                                    "这个问题是否真的模糊或有高风险（答案的关键取决于用户没说清的意图/范围/标准，猜错会浪费整轮研究）？"
-                                    if is_zh
-                                    else (
-                                        "Is this question genuinely ambiguous or high-stakes (the answer's key"
-                                        " depends on unstated user intent/scope/criteria, and guessing wrong"
-                                        " wastes the whole research)?"
-                                    )
-                                )
+                                "Is this question genuinely ambiguous or high-stakes (the answer's key"
+                                " depends on unstated user intent/scope/criteria, and guessing wrong"
+                                " wastes the whole research)?"
                             ),
                         }
                     },
@@ -228,6 +220,8 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         lang=lang,
         cfg=cfg,
     )
+    state.question_held = research_q
+
     past_ref: list[dict[str, t.Any]] = []
 
     def assign_past_sources() -> list[dict[str, t.Any]]:
@@ -314,6 +308,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         max_rounds=max_rounds,
         round_progress=round_progress(state, budget("stall_rounds", mode, 2), budget("max_seconds", mode, 0)),
         continuation=continuation,
+        pre_write=state.evidence_check,
         ask_tool=ASK_TOOL,
         ask_shape=_ask_shape,
         display=lambda calls: [display_item(idx, call) for idx, call in enumerate(calls, 1)],
@@ -443,10 +438,19 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         self.state.judgments.append(
             {
                 "purpose": "audit",
-                "question": "逐条引用核验:声明与来源的关系(supports / contradicts / says_nothing)",
-                "target": f"答案引用 {len(verdicts)} 条",
+                "question": "Per-citation check: the claim's relation to its source"
+                " (supports / contradicts / says_nothing)",
+                "target": f"answer cites {len(verdicts)} citations",
                 "citations": len(verdicts),
                 "verdicts": counts,
+                "items": [
+                    {
+                        "n": int(n),
+                        "verdict": entry.get("verdict", "unverified"),
+                        "confidence": float(entry.get("confidence") or 0.0),
+                    }
+                    for n, entry in sorted(verdicts.items(), key=lambda pair: int(pair[0]))
+                ],
                 "ms": int((time.monotonic() - started) * 1000),
             }
         )
