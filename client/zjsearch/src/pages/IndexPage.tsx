@@ -113,8 +113,8 @@ export function IndexPage({ data }: { data: IndexData }) {
   // the hero's greeting: ONE line, by time of day (computed at mount --
   // the hero is a transient landing, nobody needs it to roll over live)
   const hour = new Date().getHours();
-  const greetingKey = hour < 5 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
-  const greeting = t(`hero_greeting_${greetingKey}` as StringKey);
+  const period = hour < 5 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const greeting = t(`hero_greeting_${aiMode ? "ask" : "search"}_${period}` as StringKey);
 
   // "?" opens the shortcuts help on the home page too; the result-navigation
   // keys have nothing to act on here
