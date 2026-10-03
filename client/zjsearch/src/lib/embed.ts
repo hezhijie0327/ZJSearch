@@ -11,6 +11,7 @@
     the row persists, it just drops out of the semantic search. */
 
 import { fetchJson } from "@/lib/http.ts";
+import { pgQuery } from "@/lib/pg.ts";
 
 export interface EmbeddingConfig {
   /** the page-data HMAC token of the embedding capability */
@@ -59,15 +60,16 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
     if (!Array.isArray(embeddings) || embeddings.length !== texts.length) {
       return null;
     }
-    recordEmbedUsage(result.model ?? "", result.usage);
+    void recordEmbedUsage(result.model ?? "", result.usage);
     return embeddings;
   } catch {
     return null;
   }
 }
 
-// ── the embedding usage totals (localStorage: the calls never land in the
-// knowledge table, so there is nothing to aggregate from the store) ──
+// ── the embedding usage totals: ONE knowledge row (kind "usage") the
+// recorder upserts -- the account lives in the SAME store the resets
+// wipe, and the model-stats card reads it back ──
 export interface EmbedUsageTotals {
   model: string;
   input: number;
@@ -75,39 +77,52 @@ export interface EmbedUsageTotals {
   calls: number;
 }
 
-const EMBED_USAGE_KEY = "zjs-embed-usage";
-
-function recordEmbedUsage(model: string, usage: { input?: number; chars?: number } | null | undefined): void {
+async function recordEmbedUsage(
+  model: string,
+  usage: { input?: number; chars?: number } | null | undefined,
+): Promise<void> {
   if (!usage || (!usage.input && !usage.chars)) {
     return;
   }
   try {
-    const prev = readEmbedUsage();
-    const next: EmbedUsageTotals = {
-      model: model || prev.model,
-      input: prev.input + (usage.input ?? 0),
-      chars: prev.chars + (usage.chars ?? 0),
-      calls: prev.calls + 1,
-    };
-    localStorage.setItem(EMBED_USAGE_KEY, JSON.stringify(next));
-  } catch {
-    /* storage unavailable -- the stats are best-effort */
+    await pgQuery(
+      `INSERT INTO knowledge (id, kind, title, body, status, meta, tags, search_text, created, updated, occurred_at)
+       VALUES ('usage:embed', 'usage', 'embedding usage', '', 'done',
+               jsonb_build_object('model', $1::text, 'input', $2::bigint, 'chars', $3::bigint, 'calls', 1),
+               '[]'::jsonb, '', now(), now(), now())
+       ON CONFLICT (id) DO UPDATE SET
+         meta = jsonb_build_object(
+           'model', EXCLUDED.meta->'model',
+           'input', (COALESCE(knowledge.meta->>'input', '0')::bigint + $2::bigint),
+           'chars', (COALESCE(knowledge.meta->>'chars', '0')::bigint + $3::bigint),
+           'calls', (COALESCE(knowledge.meta->>'calls', '0')::bigint + 1)),
+         updated = EXCLUDED.updated`,
+      [model, usage.input ?? 0, usage.chars ?? 0],
+    );
+  } catch (err) {
+    // the stats are best-effort -- but a silent failure reads as a broken
+    // feature; the console carries the reason
+    console.warn("zjs-embed-usage: recording failed", err);
   }
 }
 
-export function readEmbedUsage(): EmbedUsageTotals {
+export async function readEmbedUsage(): Promise<EmbedUsageTotals> {
   try {
-    const raw = localStorage.getItem(EMBED_USAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as Partial<EmbedUsageTotals>;
+    const rows = await pgQuery<{ meta: { model?: string; input?: number; chars?: number; calls?: number } }>(
+      `SELECT meta FROM knowledge WHERE id = 'usage:embed' AND kind = 'usage'`,
+      [],
+    );
+    const meta = rows?.[0]?.meta;
+    if (meta) {
       return {
-        model: String(parsed.model ?? ""),
-        input: Number(parsed.input) || 0,
-        chars: Number(parsed.chars) || 0,
-        calls: Number(parsed.calls) || 0,
+        model: String(meta.model ?? ""),
+        input: Number(meta.input) || 0,
+        chars: Number(meta.chars) || 0,
+        calls: Number(meta.calls) || 0,
       };
     }
-  } catch {
+  } catch (err) {
+    console.warn("zjs-embed-usage: read failed", err);
     /* fall through to the zero totals */
   }
   return { model: "", input: 0, chars: 0, calls: 0 };

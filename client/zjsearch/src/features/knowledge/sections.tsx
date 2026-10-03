@@ -24,7 +24,6 @@ import {
   MessageCircleQuestion,
   Pencil,
   Repeat,
-  Scale,
   Search,
   Sparkles,
   Star,
@@ -38,7 +37,7 @@ import { Link } from "@/components/Shell.tsx";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
-import { readEmbedUsage } from "@/lib/embed.ts";
+import { type EmbedUsageTotals, readEmbedUsage } from "@/lib/embed.ts";
 import { downloadAnswerMarkdown } from "@/lib/exporters.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -853,6 +852,18 @@ export function KindItemRows({
     parent owns. */
 export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; onReset: () => void }) {
   const t = useT();
+  const [embedUsage, setEmbedUsage] = useState<EmbedUsageTotals | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    void readEmbedUsage().then((totals) => {
+      if (live) {
+        setEmbedUsage(totals);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const rows: Array<{ label: string; value: string }> = stats
     ? [
         { label: t("knowledge_admin_threads"), value: String(stats.threads) },
@@ -868,8 +879,9 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
   return (
     <div className="space-y-6 animate-fade-in">
       {(() => {
-        const embed = readEmbedUsage();
-        if (!stats?.usage && !embed.calls) {
+        const embed = embedUsage?.calls ? embedUsage : undefined;
+        const llm = stats?.usage;
+        if (!llm && !embed) {
           return null;
         }
         // 思考 only reports on SDKs that break reasoning out (openai's
@@ -909,14 +921,14 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   </dl>
                 </>
               ) : null}
-              {embed.calls || stats?.usage?.rerank ? (
+              {embed || stats?.usage?.rerank || stats?.usage?.decision ? (
                 // 嵌入 and 重排序: the LLM group's language -- one title per
                 // group, plain 输入/调用 tiles inside; the two groups share
                 // ONE row (they stack below sm).  Both score input-only, so
                 // the endpoint's prompt_tokens IS its total ("Tokens" would
                 // imply an output half that does not exist).
                 <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2">
-                  {embed.calls ? (
+                  {embed ? (
                     <div>
                       <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
                       <dl className="mt-2 grid grid-cols-2 gap-2">
@@ -982,7 +994,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                         </div>
                         <div className="rounded-xl border border-line bg-surface px-3 py-2.5">
                           <dt className="flex items-center gap-1 text-xs text-ink-3">
-                            <Scale aria-hidden="true" className="size-3" />
+                            <Repeat aria-hidden="true" className="size-3" />
                             {t("knowledge_usage_calls")}
                           </dt>
                           <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
@@ -994,7 +1006,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   ) : null}
                 </div>
               ) : null}
-              {llmTiles.length === 0 && !embed.calls && !stats?.usage?.rerank && !stats?.usage?.decision ? (
+              {llmTiles.length === 0 && !embed && !stats?.usage?.rerank && !stats?.usage?.decision ? (
                 <p className="mt-4 text-[13px] text-ink-3">{t("knowledge_usage_empty")}</p>
               ) : null}
             </div>

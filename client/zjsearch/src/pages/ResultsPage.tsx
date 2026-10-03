@@ -442,21 +442,22 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     }
     // ONE logic for every citation: locate the source card in this run's
     // grid and flash it.  A card behind the reveal cap is not in the DOM
-    // yet -- expand that run's sources, wait for the commit, then locate.
-    // Only a truly missing card (should not happen) opens the page instead.
+    // yet -- KEEP expanding that run's sources (one batch per 查看更多
+    // click; [40] can sit several batches deep) until the card surfaces
+    // or the grid is exhausted.  Only a truly missing card opens the
+    // page instead.
     let card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
     // the poll must not outlive its page: a new search mid-wait unmounts
     // this list -- bail instead of window.open'ing from a dead view
     const startHref = hrefRef.current;
-    if (!card) {
+    for (let i = 0; !card && i < 24 && hrefRef.current === startHref; i++) {
       const more = document.getElementById(`ai-run-${run.runNo}`)?.querySelector<HTMLElement>("[data-view-more]");
-      if (more) {
-        more.click();
-        for (let i = 0; i < 10 && !card && hrefRef.current === startHref; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 30));
-          card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
-        }
+      if (!more) {
+        break;
       }
+      more.click();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      card = listRef.current?.querySelector<HTMLElement>(`[data-ai-n="${index}"]`);
     }
     // the card may sit outside the bounded sources box's viewport: bring
     // it into the box's view first (the box scrolls independently of the
@@ -648,7 +649,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       }
       const card = findResultCard(index - 1, result);
       if (!card) {
-        return false;
+        // a result beyond the loaded pages (infinite scroll): there is no
+        // card to scroll to yet -- the citation chip opens the page
+        // instead of dying silently
+        window.open(result.url, "_blank", "noopener");
+        return true;
       }
       scrollIntoViewAnimated(card, "start");
       // the dashed frame persists — the accumulating set of the results the

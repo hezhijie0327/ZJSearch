@@ -1489,18 +1489,13 @@ export function deleteSource(url: string): void {
 }
 
 /** The nuclear option: drop the tables themselves (schema recreated on
-    next boot).  The knowledge base's localStorage siblings die with it --
-    the embedding usage totals (zjs-embed-usage) are part of the same
-    account; a "reset" that leaves them behind reads as a broken reset. */
+    next boot).  The embedding usage totals are a knowledge row like every
+    other account -- they die with the table, so a reset leaves nothing
+    behind. */
 export function resetAll(): void {
   void enqueue(async () => {
     const { resetDatabase } = await import("@/lib/pg.ts");
     await resetDatabase();
-    try {
-      window.localStorage.removeItem("zjs-embed-usage");
-    } catch {
-      /* storage unavailable -- the DB reset still happened */
-    }
   });
 }
 
