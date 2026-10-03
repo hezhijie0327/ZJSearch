@@ -17,25 +17,42 @@ const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_
  * The run's macro-stage spine (规划 → 检索 → 撰写 → 核验): ONE strip under
  * the run title, the task card's own status language at strip scale --
  * done = check, active = the accent ping, pending = the hollow dot.
+ * ``done`` (the run settled) turns EVERY segment green -- the spine ends
+ * honestly instead of blinking 核验 forever.  ``verifying`` (the audit's
+ * citation count) labels the active audit segment with its workload.
  * Hidden entirely when the run carries no phase events (legacy threads);
  * the timeline below remains the full record, this only tells the user
  * where in the research they are.
  */
-export function PhaseStrip({ stage }: { stage?: AiSearchStage }) {
+export function PhaseStrip({
+  stage,
+  done = false,
+  verifying,
+}: {
+  stage?: AiSearchStage;
+  /** the run settled: every segment reads done */
+  done?: boolean;
+  /** the audit's citation count while it runs (核验 · N 条) */
+  verifying?: number;
+}) {
   const t = useT();
   if (!stage) {
     return null;
   }
-  const active = ORDER.indexOf(stage);
+  const active = done ? ORDER.length : ORDER.indexOf(stage);
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs" role="status">
       {ORDER.map((name, index) => {
-        const done = index < active;
-        const isActive = index === active;
+        const isDone = done || index < active;
+        const isActive = !done && index === active;
+        const label =
+          isActive && name === "audit" && verifying !== undefined
+            ? t("ai_phase_verifying", { n: String(verifying) })
+            : t(LABELS[name]);
         return (
           <span className="flex items-center gap-1.5" key={name}>
             {index > 0 ? <span aria-hidden="true" className="h-3 w-px bg-line" /> : null}
-            {done ? (
+            {isDone ? (
               <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
             ) : isActive ? (
               <span className="relative flex size-3 shrink-0 items-center justify-center">
@@ -46,11 +63,9 @@ export function PhaseStrip({ stage }: { stage?: AiSearchStage }) {
               <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-ink-3/50" />
             )}
             <span
-              className={`whitespace-nowrap ${
-                done ? "text-ink-3" : isActive ? "font-medium text-accent" : "text-ink-3"
-              }`}
+              className={`whitespace-nowrap ${isDone ? "text-ink-3" : isActive ? "font-medium text-accent" : "text-ink-3"}`}
             >
-              {t(LABELS[name])}
+              {label}
             </span>
           </span>
         );

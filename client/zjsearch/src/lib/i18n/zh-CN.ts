@@ -294,6 +294,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_phase_write: "撰写",
   ai_phase_audit: "核验",
   ai_phase_round: "第 {n} 轮",
+  ai_phase_verifying: "核验 · {n} 条引用",
   ai_finding_superseded: "已被修正",
   ai_finding_retracted: "已被撤回",
   ai_findings_gaps: "未决缺口",

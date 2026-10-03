@@ -122,6 +122,21 @@ def _grade_relation(claim: str, passage: str, is_zh: bool) -> tuple[str, float] 
     return verdict, confidence
 
 
+def citation_workload(answer: str, sources: dict[int, dict[str, str]]) -> int:
+    """How many citations the audit WOULD grade (the cited [n] marks that
+    have a known source, capped) -- the progress signal the phase event
+    carries before the grading rounds start."""
+    if not answer or not sources:
+        return 0
+    seen: set[int] = set()
+    for sentence in _SENTENCE_RE.split(answer):
+        for match in CITE_RE.finditer(sentence):
+            n = int(match.group(1))
+            if n in sources:
+                seen.add(n)
+    return min(len(seen), CLAIM_MAX)
+
+
 def citation_verdicts(
     answer: str,
     sources: dict[int, dict[str, str]],

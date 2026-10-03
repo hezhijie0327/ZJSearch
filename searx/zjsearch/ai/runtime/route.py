@@ -398,6 +398,14 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         self.rest: t.Iterator[str] | None = None
         self.primed = False
 
+    def _audit_total(self, answer: str) -> int:
+        """The audit's workload (the cited-[n] count) -- zero when the
+        audit cannot run (the phase event stays off and the strip never
+        blinks 核验 for nothing)."""
+        if not answer or self.state is None:
+            return 0
+        return audit.citation_workload(answer, self.state.entries)
+
     def _audit(self, answer: str) -> dict[str, t.Any] | None:
         """The audit phase's payload: every cited [n] graded against its
         source (citation_verdicts -- rerank pre-floor + decision choice).
@@ -465,9 +473,11 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             if kind == "settle":
                 if str(event.get("status") or "") == "error":
                     raise _UpstreamDead(str(event.get("halt") or "upstream returned an empty stream"))
-                audit_payload = self._audit("".join(answer_parts).strip())
-                if audit_payload is not None:
-                    self.buffer.append(wire.encode({"e": "phase", "name": "audit"}))
+                audit_answer = "".join(answer_parts).strip()
+                audit_total = self._audit_total(audit_answer)
+                if audit_total:
+                    self.buffer.append(wire.encode({"e": "phase", "name": "audit", "total": audit_total}))
+                audit_payload = self._audit(audit_answer)
                 merged = self._merged_settle(event)
                 self.buffer.append(wire.encode({**merged, **({"audit": audit_payload} if audit_payload else {})}))
                 self.rest = self._late("".join(answer_parts).strip(), awaiting, related_seen)
@@ -509,9 +519,11 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             # the loop guarantees exactly one settle; a missing one is a
             # protocol bug -- fail loudly rather than hang the client
             raise _UpstreamDead("the run ended without a settle event")
-        audit_payload = self._audit("".join(answer_parts).strip())
-        if audit_payload is not None:
-            yield wire.encode({"e": "phase", "name": "audit"})
+        audit_answer = "".join(answer_parts).strip()
+        audit_total = self._audit_total(audit_answer)
+        if audit_total:
+            yield wire.encode({"e": "phase", "name": "audit", "total": audit_total})
+        audit_payload = self._audit(audit_answer)
         merged = self._merged_settle(settle_event)
         yield wire.encode({**merged, **({"audit": audit_payload} if audit_payload else {})})
         yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)

@@ -239,6 +239,9 @@ export interface AiSearchRun {
       [n] -> verdict + confidence -- the sources card renders the badges;
       absent = no audit ran (decision off, or a legacy thread) */
   audit?: AiSearchAudit;
+  /** the audit's workload (the phase event's ``total``): the strip's
+      核验 · N 条 while the citations are being graded */
+  auditTotal?: number;
 }
 
 /** One citation's audit verdict: verified / contradicted / unsupported /
@@ -413,13 +416,15 @@ export function applyEvent(
     }
     case "phase": {
       // the macro-stage spine: one value active, the history kept (the
-      // run_summary record replays it); unknown names ignore
+      // run_summary record replays it); the audit leg carries its
+      // workload (total); unknown names ignore
       const name = String(event.name ?? "") as AiSearchStage;
       if (!["plan", "research", "write", "audit"].includes(name)) {
         return core;
       }
       const stages = run.stages[run.stages.length - 1] === name ? run.stages : [...run.stages, name];
-      runs[lastIdx] = { ...run, stage: name, stages };
+      const auditTotal = name === "audit" && typeof event.total === "number" ? event.total : run.auditTotal;
+      runs[lastIdx] = { ...run, auditTotal, stage: name, stages };
       return { ...core, runs };
     }
     case "open": {

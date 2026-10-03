@@ -672,8 +672,13 @@ function AiSearchRunSectionImpl({
   // through the research phase, FOLDED once the writer takes over (the
   // answer becomes the focus; the record is one click away) -- an explicit
   // user toggle always wins
+  // the box folds when the ANSWER starts streaming, not when the write
+  // turn opens: the writer's own reasoning streams into the open box (it
+  // IS the visible feedback during the longest silent stretch), and the
+  // two-column wrapper keeps the height its absolute rail pins to
   const researchOpen =
-    researchForced ?? ((streaming && !run.wrappingUp) || (run.status === "awaiting" && run.ask !== null));
+    researchForced ??
+    ((streaming && run.answer === "" && !run.direct) || (run.status === "awaiting" && run.ask !== null));
   // a settled run without an answer is a FAILURE the user must see (the
   // writer can degrade to an empty/fence-only stream after a full
   // research phase -- silent nothing reads as a hung page), EXCEPT when
@@ -757,7 +762,7 @@ function AiSearchRunSectionImpl({
         </div>
         {/* the macro-stage spine: visible even when the timeline folds --
             this is the orientation element for a ~10-minute deep run */}
-        <PhaseStrip stage={run.stage} />
+        <PhaseStrip done={run.status !== "streaming"} stage={run.stage} verifying={run.auditTotal} />
         <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
           <div className="break-words rounded-lg border border-line p-3">
             {run.steps.map((step, index) => (

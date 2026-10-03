@@ -293,6 +293,7 @@ export const EN = {
   ai_phase_write: "Write",
   ai_phase_audit: "Verify",
   ai_phase_round: "Round {n}",
+  ai_phase_verifying: "Verify · {n} citations",
   ai_finding_superseded: "superseded",
   ai_finding_retracted: "retracted",
   ai_findings_gaps: "Open questions",
