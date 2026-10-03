@@ -13,6 +13,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   judge: "ai_dec_judge",
   audit: "ai_dec_audit",
   evidence: "ai_dec_evidence_check",
+  coverage: "ai_dec_coverage",
 };
 
 function auditLabelOf(verdict: string): string {
@@ -248,7 +249,7 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
         <h3 className="text-base font-semibold text-ink">{t("ai_decisions_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{decisions.length}</span>
       </div>
-      <ul className="mt-3 space-y-1">
+      <ul className="mt-3 space-y-1 lg:max-h-[24vh] lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
         {decisions.map((decision, index) => {
           const label = PURPOSE_LABELS[decision.purpose] ?? "ai_decisions_card";
           const expanded = openIdx === index;

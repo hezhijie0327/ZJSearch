@@ -4,7 +4,7 @@ import { Check, CircleAlert, CircleStop } from "lucide-react";
 import type { AiSearchStage } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
 
-const ORDER: readonly AiSearchStage[] = ["plan", "research", "audit", "write"];
+const ORDER: readonly AiSearchStage[] = ["plan", "research", "write"];
 
 const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_phase_write" | "ai_phase_audit"> = {
   plan: "ai_phase_plan",

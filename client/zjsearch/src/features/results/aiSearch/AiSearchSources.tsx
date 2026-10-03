@@ -295,7 +295,7 @@ export function AiSearchSources({ sources, audit }: { sources: AiSearchSource[];
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
     // cap; this section pins its heading and scrolls the cards) -- no
     // expand/collapse toggle: every source is always one scroll away
-    <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col lg:min-h-0 lg:flex-1">
+    <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col lg:min-h-[16rem] lg:flex-1">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>

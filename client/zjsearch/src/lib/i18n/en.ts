@@ -316,6 +316,7 @@ export const EN = {
   ai_dec_score: "score",
   ai_dec_evidence_pass: "Reliable evidence",
   ai_dec_evidence_fail: "Failed check -- do not cite",
+  ai_dec_coverage: "Coverage referee",
   ai_dec_evidence_check: "Evidence check",
   ai_dec_audit_cited: "{n} citations graded",
   ai_audit_segment: "Citation audit · {n} checked",

@@ -10,8 +10,6 @@ import {
   CircleCheck,
   Database,
   DatabaseZap,
-  Repeat,
-  Scale,
   ShieldAlert,
   Wrench,
 } from "lucide-react";
@@ -96,12 +94,6 @@ export function AiRunFooter({
           : []),
         ...(usage.cache_write
           ? [{ icon: DatabaseZap, title: t("ai_usage_cache_write_title"), value: formatTokens(usage.cache_write) }]
-          : []),
-        ...(usage.rerank
-          ? [{ icon: Repeat, title: t("ai_usage_rerank_title"), value: formatTokens(usage.rerank.tokens) }]
-          : []),
-        ...(usage.decision
-          ? [{ icon: Scale, title: t("ai_usage_decision_title"), value: formatTokens(usage.decision.tokens) }]
           : []),
       ]
     : [];

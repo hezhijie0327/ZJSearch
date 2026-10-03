@@ -292,16 +292,22 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 # bored): the continuation note goes back as a user
                 # message and the loop runs another turn
                 yield {"e": "close", "id": entry}
-                if continuation is not None and refusals < 2:
+                note = None
+                if continuation is not None:
                     try:
                         note = continuation()
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.warning("zjsearch loop: continuation check failed: %r", exc)
                         note = None
-                    if note:
-                        refusals += 1
-                        messages.append({"role": "user", "content": note})
-                        continue
+                if note and refusals < 2:
+                    refusals += 1
+                    messages.append({"role": "user", "content": note})
+                    continue
+                if note:
+                    # the nudges are spent but the ledger is still open --
+                    # the WRITER must know the plan was not completed (an
+                    # honest research_note beats a confident partial)
+                    halt_message = note
                 break
             rounds += 1
             yield {"e": "calls", "id": entry, "round": rounds, "items": (display or _noop_display)(calls)}
@@ -352,7 +358,6 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     logger.warning("zjsearch loop: pre-write pass failed: %r", exc)
                     pre_events = []
                 if pre_events:
-                    yield {"e": "phase", "name": "audit"}
                     yield from pre_events
             # the researcher/writer handoff: the recalled past-research
             # sources fly as one sources event (numbered AFTER the live

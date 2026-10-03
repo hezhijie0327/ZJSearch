@@ -106,7 +106,7 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
     # thresholds are starting points (the RAG-gate cookbook's), to be
     # tuned against real runs.
     "sources_gate": {
-        "enabled": True,
+        "enabled": False,
         "head": 8,
         "injection_max": 0.70,
         "contradicts_min": 0.70,

@@ -23,15 +23,18 @@ def task_write_spec() -> dict[str, t.Any]:
     return {
         "name": TASK_TOOL,
         "description": (
-            "Create or update the SUBTASK LIST for this research.  First"
+            "Create or update the SUBTASK LIST for this research -- it is"
+            " the ONLY way the plan or its statuses ever change.  First"
             " round: decompose the request into 2-4 concrete, independent"
             " subtasks (each answerable by its own focused research)."
-            " Afterwards: update statuses as subtasks complete"
-            ' ({"title": ..., "status": "done"}), and whenever the research'
-            " uncovers an IMPORTANT new facet (a gap in the ledger), APPEND"
-            " it as a new subtask -- the plan grows with the findings."
-            "  The list is rendered to the user as your research plan --"
-            " keep it current."
+            " EVERY round afterwards: keep the list TRUE -- set a subtask"
+            ' to {"status": "done"} the moment its sources are gathered,'
+            ' "active" while researching it, and APPEND new subtasks whenever'
+            " the findings reveal an important facet you had not planned"
+            " for.  THE RESEARCH IS NOT COMPLETE while any subtask is"
+            " pending or active: finish it, or hand over only once every"
+            " subtask is done.  The list is rendered to the user as your"
+            " research plan -- keep it current."
         ),
         "parameters": {
             "type": "object",

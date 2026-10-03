@@ -317,6 +317,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_dec_score: "评分",
   ai_dec_evidence_pass: "证据可靠",
   ai_dec_evidence_fail: "未过核验 · 勿引用",
+  ai_dec_coverage: "覆盖裁判",
   ai_dec_evidence_check: "证据核验",
   ai_dec_audit_cited: "核验引用 {n} 条",
   ai_audit_segment: "核验引用 · {n} 条",
