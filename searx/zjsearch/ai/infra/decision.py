@@ -22,6 +22,7 @@ import os
 import typing as t
 
 from searx import settings
+from searx.zjsearch.ai.infra import security
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,16 @@ def sdk_missing() -> str | None:
     return None
 
 
+def capability() -> dict[str, str] | None:
+    """The page-data ``decision`` payload (token + model label); ``None``
+    when the feature is off or unconfigured -- the client hides the
+    surface then (the browser proxies its judgments through the route
+    with this token)."""
+    if not enabled() or not configured():
+        return None
+    return {"tk": security.issue_token(), "model": str(cfg().get("model"))}
+
+
 def judge(  # pylint: disable=too-many-return-statements
     state: t.Any,
     questions: dict[str, dict[str, t.Any]],
@@ -100,7 +111,11 @@ def judge(  # pylint: disable=too-many-return-statements
     or the upstream fails -- every consumer degrades silently (a decision
     is a lens, not a dependency).  The question shapes follow the SDK's
     own vocabulary: ``choice`` (criteria = label -> description),
-    ``score`` (criteria = ordered legend), ``noul`` (boolean)."""
+    ``score`` (criteria = ordered legend), ``noul`` (boolean).  The call
+    itself delegates to the FAMILY surface (``infra.sdk.typesafe`` -- the
+    client lifecycle, the extra_headers/extra_body escape hatches and the
+    typed-answer downgrade live there), like the rerank service
+    delegates to the dashscope family."""
     if not enabled() or not configured():
         return None
     block = cfg()
@@ -110,8 +125,6 @@ def judge(  # pylint: disable=too-many-return-statements
         return None
     if importlib.util.find_spec(SDK_PACKAGES["typesafe"]) is None:
         return None
-    from typesafe_sdk import TypeSafeClient  # pylint: disable=import-outside-toplevel
-
     trimmed = {
         name: questions[name]
         for name in list(questions)[:MAX_QUESTIONS]
@@ -119,45 +132,15 @@ def judge(  # pylint: disable=too-many-return-statements
     }
     if not trimmed:
         return None
+    from .sdk.typesafe import factory  # pylint: disable=import-outside-toplevel
+
+    bound = {**block, "api_key": decision_key(block)}
     try:
-        client = TypeSafeClient(
-            api_key=decision_key(block),
-            base_url=(str(block.get("base_url")).rstrip("/") if block.get("base_url") else None) or None,
-            timeout=timeout or 30.0,
-        )
-        response = client.system_one(
+        return factory(bound, str(block.get("base_url") or ""), "typesafe", "decision").system_one(
             state=str(state)[:MAX_STATE_CHARS] if isinstance(state, str) else state,
             questions=trimmed,
-            model=str(block.get("model")),
-            timeout=timeout or 30.0,
+            timeout=timeout,
         )
-        client.close()
-        answers = getattr(response, "answers", None)
-        if answers is None:
-            return None
-
-        def _plain(value: t.Any) -> t.Any:
-            """The SDK's typed answer models (ChoiceAnswer / ScoreAnswer /
-            NoulAnswer) downgrade to plain dicts -- pydantic's own dump when
-            the object speaks it, the dict when it is one, str for the
-            rest."""
-            dump = getattr(value, "model_dump", None)
-            if dump is not None:
-                return dump()
-            return value if isinstance(value, dict) else str(value)
-
-        plain_answers = {name: _plain(answer) for name, answer in answers.items()}
-        usage = getattr(response, "usage", None)
-        plain_usage = (
-            usage.model_dump()
-            if hasattr(usage, "model_dump")
-            else (dict(usage) if isinstance(usage, dict) else {"input_tokens": getattr(usage, "input_tokens", 0) or 0})
-        )
-        return {
-            "answers": plain_answers,
-            "usage": plain_usage,
-            "latency_ms": getattr(response, "latency_ms", None),
-        }
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_decision: judge failed: %s", exc)
         return None

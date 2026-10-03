@@ -60,9 +60,11 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
         timeout: float | None = None,
     ) -> dict[str, t.Any] | None:
         """One System-One judgment: ``(state, questions) -> {"answers",
-        "usage", "latency_ms"}`` with JSON-safe answers; ``None`` when
-        the upstream fails (the caller's lens degrades, the pipeline
-        does not)."""
+        "usage", "latency_ms"}`` with JSON-safe answers.  Raw question
+        dicts are accepted (the SDK coerces its own typed models); the
+        client is one self-contained connection per call, closed on every
+        path.  The caller's lens degrades on ``None`` (raised errors
+        propagate -- the service owns the fail-open)."""
         from typesafe_sdk import TypeSafeClient  # pylint: disable=import-outside-toplevel
 
         client = TypeSafeClient(
@@ -72,13 +74,16 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
             timeout=timeout or sdk_timeout(),
             headers=extra_headers(self.cfg) or None,
         )
-        response = client.system_one(
-            state,
-            questions,
-            model=str(self.cfg.get("model")),
-            timeout=timeout or sdk_timeout(),
-            extra_body=extra_body(self.cfg) or None,
-        )
+        try:
+            response = client.system_one(
+                state,
+                questions,
+                model=str(self.cfg.get("model")),
+                timeout=timeout or sdk_timeout(),
+                extra_body=extra_body(self.cfg) or None,
+            )
+        finally:
+            client.close()
         answers = _field(response, "answers")
         if not isinstance(answers, dict) or not answers:
             return None

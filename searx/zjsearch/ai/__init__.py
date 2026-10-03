@@ -42,12 +42,17 @@ def _capabilities() -> dict[str, dict[str, str] | None]:
     the key then and the client hides the feature's entry point."""
 
     from searx.zjsearch.ai import runtime  # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.runtime import embed_route, overview  # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.runtime import (  # pylint: disable=import-outside-toplevel
+        decision_route,
+        embed_route,
+        overview,
+    )
 
     return {
         "ai": overview.capability(),
         "ai_search": runtime.capability(),
         "embedding": embed_route.capability(),
+        "decision": decision_route.capability(),
     }
 
 

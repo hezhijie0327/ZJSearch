@@ -79,6 +79,10 @@ export interface GlobalData {
       when the zjsearch.embedding feature is off/unconfigured — the
       history drawer's semantic search hides itself */
   embedding?: { tk: string; model: string; dimensions?: number };
+  /** Decision-model capability (token + model): absent when the
+      zjsearch.decision block is off/unconfigured — the browser proxies its
+      SystemOne judgments (choice / score / noul) through /zjsearch/ai/decision */
+  decision?: { tk: string; model: string };
   /** true when THIS request runs in AI search takeover (ai=1 + capability):
       the classic engine fan-out was skipped, the page is the agent */
   ai_mode?: boolean;

@@ -39,6 +39,11 @@ def _decision_view() -> flask.Response:
     return flask.jsonify(result)
 
 
+def capability() -> dict[str, str] | None:
+    """The page-data ``decision`` payload (delegates to the service)."""
+    return decision.capability()
+
+
 def install(app: flask.Flask) -> None:
     """Register the decision route; chained from the ``searx.zjsearch.ai``
     package install.  Silent when not configured."""
