@@ -238,18 +238,20 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
                   : "ai_task_status_pending",
           )}
         </span>
-        {task.status === "done" ? (
-          <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
-        ) : task.status === "active" ? (
-          <span className="relative mt-1 flex size-3 shrink-0 items-center justify-center">
-            <span className="absolute size-3 animate-ping rounded-full bg-accent/40" />
-            <span className="size-1.5 rounded-full bg-accent" />
-          </span>
-        ) : task.status === "missed" ? (
-          <CircleAlert aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-warning" />
-        ) : (
-          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-ink-3/50" />
-        )}
+        <span className="relative mt-0.5 flex size-3 shrink-0 items-center justify-center">
+          {task.status === "done" ? (
+            <Check aria-hidden="true" className="size-3 text-ok" />
+          ) : task.status === "active" ? (
+            <>
+              <span aria-hidden="true" className="absolute size-3 animate-ping rounded-full bg-accent/40" />
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-accent" />
+            </>
+          ) : task.status === "missed" ? (
+            <CircleAlert aria-hidden="true" className="size-3 text-warning" />
+          ) : (
+            <span aria-hidden="true" className="size-1.5 rounded-full bg-ink-3/50" />
+          )}
+        </span>
         <span className={`min-w-0 flex-1 break-words ${task.status === "done" ? "text-ink-3" : "text-ink"}`} dir="auto">
           {task.title}
           {task.status === "missed" ? (
@@ -703,7 +705,18 @@ function AiSearchRunSectionImpl({
       {/* the run's macro-stage spine: the RUN's own line under the title --
           it covers 撰写/核验 which live outside the research box, so it
           must not read as part of the collapsible */}
-      <PhaseStrip done={run.status !== "streaming"} stage={run.stage} />
+      <PhaseStrip
+        stage={run.stage}
+        state={
+          run.status === "streaming"
+            ? "streaming"
+            : run.status === "awaiting"
+              ? "awaiting"
+              : run.stopped
+                ? "stopped"
+                : "done"
+        }
+      />
 
       {/* the clarify modal floats OVER the page -- PORTALed to the body:
           the run section's animate-fade-up leaves a residual transform and
@@ -929,11 +942,11 @@ function AiSearchRunSectionImpl({
                 squeezed to the answer column's height and collapsed during
                 the write phase).  Below lg it stacks under the answer. */}
             <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:max-h-[calc(100vh-3.5rem)] lg:w-80 lg:shrink-0 lg:flex-col xl:w-96">
+              {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
               {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
               {run.learnings || run.gaps ? (
                 <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />
               ) : null}
-              {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
               {(run.decisions ?? []).length > 0 ? <DecisionsCard decisions={run.decisions ?? []} /> : null}
               {run.sources.length > 0 ? (
                 <AiSearchSources audit={run.audit} sources={run.sources} />

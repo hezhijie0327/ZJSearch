@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronDown, Scale } from "lucide-react";
+import { ChevronDown, CircleHelp, CornerDownRight, Scale } from "lucide-react";
 import { useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import type { AiDecision } from "@/features/results/aiSearch/timeline.ts";
@@ -132,15 +132,22 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       <div className="mt-1.5 space-y-2">
         {questions.map((question) => (
           <div key={question.name}>
-            <p className="break-words text-ink-2" dir="auto">
-              <span className="font-medium text-accent">{t("ai_dec_q")}</span>
-              {question.instructions ?? question.name}
-            </p>
-            <p className="mt-0.5 flex items-center gap-1.5">
-              <span className="font-medium text-accent">{t("ai_dec_a")}</span>
-              {answers[question.name] ? <span className="min-w-0 flex-1" /> : <span className="text-ink-3">—</span>}
-            </p>
-            {answers[question.name] ? <AnswerValue answer={answers[question.name]} /> : null}
+            <div className="flex items-start gap-1.5">
+              <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
+              <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
+                {question.instructions ?? question.name}
+              </p>
+            </div>
+            {answers[question.name] ? (
+              <div className="flex items-start gap-1.5">
+                <CornerDownRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
+                <div className="min-w-0 flex-1">
+                  <AnswerValue answer={answers[question.name]} />
+                </div>
+              </div>
+            ) : (
+              <p className="ps-5 text-ink-3">—</p>
+            )}
           </div>
         ))}
       </div>
@@ -157,10 +164,12 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
             typeof value === "object" && value ? (value as Record<string, unknown>).noul : Number(value) || 0;
           return (
             <div key={key}>
-              <p className="break-words text-ink-2" dir="auto">
-                <span className="font-medium text-accent">{t("ai_dec_q")}</span>
-                {titles[idx] ?? key}
-              </p>
+              <div className="flex items-start gap-1.5">
+                <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
+                <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
+                  {titles[idx] ?? key}
+                </p>
+              </div>
               <AnswerValue answer={{ type: "noul", noul: noulValue }} />
             </div>
           );
@@ -272,15 +281,12 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
               <Collapse className={expanded ? "mt-1" : ""} open={expanded}>
                 <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-xs leading-relaxed">
                   {decision.question ? (
-                    <p className="break-words text-ink-2" dir="auto">
-                      <span className="font-medium text-accent">{t("ai_dec_q")}</span>
-                      {decision.question}
-                    </p>
-                  ) : null}
-                  {decision.answer !== undefined || decision.purpose === "audit" ? (
-                    <p className="mt-1 break-words">
-                      <span className="font-medium text-accent">{t("ai_dec_a")}</span>
-                    </p>
+                    <div className="flex items-start gap-1.5">
+                      <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
+                      <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
+                        {decision.question}
+                      </p>
+                    </div>
                   ) : null}
                   <DecisionBody decision={decision} />
                 </div>

@@ -305,8 +305,6 @@ export const EN = {
   ai_dec_judge: "Judge",
   ai_dec_audit: "Citation audit",
   ai_dec_question: "Question",
-  ai_dec_q: "Q.",
-  ai_dec_a: "A.",
   ai_dec_raw: "Raw answer",
   ai_dec_rel: "Relevant",
   ai_dec_evidence: "Has evidence",

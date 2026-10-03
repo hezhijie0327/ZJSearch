@@ -306,8 +306,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_dec_judge: "模型判定",
   ai_dec_audit: "引用审计",
   ai_dec_question: "问题",
-  ai_dec_q: "问:",
-  ai_dec_a: "答:",
   ai_dec_raw: "原始结果",
   ai_dec_rel: "主题相关",
   ai_dec_evidence: "含答案证据",
