@@ -29,7 +29,7 @@ import {
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
-import { loadDocument, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
+import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
   deleteItem,
@@ -228,8 +228,8 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       };
     }
     if (inspected?.kind === "run") {
-      // the thread's full answer + cited sources + token usage,
-      // reassembled from the evt log
+      // the thread's full answer + cited sources + token usage, off the
+      // run_summary rollup row
       let cancelled = false;
       loadThreadAnswer(inspected.threadId ?? "")
         .then((result) => {
@@ -243,6 +243,22 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             setInspectedExtras(null);
           }
         });
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (inspected?.kind === "answer") {
+      // the overview archive's full text: the listing rows carry the
+      // 600-char head excerpt only
+      let cancelled = false;
+      loadItemBody(inspected.id)
+        .then((text) => {
+          if (!cancelled) setInspectedBody(text);
+        })
+        .catch(() => {
+          if (!cancelled) setInspectedBody("");
+        });
+      setInspectedExtras(null);
       return () => {
         cancelled = true;
       };

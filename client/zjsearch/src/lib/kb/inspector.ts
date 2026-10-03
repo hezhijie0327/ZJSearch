@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 /** The knowledge store's inspector reads: the thread inspector's answer
-    (reassembled from the evt log -- the run rows only carry a 600-char
-    head for the directory preview) with its cited sources and token
-    usage, and an archived document's full text (the reading pane).
-    Factored apart from projections.ts because both reads are standalone
-    SELECTs -- nothing in the write paths needs them. */
+    (the ``run_summary`` rollup row -- the full answer text lives there
+    since settle, no event-log reassembly) with its cited sources and
+    token usage, any knowledge row's full body, and an archived
+    document's full text (the reading pane).  Factored apart from
+    projections.ts because these reads are standalone SELECTs -- nothing
+    in the write paths needs them. */
 
 import type { OverviewUsage } from "@/lib/kb/projections.ts";
 import { pg, pgQuery, urlHash } from "@/lib/pg.ts";
@@ -14,20 +15,18 @@ export interface ThreadAnswer {
   answer: string;
   /** the run's cited sources in citation order (the inspector's 引用来源) */
   sources: Array<{ n: number; url: string; title: string; host: string; favicon: string }>;
-  /** the run's token usage (the run row's meta) */
+  /** the run's token usage (the run_summary rollup) */
   usage: OverviewUsage | null;
 }
 
-/** A thread's latest run answer, reassembled from the evt log, with the
-    run's cited sources and token usage.  Gallery placeholders strip --
-    the inspector renders plain markdown. */
+/** A thread's latest run answer off the rollup row, with the run's cited
+    sources and token usage.  Gallery placeholders strip -- the inspector
+    renders plain markdown. */
 export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> {
   await pg();
-  const rows = await pgQuery<{ answer: string }>(
-    `SELECT COALESCE(string_agg(data->>'t', '' ORDER BY n), '') AS answer
-     FROM run_event
-     WHERE thread_id = $1 AND data->>'e' = 'answer'
-       AND run_id = (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1)`,
+  const rows = await pgQuery<{ answer: string; usage: OverviewUsage | null; model: string | null }>(
+    `SELECT rs.answer, rs.usage, rs.model FROM run_summary rs
+     WHERE rs.run_id = (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1)`,
     [threadId],
   );
   const sources = await pgQuery<{ n: number; url: string; title: string; host: string; favicon: string | null }>(
@@ -38,41 +37,35 @@ export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> 
      ORDER BY n`,
     [threadId],
   );
-  const usageRows = await pgQuery<{ meta: Record<string, unknown> }>(
-    "SELECT meta FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1",
-    [threadId],
-  );
-  const runMeta = (usageRows?.[0]?.meta ?? {}) as {
-    model?: string;
-    usage?: {
-      input?: number;
-      output?: number;
-      thoughts?: number | null;
-      cached?: number;
-      rerank?: { calls: number; tokens: number };
-    };
-  };
-  const usage = runMeta.usage
+  const row = rows?.[0];
+  const usage = row?.usage
     ? {
-        model: runMeta.model ?? null,
-        input: runMeta.usage.input ?? null,
-        output: runMeta.usage.output ?? null,
-        thoughts: runMeta.usage.thoughts ?? null,
-        cached: runMeta.usage.cached ?? null,
-        rerank: runMeta.usage.rerank,
+        model: row.model ?? null,
+        input: row.usage.input ?? null,
+        output: row.usage.output ?? null,
+        thoughts: row.usage.thoughts ?? null,
+        cached: row.usage.cached ?? null,
+        rerank: row.usage.rerank,
       }
     : null;
   return {
-    answer: String(rows?.[0]?.answer ?? "").replace(/\{\{zjs-gallery:\d+\}\}/g, ""),
-    sources: (sources ?? []).map((row) => ({
-      n: Number(row.n) || 0,
-      url: String(row.url ?? ""),
-      title: String(row.title ?? ""),
-      host: String(row.host ?? ""),
-      favicon: String(row.favicon ?? ""),
+    answer: String(row?.answer ?? "").replace(/\{\{zjs-gallery:\d+\}\}/g, ""),
+    sources: (sources ?? []).map((source) => ({
+      n: Number(source.n) || 0,
+      url: String(source.url ?? ""),
+      title: String(source.title ?? ""),
+      host: String(source.host ?? ""),
+      favicon: String(source.favicon ?? ""),
     })),
     usage,
   };
+}
+
+/** Any knowledge row's full body (the listings carry the 600-char head
+    excerpt only -- the inspector fetches the whole text on open). */
+export async function loadItemBody(id: string): Promise<string> {
+  const rows = await pgQuery<{ body: string }>("SELECT body FROM knowledge WHERE id = $1", [id]);
+  return String((rows ?? [])[0]?.body ?? "");
 }
 
 /** One archived document's full markdown (the inspector's reading pane). */

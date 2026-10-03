@@ -117,7 +117,18 @@ export function rowToItem(row: Record<string, unknown>): KnowledgeItem {
   };
 }
 
+/** The display columns: ``head AS body`` -- every listing/search row
+    carries the 600-char write-time excerpt and NEVER detoasts the full
+    text (the old shape dragged 40 full documents through the WASM just
+    to render 90-char previews).  Full text is the inspector's business:
+    loadItemBody / the corpus columns below. */
 export const ITEM_COLUMNS =
+  "id, kind, thread_id, run_id, url, url_hash, host, title, head AS body, tags, meta, status, n, pinned, refs, cited, updated";
+
+/** The corpus columns: the REAL body -- the AI-context paths (the writer
+    corpus, the past_research index) feed ~1500-char heads to the model
+    and need the whole text, bounded by their own LIMIT. */
+export const CORPUS_COLUMNS =
   "id, kind, thread_id, run_id, url, url_hash, host, title, body, tags, meta, status, n, pinned, refs, cited, updated";
 
 // ---------------------------------------------------------- ordered queue

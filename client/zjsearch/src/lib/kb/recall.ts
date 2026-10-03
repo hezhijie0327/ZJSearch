@@ -8,7 +8,7 @@
     rows), aggregated on demand -- the graph is a query, not a table. */
 
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
-import { enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem } from "@/lib/kb/shared.ts";
+import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
 
 const SEARCHABLE_KINDS = ["answer", "source", "document", "memory", "call", "task", "clarify", "run"];
@@ -22,6 +22,7 @@ async function hybridRecall(
   query: string,
   kinds: string[],
   limit: number,
+  fullBody = false,
 ): Promise<Array<{ item: KnowledgeItem; score: number }>> {
   const trimmed = query.trim();
   if (!trimmed) {
@@ -43,7 +44,7 @@ async function hybridRecall(
   const [keywordRows, semanticRows] = await Promise.all([
     keywords
       ? pgQuery<Record<string, unknown>>(
-          `SELECT ${ITEM_COLUMNS}, (search_text <@> to_bm25query($1, 'knowledge_bm25')) AS _score
+          `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, (search_text <@> to_bm25query($1, 'knowledge_bm25')) AS _score
            FROM knowledge
            WHERE kind IN (${kindList}) AND (search_text <@> to_bm25query($1, 'knowledge_bm25')) <> 0
            ORDER BY _score DESC LIMIT $2`,
@@ -57,7 +58,7 @@ async function hybridRecall(
             return [] as Record<string, unknown>[];
           }
           return pgQuery<Record<string, unknown>>(
-            `SELECT ${ITEM_COLUMNS}, 1 - (embedding <=> $1::vector) AS _score
+            `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, 1 - (embedding <=> $1::vector) AS _score
              FROM knowledge
              WHERE kind IN (${kindList}) AND embedding IS NOT NULL
              ORDER BY embedding <=> $1::vector LIMIT $2`,
@@ -70,7 +71,7 @@ async function hybridRecall(
   bump(semanticRows, 1.0);
   if (scores.size === 0 && trimmed.length >= 2) {
     const rescued = await pgQuery<Record<string, unknown>>(
-      `SELECT ${ITEM_COLUMNS}, word_similarity($1, title) AS _score
+      `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, word_similarity($1, title) AS _score
        FROM knowledge
        WHERE kind IN (${kindList}) AND word_similarity($1, title) >= 0.3
        ORDER BY _score DESC LIMIT $2`,
@@ -100,7 +101,7 @@ async function tagVocabulary(): Promise<string[]> {
 
 /** The knowledge-graph recall dimension: match the query against the tag
     vocabulary, pull rows sharing the seed tags (more shared tags first). */
-async function graphRecall(query: string, kinds: string[], limit: number): Promise<KnowledgeItem[]> {
+async function graphRecall(query: string, kinds: string[], limit: number, fullBody = false): Promise<KnowledgeItem[]> {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) {
     return [];
@@ -114,7 +115,7 @@ async function graphRecall(query: string, kinds: string[], limit: number): Promi
   }
   const kindList = kinds.map((kind) => `'${kind.replaceAll("'", "")}'`).join(",");
   const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT ${ITEM_COLUMNS}, (
+    `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, (
        SELECT count(*) FROM jsonb_array_elements_text(tags) AS t
        WHERE t = ANY($1::text[])
      ) AS _hits
@@ -230,8 +231,8 @@ export async function searchKnowledge(
     incentive).  Fuses the hybrid dimension with the tag-graph dimension. */
 export async function recallCorpus(query: string, limit = 6): Promise<KnowledgeItem[]> {
   const [hybrid, graph] = await Promise.all([
-    hybridRecall(query, ["source", "answer"], limit),
-    graphRecall(query, ["source", "answer"], limit),
+    hybridRecall(query, ["source", "answer"], limit, true),
+    graphRecall(query, ["source", "answer"], limit, true),
   ]);
   const scores = new Map<string, { item: KnowledgeItem; score: number }>();
   const bump = (items: KnowledgeItem[], weight: number) => {
@@ -259,8 +260,8 @@ export async function recallPages(
   limit = 4,
 ): Promise<Array<{ url: string; title: string; chars: number; text: string }>> {
   const [hybrid, graph] = await Promise.all([
-    hybridRecall(query, ["document"], limit),
-    graphRecall(query, ["document"], limit),
+    hybridRecall(query, ["document"], limit, true),
+    graphRecall(query, ["document"], limit, true),
   ]);
   const scores = new Map<string, { item: KnowledgeItem; score: number }>();
   const bump = (items: KnowledgeItem[], weight: number) => {

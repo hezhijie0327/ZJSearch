@@ -18,6 +18,7 @@
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
 import { aiTokenValue, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
+import { invalidateStatsCache } from "@/lib/kb/stats.ts";
 import { pgQuery, pgTransaction, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
 
 /** The structural shape the store reads off a settled run.  The feature
@@ -53,6 +54,9 @@ export interface RunSnapshot {
   /** the user's answered clarify text ("" = skipped) */
   clarify?: string | null;
   tags?: string[];
+  /** the macro phases the run walked (the wire's ``phase`` events, in
+      order) -- the run_summary row replays them for the directory */
+  phases?: string[];
   steps?: Array<{
     kind: string;
     round?: number;
@@ -323,6 +327,34 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         [threadId, run.q.slice(0, 300), String(run.answer ?? "").slice(0, 400), now],
         tx,
       );
+      // the per-run rollup: the directory/inspector/stats reads that used
+      // to reassemble from the event log (or aggregate the whole
+      // projections table) become one-row reads off this small table
+      await pgQuery(
+        `INSERT INTO run_summary (run_id, thread_id, q, mode, model, status, events, sources, answer, usage, phases, started_at, settled_at)
+         VALUES ($1, $2, $3, $4, $5, $6,
+           (SELECT count(*) FROM run_event re WHERE re.run_id = $1),
+           $7, $8, $9::jsonb, $10::jsonb, $11, $12)
+         ON CONFLICT (run_id) DO UPDATE SET q = EXCLUDED.q, mode = EXCLUDED.mode, model = EXCLUDED.model,
+           status = EXCLUDED.status, events = EXCLUDED.events, sources = EXCLUDED.sources,
+           answer = EXCLUDED.answer, usage = EXCLUDED.usage, phases = EXCLUDED.phases,
+           started_at = EXCLUDED.started_at, settled_at = EXCLUDED.settled_at`,
+        [
+          runId,
+          threadId,
+          run.q.slice(0, 300),
+          run.mode ?? "",
+          run.model ?? null,
+          run.status || "done",
+          (run.sources ?? []).length,
+          String(run.answer ?? ""),
+          run.usage ? JSON.stringify(run.usage) : null,
+          JSON.stringify(run.phases ?? []),
+          Number(run.startedAt ?? now) || now,
+          now,
+        ],
+        tx,
+      );
       // the task card + the clarify archive
       if ((run.tasks ?? []).length > 0) {
         await pgQuery(
@@ -455,6 +487,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         }
       }
     });
+    invalidateStatsCache();
     void embedPending();
     scheduleTagNormalize();
   });
@@ -688,13 +721,15 @@ export function toggleItemPin(id: string, on: boolean): void {
   });
 }
 
-/** Delete one projection row by id.  An overview takes its (query,
-    source) ref rows with it and steps the cited sources' counters back
-    down; other kinds are a single DELETE (sources go through
-    deleteSource, which cascades by url_hash). */
+/** Delete one projection row by id.  A run takes its summary row with
+    it; an overview takes its (query, source) ref rows and steps the
+    cited sources' counters back down; other kinds are a single DELETE
+    (sources go through deleteSource, which cascades by url_hash). */
 export function deleteItem(id: string): void {
   void enqueue(async () => {
-    if (id.startsWith("ovw:")) {
+    if (id.startsWith("run:")) {
+      await pgQuery("DELETE FROM run_summary WHERE run_id = $1", [id.slice(4)]);
+    } else if (id.startsWith("ovw:")) {
       const queryHash = id.slice(4);
       const refs = await pgQuery<{ url_hash: string }>(
         "SELECT url_hash FROM knowledge WHERE kind = 'source_ref' AND id LIKE 'ref:ovw:' || $1 || ':%'",
@@ -711,16 +746,20 @@ export function deleteItem(id: string): void {
       ]);
     }
     await pgQuery("DELETE FROM knowledge WHERE id = $1", [id]);
+    invalidateStatsCache();
   });
 }
 
-/** A thread's everything: events, projections, provenance -- one DELETE
-    per table (the thread head row goes with it). */
+/** A thread's everything: events, projections, the run rollups,
+    provenance -- one DELETE per table (the thread head row goes with
+    it). */
 export function deleteThread(threadId: string): void {
   void enqueue(async () => {
     await pgQuery("DELETE FROM knowledge WHERE thread_id = $1", [threadId]);
     await pgQuery("DELETE FROM run_event WHERE thread_id = $1", [threadId]);
+    await pgQuery("DELETE FROM run_summary WHERE thread_id = $1", [threadId]);
     await pgQuery("DELETE FROM thread_head WHERE thread_id = $1", [threadId]);
+    invalidateStatsCache();
   });
 }
 
@@ -730,6 +769,7 @@ export function deleteSource(url: string): void {
   const hash = urlHash(url);
   void enqueue(async () => {
     await pgQuery("DELETE FROM knowledge WHERE url_hash = $1 AND kind IN ('source', 'source_ref', 'document')", [hash]);
+    invalidateStatsCache();
   });
 }
 

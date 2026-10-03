@@ -8,10 +8,12 @@
     knowledge operation pays the load once, the promise is cached for the
     session.
 
-    Schema v4 -- the event log moves to its OWN table (`run_event`), so
-    every projection scan, aggregate and work queue costs O(projections),
-    never O(projections + events); the projections stay one `knowledge`
-    table (kinds are few, identities are id-keyed):
+    Schema v5 -- the aggregates move OFF the hot read paths: the per-kind
+    counts/bytes live in a trigger-maintained ``stats`` table, every
+    settled run carries a ``run_summary`` row (full answer + usage), and
+    ``knowledge`` gains write-time ``bytes``/``head`` columns -- every
+    scan, aggregate and work queue costs O(projections), never
+    O(projections + events), and no read ever detoasts a full text:
 
     - run_event   the wire log, one row per event (data = the whole event,
                   PK (run_id, n)) -- replay's source, excluded from every
@@ -19,9 +21,10 @@
     - knowledge   the projections, one row per knowledge object:
                   run / answer (the AI Overview archive) / source /
                   source_ref / document / memory / call / task / clarify
-    - thread_head the thread directory, maintained at settle (the old
-                  GROUP BY + correlated-subqueries aggregate re-fired on
-                  every evt flush; this is a 40-row indexed listing)
+    - thread_head the thread directory, maintained at settle (a 40-row
+                  indexed listing)
+    - run_summary the per-run rollup the directory/inspector/stats read
+    - stats       the per-kind counter/byte ledger (trigger-maintained)
 
     Relational furniture v4 puts to work: a GIN index on tags (the tag
     queries ride `?` / `?|`), partial indexes for the two work queues
@@ -75,9 +78,9 @@ export function pg(): Promise<Pg> {
     contents are destroyed. */
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
-  await db.query("DROP TABLE IF EXISTS knowledge CASCADE");
-  await db.query("DROP TABLE IF EXISTS run_event CASCADE");
-  await db.query("DROP TABLE IF EXISTS thread_head CASCADE");
+  for (const table of ["knowledge", "run_event", "thread_head", "run_summary", "stats"]) {
+    await db.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
+  }
   await createSchema(db);
 }
 
@@ -162,20 +165,63 @@ async function boot(): Promise<Pg> {
     }
   }
   await createSchema(db);
+  scheduleVacuum(db);
   return db;
 }
 
-/** The schema DDL + the idempotent data repairs: boot runs it once, the
-    full reset re-runs it on the spot (the re-runnable migration/backfill
-    guards make a fresh drop + recreate exact). */
+/** A throttled `VACUUM ANALYZE` (one shot per 24h, 30s after boot so it
+    never competes with the first queries): the visibility map an index-only
+    scan needs is only built by VACUUM, and a database that never gets one
+    degrades every `GROUP BY`/count onto full heap scans -- the stats page's
+    old sluggishness had this as a cofactor.  Fire-and-forget: a failure
+    (or a webview without localStorage) costs nothing. */
+function scheduleVacuum(db: Pg): void {
+  setTimeout(() => {
+    void (async () => {
+      try {
+        const at = Number(localStorage.getItem("zjs-pg-vacuum-at") ?? 0);
+        if (Date.now() - at < 24 * 3600 * 1000) {
+          return;
+        }
+        localStorage.setItem("zjs-pg-vacuum-at", String(Date.now()));
+        await db.query("VACUUM ANALYZE knowledge");
+        await db.query("VACUUM ANALYZE run_event");
+      } catch (err) {
+        console.warn("zjsearch pg: vacuum pass failed (harmless)", err);
+      }
+    })();
+  }, 30_000);
+}
+
+/** The schema DDL (idempotent): boot runs it once, the full reset re-runs
+    it on the spot.  v5's marker is the ``run_summary`` table: a database
+    WITHOUT it is a v4 store -- compatibility is explicitly waived, so it
+    dies WHOLESALE (the v2 precedent) and the fresh schema rises in its
+    place.  The relational furniture:
+
+    - ``knowledge.bytes`` / ``knowledge.head`` -- computed ONCE per write by
+      a BEFORE trigger (``octet_length`` forces a TOAST detoast; doing it at
+      read time was the stats page's ``sum(octet_length(body))`` full-scan
+      tax).  ``head`` is the listing excerpt: directory queries select
+      ``head AS body`` and never touch the full text.
+    - ``stats`` -- per-kind row counts + bytes, maintained by an AFTER
+      trigger (inserts/upserts/deletes all land correctly, deletes included
+      -- no write-site bookkeeping to forget, no drift).
+    - ``run_summary`` -- one row per settled run (full answer text, usage,
+      phases): the directory/inspector/stats reads that used to reassemble
+      from the event log become one-row (or one-small-table) reads. */
 async function createSchema(db: Pg): Promise<void> {
   // the width comes from the SAME capability the embed calls use --
   // whatever the boot payload carried, the column matches the vectors
   const dims = embeddingDimensions() ?? pgDimensions;
-  // the event log's own table (v4): its existence is the schema marker --
-  // a database without it carries v3 evt rows to copy over
-  const hadRunEvent = await db.query<{ present: boolean }>("SELECT to_regclass('run_event') IS NOT NULL AS present");
-  const fresh = !(hadRunEvent.rows ?? [])[0]?.present;
+  const hadV5 = await db.query<{ present: boolean }>("SELECT to_regclass('run_summary') IS NOT NULL AS present");
+  const carried = !(hadV5.rows ?? [])[0]?.present;
+  if (carried) {
+    // a v4 database (or a fresh one -- the drops no-op): v4 dies wholesale
+    for (const table of ["knowledge", "run_event", "thread_head"]) {
+      await db.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
+    }
+  }
   await db.query(`CREATE TABLE IF NOT EXISTS knowledge (
     id          text PRIMARY KEY,
     kind        text NOT NULL,
@@ -186,6 +232,8 @@ async function createSchema(db: Pg): Promise<void> {
     host        text,
     title       text NOT NULL DEFAULT '',
     body        text NOT NULL DEFAULT '',
+    head        text NOT NULL DEFAULT '',
+    bytes       integer NOT NULL DEFAULT 0,
     meta        jsonb NOT NULL DEFAULT '{}',
     status      text NOT NULL DEFAULT 'done',
     n           integer,
@@ -218,53 +266,69 @@ async function createSchema(db: Pg): Promise<void> {
     updated   double precision NOT NULL DEFAULT 0,
     pinned    integer NOT NULL DEFAULT 0
   )`);
-  if (fresh) {
-    // the v3 -> v4 upgrade, IN PLACE: the evt rows move to their own
-    // table (DO NOTHING keeps a crash-resumed re-run idempotent), the
-    // projections table loses them and v3's dead column; nothing replays,
-    // nothing drops.  Failure-safe: a thrown copy leaves the data in
-    // place and the next boot resumes (the DELETE only runs after a
-    // clean copy).
-    try {
-      await db.query(
-        `INSERT INTO run_event (run_id, n, thread_id, occurred_at, data)
-         SELECT run_id, n, thread_id, occurred_at, meta FROM knowledge
-         WHERE kind = 'evt' AND run_id IS NOT NULL AND n IS NOT NULL
-         ON CONFLICT DO NOTHING`,
-      );
-      await db.query("DELETE FROM knowledge WHERE kind = 'evt'");
-      await db.query("ALTER TABLE knowledge DROP COLUMN IF EXISTS parent_id");
-    } catch (err) {
-      console.warn("zjsearch pg: v3->v4 event-log migration failed -- will retry next boot", err);
-    }
-  }
-  // the thread directory backfill -- EVERY boot, idempotent: threads that
-  // predate thread_head (the v3 era, or a run row written by anything
-  // other than settleRun) join the directory here.  settleRun stays the
-  // owner of live counters (DO NOTHING never clobbers them).
-  try {
-    await db.query(
-      `INSERT INTO thread_head (thread_id, title, preview, runs, sources, updated, pinned)
-       SELECT k.thread_id,
-              (SELECT k2.title FROM knowledge k2 WHERE k2.thread_id = k.thread_id AND k2.kind = 'run' ORDER BY k2.n LIMIT 1),
-              COALESCE((SELECT substring(k3.meta->>'answer' FROM 1 FOR 400) FROM knowledge k3
-                        WHERE k3.thread_id = k.thread_id AND k3.kind = 'run' ORDER BY k3.n DESC LIMIT 1), ''),
-              count(*),
-              COALESCE(sum((k.meta->>'sources')::int), 0),
-              max(k.updated),
-              max(k.pinned)
-       FROM knowledge k WHERE k.kind = 'run' AND k.thread_id IS NOT NULL
-       GROUP BY k.thread_id
-       ON CONFLICT (thread_id) DO NOTHING`,
-    );
-  } catch (err) {
-    console.warn("zjsearch pg: thread_head backfill failed", err);
-  }
+  await db.query(`CREATE TABLE IF NOT EXISTS run_summary (
+    run_id      text PRIMARY KEY,
+    thread_id   text NOT NULL,
+    q           text NOT NULL DEFAULT '',
+    mode        text NOT NULL DEFAULT '',
+    model       text,
+    status      text NOT NULL DEFAULT 'done',
+    events      integer NOT NULL DEFAULT 0,
+    sources     integer NOT NULL DEFAULT 0,
+    answer      text NOT NULL DEFAULT '',
+    usage       jsonb,
+    phases      jsonb NOT NULL DEFAULT '[]',
+    started_at  double precision,
+    settled_at  double precision
+  )`);
+  await db.query("CREATE INDEX IF NOT EXISTS run_summary_thread ON run_summary (thread_id, settled_at DESC)");
+  await db.query(`CREATE TABLE IF NOT EXISTS stats (
+    kind    text PRIMARY KEY,
+    n       bigint NOT NULL DEFAULT 0,
+    bytes   bigint NOT NULL DEFAULT 0
+  )`);
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
   );
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_hnsw ON knowledge USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+  );
+  // the write-time projection triggers: bytes/head computed once per write;
+  // the per-kind ledger maintained on every insert/update/delete (the
+  // UPDATE guard skips no-op updates -- the embed pass touches columns the
+  // ledger does not read)
+  await db.query(`CREATE FUNCTION knowledge_bytes_trg() RETURNS trigger AS $$
+    DECLARE changed boolean := TG_OP = 'INSERT';
+    BEGIN
+      IF TG_OP = 'UPDATE' THEN
+        changed := NEW.body IS DISTINCT FROM OLD.body OR NEW.title IS DISTINCT FROM OLD.title
+          OR NEW.search_text IS DISTINCT FROM OLD.search_text;
+      END IF;
+      IF changed THEN
+        NEW.bytes := octet_length(NEW.body) + octet_length(NEW.title) + octet_length(COALESCE(NEW.search_text, ''));
+        NEW.head := left(NEW.body, 600);
+      END IF;
+      RETURN NEW;
+    END $$ LANGUAGE plpgsql`);
+  await db.query(
+    "CREATE TRIGGER knowledge_bytes BEFORE INSERT OR UPDATE ON knowledge FOR EACH ROW EXECUTE FUNCTION knowledge_bytes_trg()",
+  );
+  await db.query(`CREATE FUNCTION knowledge_stats_trg() RETURNS trigger AS $$
+    BEGIN
+      IF TG_OP = 'UPDATE' AND OLD.kind = NEW.kind AND OLD.bytes = NEW.bytes THEN
+        RETURN NULL;
+      END IF;
+      IF TG_OP <> 'DELETE' THEN
+        INSERT INTO stats (kind, n, bytes) VALUES (NEW.kind, 1, NEW.bytes)
+          ON CONFLICT (kind) DO UPDATE SET n = stats.n + 1, bytes = stats.bytes + EXCLUDED.bytes;
+      END IF;
+      IF TG_OP <> 'INSERT' THEN
+        UPDATE stats SET n = n - 1, bytes = bytes - OLD.bytes WHERE kind = OLD.kind;
+      END IF;
+      RETURN NULL;
+    END $$ LANGUAGE plpgsql`);
+  await db.query(
+    "CREATE TRIGGER knowledge_stats AFTER INSERT OR UPDATE OR DELETE ON knowledge FOR EACH ROW EXECUTE FUNCTION knowledge_stats_trg()",
   );
   // the tag dimension, relational at last: the `?`/`?|` membership
   // queries (graphRecall, itemsByTag) ride this GIN instead of expanding
@@ -292,15 +356,8 @@ async function createSchema(db: Pg): Promise<void> {
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_thread ON knowledge (thread_id, kind)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_run ON knowledge (run_id, n)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_url ON knowledge (url_hash)");
-  // the answer kind changed semantics (run answers -> the AI Overview
-  // archive): the old per-run projections were pure duplicates of the evt
-  // replay -- sweep them once per boot, idempotent and cheap
-  await db.query("DELETE FROM knowledge WHERE kind = 'answer' AND id LIKE 'ans:%'");
-  // overviews saved before the meta-sentinel strip carry the raw
-  // `<<<zjs-meta:{...}>>>` tail -- truncate at the marker (data fix, not
-  // DDL: the pg_textsearch tuples stay intact)
   await db.query(
-    "UPDATE knowledge SET body = substring(body FROM 1 FOR position('<<<zjs-meta:' IN body) - 1) WHERE kind = 'answer' AND position('<<<zjs-meta:' IN body) > 0",
+    "CREATE INDEX IF NOT EXISTS knowledge_embedded ON knowledge (embed_model) WHERE embed_model IS NOT NULL",
   );
 }
 

@@ -606,7 +606,7 @@ export function InspectorView({
     title: source.title || source.url,
     url: source.url,
   }));
-  const answerText = item.kind === "answer" ? item.body : (body ?? "");
+  const answerText = item.kind === "answer" ? (body ?? item.body) : (body ?? "");
   const downloadMd = () => {
     downloadAnswerMarkdown(item.title || item.url || t("knowledge_title"), answerText, exportSources, {
       sources: t("knowledge_inspector_sources"),
@@ -712,7 +712,11 @@ export function InspectorView({
           </h2>
           <div className="text-[13px] leading-relaxed text-ink-2">
             {item.kind === "answer" ? (
-              <InspectorMarkdown text={item.body} />
+              body ? (
+                <InspectorMarkdown text={body} />
+              ) : (
+                <InspectorMarkdown text={item.body} />
+              )
             ) : item.kind === "run" ? (
               body ? (
                 <InspectorMarkdown text={body} />
