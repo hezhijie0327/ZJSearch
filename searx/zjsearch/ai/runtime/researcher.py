@@ -58,18 +58,6 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " against independent sources.  The research ends when the LEDGER"
     " closes -- every subtask covered, every gap answered or explicitly"
     " abandoned -- not when you feel done.",
-    "goal": "Depth: GOAL -- the question is a TARGET the user wants"
-    " reached, and this mode is a LOOP, not a fixed number of rounds: first"
-    " state what evidence would demonstrate the goal is met (your"
-    " task_write ledger IS that checklist), then work toward it round by"
-    " round.  After each round, explicitly check what is still missing and"
-    " search for exactly that; switch tools freely (searches, page reads,"
-    " the calculator for every derived figure) until the ledger closes."
-    "  Do NOT hand off early: while the ledger has open items and you have"
-    " fresh angles left, keep researching -- only a ledger you cannot close"
-    " (the sources agree the evidence does not exist) or a stale run ends"
-    " the loop early.  Verify load-bearing claims against independent"
-    " sources.",
 }
 
 

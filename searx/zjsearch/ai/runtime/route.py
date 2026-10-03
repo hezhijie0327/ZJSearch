@@ -148,6 +148,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         clarify_state = "ask"
     clarifications = str(payload.get("clarifications") or "").strip()[:2000]
     max_rounds = budget("max_rounds", mode, 2)
+    depth_probe_entry: dict[str, t.Any] | None = None
     # the pre-flight gate (Vane's skipSearch, narrowed to our contract): a
     # question carrying a URL always researches (the page read IS the
     # research); everything else passes one small completion that skips
@@ -209,6 +210,51 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # never gates it
     register_tasks = True
     research_q = (standalone_question(cfg, q, history, lang, gate_usage) if history else "") or q
+    depth_probe_entry: dict[str, t.Any] | None = None
+    # the DEPTH PROBE: the decision model grades how deep/broad the
+    # question needs to be (one score call) and the mode's round LADDER
+    # scales accordingly -- the model-controlled depth made literal (the
+    # budget number is only the top rung; fail-open keeps the default)
+    probe = decision_features("depth_probe")
+    if probe.get("enabled") and mode in ("balanced", "deep") and decision.enabled() and decision.configured():
+        try:
+            ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])]
+            if ladder:
+                started = time.monotonic()
+                out = decision.judge(
+                    research_q if research_q else q,
+                    {
+                        "depth": {
+                            "type": "score",
+                            "instructions": (
+                                "How deep and broad does the research for this question need to be"
+                                " (0 = a quick lookup, 4 = an exhaustive multi-facet investigation)?"
+                            ),
+                            "criteria": [
+                                "A quick lookup: one or two searches settle it",
+                                "A facet overview: a handful of searches",
+                                "Multi-facet research: definitions, mechanics, context",
+                                "A full research project: cross-verification, multiple angles, page reads",
+                                "An exhaustive investigation: many facets, comparisons, recent dynamics",
+                            ],
+                        }
+                    },
+                    timeout=8.0,
+                )
+                answers = out.get("answers") if isinstance(out, dict) else None
+                depth = answers.get("depth") if isinstance(answers, dict) else None
+                if isinstance(depth, dict) and depth.get("score") is not None:
+                    rung = max(0, min(int(round(float(depth["score"]))), len(ladder) - 1))
+                    max_rounds = ladder[rung]
+                    depth_probe_entry = {
+                        "purpose": "depth_probe",
+                        "question": "How deep and broad does the research need to be (score 0-4)?",
+                        "target": (research_q or q)[:200],
+                        "answer": depth,
+                        "ms": int((time.monotonic() - started) * 1000),
+                    }
+        except Exception:  # pylint: disable=broad-except
+            pass
     state = Searches(
         sxng_request.preferences,
         list(sxng_request.user_plugins),
@@ -221,6 +267,8 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         cfg=cfg,
     )
     state.question_held = research_q
+    if depth_probe_entry:
+        state.judgments.append(depth_probe_entry)
 
     past_ref: list[dict[str, t.Any]] = []
 
@@ -327,6 +375,16 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             state.decision_usage,
             state.judgments,
             state,
+            (
+                [
+                    {
+                        "e": "decisions",
+                        "items": [depth_probe_entry],
+                    }
+                ]
+                if depth_probe_entry
+                else None
+            ),
         )
     )
 
@@ -371,6 +429,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         decision_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
         state: t.Any = None,
+        preamble: list[dict[str, t.Any]] | None = None,
     ):
         self.events = events
         self.cfg = cfg
@@ -390,6 +449,9 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # entries) -- a cheap ref, the executor is done mutating by the
         # time the settle passes through here
         self.state = state
+        # events that precede the loop's own stream (the depth probe runs
+        # BEFORE the executor exists) -- flushed first when iterating
+        self.preamble = [wire.encode(e) for e in (preamble or [])]
         self.buffer: list[str] = []
         self.rest: t.Iterator[str] | None = None
         self.primed = False
@@ -518,7 +580,6 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                     self.buffer.append(wire.encode({"e": "phase", "name": "audit", "total": audit_total}))
                 audit_payload = self._audit(audit_answer)
                 if audit_payload is not None:
-                    self.buffer.append(wire.encode(self._audit_event(audit_payload)))
                     if self.state.judgments and self.state.judgments[-1].get("purpose") == "audit":
                         self.buffer.append(
                             wire.encode(
@@ -623,6 +684,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         }
 
     def __iter__(self) -> t.Iterator[str]:
+        yield from self.preamble
         if not self.primed:
             self.prime()
         yield from self.buffer

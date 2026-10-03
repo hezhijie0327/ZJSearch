@@ -27,7 +27,7 @@ import {
  * no-op persistence -- a stored run and a live run hit one renderer.
  */
 
-export type AiSearchMode = "speed" | "balanced" | "deep" | "goal";
+export type AiSearchMode = "speed" | "balanced" | "deep";
 
 /** The run's macro stages (the wire's ``phase`` events -- Qwen Deep
     Research's spine): one value active at a time, the history kept for

@@ -10,28 +10,22 @@ import typing as t
 
 from searx.zjsearch.ai.infra import config as llm_config
 
-SEARCH_MODES = ("speed", "balanced", "deep", "goal")
+SEARCH_MODES = ("speed", "balanced", "deep")
 
 _MODE_BUDGETS: dict[str, dict[str, int]] = {
-    # speed: ONE focused round (Morphic's quick discipline); balanced: main
-    # facets plus a gap-filler pass (~3 minutes); deep: THE ~10-minute
-    # research -- breadth (8 subtasks) and depth (real page reads) under a
-    # ledger that must CLOSE, not a model that got bored; goal: THE LOOP
-    # MODE -- the question is a target
-    # and the run iterates through its tools until the evidence ledger
-    # closes.  "Infinite" means the loop ends on COMPLETION, not on a
-    # small count: max_rounds is the runaway guard (the client-visible
-    # contract is "researches until the goal is met"), the REAL plan is
-    # PROGRESS -- a round that adds no new information (only repeats or
-    # empty results) is stalled, and stall_rounds consecutive stalled
-    # rounds end the research.  max_seconds is the wall-clock budget the
-    # round detector also honors (0 = unlimited -- speed's single round
-    # needs no clock).  Per-round call counts are the MODEL's call
-    # (uncapped); every engine request carries its own per-request timeout.
-    "speed": {"max_rounds": 1, "stall_rounds": 1, "max_seconds": 0},
-    "balanced": {"max_rounds": 6, "stall_rounds": 3, "max_seconds": 240},
-    "deep": {"max_rounds": 18, "stall_rounds": 4, "max_seconds": 600},
-    "goal": {"max_rounds": 32, "stall_rounds": 3, "max_seconds": 900},
+    # THE MODEL CONTROLS DEPTH AND BREADTH -- fixed round caps that
+    # amputate good research are gone.  Modes differ in TOOLS and in what
+    # the prompt asks (speed = a quick answer; balanced = the main facets
+    # with a partial toolset; deep = every tool, a full research project
+    # that ends when the LEDGER closes).  max_rounds is the RUNAWAY guard
+    # only (the user's stop button is the real control), stall_rounds
+    # ends unproductive streaks, and max_seconds stays at 0 -- no wall
+    # clock.  Per-round call counts are the MODEL's call (uncapped).
+    # round caps are GONE too: the model runs until the LEDGER closes or
+    # the rounds go stale -- max_rounds is a very high runaway guard.
+    "speed": {"max_rounds": 6, "stall_rounds": 1, "max_seconds": 0},
+    "balanced": {"max_rounds": 60, "stall_rounds": 3, "max_seconds": 0},
+    "deep": {"max_rounds": 120, "stall_rounds": 4, "max_seconds": 0},
 }
 
 

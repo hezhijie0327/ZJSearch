@@ -33,11 +33,6 @@ _DEPTH_SHAPE: dict[str, str] = {
     "quality": "Shape: a thorough, structured answer in \"##\" sections --"
     " definitions, mechanics, comparisons, recent developments -- citing"
     " every major claim.",
-    "goal": "Shape: structure the answer around the goal with \"##\""
-    " sections, and close with a GFM task list (- [x] met / - [ ] open) as"
-    " the evidence ledger -- every checked item cited.  If the research"
-    " could not close an item, leave it unchecked and name the evidence"
-    " that would.",
 }
 
 _FOLLOWUPS_BLOCK = (
