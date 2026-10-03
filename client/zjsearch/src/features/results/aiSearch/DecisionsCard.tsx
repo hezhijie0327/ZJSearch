@@ -164,12 +164,9 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
             typeof value === "object" && value ? (value as Record<string, unknown>).noul : Number(value) || 0;
           return (
             <div key={key}>
-              <div className="flex items-start gap-1.5">
-                <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-                <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
-                  {titles[idx] ?? key}
-                </p>
-              </div>
+              <p className="break-words text-ink-2" dir="auto">
+                {titles[idx] ?? key}
+              </p>
               <AnswerValue answer={{ type: "noul", noul: noulValue }} />
             </div>
           );
