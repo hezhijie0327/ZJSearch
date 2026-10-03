@@ -14,7 +14,7 @@ writer side's answer to "what do we tell the model".
 import typing as t
 
 from searx.zjsearch.ai.runtime import spine as shared
-from searx.zjsearch.ai.runtime.context import _WRITER_CONTEXT_MAX, _fit_context
+from searx.zjsearch.ai.runtime.context import _fit_context, writer_context_max
 
 _BUDGET_NOTE = "The research budget ended the gathering early -- the sources above are everything that was found."
 
@@ -197,11 +197,12 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
             " labels are already assigned); for anything time-sensitive"
             " prefer the live sources.\n</past_research>"
         )
-    context = "\n\n".join(_fit_context(feed, _WRITER_CONTEXT_MAX, relevance))
-    if len(context) > _WRITER_CONTEXT_MAX:
+    cap = writer_context_max(mode)
+    context = "\n\n".join(_fit_context(feed, cap, relevance))
+    if len(context) > cap:
         # a single oversized block: the last-resort slice the eviction
         # cannot fix
-        context = context[:_WRITER_CONTEXT_MAX] + "\n\n[... the feed was truncated ...]"
+        context = context[:cap] + "\n\n[... the feed was truncated ...]"
     user = (
         f"<question>{question}</question>\n<context>\n"
         f"{context if not direct else 'No sources: this answer does not need them.'}\n</context>"

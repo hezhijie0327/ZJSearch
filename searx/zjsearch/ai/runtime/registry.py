@@ -32,6 +32,10 @@ class SourcesRegistry:
         # repeat of a known url reuses the number instead of minting a
         # duplicate source (the FEED dedup rides the same registry)
         self.url_n: dict[str, int] = {}
+        # the url's feed metadata (title + snippet head) -- the read
+        # gate's judgment material (what the model knows about the page
+        # BEFORE spending the Browserless round trip)
+        self.url_meta: dict[str, dict[str, str]] = {}
         # image urls fed to the model (img=... lines) -> their global [n]:
         # the validated whitelist of the writer's ``zjs-images`` fence
         self.gallery_pool: dict[str, int] = {}
@@ -55,6 +59,10 @@ class SourcesRegistry:
         first kept -- the pool is capped)."""
         if img and len(self.gallery_pool) < _GALLERY_POOL_MAX:
             self.gallery_pool.setdefault(img, n)
+
+    def note_meta(self, norm_url: str, title: str, snippet: str) -> None:
+        if norm_url:
+            self.url_meta.setdefault(norm_url, {"title": title[:300], "snippet": snippet[:400]})
 
     def note_query(self, dedup_key: str, query: str) -> None:
         self.ran[dedup_key] = [query, 0]

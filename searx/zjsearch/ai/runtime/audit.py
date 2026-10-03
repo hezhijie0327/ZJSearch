@@ -30,6 +30,7 @@ import typing as t
 from searx.zjsearch.ai.infra import decision as decision_service
 from searx.zjsearch.ai.infra import embed as embed_service
 from searx.zjsearch.ai.infra import rerank as rerank_service
+from searx.zjsearch.ai.runtime.rank import has_cjk
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +53,6 @@ thing -- only there does a consistency judgment mean anything."""
 _AUTO_ACCEPT = 0.50
 """Confidence floor: at/above it the verdict stands on its own, below it
 the citation renders as ``unverified`` (the model was torn)."""
-
-
-def _has_cjk(text: str) -> bool:
-    return bool(re.search(r"[\u2e80-\u9fff\uf900-\ufaff\ufe30-\ufe4f]", text))
 
 
 def _relation_question(is_zh: bool) -> dict[str, t.Any]:
@@ -146,7 +143,7 @@ def citation_verdicts(
             n = int(match.group(1))
             if n in sources and n not in claims:
                 claims[n] = sentence.strip()[:400]
-    is_zh = _has_cjk(answer)
+    is_zh = has_cjk(answer)
     verdicts: dict[int, dict[str, t.Any]] = {}
     for n, claim in list(claims.items())[:CLAIM_MAX]:
         source = sources[n]
@@ -194,7 +191,7 @@ def finding_conflict(fact_text: str, established: list[str]) -> int | None:
         best = _nearest_fact(fact_text, established)
         if best is None:
             return None
-        is_zh = _has_cjk(fact_text)
+        is_zh = has_cjk(fact_text)
         out = decision_service.judge(
             {"new_fact": fact_text, "established_fact": established[best]},
             {
@@ -230,7 +227,7 @@ def subtask_gaps(answer: str, open_tasks: list[str]) -> list[str]:
         return []
     if not decision_service.enabled() or not decision_service.configured():
         return []
-    is_zh = _has_cjk(answer)
+    is_zh = has_cjk(answer)
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         judged = list(
             pool.map(

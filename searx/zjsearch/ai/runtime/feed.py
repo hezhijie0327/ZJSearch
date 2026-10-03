@@ -127,6 +127,7 @@ def build_search_feed(
             continue
         n = reg.mint()
         reg.note_url(norm, n)
+        reg.note_meta(norm, title, str(item.get("content_text") or ""))
         # the gallery whitelist mirrors the FEED: only deep lines carry the
         # img= token -- an image the model was never shown must not spend
         # the writer's validated pool

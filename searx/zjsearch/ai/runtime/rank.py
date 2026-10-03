@@ -45,11 +45,12 @@ a hung gate must never stall the round's ranking (fail-open)."""
 _ZH_RE = re.compile(r"[\u2e80-\u9fff\uf900-\ufaff\ufe30-\ufe4f]")
 
 
-def _is_zh(query: str) -> bool:
-    """The query carries CJK text -- the gate's criteria follow the query's
-    language (the decision model judges best in the material's own
-    language; zh criteria on zh queries, English otherwise)."""
-    return bool(_ZH_RE.search(query))
+def has_cjk(text: str) -> bool:
+    """The text carries CJK -- the gates' criteria follow the material's
+    own language (the decision model judges best in it; zh criteria on
+    zh material, English otherwise).  The package's ONE language probe:
+    the audit phase imports it too."""
+    return bool(_ZH_RE.search(text))
 
 
 def bm25_order(query: str, results: list[t.Any]) -> list[int] | None:
@@ -143,7 +144,7 @@ def _gate_questions(query: str) -> dict[str, dict[str, t.Any]]:
     """The four-noul vocabulary (the RAG-gate cookbook's), in the query's
     own language -- zh queries get zh criteria (the decision model judges
     the material best in its language)."""
-    if _is_zh(query):
+    if has_cjk(query):
         return {
             "is_relevant": {
                 "type": "noul",
