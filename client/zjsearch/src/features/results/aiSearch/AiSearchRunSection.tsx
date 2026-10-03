@@ -410,11 +410,11 @@ function StepSegment({
       <div className={index > 0 ? "mt-2" : ""}>
         <ThinkSegment
           live={streaming && index === run.steps.length - 1}
-          // while the run streams, only the LIVE round's reasoning is open
-          // (older rounds fold as the next one starts); once settled every
-          // segment opens -- the inter-round reasoning IS the reply between
-          // the call rows, and ThinkScroll caps the volume per segment
-          open={streaming ? index === run.steps.length - 1 : true}
+          // ONLY the LIVE segment opens by default (the reasoning you are
+          // watching); every other segment -- earlier rounds AND the whole
+          // run once settled -- stays folded behind its one-click toggle
+          // (a dozen open think panes read as a wall of machine voice)
+          open={streaming && index === run.steps.length - 1}
           step={step}
         />
       </div>
