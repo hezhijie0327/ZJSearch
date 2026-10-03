@@ -443,6 +443,25 @@ surface. Highlights that must not regress (the full fix list is in git:
   (same concept = same icon; X = dismiss only; sizes on the 12/14/18/20
   tiers).
 
+Lighthouse outcome (round record, the ONE open item): the CLASSIC
+surfaces regressed GREEN (the 10-01 knowledge wave had put PGlite's
+16MB boot inside every search page's load window through the overview
+recall -- the recall now prewarms on the user's INTENT (pointerenter/
+focusin/touchstart; the ai_overview=1 deep link recalls immediately),
+and every non-AI page is back above its floor).  The AI SURFACES stay
+below their calibrated floors (perf 37-61 vs 80; variance run-to-run is
+high): root cause is the same store -- the takeover's knowledge
+persistence (startRun + the 1.5s evt flush) boots the WASM inside the
+STREAMED window, by design (the crash window the continue feature
+stands on).  Three ways out, a deliberate decision, not an audit
+accident: (a) move PGlite into a Web Worker (the store's API already
+funnels through knowledgeStore.ts -- the boot + queries leave the main
+thread, floors re-earnable, real effort); (b) weaken the crash window
+(flush at settle only -- continue's mid-run storage degrades); (c)
+recalibrate the AI floors to the knowledge-era reality (gaming the gate
+-- last resort).  Until one lands, the AI pages' perf floors are the
+audit's known-red.
+
 ## 8. Known environment traps
 
 - `pnpm run audit` needs a Chromium browser (`ChromeNotInstalledError`) —

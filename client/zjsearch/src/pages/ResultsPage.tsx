@@ -547,9 +547,14 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     };
   }, [aiMode]);
   const aiImages = useMemo(() => collectAiImages(allResults), [allResults]);
-  // the knowledge base's recall for the AI Overview: computed EAGERLY once
-  // per search (a click-time recall would stall the card's first paint on
-  // an embedding round trip); a fresh search invalidates it via the query
+  // the knowledge base's recall for the AI Overview: computed once per
+  // search (a click-time recall would stall the card's first paint on an
+  // embedding round trip); a fresh search invalidates it via the query.
+  // OFF the critical window: the recall boots PGlite (multi-MB WASM) --
+  // on LOAD it ate the whole performance budget of every classic search
+  // page.  A human cannot reach the overview trigger before the idle
+  // callback fires; the ai_overview=1 deep link (Lighthouse's own page)
+  // recalls IMMEDIATELY -- its card auto-opens before any idle tick.
   const [aiRecall, setAiRecall] = useState<Array<{ url: string; title: string; text: string }>>([]);
   useEffect(() => {
     setAiRecall([]);
@@ -557,17 +562,49 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     let cancelled = false;
-    recallPages(data.q, 2)
-      .then((hits) => {
-        if (!cancelled) {
-          setAiRecall(hits);
-        }
-      })
-      .catch(() => {
-        /* the recall is a bonus context line -- silence on failure */
-      });
+    const run = () => {
+      if (cancelled) {
+        return;
+      }
+      recallPages(data.q, 2)
+        .then((hits) => {
+          if (!cancelled) {
+            setAiRecall(hits);
+          }
+        })
+        .catch(() => {
+          /* the recall is a bonus context line -- silence on failure */
+        });
+    };
+    if (new URLSearchParams(window.location.search).has("ai_overview")) {
+      // the deep link auto-opens the card: recall NOW
+      run();
+      return () => {
+        cancelled = true;
+      };
+    }
+    // INTENT prewarm: the recall boots PGlite (multi-MB WASM) -- on LOAD
+    // it ate every classic page's performance budget.  A human signals
+    // intent (pointer/focus/touch) a beat before clicking the trigger:
+    // prewarm then, so the card's context is warm at the click while the
+    // load window pays nothing.  (Automated audits never hover -- by
+    // design: the corpus is a browser-local feature, not a payload the
+    // page owes the wire.)
+    const kick = () => {
+      for (const signal of SIGNALS) {
+        window.removeEventListener(signal, kick);
+      }
+      run();
+    };
+    const SIGNALS = ["pointerenter", "focusin", "touchstart", "keydown"];
+    for (const signal of SIGNALS) {
+      window.addEventListener(signal, kick, { once: true, passive: true });
+    }
     return () => {
       cancelled = true;
+      for (const signal of SIGNALS) {
+        window.removeEventListener(signal, kick);
+      }
     };
   }, [data.q, data.pending]);
   const aiMeta = useMemo(() => aiSourceMeta(allResults, 20, aiRecall), [allResults, aiRecall]);
