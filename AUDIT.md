@@ -434,9 +434,10 @@ surface. Highlights that must not regress (the full fix list is in git:
 - **web_reader rows never fold** (the pane is scroll-capped); failed
   tool rows wear CircleAlert (X = dismiss only); regenerate is
   RefreshCw on BOTH answer surfaces.
-- **Model-usage card**: LLM row + ONE merged row (嵌入输入/嵌入调用/
-  重排输入/重排调用, 嵌入 first); score endpoints are input-only so the
-  label is 输入, never "Tokens".
+- **Model-usage card**: the LLM row, then the 嵌入 and 重排 groups side
+  by side in ONE row -- each with its own title and plain 输入/调用
+  tiles (the LLM group's language); score endpoints are input-only so
+  the tile says 输入, never "Tokens".
 - Audit-methodology additions: settle-path checks (startRun's
   streaming row + the stale-run sweep), wire-LATE-event coverage, the
   gallery-whitelist-mirrors-feed invariant, and the icon-language sweep
