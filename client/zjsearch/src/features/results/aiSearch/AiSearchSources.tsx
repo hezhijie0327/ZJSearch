@@ -4,7 +4,7 @@ import { Award, BookOpen, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
-import { Snippet } from "@/features/results/cardParts.tsx";
+import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -166,12 +166,7 @@ function SourceCard({ source }: { source: AiSearchSource }) {
       ) : null}
       {source.img ? (
         <div className="relative hidden shrink-0 self-start sm:block">
-          <img
-            alt=""
-            className="h-20 w-28 rounded-lg border border-line object-cover"
-            loading="lazy"
-            src={source.img}
-          />
+          <Thumb alt="" className="h-20 w-28" src={source.img} />
           {isMedia && source.meta ? (
             <span className="absolute bottom-1 end-1 rounded-md bg-black/70 px-1 py-0.5 text-[11px] font-medium leading-none text-white">
               {source.meta}
