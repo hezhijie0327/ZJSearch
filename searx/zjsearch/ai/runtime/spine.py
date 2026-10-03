@@ -64,6 +64,12 @@ def citation_rules() -> str:
     )
 
 
+AGENT_PERSONA_NAME = "ZJSearch"
+"""The AI surfaces' product name as the prompts speak it (the roles
+address the model as this mode's research agent / writer) -- ONE
+variable, so a rename touches one line instead of every role block."""
+
+
 def identity() -> str:
     """The brand block (Morphic's identity guidance): the answer engine has
     a name, and a model that is asked what it is must not role-play as

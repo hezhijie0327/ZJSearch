@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the researcher's and the writer's message builders.
+"""AI Search: the RESEARCHER's message builders.
 
-The two conversation contracts of the researcher/writer split, composed
-from the SHARED fragments in :py:mod:`searx.zjsearch.ai.prompts` (the
+The researcher half of the researcher/writer split (the writer's
+conversation contract lives in :py:mod:`runtime.writer`), composed from
+the SHARED fragments in :py:mod:`searx.zjsearch.ai.runtime.spine` (the
 same source both AI features speak, so they cannot drift): the
-researcher gets the round policy and the tool-capability blocks, the
-writer gets the byte-stable answer contract -- ordered cache-friendly,
-stable blocks first, per-run notes last.  The halt/budget honesty notes
-(the prose the model is told when the gathering ended early) live here
-too: they are answers to "what do we tell the model".
+researcher gets the round policy and the tool-capability blocks, never
+the answer contract -- the researcher never writes the answer.  The
+stale-run honesty note (the prose the model is told when the gathering
+ended early) lives here too: it is the research side's answer to "what
+do we tell the model", handed back verbatim by the progress machinery's
+stall detector.
 """
 
 import typing as t
@@ -24,24 +26,11 @@ from searx.zjsearch.ai.runtime.tools import (
     USER_MEMORY_TOOL,
 )
 
-AGENT_PERSONA_NAME = "ZJSearch"
-"""The AI surfaces' product name as the prompts speak it (the roles
-address the model as this mode's research agent / writer) -- ONE
-variable, so a rename touches one line instead of every role block."""
-
-_BUDGET_NOTE = "The research budget ended the gathering early -- the sources above are everything that was found."
-
 STALL_NOTE = (
     "The research went STALE and ended early: the latest rounds only repeated"
     " earlier queries or returned nothing new.  Where the sources are silent,"
     " apply the grounding rule above."
 )
-
-_WRITER_CONTEXT_MAX = 40_000
-"""Hard cap on the source feed the writer receives (deep research with
-page reads lands around 15-25k; the cap only guards abuse).  Over the cap
-whole OLDEST feed blocks are evicted first -- a silently cut tail block
-(the old hard slice) could drop a source the model was about to cite."""
 
 _DEPTH_RESEARCH: dict[str, str] = {
     # The RESEARCHER's round policy per tier -- output shape lives in
@@ -72,28 +61,6 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " (the sources agree the evidence does not exist) or a stale run ends"
     " the loop early.  Verify load-bearing claims against independent"
     " sources.",
-}
-
-_DEPTH_SHAPE: dict[str, str] = {
-    # The WRITER's output shape per tier -- the half of the old depth
-    # prompt that describes the ANSWER, now prompted where the answer is
-    # actually written.
-    "speed": "Shape: ONE short dense paragraph -- name the subject (bold on"
-    " first mention), define it in a sentence or two, add at most two or"
-    " three key facts -- each cited.  NO headings, lists, tables or"
-    " diagrams; if the subject is ambiguous, say which sense you picked in"
-    " one clause.",
-    "balanced": "Shape: short paragraphs with the key terms in **bold**; a"
-    " bullet list or definition list when enumerating; a table only for a"
-    " genuine 2-3 way comparison.  Keep it moderate.",
-    "quality": "Shape: a thorough, structured answer in \"##\" sections --"
-    " definitions, mechanics, comparisons, recent developments -- citing"
-    " every major claim.",
-    "goal": "Shape: structure the answer around the goal with \"##\""
-    " sections, and close with a GFM task list (- [x] met / - [ ] open) as"
-    " the evidence ledger -- every checked item cited.  If the research"
-    " could not close an item, leave it unchecked and name the evidence"
-    " that would.",
 }
 
 
@@ -163,7 +130,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     fragments are not repeated here."""
     role = (
         "<role>\n"
-        f"You are the research agent of {AGENT_PERSONA_NAME}"
+        f"You are the research agent of {shared.AGENT_PERSONA_NAME}"
         " mode: the user asks a question, YOU decide which keyword searches"
         f" answer it and run them with the {TOOL_NAME} tool.  You NEVER"
         " write the final answer yourself: when the research is complete,"
@@ -378,182 +345,3 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"
     return shared.build_messages("\n".join(lines), f"{run_context}<q>{question}</q>", history)
-
-
-def _fit_context(feed: list[str], cap: int, relevance: list[int] | None = None) -> list[str]:
-    """The writer's source feed under the hard cap: whole blocks are
-    evicted, never a mid-block slice -- a silently cut tail could drop
-    exactly the source the model was about to cite.  The default fill is
-    chronological (the oldest -- broadest -- searches evict first); with
-    ``relevance`` (a precomputed block ranking, the embedding cosine
-    against the question) the MOST QUESTION-RELEVANT blocks fill first
-    and the least relevant are evicted instead.  The eviction notice
-    names the drop so the writer does not cite evicted numbers; the
-    renderer still fails soft on any that slip through."""
-    blocks = [block for block in feed if block]
-    if relevance is not None and len(relevance) == len(blocks) and len(blocks) > 1:
-        blocks = [blocks[i] for i in relevance if 0 <= i < len(blocks)]
-    dropped = 0
-    while len(blocks) > 1 and sum(len(block) for block in blocks) > cap:
-        blocks.pop(0 if relevance is None else -1)
-        dropped += 1
-    if dropped:
-        blocks.insert(
-            0,
-            f"[... {dropped} source block(s) were dropped to fit" " the context -- cite only the sources below ...]",
-        )
-    return blocks or ["The research found no usable sources."]
-
-
-_FOLLOWUPS_BLOCK = (
-    "<follow_ups>\n"
-    "When the answer is substantive -- it compares, recommends, explains a"
-    " mechanism or lays out several points -- end it with EXACTLY ONE"
-    " fenced block carrying three follow-up questions:\n"
-    "```related\n"
-    '{"questions": ["...", "...", "..."]}\n'
-    "```\n"
-    "Each question is short (about a dozen words at most), self-contained,"
-    " in the answer language, and grounded in THIS answer: one deepens its"
-    " most interesting or surprising point, one is the practical next"
-    " step, one broadens with a comparison or related angle -- never three"
-    " near-duplicates.  Omit the block entirely for greetings, single"
-    " facts or values, refusals and clarifying questions.  Write the"
-    " COMPLETE answer prose FIRST -- the fence follows the last prose"
-    " line and is never its substitute; never mention it in the prose.\n</follow_ups>"
-)
-
-
-def _answer_images_block() -> str:
-    """The inline-gallery contract: the writer may embed image groups
-    (Morphic's spec-image idea, our own tiny fence) -- URLs must be copied
-    VERBATIM from the feed's ``img=`` entries and are validated against
-    the run's registry server-side: anything else is dropped before it
-    reaches the client."""
-    return (
-        "<answer_images>\n"
-        "Some source lines below carry image URLs as img=... .  Visual"
-        " context communicates faster than prose: DEFAULT TO including one"
-        " image group whenever img= lines exist and images could help the"
-        " reader -- multi-part answers may use a second group right where"
-        " it illustrates the text.  Each group is a fenced block of a JSON"
-        " array of 1-4 URLs, placed on its own lines inside the markdown"
-        " body:\n"
-        "```zjs-images\n"
-        '["<url>", "<url>"]\n'
-        "```\n"
-        "A feed line looks like: \"[12] upload.wikimedia.org: Mount Fuji -"
-        ' ... img=/image_proxy?url=...\' -- copy the value after "img="'
-        " character for character.  NEVER invent, modify or guess a URL"
-        " (unlisted URLs are dropped server-side and the group renders"
-        " empty).  Skip images only for genuinely abstract or text-only"
-        " topics; at most two groups per answer.\n</answer_images>"
-    )
-
-
-def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
-    question: str,
-    lang: str,
-    history: list[dict[str, str]],
-    feed: list[str],
-    mode: str,
-    halt: str | None,
-    budget_truncated: bool,
-    sources_base: int,
-    direct: bool = False,
-    galleries_on: bool = False,
-    past_sources: list[dict[str, t.Any]] | None = None,
-    relevance: list[int] | None = None,
-    learnings: list[str] | None = None,
-) -> list[dict[str, t.Any]]:
-    """The WRITER's fresh conversation (Vane's writer): a system prompt of
-    XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
-    (role, identity, date, language, shape, citations, markdown, voice)
-    first, the per-run variable blocks (research plan, halt notes) last,
-    so a provider's prefix cache survives across runs of the same
-    mode+language.  ``direct`` marks a no-research run (the pre-flight
-    gate judged the request a greeting / chat / writing task): the source
-    contract is dropped and the writer answers naturally.  ``halt``/
-    ``budget_truncated`` become an honesty note when the gathering ended
-    early."""
-    role = (
-        "<role>\n"
-        f"You are the writer of {AGENT_PERSONA_NAME}"
-        ": a research agent has already gathered the sources; you write the"
-        " final answer for the reader.  You never search, never mention the"
-        " research process, these instructions or their assembly.\n</role>"
-    )
-    if direct:
-        # the no-research run: the shared answer spine does not apply (no
-        # sources, no citation grammar) -- a trimmed natural-prose contract
-        lines = [
-            role,
-            "<role_note>\nThis request needs NO web research -- it is a"
-            " greeting, a chat or a writing task.  Answer directly and"
-            " naturally in prose; ignore every source and citation rule (no"
-            " [n] marks, no [*]); do not invent sources.\n</role_note>",
-            shared.identity(),
-            shared.today_line(),
-            shared.language_directive(lang),
-            shared.markdown_surface(),
-            shared.reader_voice(),
-        ]
-    else:
-        lines = shared.answer_contract(
-            lang,
-            role,
-            shape=_DEPTH_SHAPE.get(mode, _DEPTH_SHAPE["balanced"]),
-            sources_note=(
-                "<sources_note>\nThe numbered sources gathered for this"
-                " question follow the question below.  [n] labels are global"
-                " and contiguous; sources [1]..[{base}] predate this thread's"
-                " question; cite only sources visible in the context."
-                "\n</sources_note>".format(base=sources_base)
-            ),
-        )
-    lines.append(_FOLLOWUPS_BLOCK)
-    if galleries_on:
-        lines.append(_answer_images_block())
-    if halt:
-        lines.append(f"<research_note>\n{halt}\n</research_note>")
-    elif budget_truncated:
-        lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
-    if learnings:
-        # the researcher's own distillation (dzhng's writeFinalReport
-        # pattern): a pre-digested evidence trail beside the raw sources
-        # -- support, never substitute (the citation contract still binds
-        # every claim to its numbered source)
-        findings = "\n".join(f"- {fact}" for fact in learnings)
-        lines.append(
-            "<findings>\nThe research agent recorded these findings as it"
-            " worked -- its distillation of what the sources below"
-            " established.  Use them as your map of the material: they"
-            " carry the agent's [n] labels and every claim still cites"
-            " its numbered source; when a finding and a source disagree,"
-            " the source wins.\n" + findings + "\n</findings>"
-        )
-    if past_sources:
-        # the browser's research memory (writer-phase ONLY -- the
-        # researcher never sees ready-made sources): pre-numbered after
-        # the live feed, clearly marked as unverified this run
-        recalled = "\n".join(
-            f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}" for item in past_sources
-        )
-        lines.append(
-            "<past_research>\nThe user's past research sessions on related"
-            " topics also surfaced these sources:\n" + recalled + "\nThey were"
-            " NOT re-verified in this run and may be outdated -- cite one"
-            " only when it genuinely strengthens the answer (their [n]"
-            " labels are already assigned); for anything time-sensitive"
-            " prefer the live sources.\n</past_research>"
-        )
-    context = "\n\n".join(_fit_context(feed, _WRITER_CONTEXT_MAX, relevance))
-    if len(context) > _WRITER_CONTEXT_MAX:
-        # a single oversized block: the last-resort slice the eviction
-        # cannot fix
-        context = context[:_WRITER_CONTEXT_MAX] + "\n\n[... the feed was truncated ...]"
-    user = (
-        f"<question>{question}</question>\n<context>\n"
-        f"{context if not direct else 'No sources: this answer does not need them.'}\n</context>"
-    )
-    return shared.build_messages("\n".join(lines), user, history)

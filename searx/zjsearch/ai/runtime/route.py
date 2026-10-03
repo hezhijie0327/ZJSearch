@@ -30,9 +30,9 @@ from searx.zjsearch.ai.framework.fences import parse_fence_json
 from searx.zjsearch.ai.infra import config as llm_config
 from searx.zjsearch.ai.infra import decision, http, jsongate
 from searx.zjsearch.ai.infra import sdk as sdk_registry
-from searx.zjsearch.ai.infra.embed import cosine as _cosine
-from searx.zjsearch.ai.infra.embed import embed_texts
-from searx.zjsearch.ai.runtime.executor import Searches, round_progress
+from searx.zjsearch.ai.runtime.context import _relevance_order
+from searx.zjsearch.ai.runtime.executor import Searches
+from searx.zjsearch.ai.runtime.progress import round_progress
 from searx.zjsearch.ai.runtime.gates import (
     clarify_gate,
     related_questions,
@@ -41,7 +41,8 @@ from searx.zjsearch.ai.runtime.gates import (
     standalone_question,
 )
 from searx.zjsearch.ai.runtime.profile import CLARIFY_MODES, PLAN_MODES, budget, enabled, SEARCH_MODES
-from searx.zjsearch.ai.runtime.prompts import initial_messages, writer_messages
+from searx.zjsearch.ai.runtime.researcher import initial_messages
+from searx.zjsearch.ai.runtime.writer import writer_messages
 from searx.zjsearch.ai.runtime.tools import (
     ASK_TOOL,
     ask_user_spec,
@@ -56,11 +57,6 @@ from searx.zjsearch.ai.runtime.tools import (
 logger = logging.getLogger(__name__)
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
-
-_RERANK_ABOVE = 24000
-"""The feed size past which the writer's context overflow is likely (the
-cap sits at 40k): the relevance embedding runs only there -- a fitting
-feed keeps its chronological order and costs no embedding round trip."""
 
 _CONTENT_EVENTS = (
     "open",
@@ -78,26 +74,6 @@ _CONTENT_EVENTS = (
 )
 """The wire events that prove the upstream is alive: a ``settle`` before
 any of these is the 502 path (the stream died before its first token)."""
-
-
-async def _relevance_order(question: str, feed: list[str]) -> list[int] | None:
-    """The feed blocks ranked by embedding cosine against the question --
-    the writer's fill order when the context would overflow (the cap then
-    keeps the MOST RELEVANT material instead of the newest).  ``None`` on
-    any skip: a fitting feed, the embedding feature off, an upstream
-    failure -- the chronological eviction stands, silently."""
-    blocks = [block for block in feed if block]
-    if len(blocks) < 2 or sum(len(block) for block in blocks) <= _RERANK_ABOVE:
-        return None
-    result = await embed_texts([question] + [block[:600] for block in blocks])
-    if not result:
-        return None
-    vectors = result[0]
-    if len(vectors) != len(blocks) + 1:
-        return None
-    probe = vectors[0]
-    order = sorted(range(len(blocks)), key=lambda i: -_cosine(vectors[i + 1], probe))
-    return order
 
 
 def _ask_shape(arguments: str) -> dict[str, t.Any] | None:

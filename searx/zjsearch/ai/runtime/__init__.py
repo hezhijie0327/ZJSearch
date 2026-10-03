@@ -17,20 +17,23 @@ uses, so the client renders sub-results with its standard components.
 
 Modules (one-way dependencies):
 
-- :py:mod:`runtime.search.profile` -- modes, budgets, the
+- :py:mod:`runtime.profile` -- modes, budgets, the
   ``zjsearch.feature.ai_search`` settings block and the capability;
-- :py:mod:`runtime.search.tools` -- the tool specs and their argument
-  sanitizers;
-- :py:mod:`runtime.search.prompts` -- the researcher's and the writer's
-  message builders (on :py:mod:`runtime.spine`'s shared blocks);
-- :py:mod:`runtime.search.gates` -- the small fail-open structured
+- :py:mod:`runtime.tools` -- the tool registry: ONE module per tool
+  family (spec, argument sanitizers, timeline row);
+- :py:mod:`runtime.researcher` / :py:mod:`runtime.writer` -- the two
+  conversation contracts (on :py:mod:`runtime.spine`'s shared blocks);
+- :py:mod:`runtime.gates` -- the small fail-open structured
   completions;
-- :py:mod:`runtime.search.executor` -- the worker pool, the ``[n]``
-  registries, the feed and the stall detector;
-- :py:mod:`runtime.search.route` -- the ``POST /zjsearch/ai/search``
+- :py:mod:`runtime.executor` -- the worker pool, the ``[n]``
+  registries and the feed; :py:mod:`runtime.progress` -- the budget
+  notes and the stall detector;
+- :py:mod:`runtime.context` -- the writer-context assembly (budget,
+  ordering, eviction);
+- :py:mod:`runtime.route` -- the ``POST /zjsearch/ai/search``
   view over :py:mod:`framework.loop` (the timeline ops ARE the wire) and
   the install hook;
-- :py:mod:`runtime.search.page` -- the standalone thread page
+- :py:mod:`runtime.page` -- the standalone thread page
   (``GET /zjsearch/ai/thread/<uuid>``).
 
 Wire protocol v2 (NDJSON; the closed event set lives in

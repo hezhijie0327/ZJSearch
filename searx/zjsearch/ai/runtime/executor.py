@@ -6,9 +6,11 @@
 preferences and the site operators included) and ``web_reader``
 through the Browserless reader.  It owns the run's registries (the
 global ``[n]`` numbering, dedup, the gallery whitelist), compiles the
-compact ``[n]`` feed the writer reads, yields the feature events for
-the wire protocol and carries the model-facing budget notes
-(Vane's per-iteration awareness, in canonical-messages form).
+compact ``[n]`` feed the writer reads and yields the feature events for
+the wire protocol; the progress machinery -- the model-facing budget
+notes and the stall detector -- lives in
+:py:mod:`searx.zjsearch.ai.runtime.progress` (Vane's per-iteration
+awareness, in canonical-messages form).
 """
 
 import concurrent.futures
@@ -29,7 +31,7 @@ from searx.zjsearch.ai.capabilities import user_memory as user_memory_cap
 from searx.zjsearch.ai.runtime.coverage import Coverage
 from searx.zjsearch.ai.infra import decision
 from searx.zjsearch.ai.runtime.feed import RESULTS_CAP, build_search_feed, serialize_results
-from searx.zjsearch.ai.runtime.prompts import STALL_NOTE
+from searx.zjsearch.ai.runtime.progress import BUDGET_LAST_ROUND_NOTE, FEED_CONVERGE_NOTE
 from searx.zjsearch.ai.runtime.rank import RERANK_HEAD, bm25_order, rerank_doc, rerank_order
 from searx.zjsearch.ai.runtime.registry import SourcesRegistry
 from searx.zjsearch.ai.runtime.tools import (
@@ -622,17 +624,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # the iteration counter into the system prompt every turn -- this
         # is the cheap canonical-messages equivalent)
         if self.max_rounds and rnd == self.max_rounds - 1:
-            self._append_note(
-                feeds,
-                "(budget note: ONE research round remains -- make it cover the most important remaining gaps.)",
-            )
+            self._append_note(feeds, BUDGET_LAST_ROUND_NOTE)
         elif self.feed_chars > _FEED_SOFT_LIMIT and not self.size_noted:
             self.size_noted = True
-            self._append_note(
-                feeds,
-                "(note: the source context is getting large -- start converging:"
-                " prefer answering from what you have over opening more pages.)",
-            )
+            self._append_note(feeds, FEED_CONVERGE_NOTE)
         yield (
             "tool_results",
             [(calls[idx], str(feed or "error: the call failed")) for idx, feed in enumerate(feeds)],
@@ -818,26 +813,3 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 else:
                     url, started = args
                     yield from self._finish_page(rnd, wire_id, url, fut, started, feeds)
-
-
-def round_progress(state: Searches, stall_rounds: int) -> t.Callable[[int], str | None]:
-    """The progress-based termination policy: called by the agent loop
-    after each executed round.  A round is PRODUCTIVE when at least one
-    fresh query returned results; ``stall_rounds`` consecutive
-    unproductive rounds end the research (the returned message explains
-    the staleness to the model).  Productive research is UNLIMITED; a
-    round of pure bookkeeping (plan writes, memory saves) is neither
-    progress nor stall."""
-
-    def verdict(_round_no: int) -> str | None:
-        if not state.round_gathered:
-            return None
-        if state.round_new_hits > 0:
-            state.stalled_rounds = 0
-            return None
-        state.stalled_rounds += 1
-        if state.stalled_rounds < stall_rounds:
-            return None
-        return STALL_NOTE
-
-    return verdict
