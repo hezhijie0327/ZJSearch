@@ -224,11 +224,10 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       without them the run is a single WRITE turn, the AI Overview shape).
     - ``round_progress(executed_rounds)``: the stall detector -- ``None``
       keeps researching, a string explains the halt and ends the phase.
-    - ``pre_write()``: the PRE-WRITE verification pass (the strip's 核验
-      stage) -- runs AFTER the research ends and BEFORE the write opens;
-      the returned events stream under the ``audit`` phase (evidence
-      checks, final gates), so the writer only consumes verified
-      material.
+    - ``pre_write()``: the PRE-WRITE verification pass -- runs AFTER the
+      research ends and BEFORE the write opens; the returned events
+      stream as-is (evidence checks land in the 决策结果 card), so the
+      writer only consumes verified material.
     - ``continuation()``: the LEDGER-CLOSE contract -- consulted when a
       turn ends with ZERO calls (the model "stopped researching").
       ``None`` (or a missing callback) lets the run end; a string is the

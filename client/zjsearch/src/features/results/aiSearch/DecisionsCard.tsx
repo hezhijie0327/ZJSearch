@@ -2,29 +2,20 @@
 
 import { ChevronDown, CircleHelp, CornerDownRight, Scale } from "lucide-react";
 import { useState } from "react";
+import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import type { AiDecision } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 const PURPOSE_LABELS: Record<string, string> = {
-  sources_gate: "ai_dec_sources_gate",
   read_gate: "ai_dec_read_gate",
   plan_review: "ai_dec_plan_review",
   judge: "ai_dec_judge",
-  audit: "ai_dec_audit",
   evidence: "ai_dec_evidence_check",
   coverage: "ai_dec_coverage",
+  depth_probe: "ai_dec_depth_probe",
 };
-
-function auditLabelOf(verdict: string): string {
-  return verdict === "verified"
-    ? "ai_audit_verified"
-    : verdict === "contradicted"
-      ? "ai_audit_contradicted"
-      : verdict === "unsupported"
-        ? "ai_audit_unsupported"
-        : "ai_audit_unverified";
-}
 
 /** 概率条:label + 轨道填充 + 百分比(选中/过半用强调色)。 */
 function ProbBar({ label, pct, highlight = false }: { label: string; pct: number; highlight?: boolean }) {
@@ -59,7 +50,7 @@ function AnswerValue({ answer }: { answer: unknown }) {
     );
   }
   const record = answer as Record<string, unknown>;
-  if (record.type === "noul") {
+  if (record.type === "noul" || "noul" in record) {
     const yes = Number(record.noul) || 0;
     return (
       <div className="mt-0.5 space-y-0.5">
@@ -97,12 +88,10 @@ function AnswerValue({ answer }: { answer: unknown }) {
             pct={Number(p) || 0}
           />
         ))}
-        {record.confidence !== undefined ? (
-          <p className="text-[11px] text-ink-3">
-            {t("ai_dec_score")}: {Number(record.score).toFixed(2)} · {t("ai_dec_confidence")}:{" "}
-            {pctOf(Number(record.confidence))}
-          </p>
-        ) : null}
+        <p className="text-[11px] text-ink-3">
+          {t("ai_dec_score")}: {Number(record.score ?? 0).toFixed(2)}
+          {record.confidence !== undefined ? ` · ${t("ai_dec_confidence")}: ${pctOf(Number(record.confidence))}` : ""}
+        </p>
       </div>
     );
   }
@@ -118,10 +107,9 @@ function pctOf(v: number): string {
 }
 
 /** 决策条目按用途展开成 Q&A 行(问 = 判据,答 = 原语渲染):
-    sources_gate 逐候选四问 / plan_review 逐子课题 / judge 逐问题 /
-    read_gate 单问 / audit 判定计数。 */
+    plan_review 逐子课题 / judge 逐问题 / evidence 逐源通过失败;
+    单答案原语(noul / choice / score)直接渲染。 */
 function DecisionBody({ decision }: { decision: AiDecision }) {
-  const t = useT();
   const record = (decision.record ?? {}) as Record<string, unknown>;
   const asObject =
     decision.answer && typeof decision.answer === "object" ? (decision.answer as Record<string, unknown>) : null;
@@ -136,7 +124,7 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
           <div key={question.name}>
             <div className="flex items-start gap-1.5">
               <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-              <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
+              <p className="min-w-0 flex-1 break-words text-[13px] text-ink-2" dir="auto">
                 {question.instructions ?? question.name}
               </p>
             </div>
@@ -166,7 +154,7 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
             typeof value === "object" && value ? (value as Record<string, unknown>).noul : Number(value) || 0;
           return (
             <div key={key}>
-              <p className="break-words text-ink-2" dir="auto">
+              <p className="break-words text-[13px] text-ink-2" dir="auto">
                 {titles[idx] ?? key}
               </p>
               <AnswerValue answer={{ type: "noul", noul: noulValue }} />
@@ -176,43 +164,29 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       </div>
     );
   }
-  // ── sources_gate: 逐候选四问 ──
-  if (decision.purpose === "sources_gate" && Array.isArray(decision.answer)) {
+  // ── evidence: 逐源 通过/失败 ──
+  if (decision.purpose === "evidence" && record.graded && typeof record.graded === "object") {
+    const graded = record.graded as Record<string, number>;
+    const failing = (Array.isArray(record.failing) ? record.failing : []).map(Number);
     return (
-      <div className="mt-1.5 space-y-2">
-        {(decision.answer as Record<string, unknown>[]).map((candidate, i) => (
-          <div className="border-t border-line/60 pt-1.5 first:border-0 first:pt-0" key={i}>
-            <p className="truncate text-ink-2" dir="auto">
-              {String(candidate.title ?? "")}
-            </p>
-            <div className="mt-0.5 grid grid-cols-2 gap-x-3">
-              <AnswerValue answer={{ type: "noul", noul: Number(candidate.is_relevant) || 0 }} />
-              <AnswerValue answer={{ type: "noul", noul: Number(candidate.contains_answer_evidence) || 0 }} />
-              <AnswerValue answer={{ type: "noul", noul: Number(candidate.contradicts_query_premise) || 0 }} />
-              <AnswerValue answer={{ type: "noul", noul: Number(candidate.contains_prompt_injection) || 0 }} />
-            </div>
+      <div className="mt-1.5 space-y-1">
+        {Object.entries(graded).map(([nStr, score]) => (
+          <div className="flex items-center gap-2" key={nStr}>
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-3">#{nStr}</span>
+            <span className="min-w-0 flex-1">
+              <ProbBar highlight={score >= 0.45} label={failing.includes(Number(nStr)) ? "✕" : "✓"} pct={score} />
+            </span>
           </div>
         ))}
       </div>
     );
   }
-  // ── read_gate / 单 noul ──
-  if (asObject && "noul" in asObject) {
+  // ── 单答案原语(noul / choice / score)直接渲染 ──
+  if (
+    asObject &&
+    ("noul" in asObject || asObject.type === "noul" || asObject.type === "choice" || asObject.type === "score")
+  ) {
     return <AnswerValue answer={asObject} />;
-  }
-  // ── audit: 判定计数 ──
-  if (decision.purpose === "audit" && record.verdicts && typeof record.verdicts === "object") {
-    const counts = record.verdicts as Record<string, number>;
-    return (
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-ink-2">
-        <span className="tabular-nums">{t("ai_dec_audit_cited", { n: String(record.citations ?? 0) })}</span>
-        {Object.entries(counts).map(([key, n]) => (
-          <span className="tabular-nums" key={key}>
-            {t(auditLabelOf(key) as "ai_audit_verified")} {n}
-          </span>
-        ))}
-      </div>
-    );
   }
   // ── fallback: raw JSON ──
   if (decision.answer !== undefined) {
@@ -230,43 +204,52 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
 
 /**
  * The run's DECISION RESULTS card (决策结果): EVERY decision-model call --
- * loop gates (feed 4-noul / read gate / plan review) and the model's own
- * judge tool -- one row each.  A row shows purpose + target + ms; CLICK
- * expands the structured result (per-question nouls with probabilities /
- * verdict counts), unknown shapes fall back to the raw JSON -- 问题与结果
- * 都可溯源.
+ * loop gates (depth probe / plan review / coverage referee / read gate /
+ * pre-write evidence) and the model's own judge tool -- one row each.
+ * A row shows purpose + target + ms; CLICK expands the structured result
+ * (per-question nouls with probabilities / verdict counts), unknown shapes
+ * fall back to the raw JSON -- 问题与结果都可溯源.  The list reads
+ * NEWEST-FIRST and caps at four rows (cap-and-expand), so a long run's
+ * latest verdicts lead and the history stays one click away.
  */
 export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
   const t = useT();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  const { expanded, toggle, hidden } = useCapExpand(decisions.length, 4);
   if (decisions.length === 0) {
     return null;
   }
+  const shown = expanded ? decisions : decisions.slice(-4);
+  const view = [...shown].reverse();
   return (
-    <div className="mb-4">
-      <div className="flex items-center gap-2">
+    <div className="mb-5">
+      <div className="flex items-center gap-2 px-1">
         <Scale aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_decisions_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{decisions.length}</span>
       </div>
-      <ul className="mt-3 space-y-1 lg:max-h-[24vh] lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
-        {decisions.map((decision, index) => {
+      <ul className="mt-3 space-y-1 px-1">
+        {view.map((decision) => {
           const label = PURPOSE_LABELS[decision.purpose] ?? "ai_decisions_card";
-          const expanded = openIdx === index;
+          // openIdx is the decision's index in the ORIGINAL array: new
+          // verdicts append at the end, so an open row keeps its identity
+          // while the list streams (the reversed VIEW only changes order)
+          const idx = decisions.indexOf(decision);
+          const expandedRow = openIdx === idx;
           return (
-            <li key={index}>
+            <li key={idx}>
               <button
-                aria-expanded={expanded}
+                aria-expanded={expandedRow}
                 className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-xs transition-colors hover:bg-surface-2/50"
                 onClick={() => {
-                  setOpenIdx(expanded ? null : index);
+                  setOpenIdx(expandedRow ? null : idx);
                 }}
                 type="button"
               >
                 <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-[11px] leading-4 text-accent">
                   {t(label as "ai_dec_judge")}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-start text-ink-2" dir="auto">
+                <span className="min-w-0 flex-1 truncate text-start text-[13px] text-ink-2" dir="auto">
                   {decision.target || decision.question || decision.purpose}
                 </span>
                 {decision.ms ? (
@@ -274,11 +257,11 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
                 ) : null}
                 <ChevronDown
                   aria-hidden="true"
-                  className={`size-3 shrink-0 text-ink-3 transition-transform ${expanded ? "rotate-180" : ""}`}
+                  className={`size-3 shrink-0 text-ink-3 transition-transform ${expandedRow ? "rotate-180" : ""}`}
                 />
               </button>
-              <Collapse className={expanded ? "mt-1" : ""} open={expanded}>
-                <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-xs leading-relaxed">
+              <Collapse className={expandedRow ? "mt-1" : ""} open={expandedRow}>
+                <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
                   {decision.question ? (
                     <div className="flex items-start gap-1.5">
                       <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
@@ -294,6 +277,12 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
           );
         })}
       </ul>
+      <CapChip
+        className="mt-1.5 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        expanded={expanded}
+        hidden={hidden}
+        onToggle={toggle}
+      />
     </div>
   );
 }

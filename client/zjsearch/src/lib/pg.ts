@@ -296,8 +296,11 @@ async function createSchema(db: Pg): Promise<void> {
   // the write-time projection triggers: bytes/head computed once per write;
   // the per-kind ledger maintained on every insert/update/delete (the
   // UPDATE guard skips no-op updates -- the embed pass touches columns the
-  // ledger does not read)
-  await db.query(`CREATE FUNCTION knowledge_bytes_trg() RETURNS trigger AS $$
+  // ledger does not read).  IDEMPOTENT: boot re-runs the DDL on EVERY page
+  // load -- plain CREATE FUNCTION/TRIGGER would fail the second boot with
+  // "already exists" and take the whole store down for the session (the
+  // knowledge base read as empty; every write died with it).
+  await db.query(`CREATE OR REPLACE FUNCTION knowledge_bytes_trg() RETURNS trigger AS $$
     DECLARE changed boolean := TG_OP = 'INSERT';
     BEGIN
       IF TG_OP = 'UPDATE' THEN
@@ -310,10 +313,11 @@ async function createSchema(db: Pg): Promise<void> {
       END IF;
       RETURN NEW;
     END $$ LANGUAGE plpgsql`);
+  await db.query("DROP TRIGGER IF EXISTS knowledge_bytes ON knowledge");
   await db.query(
     "CREATE TRIGGER knowledge_bytes BEFORE INSERT OR UPDATE ON knowledge FOR EACH ROW EXECUTE FUNCTION knowledge_bytes_trg()",
   );
-  await db.query(`CREATE FUNCTION knowledge_stats_trg() RETURNS trigger AS $$
+  await db.query(`CREATE OR REPLACE FUNCTION knowledge_stats_trg() RETURNS trigger AS $$
     BEGIN
       IF TG_OP = 'UPDATE' AND OLD.kind = NEW.kind AND OLD.bytes = NEW.bytes THEN
         RETURN NULL;
@@ -327,6 +331,7 @@ async function createSchema(db: Pg): Promise<void> {
       END IF;
       RETURN NULL;
     END $$ LANGUAGE plpgsql`);
+  await db.query("DROP TRIGGER IF EXISTS knowledge_stats ON knowledge");
   await db.query(
     "CREATE TRIGGER knowledge_stats AFTER INSERT OR UPDATE OR DELETE ON knowledge FOR EACH ROW EXECUTE FUNCTION knowledge_stats_trg()",
   );

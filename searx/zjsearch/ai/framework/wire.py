@@ -20,15 +20,11 @@ bug and :py:func:`encode` refuses it):
                         (n/ms/chars/text/result/preview per tool kind).
 ``close``               entry ``id`` is final.
 ``phase``               the run's macro stage: ``{name: plan|
-                        research|write|audit}`` -- the timeline's one
+                        research|write}`` -- the timeline's one
                         coarse spine (Qwen Deep Research's phase
                         design); micro-activity stays with the entries.
-``audit``               the citation audit's PROCESS + RESULT, one row
-                        per graded [n]: ``{items: [{n, verdict,
-                        confidence, claim}]}`` -- the sources rail
-                        renders the badges + traceability blocks.
 ``decisions``           the run's DECISION RESULTS (framework gates +
-                        model-initiated judge + audit), one batch per
+                        model-initiated judge), one batch per
                         round: ``{round, items: [{purpose, question,
                         target, answer, ms}]}`` -- the sources rail's
                         决策结果 card; ``answer`` is the RAW model
@@ -71,7 +67,6 @@ EVENTS: frozenset[str] = frozenset(
         "tasks",
         "learnings",
         "sources",
-        "audit",
         "decisions",
         "answer",
         "ask",

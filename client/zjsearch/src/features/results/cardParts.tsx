@@ -381,7 +381,17 @@ export interface CardProps {
     final snap when the clamp takes over. */
 const SNIPPET_PREVIEW_PX = 46;
 
-export function Snippet({ className = "", contentHtml }: { className?: string; contentHtml: string }) {
+export function Snippet({
+  className = "",
+  contentHtml,
+  textClass = "text-sm leading-relaxed text-ink-2",
+}: {
+  className?: string;
+  contentHtml: string;
+  /** the paragraph's own type classes -- the rail's compact cards drop to
+      the 13px tier while result cards keep the 14px body default */
+  textClass?: string;
+}) {
   const t = useT();
   const ref = useRef<HTMLParagraphElement | null>(null);
   const [overflow, setOverflow] = useState(false);
@@ -455,7 +465,7 @@ export function Snippet({ className = "", contentHtml }: { className?: string; c
   return (
     <div className={className}>
       <p
-        className={`text-sm leading-relaxed text-ink-2 transition-[max-height] duration-300 ease-out ${clamped && animPx === null ? "line-clamp-2" : ""}`}
+        className={`${textClass} transition-[max-height] duration-300 ease-out ${clamped && animPx === null ? "line-clamp-2" : ""}`}
         dangerouslySetInnerHTML={{ __html: contentHtml }}
         dir="auto"
         onTransitionEnd={(event) => {

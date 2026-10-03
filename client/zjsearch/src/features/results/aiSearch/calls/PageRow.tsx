@@ -29,19 +29,19 @@ function pageLabel(url: string | undefined): string {
   }
 }
 
-/** The web_reader row: the read url and its character count.  The reading
-    pane NEVER folds -- a settled read shows its content right under the
-    row (scroll-capped inside CallContent); a second click to see what was
-    read is friction.  The debug panes (raw arguments + the model's
-    receipt) join the expandable area beside colliding result sources. */
+/** The web_reader row: the read url and its character count, ONE LINE
+    folded like a search row -- the reading pane (what was read, capped
+    scroll) opens on click, beside the debug panes (raw arguments + the
+    model's receipt) and any colliding result sources.  A long read must
+    not push the timeline around uninvited. */
 export function PageRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const rawArgs = rawArgsOf(call);
   // web_reader rows never expand for call text (the shared hasText rule
-  // excludes them) -- the fold triggers are the raw arguments, the model
-  // receipt and colliding result sources
-  const expandable = results.length > 0 || rawArgs !== null || Boolean(call.feed);
+  // excludes them) -- the fold triggers are the reading pane, the raw
+  // arguments, the model receipt and colliding result sources
+  const expandable = Boolean(call.text) || results.length > 0 || rawArgs !== null || Boolean(call.feed);
   return (
     <div>
       <CallRowShell
@@ -61,11 +61,11 @@ export function PageRow({ call, results }: { call: AiSearchCall; results: AiSear
         }}
         open={open}
       />
-      {/* the reading pane NEVER folds: a settled read shows its content
-          right under the row (scroll-capped inside CallContent) */}
-      {call.text ? <CallContent call={call} /> : null}
       {open && expandable ? (
         <>
+          {/* the READING PANE first: what the model actually read (the
+              row's point), then the debug contract */}
+          {call.text ? <CallContent call={call} /> : null}
           <DebugPanes call={call} rawArgs={rawArgs} />
           <CallResults results={results} />
         </>

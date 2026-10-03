@@ -113,7 +113,7 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
 
   return (
     <Shell globals={globals}>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-44 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
         {resuming ? (
           <ThreadGhost />
         ) : hasThread ? (
@@ -189,7 +189,7 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
               // Perplexica's floating follow-up, the takeover page's composer
               // in the thread page's own measure (no fog scrim -- it washed
               // out short content underneath)
-              <div className="sticky bottom-6 z-10">
+              <div className="sticky bottom-6 z-10 lg:me-[22rem] xl:me-[26rem]">
                 <form
                   aria-label={t("ai_search_followup")}
                   className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent"

@@ -6,23 +6,20 @@ import { useT } from "@/lib/i18n.ts";
 
 const ORDER: readonly AiSearchStage[] = ["plan", "research", "write"];
 
-const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_phase_write" | "ai_phase_audit"> = {
+const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_phase_write"> = {
   plan: "ai_phase_plan",
   research: "ai_phase_research",
-  audit: "ai_phase_audit",
   write: "ai_phase_write",
 };
 
 /**
- * The run's macro-stage spine (规划 → 检索 → 撰写 → 核验): ONE strip under
- * the run title, the task card's own status language at strip scale --
+ * The run's macro-stage spine (规划 → 检索 → 撰写): ONE strip under the
+ * run title, the task card's own status language at strip scale --
  * done = check, active = the accent ping, pending = the hollow dot.
- * ``done`` (the run settled) turns EVERY segment green -- the spine ends
- * honestly instead of blinking 核验 forever.  ``verifying`` (the audit's
- * citation count) labels the active audit segment with its workload.
- * Hidden entirely when the run carries no phase events (legacy threads);
- * the timeline below remains the full record, this only tells the user
- * where in the research they are.
+ * ``done`` (the run settled) turns EVERY segment green.  Hidden entirely
+ * when the run carries no phase events (legacy threads); the timeline
+ * below remains the full record, this only tells the user where in the
+ * research they are.
  */
 export type PhaseStripState = "streaming" | "done" | "stopped" | "error" | "awaiting";
 

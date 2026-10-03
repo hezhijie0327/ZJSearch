@@ -33,13 +33,11 @@ from searx.zjsearch.ai.infra import decision
 from searx.zjsearch.ai.runtime.feed import FEED_DEEP, RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.runtime import audit
 from searx.zjsearch.ai.runtime.progress import BUDGET_LAST_ROUND_NOTE, FEED_CONVERGE_NOTE
-from searx.plugins.bm25_reranker import _field
 from searx.zjsearch.ai.infra.decision import features as decision_features
 from searx.zjsearch.ai.runtime.rank import (
     RERANK_HEAD,
     bm25_order,
     diverse_order,
-    gate_order,
     rerank_doc,
     rerank_order,
 )
@@ -180,8 +178,13 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # the run's wall clock (the max_seconds budget reads it)
         self.started_at = time.monotonic()
         # the numbered entries' identity (n -> title + snippet) -- the
-        # audit phase's citation sources
+        # pre-write evidence check's source pool
         self.entries: dict[int, dict[str, str]] = {}
+        # the coverage referee's last verdict bands ((title, band) per
+        # judged subtask): the 决策结果 entry only re-emits when a band
+        # CHANGES -- identical per-round verdicts are not news (the feed
+        # advice keeps its cadence, the card does not)
+        self._referee_signature: tuple[tuple[str, str], ...] = ()
 
     def ledger_open_items(self) -> tuple[list[str], list[str]]:
         """The ledger's OPEN items: (open subtask titles, open gap
@@ -294,22 +297,20 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
         return search_obj.search().get_ordered_results()
 
-    def _ranked(self, query: str, raw: list[t.Any]) -> tuple[list[t.Any], list[int]]:
-        """One search's results through the FOUR-stage cascade: engine
+    def _ranked(self, query: str, raw: list[t.Any]) -> list[t.Any]:
+        """One search's results through the THREE-stage cascade: engine
         order -> BM25 text relevance -> the rerank model re-scoring the
-        head -> the model funnel (embedding diversity prunes the
-        near-duplicate syndications; the decision 4-noul gate orders by
-        ANSWER EVIDENCE, pulls premise-conflicts out of the ranked head
-        and drops injections outright).  Every stage fails open into the
-        previous order (rank.py); the rerank model's token usage joins
-        the run's account (the settle carries it as ``usage.rerank``),
-        the gate's verdict joins the judgment ledger.  Returns the
-        ranked results plus the CONFLICT results (the caller routes them
-        to the writer's conflicting-evidence lane)."""
+        head -> embedding diversity pruning the near-duplicate
+        syndications.  Every stage fails open into the previous order
+        (rank.py); the rerank model's token usage joins the run's account
+        (the settle carries it as ``usage.rerank``).  (The per-candidate
+        decision gate that once ordered by answer evidence was removed
+        with the sources_gate feature -- ranking is mechanical; the
+        decision model's judgments live where the model invokes them.)"""
         try:
             order = bm25_order(query, raw)
             if order is None:
-                return raw, []
+                return raw
             head = order[:RERANK_HEAD]
             if len(head) >= 2:
                 sub_order, tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head])
@@ -318,7 +319,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     self.rerank_usage["tokens"] += tokens
                 if sub_order is not None:
                     order = [head[i] for i in sub_order] + order[RERANK_HEAD:]
-            # ── the funnel: diversity prunes the head, the gate reorders it ──
+            # ── the funnel's last stage: embedding diversity ──
             ranked_head = order[:RERANK_HEAD]
             kept = diverse_order(
                 [rerank_doc(raw[i]) for i in ranked_head],
@@ -326,47 +327,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             )
             if kept is not None:
                 order = [ranked_head[i] for i in kept] + order[RERANK_HEAD:]
-            gate_size = int(decision_features("sources_gate").get("head", 8) or 8)
-            gate_head = order[:gate_size]
-            passed, conflicts, injections, gate_tokens, gate_raw = gate_order(
-                query,
-                [
-                    (str(_field(raw[i], "title", "") or ""), str(_field(raw[i], "content", "") or "")[:400])
-                    for i in gate_head
-                ],
-            )
-            if passed is not None:
-                if gate_tokens:
-                    self.decision_usage["calls"] += len(gate_head)
-                    self.decision_usage["tokens"] += gate_tokens
-                self.judgments.append(
-                    {
-                        "purpose": "sources_gate",
-                        "question": (
-                            "Per-candidate: relevant / has answer evidence / contradicts premise /"
-                            " prompt injection (noul 0-1)"
-                        ),
-                        "target": query[:200],
-                        "gated": len(gate_head),
-                        "passed": len(passed),
-                        "conflicts": len(conflicts),
-                        "injections": len(injections),
-                        "raw": gate_raw,
-                    }
-                )
-                head_ranked = [gate_head[i] for i in passed]
-                conflict_results = [gate_head[i] for i in conflicts]
-                conflict_set = set(conflict_results)
-                # the conflict lane rides right behind the ranked head:
-                # the researcher still sees the evidence, the writer
-                # reads it with its conflicting-evidence marker
-                order = head_ranked + conflict_results + [i for i in order[gate_size:] if i not in conflict_set]
-            return [raw[i] for i in order], [gate_head[i] for i in conflicts]
+            return [raw[i] for i in order]
         except Exception:  # pylint: disable=broad-except
             # one odd result shape must never take the round's remaining
             # settlements down with it -- the engine order stands
             logger.exception("zjsearch_ai_search: ranking cascade failed -- keeping the engine order")
-            return raw, []
+            return raw
 
     def _plan_review(self, items: list[dict[str, t.Any]]) -> None:
         """The plan REVIEW (fail-open): one decision pass asks per subtask
@@ -448,7 +414,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # or not -- is honestly remembered; its outcome is in the feed)
         self.reg.note_query(dedup_key, query)
         try:
-            raw, conflicts = self._ranked(query, raw)
+            raw = self._ranked(query, raw)
             items = serialize_results(raw, query)
             feed_block, entries = build_search_feed(self.reg, query, category, items)
         except Exception as exc:  # pylint: disable=broad-except
@@ -473,18 +439,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     "title": str(entry.get("title") or "")[:200],
                     "snippet": str(entry.get("content") or "")[:400],
                 }
-        # the conflicting-evidence lane: the gate flagged these positions
-        # as contradicting the query's premise -- they keep their [n] (the
-        # researcher may cite the disagreement) and the feed names them so
-        # the answer can correct the premise instead of parroting it
-        conflict_ns = sorted({int(entries[pos].get("n") or 0) for pos in conflicts if 0 <= pos < len(entries)})
-        feeds[idx - 1] = feed_block + (
-            "\n(note: result(s) " + ", ".join(f"[{n}]" for n in conflict_ns) + " CONTRADICT the query's"
-            " stated premise -- if the premise is wrong, say so in the answer and cite them as the"
-            " correction.)"
-            if conflict_ns
-            else feed_block
-        )
+        feeds[idx - 1] = feed_block
         self.feed.append(feeds[idx - 1])
         self.feed_chars += len(feeds[idx - 1])
         # the task card's coverage tracking with the REAL titles: the
@@ -1052,7 +1007,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         # (active) and per-settlement in _finish (done + provenance) --
         # this re-emission syncs the card after the round's results
         yield ("tasks", {"items": [dict(t) for t in self.coverage.task_list]})
-        # the run's DECISION RESULTS (framework gates + model judge + audit
+        # the run's DECISION RESULTS (framework gates + model judge
         # summaries gathered THIS round): one wire batch per round -- the
         # sources rail's 决策结果 card reads it, raw answers included
         round_judgments = self.judgments[judgment_mark:]
@@ -1102,19 +1057,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         if usage.get("input_tokens"):
             self.decision_usage["calls"] += len(answers)
             self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
-        self.judgments.append(
-            {
-                "purpose": "coverage",
-                "question": (
-                    "Per open subtask: covered by this round's new sources" " (noul 0-1, above threshold suggests done)"
-                ),
-                "target": " / ".join(str(t.get("title") or "")[:60] for t in open_tasks[:graded_count]),
-                "answers": answers,
-                "ms": int((time.monotonic() - started) * 1000),
-            }
-        )
         done_min = float(cov.get("done_min", 0.6))
         done_candidates, thin = [], []
+        signature: list[tuple[str, str]] = []
         for name, answer in answers.items():
             if not name.startswith("task_"):
                 continue
@@ -1123,7 +1068,26 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 continue
             noul = float(answer.get("noul") or 0.0) if isinstance(answer, dict) else 0.0
             title = str(open_tasks[idx].get("title") or "")[:60]
-            (done_candidates if noul >= done_min else thin).append(title)
+            band = "done" if noul >= done_min else "thin"
+            signature.append((title, band))
+            (done_candidates if band == "done" else thin).append(title)
+        # the 决策结果 card only learns of a verdict when it CHANGED: the
+        # referee re-grades the same open subtasks every round, and eleven
+        # identical rows read as noise, not assurance
+        if tuple(signature) != self._referee_signature:
+            self._referee_signature = tuple(signature)
+            self.judgments.append(
+                {
+                    "purpose": "coverage",
+                    "question": (
+                        "Per open subtask: covered by this round's new sources"
+                        " (noul 0-1, above threshold suggests done)"
+                    ),
+                    "target": " / ".join(str(t.get("title") or "")[:60] for t in open_tasks[:graded_count]),
+                    "answers": answers,
+                    "ms": int((time.monotonic() - started) * 1000),
+                }
+            )
         advice = []
         if done_candidates:
             advice.append(
@@ -1205,7 +1169,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             )
             self.feed.append(note)
             self.feed_chars += len(note)
-        # the wire batch (the loop streams it under the audit phase): a
+        # the wire batch (the loop streams it BEFORE the writer opens): a
         # DECISIONS event, not the bare ledger entry
         return [{"e": "decisions", "round": self.round_no, "items": [entry]}]
 

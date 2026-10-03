@@ -32,7 +32,6 @@ from searx.zjsearch.ai.infra import sdk as sdk_registry
 from searx.zjsearch.ai.runtime.context import _relevance_order
 from searx.zjsearch.ai.runtime.executor import Searches
 from searx.zjsearch.ai.infra.decision import features as decision_features
-from searx.zjsearch.ai.runtime import audit
 from searx.zjsearch.ai.runtime.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runtime.gates import (
     clarify_gate,
@@ -374,7 +373,6 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             state.rerank_usage,
             state.decision_usage,
             state.judgments,
-            state,
             (
                 [
                     {
@@ -428,7 +426,6 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         rerank_usage: dict[str, int] | None = None,
         decision_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
-        state: t.Any = None,
         preamble: list[dict[str, t.Any]] | None = None,
     ):
         self.events = events
@@ -445,78 +442,12 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
         self.judgments = judgments if judgments is not None else []
-        # the run's live Searches (the audit phase reads its numbered
-        # entries) -- a cheap ref, the executor is done mutating by the
-        # time the settle passes through here
-        self.state = state
         # events that precede the loop's own stream (the depth probe runs
         # BEFORE the executor exists) -- flushed first when iterating
         self.preamble = [wire.encode(e) for e in (preamble or [])]
         self.buffer: list[str] = []
         self.rest: t.Iterator[str] | None = None
         self.primed = False
-
-    def _audit_event(self, payload: dict[str, t.Any]) -> dict[str, t.Any]:
-        """The audit event: the graded citations as an ordered array (the
-        timeline's audit step) -- the process AND the result in the
-        研究过程, beside the badges the cards render."""
-        citations = payload.get("citations", {})
-        items = [
-            {
-                "n": int(n),
-                "verdict": entry.get("verdict", "unverified"),
-                "confidence": float(entry.get("confidence") or 0.0),
-                **({"claim": entry["claim"]} if entry.get("claim") else {}),
-            }
-            for n, entry in sorted(citations.items(), key=lambda pair: int(pair[0]))
-        ]
-        return {"e": "audit", "items": items}
-
-    def _audit_total(self, answer: str) -> int:
-        """The audit's workload (the cited-[n] count) -- zero when the
-        audit cannot run (the phase event stays off and the strip never
-        blinks 核验 for nothing)."""
-        if not answer or self.state is None:
-            return 0
-        return audit.citation_workload(answer, self.state.entries)
-
-    def _audit(self, answer: str) -> dict[str, t.Any] | None:
-        """The audit phase's payload: every cited [n] graded against its
-        source (citation_verdicts -- rerank pre-floor + decision choice).
-        ``None`` when the audit cannot run (decision off/unconfigured,
-        empty answer/registry) -- the settle carries nothing and the
-        client renders no badges (a lens, not a dependency).  The summary
-        joins the judgment ledger (purpose ``audit``): the knowledge
-        base's run meta carries WHAT was audited and what came of it."""
-        if not answer or self.state is None:
-            return None
-        started = time.monotonic()
-        verdicts = audit.citation_verdicts(answer, self.state.entries)
-        if not verdicts:
-            return None
-        counts: dict[str, int] = {}
-        for entry in verdicts.values():
-            counts[entry["verdict"]] = counts.get(entry["verdict"], 0) + 1
-        self.state.judgments.append(
-            {
-                "purpose": "audit",
-                "question": "Per-citation check: the claim's relation to its source"
-                " (supports / contradicts / says_nothing)",
-                "target": f"answer cites {len(verdicts)} citations",
-                "citations": len(verdicts),
-                "verdicts": counts,
-                "items": [
-                    {
-                        "n": int(n),
-                        "verdict": entry.get("verdict", "unverified"),
-                        "confidence": float(entry.get("confidence") or 0.0),
-                    }
-                    for n, entry in sorted(verdicts.items(), key=lambda pair: int(pair[0]))
-                ],
-                "ms": int((time.monotonic() - started) * 1000),
-            }
-        )
-        return {"citations": verdicts}
 
     def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
         """The settle with the GATES' token account folded into its usage:
@@ -574,21 +505,6 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             if kind == "settle":
                 if str(event.get("status") or "") == "error":
                     raise _UpstreamDead(str(event.get("halt") or "upstream returned an empty stream"))
-                audit_answer = "".join(answer_parts).strip()
-                audit_total = self._audit_total(audit_answer)
-                if audit_total:
-                    self.buffer.append(wire.encode({"e": "phase", "name": "audit", "total": audit_total}))
-                audit_payload = self._audit(audit_answer)
-                if audit_payload is not None:
-                    if self.state.judgments and self.state.judgments[-1].get("purpose") == "audit":
-                        self.buffer.append(
-                            wire.encode(
-                                {
-                                    "e": "decisions",
-                                    "items": [dict(self.state.judgments[-1])],
-                                }
-                            )
-                        )
                 merged = self._merged_settle(event)
                 self.buffer.append(wire.encode(merged))
                 self.rest = self._late("".join(answer_parts).strip(), awaiting, related_seen)
@@ -630,15 +546,6 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             # the loop guarantees exactly one settle; a missing one is a
             # protocol bug -- fail loudly rather than hang the client
             raise _UpstreamDead("the run ended without a settle event")
-        audit_answer = "".join(answer_parts).strip()
-        audit_total = self._audit_total(audit_answer)
-        if audit_total:
-            yield wire.encode({"e": "phase", "name": "audit", "total": audit_total})
-        audit_payload = self._audit(audit_answer)
-        if audit_payload is not None:
-            yield wire.encode(self._audit_event(audit_payload))
-            if self.state.judgments and self.state.judgments[-1].get("purpose") == "audit":
-                yield wire.encode({"e": "decisions", "items": [dict(self.state.judgments[-1])]})
         merged = self._merged_settle(settle_event)
         yield wire.encode(merged)
         yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)

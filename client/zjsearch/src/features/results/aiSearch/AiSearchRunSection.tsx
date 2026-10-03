@@ -5,7 +5,6 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
-  CircleHelp,
   CircleStop,
   Compass,
   Copy,
@@ -21,8 +20,9 @@ import {
   Waypoints,
   Zap,
 } from "lucide-react";
-import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useState } from "react";
+import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
@@ -53,6 +53,7 @@ import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
+import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml } from "@/lib/print.ts";
 import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
 
@@ -113,7 +114,7 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
   }
   const done = tasks.filter((task) => task.status === "done").length;
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
         <ListTodo aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_task_card")}</h3>
@@ -130,35 +131,62 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
   );
 }
 
-/** The findings ledger (the learnings tool writes it; the writer received
-    the same list as <findings>): the evidence trail under the plan card --
-    what the sources ESTABLISHED, growing live as the run records.  Each
-    fact renders through the SAME measured clamp+expand as a source card's
-    snippet (the 查看更多 language) -- nothing is folded away unreadable.
-    The plan card above says what the run intends; this card says what it
-    already has. */
-/** The BELIEF LEDGER card: active facts carry the accent dot; superseded
-    facts stay visible (retired, struck) and retracted ones drop their
-    claim (struck, warning) -- the revision history IS the honesty; the
-    gaps partition renders under the facts (open = the question chip,
-    closed = its settlement). */
-function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: LedgerGap[] }) {
+/** The BELIEF LEDGER card (研究发现): active facts carry the accent dot,
+    superseded facts stay visible (retired, struck) and retracted ones
+    drop their claim (struck, warning) -- the revision history IS the
+    honesty.  Each fact renders through the SAME measured clamp+expand as
+    a source card's snippet, with inline [n] marks as accent chip buttons
+    that locate the source in the rail.  The list reads NEWEST-FIRST and
+    caps at four entries (one chip unfolds both the facts and the gaps
+    partition); 未决缺口 renders under the facts: an OPEN gap is a
+    colored dot (an owed question, not an achievement), a closed one
+    settles as a check + its answer. */
+function factHtml(text: string): string {
+  return escapeHtml(text).replace(/\[(\d{1,3})\]/g, (_mark, n: string) => {
+    const num = Number(n);
+    if (!(num > 0)) {
+      return `[${n}]`;
+    }
+    return (
+      `<button type="button" data-cite-n="${num}" title="来源 [${num}]"` +
+      ` class="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded bg-accent-soft px-1 align-baseline text-[11px] font-medium leading-4 text-accent transition-colors hover:text-accent-hover">[${num}]</button>`
+    );
+  });
+}
+
+function FindingsCard({
+  learnings,
+  gaps,
+  expanded,
+  onToggleExpanded,
+  onCiteN,
+}: {
+  learnings: LedgerFact[];
+  gaps: LedgerGap[];
+  /** CONTROLLED cap state (a [n] click expands it; the chip may fold) */
+  expanded: boolean;
+  onToggleExpanded: (next: boolean) => void;
+  onCiteN: (n: number) => void;
+}) {
   const t = useT();
   if (learnings.length === 0 && gaps.length === 0) {
     return null;
   }
   const active = learnings.filter((fact) => fact.status === "active");
+  const openGaps = gaps.filter((gap) => gap.status === "open");
+  const factsHidden = Math.max(0, learnings.length - 4);
+  const gapsHidden = Math.max(0, gaps.length - 4);
+  const factView = [...(expanded ? learnings : learnings.slice(-4))].reverse();
+  const gapView = [...(expanded ? gaps : gaps.slice(-4))].reverse();
   return (
-    <div className="mb-4">
+    <div className="mb-5">
       <div className="flex items-center gap-2 px-1">
         <NotebookPen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_findings_card")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{active.length}</span>
       </div>
-      {/* the facts cap + scroll INTERNALLY; 未决缺口 renders BELOW the scroll
-          area -- always visible, never occluded by a long facts list */}
-      <ul className="mt-3 space-y-1.5 lg:max-h-[30vh] lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
-        {learnings.map((fact) => (
+      <ul className="mt-3 space-y-1.5">
+        {factView.map((fact) => (
           <li className="flex items-start gap-2" key={fact.id}>
             {fact.status === "active" ? (
               <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
@@ -168,10 +196,31 @@ function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: Ledg
               <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-ink-3/40" />
             )}
             <div className="min-w-0 flex-1">
-              <Snippet
-                className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
-                contentHtml={escapeHtml(fact.text)}
-              />
+              {/* the [n] marks ride INSIDE the snippet's html as chip
+                  buttons; the delegated click locates the source */}
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only catches the fact's own [n] chip buttons */}
+              <div
+                onClick={(event) => {
+                  const chip = (event.target as HTMLElement).closest("[data-cite-n]");
+                  if (chip) {
+                    onCiteN(Number(chip.getAttribute("data-cite-n")));
+                  }
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    const chip = (event.target as HTMLElement).closest("[data-cite-n]");
+                    if (chip) {
+                      onCiteN(Number(chip.getAttribute("data-cite-n")));
+                    }
+                  }
+                }}
+              >
+                <Snippet
+                  className={fact.status === "active" ? "" : "text-ink-3 line-through decoration-ink-3/60"}
+                  contentHtml={factHtml(fact.text)}
+                  textClass="text-[13px] leading-relaxed text-ink-2"
+                />
+              </div>
               {fact.status !== "active" ? (
                 <span className="ms-1.5 whitespace-nowrap text-[11px] text-ink-3">
                   {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
@@ -192,12 +241,15 @@ function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: Ledg
       </ul>
       {gaps.length > 0 ? (
         <div className="mt-3 border-t border-line px-1 pt-2.5">
-          <p className="text-xs font-medium text-ink-2">{t("ai_findings_gaps")}</p>
+          <p className="text-xs font-medium text-ink-2">
+            {t("ai_findings_gaps")}
+            {openGaps.length > 0 ? <span className="ms-1.5 tabular-nums text-ink-3">{openGaps.length}</span> : null}
+          </p>
           <ul className="mt-1.5 space-y-1">
-            {gaps.map((gap) => (
-              <li className="flex items-start gap-2 text-xs" key={gap.id}>
+            {gapView.map((gap) => (
+              <li className="flex items-start gap-2 text-[13px]" key={gap.id}>
                 {gap.status === "open" ? (
-                  <CircleHelp aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-accent" />
+                  <span aria-hidden="true" className="mt-[7px] size-1.5 shrink-0 rounded-full bg-accent" />
                 ) : (
                   <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
                 )}
@@ -215,6 +267,14 @@ function FindingsCard({ learnings, gaps }: { learnings: LedgerFact[]; gaps: Ledg
           </ul>
         </div>
       ) : null}
+      <CapChip
+        className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        expanded={expanded}
+        hidden={factsHidden + gapsHidden}
+        onToggle={() => {
+          onToggleExpanded(!expanded);
+        }}
+      />
     </div>
   );
 }
@@ -226,7 +286,7 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
   const t = useT();
   return (
     <li>
-      <div className="flex items-start gap-2 text-xs">
+      <div className="flex items-start gap-2 text-[13px]">
         <span className="sr-only">
           {t(
             task.status === "done"
@@ -260,7 +320,9 @@ function TaskItem({ task }: { task: AiSearchRun["tasks"][number] }) {
         </span>
         {task.status === "done" && (task.sources?.length ?? 0) > 0 ? (
           <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
-            {t("ai_task_sources", { n: String(task.sources?.length ?? 0) })}
+            {t((task.sources?.length ?? 0) === 1 ? "ai_task_source_one" : "ai_task_sources", {
+              n: String(task.sources?.length ?? 0),
+            })}
           </span>
         ) : null}
       </div>
@@ -544,14 +606,13 @@ function AskCard({
   );
 }
 
-/** The clarify round-trip after submission: the confirmed direction (or
-    the skip) the research below is built on, as a collapsible segment --
-    OPEN by default so the user can always review what shaped the run
-    (morphic keeps the clarification exchange in the transcript; a thin
-    one-line summary just reads as broken). */
+/** The clarify round-trip archive (已确认方向): the confirmed direction
+    (or the skip) the research below is built on.  The SAME section
+    language as every rail card -- icon + title + count header, one
+    settled row per answered question (check + answer + the question in
+    muted) -- newest first, capped at four. */
 function AskArchiveCard({ clarify }: { clarify: string }) {
   const t = useT();
-  const [expanded, setExpanded] = useState(false);
   // parse "1. Question：Answer" lines into confirmed-context pairs; the
   // trailing free-text note (no separator) rides as its own item
   const text = clarify.trim();
@@ -576,57 +637,29 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
   if (note) {
     items.push({ q: t("ai_clarify_more"), a: note });
   }
+  const view = [...items].reverse().slice(0, 4);
   return (
-    // the ask round ARCHIVED, in the sources section's own language:
-    // header + SourceCard-shaped rows -- one card per ask round, click to
-    // expand the full Q/A detail
-    <section aria-label={t("ai_clarify_summary")}>
-      <div className="mb-4">
-        <div className="flex items-center gap-2">
-          <MessageCircleQuestion aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-          <h3 className="text-base font-semibold text-ink">{t("ai_clarify_summary")}</h3>
-          <span className="shrink-0 text-xs tabular-nums text-ink-3">{items.length}</span>
-        </div>
-        <div className="mt-3 flex flex-col gap-2">
-          <button
-            aria-expanded={expanded}
-            className={`flex items-center gap-2.5 rounded-lg bg-surface-2/70 p-2.5 text-start transition-colors hover:bg-surface-2 ${expanded ? "ring-1 ring-accent-soft" : ""}`}
-            onClick={() => {
-              setExpanded(!expanded);
-            }}
-            type="button"
-          >
-            <span className="flex size-4 shrink-0 items-center justify-center self-center overflow-hidden rounded-[5px] bg-surface ring-1 ring-line lg:self-auto">
-              <MessageCircleQuestion aria-hidden="true" className="size-3.5 text-ink-3" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs font-medium text-ink" dir="auto">
-                {pairs[0]?.q ?? t("ai_clarify_summary")}
-              </span>
-              <span className="mt-0.5 flex items-center justify-between gap-1.5">
-                <span className="truncate text-xs text-ink-3">{items.map((item) => item.a).join(" · ")}</span>
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`size-3.5 shrink-0 text-ink-3 transition-transform ${expanded ? "rotate-180" : ""}`}
-                />
-              </span>
-            </span>
-          </button>
-          <Collapse className={expanded ? "ps-1" : ""} open={expanded} unmountAfterHide>
-            <div className="space-y-1.5">
-              {items.map((item) => (
-                <div className="flex items-start gap-2 text-xs" key={item.q}>
-                  <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
-                  <span className="min-w-0 flex-1 break-words">
-                    <span className="block text-ink">{item.a}</span>
-                    <span className="block text-ink-3">{item.q}</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Collapse>
-        </div>
+    <section aria-label={t("ai_clarify_summary")} className="mb-5">
+      <div className="flex items-center gap-2 px-1">
+        <MessageCircleQuestion aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
+        <h3 className="text-base font-semibold text-ink">{t("ai_clarify_summary")}</h3>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">{items.length}</span>
       </div>
+      <ul className="mt-3 space-y-1.5">
+        {view.map((item) => (
+          <li className="flex items-start gap-2 text-[13px]" key={`${item.q}-${item.a}`}>
+            <Check aria-hidden="true" className="mt-0.5 size-3 shrink-0 text-ok" />
+            <span className="min-w-0 flex-1 break-words">
+              <span className="block text-ink" dir="auto">
+                {item.a}
+              </span>
+              <span className="block text-ink-3" dir="auto">
+                {item.q}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -667,6 +700,62 @@ function AiSearchRunSectionImpl({
   const t = useT();
   const copyToast = useCopyToast();
   const [researchForced, setResearchForced] = useState<boolean | null>(null);
+  // the citation-locate flow: an [n] click (answer chip, gallery tile,
+  // findings-fact chip) EXPANDS the rail's capped lists, then scrolls the
+  // target source card into view inside the rail's own scroll and flashes
+  // it -- the cap must never eat a citation
+  const [locate, setLocate] = useState<{ n: number; seq: number } | null>(null);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [findingsExpanded, setFindingsExpanded] = useState(false);
+  const locateSeq = useRef(0);
+  const handleCite = (n: number) => {
+    // a cited [n] this run never gathered (a past-research recall, a
+    // previous run's numbering) has no rail card -- the page-level
+    // handler takes it (opens the recalled page)
+    if (!run.sources.some((source) => source.n === n)) {
+      onCite?.(n);
+      return;
+    }
+    locateSeq.current += 1;
+    setLocate({ n, seq: locateSeq.current });
+    setSourcesExpanded(true);
+    setFindingsExpanded(true);
+  };
+  useEffect(() => {
+    if (!locate) {
+      return;
+    }
+    // setTimeout, not rAF: the expansion must mount the card first, and a
+    // jammed/starved compositor (occluded tab, in-app webview) never fires
+    // rAF -- a timer always does (clamped, but it fires).  The scroll goes
+    // through the rail's own scrollTop; the page scroll is the fallback.
+    const timer = window.setTimeout(() => {
+      const root = document.getElementById(`ai-run-${run.runNo}`);
+      const card = root?.querySelector<HTMLElement>(`[data-ai-n="${locate.n}"]`);
+      const rail = root?.querySelector("aside");
+      if (!card) {
+        return;
+      }
+      const flash = () => {
+        card.removeAttribute("data-ai-flash");
+        void card.offsetWidth;
+        card.setAttribute("data-ai-flash", "");
+        window.setTimeout(() => card.removeAttribute("data-ai-flash"), 1900);
+      };
+      if (rail && rail.scrollHeight > rail.clientHeight) {
+        const railRect = rail.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        rail.scrollTop += cardRect.top - railRect.top - railRect.height / 2 + cardRect.height / 2;
+        flash();
+        return;
+      }
+      scrollIntoViewAnimated(card, "center");
+      flash();
+    }, 60);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [locate, run.runNo]);
   const streaming = run.status === "streaming" && live;
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
   // the round counter (第 N 轮): the executed steps' count -- while a
@@ -838,7 +927,7 @@ function AiSearchRunSectionImpl({
                 galleries={run.galleries}
                 markdown={citeToLinks(run.answer)}
                 meta={sourceMeta}
-                onCite={onCite}
+                onCite={handleCite}
                 settled={!streaming}
               />
             </div>
@@ -935,26 +1024,31 @@ function AiSearchRunSectionImpl({
             narrow screens (the run hides the slot entirely when it can
             never get content: a settled no-source run) */}
         {run.sources.length > 0 || streaming ? (
-          <>
-            {/* the rail is a STATIC STICKY column on lg: top-aligned beside
-                the research box / answer, pinned under the appbar with its
-                own scroll while the page scrolls (the old absolute pinning
-                squeezed to the answer column's height and collapsed during
-                the write phase).  Below lg it stacks under the answer. */}
-            <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:max-h-[calc(100vh-3.5rem)] lg:w-80 lg:shrink-0 lg:flex-col xl:w-96">
-              {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
-              {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
-              {run.learnings || run.gaps ? (
-                <FindingsCard gaps={run.gaps ?? []} learnings={run.learnings ?? []} />
-              ) : null}
-              {(run.decisions ?? []).length > 0 ? <DecisionsCard decisions={run.decisions ?? []} /> : null}
-              {run.sources.length > 0 ? (
-                <AiSearchSources audit={run.audit} sources={run.sources} />
-              ) : (
-                <AiSearchSourcesSkeleton />
-              )}
-            </aside>
-          </>
+          <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:h-[calc(100vh-3.5rem)] lg:w-80 lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:overscroll-contain lg:pb-10 lg:pr-0.5 xl:w-96">
+            {/* FIXED-HEIGHT SCROLLER, not a max-h: flex children never
+                shrink below their content, so a capped aside only clips
+                its paint -- the bottom sat unreachable under the floating
+                follow-up box.  The rail owns THE scroll; every section is
+                an ordinary block (cap-4 each), and the pb-44 keeps the
+                last card reachable above the follow-up box. */}
+            {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
+            {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}
+            {(run.learnings ?? []).length > 0 || (run.gaps ?? []).length > 0 ? (
+              <FindingsCard
+                expanded={findingsExpanded}
+                gaps={run.gaps ?? []}
+                learnings={run.learnings ?? []}
+                onCiteN={handleCite}
+                onToggleExpanded={setFindingsExpanded}
+              />
+            ) : null}
+            {run.sources.length > 0 ? (
+              <AiSearchSources expanded={sourcesExpanded} onToggleExpanded={setSourcesExpanded} sources={run.sources} />
+            ) : (
+              <AiSearchSourcesSkeleton />
+            )}
+            <DecisionsCard decisions={run.decisions ?? []} />
+          </aside>
         ) : null}
       </div>
 

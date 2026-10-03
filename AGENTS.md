@@ -155,8 +155,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     tracker), `feed` (the writer's compact [n] block builder), `rank`
     (the web_search RANKING CASCADE: engine order → BM25 via the classic
     page's bm25_reranker tokenizer/RRF → the `zjsearch.rerank` endpoint
-    re-scoring the head-20 — Bocha's cascade; every stage fails open,
-    rerank rides searx's curl_cffi network layer with a
+    re-scoring the head-20 → embedding diversity pruning the
+    near-duplicate syndications — Bocha's cascade MINUS the decision
+    stage: the per-candidate 4-noul gate was removed with the
+    `sources_gate` feature, ranking stays mechanical and the decision
+    model's judgments live where the model invokes them; every stage
+    fails open, rerank rides searx's curl_cffi network layer with a
     `zjsearch-rerank` network escape hatch, and its prompt tokens
     accumulate into the settle's `usage.rerank` bucket) and the
     Searches facade) and the AI OVERVIEW (`runtime/overview.py` — the
@@ -181,8 +185,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   OWN buffer (narration never mixes in); `ask` is the clarify gate AND
   the mid-research ask_user (same schema); `settle` declares the
   terminal state (`status: done|awaiting|error` + finish/usage/model/
-  halt).  After the settle only `related`/`memory` may follow (the
-  related fallback completion and memory extraction trail behind — the
+  halt).  `decisions` batches the run's DECISION RESULTS (framework gates
+  + the model's own judge) once per round — the rail's 决策结果 card
+  renders them click-through (score/choice/noul bars); `phase` moves the
+  规划→检索→撰写 spine (the closed stage set has no `audit` — the
+  post-write citation audit was REMOVED: the pre-write evidence check
+  already gates what the writer leans on, and a verdict that arrives
+  after the answer can only badge, never fix).  After the settle only
+  `related`/`memory`/`tags`/`usage` may follow (the late set — the
   follow-up box unlocks on settle, not on them).  A stream that dies
   before its first content event answers 502 (the route PRIMES the
   stream before responding).
@@ -198,6 +208,26 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   / `missed` warning — a subtask that never gathered a source is NOT
   flipped to done), and the research box stays OPEN through the run's
   whole life (it IS the record of how the report was made).
+
+- The AI run's RIGHT RAIL is one uniform surface (five sections, one
+  section language — icon+title+count header, 13px body rows, cap-and-
+  expand): 已确认方向 (the clarify archive) → 调研计划 (task card,
+  plan order, never capped) → 研究发现 (findings + 未决缺口: open gaps
+  read as colored DOTS, closed ones as checks; facts render inline [n]
+  marks as accent chip BUTTONS) → 来源 (source cards) → 决策结果
+  (decisions, diagnostics sink last).  Every list reads NEWEST-FIRST and
+  caps at 4 rows (`useCapExpand` state owned by the run section so a
+  citation click can force it open).  The aside is a FIXED-HEIGHT
+  internal scroller on lg (`lg:h-[calc(100vh-3.5rem)] overflow-y-auto`)
+  — NOT max-h: flex children never shrink below content, a capped box
+  just clips its paint and the bottom sat unreachable under the floating
+  composer; the composer itself is confined to the answer column at lg
+  (`lg:me-[22rem] xl:me-[26rem]`) so it never covers the rail.  The
+  citation-locate chain ([n] chip → expand caps → scroll the rail's own
+  scrollTop → `data-ai-flash`) runs on `setTimeout`, NEVER on
+  requestAnimationFrame — a starved/jammed compositor (occluded tab, the
+  in-app webview, where rAF verifiably never fires) must not break the
+  jump (same doctrine as Collapse's 120ms fallback).
 
 - The AI Overview client (`features/results/AiSummary.tsx`) consumes the
   SAME NDJSON timeline (the hook adapts it into the card's raw-text
@@ -603,9 +633,10 @@ THINK vs CONTENT (the AI timeline's one visual rule): machine-produced
 material — reasoning streams, web_reader reading panes, MCP payloads,
 raw-args debug — sits on the boxed machine-voice ground (`READ_PANE` /
 `HOVER_CHIP` in `lib/styles.ts`: surface-2/50 rounded, 12px ink-3/ink-2);
-the ANSWER sits on the plain ground at 14px `text-ink`.  A settled
-web_reader row renders its pane UNCONDITIONALLY (scroll-capped at
-max-h-40 — the fold was friction, the content is the row's point).
+the ANSWER sits on the plain ground at 14px `text-ink`.  A web_reader row
+folds to ONE LINE like a search row — the reading pane (scroll-capped in
+`CallContent`) opens on click beside the debug panes; an always-open pane
+shoved the whole timeline around (reversed doctrine: the fold came back).
 In-card action ghosts are the 28px/14px `CHIP_BTN` tier (`ICON_BTN`'s
 36px stays chrome-level); hover-revealed corner chips must ALSO reveal
 on `focus-within` (keyboard users tab to invisible controls otherwise).
@@ -1182,6 +1213,13 @@ loses the event -- shipped bug).
   pre-drop state back: "the reset did nothing") and wedged the live
   subscriptions; the reset also clears the localStorage embedding-usage
   totals (`zjs-embed-usage` — a reset that leaves them reads broken).
+  `createSchema` runs on EVERY page load, so its DDL must be IDEMPOTENT
+  end to end: `CREATE OR REPLACE FUNCTION` + `DROP TRIGGER IF EXISTS`
+  before each `CREATE TRIGGER` — a bare `CREATE FUNCTION`/`CREATE
+  TRIGGER` fails the SECOND boot with "already exists", the rejected
+  pgPromise takes every store read AND write down for the session, and
+  the knowledge base reads as EMPTY (shipped bug, caught by the 2026-10
+  browser audit).
 - ENV keys: `ZJSEARCH_AI_KEY` / `ZJSEARCH_EMBEDDING_KEY` /
   `ZJSEARCH_READER_KEY` / `ZJSEARCH_RERANK_KEY` (api_key stays "" in
   dev-settings.yml -- the rerank key NEVER lives in the file).

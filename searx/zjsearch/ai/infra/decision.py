@@ -105,14 +105,6 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
     # confidence simply leaves the previous behavior standing.  The
     # thresholds are starting points (the RAG-gate cookbook's), to be
     # tuned against real runs.
-    "sources_gate": {
-        "enabled": False,
-        "head": 8,
-        "injection_max": 0.70,
-        "contradicts_min": 0.70,
-        "relevant_min": 0.45,
-        "evidence_min": 0.55,
-    },
     "read_gate": {"enabled": True, "injection_max": 0.70, "relevant_min": 0.45},
     "diversity": {"enabled": True, "cosine": 0.92},
     "coverage": {"enabled": True},

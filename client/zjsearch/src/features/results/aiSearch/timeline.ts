@@ -32,7 +32,7 @@ export type AiSearchMode = "speed" | "balanced" | "deep";
 /** The run's macro stages (the wire's ``phase`` events -- Qwen Deep
     Research's spine): one value active at a time, the history kept for
     the run_summary record. */
-export type AiSearchStage = "plan" | "research" | "write" | "audit";
+export type AiSearchStage = "plan" | "research" | "write";
 /** "awaiting": the clarify gate asked for the user's direction -- the run
     lives on until they answer (or skip) via submitClarify. */
 export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error";
@@ -235,13 +235,6 @@ export interface AiSearchRun {
   stage?: AiSearchStage;
   /** every stage the run walked, in order -- the run_summary record */
   stages: AiSearchStage[];
-  /** the audit phase's citation verdicts (the settle carries them):
-      [n] -> verdict + confidence -- the sources card renders the badges;
-      absent = no audit ran (decision off, or a legacy thread) */
-  audit?: AiSearchAudit;
-  /** the audit's workload (the phase event's ``total``): the strip's
-      核验 · N 条 while the citations are being graded */
-  auditTotal?: number;
   /** the run's DECISION RESULTS (framework gates + model judge), one
       entry per decision call -- the rail's 决策结果 card renders them
       with click-through raw answers */
@@ -261,14 +254,6 @@ export interface AiDecision {
   /** the wire entry verbatim (structured renderers read purpose-specific
       fields off it -- verdicts/citations/counts) */
   record?: Record<string, unknown>;
-}
-
-/** One citation's audit verdict: verified / contradicted / unsupported /
-    unverified, with the decision model's confidence and the audited
-    CLAIM (the sentence that carried the [n] -- the traceability
-    payload; the judged passage is the card's own source). */
-export interface AiSearchAudit {
-  citations: Record<string, { verdict: string; confidence: number; claim?: string }>;
 }
 
 /** The fold's state: the threaded runs plus the thread-wide surfaces
@@ -437,15 +422,13 @@ export function applyEvent(
     }
     case "phase": {
       // the macro-stage spine: one value active, the history kept (the
-      // run_summary record replays it); the audit leg carries its
-      // workload (total); unknown names ignore
+      // run_summary record replays it); unknown names ignore
       const name = String(event.name ?? "") as AiSearchStage;
-      if (!["plan", "research", "write", "audit"].includes(name)) {
+      if (!["plan", "research", "write"].includes(name)) {
         return core;
       }
       const stages = run.stages[run.stages.length - 1] === name ? run.stages : [...run.stages, name];
-      const auditTotal = name === "audit" && typeof event.total === "number" ? event.total : run.auditTotal;
-      runs[lastIdx] = { ...run, auditTotal, stage: name, stages };
+      runs[lastIdx] = { ...run, stage: name, stages };
       return { ...core, runs };
     }
     case "open": {
@@ -544,25 +527,6 @@ export function applyEvent(
     case "tasks": {
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
       runs[lastIdx] = { ...run, tasks: mergeTaskSnapshot(run.tasks, items) };
-      return { ...core, runs };
-    }
-    case "audit": {
-      // the citation audit's verdicts: the run carries them (the sources
-      // rail renders the badges, the per-card traceability blocks and the
-      // header's verdict summary) -- the timeline stays the model's record
-      const citations: AiSearchAudit["citations"] = {};
-      for (const row of Array.isArray(event.items) ? event.items : []) {
-        const record = row as Record<string, unknown>;
-        const n = Number(record.n) || 0;
-        if (n > 0) {
-          citations[String(n)] = {
-            verdict: String(record.verdict ?? "unverified"),
-            confidence: Number(record.confidence) || 0,
-            claim: typeof record.claim === "string" ? record.claim : undefined,
-          };
-        }
-      }
-      runs[lastIdx] = { ...run, audit: { citations } };
       return { ...core, runs };
     }
     case "decisions": {
@@ -724,7 +688,6 @@ export function applyEvent(
       // error) -- no client inference
       const status = String(event.status ?? "done");
       const usage = event.usage as AiSearchRun["usage"];
-      const audit = event.audit as AiSearchAudit | undefined;
       const halt = typeof event.halt === "string" && event.halt ? event.halt : null;
       let next: AiSearchRun = {
         ...run,
@@ -745,7 +708,6 @@ export function applyEvent(
             }
           : (run.usage ?? null),
         halt,
-        audit,
       };
       if (status === "awaiting") {
         next = { ...next, status: "awaiting", endedAt: null };

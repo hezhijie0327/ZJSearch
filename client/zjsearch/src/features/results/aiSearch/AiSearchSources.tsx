@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Award, BookOpen, CircleHelp, Globe, History, Minus, Server, ShieldCheck, Zap } from "lucide-react";
+import { Award, BookOpen, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
-import type { AiSearchAudit } from "@/features/results/aiSearch/timeline.ts";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
@@ -15,14 +14,11 @@ import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
- * source cards — title on top, favicon + domain + global [n] below — the
- * first four inline, the rest behind the section's toggle.  The toggle is
- * ALWAYS the section's last element (the original card shape with a
- * favicon preview of what's hidden): 查看全部 below the inline cards,
- * 收起 below the revealed ones -- it never sits mid-grid.  The revealed
- * list is HEIGHT-BOUNDED with its own scroll, so a 90-source run reads
- * as a bounded block, not an endless page.  A card opens the source
- * page; citation [n] chips in the answer jump instead.
+ * source cards — identity row (favicon + domain + global [n]), title link,
+ * clamp-and-reveal snippet, attribution chips.  The list reads
+ * NEWEST-FIRST and caps at four cards (cap-and-expand) so a 200-source
+ * run leads with what the research just found; a citation click EXPANDS
+ * the cap (the parent owns the state) and scrolls the card into view.
  */
 
 /** The uniform favicon frame: every card anchors its left edge with the
@@ -50,80 +46,7 @@ function SourceFavicon({ source }: { source: AiSearchSource }) {
   );
 }
 
-/** The citation audit's verdict badge: a checked claim in this source
-    (✓ verified / ⚡ contradicted / – the source does not address it /
-    ? torn), title-carried so the row stays clean. */
-function AuditBadge({ verdict }: { verdict: string }) {
-  const t = useT();
-  const key =
-    verdict === "verified"
-      ? "ai_audit_verified"
-      : verdict === "contradicted"
-        ? "ai_audit_contradicted"
-        : verdict === "unsupported"
-          ? "ai_audit_unsupported"
-          : "ai_audit_unverified";
-  if (verdict === "verified") {
-    return (
-      <span
-        aria-label={t(key)}
-        className="inline-flex size-4 items-center justify-center rounded-full bg-ok/15 text-ok"
-        role="img"
-        title={t(key)}
-      >
-        <ShieldCheck aria-hidden="true" className="size-2.5" />
-      </span>
-    );
-  }
-  if (verdict === "contradicted") {
-    return (
-      <span
-        aria-label={t(key)}
-        className="inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
-        role="img"
-        title={t(key)}
-      >
-        <Zap aria-hidden="true" className="size-2.5" />
-      </span>
-    );
-  }
-  if (verdict === "unsupported") {
-    return (
-      <span
-        aria-label={t(key)}
-        className="inline-flex size-4 items-center justify-center rounded-full bg-surface-2 text-ink-3"
-        role="img"
-        title={t(key)}
-      >
-        <Minus aria-hidden="true" className="size-2.5" />
-      </span>
-    );
-  }
-  return (
-    <span
-      aria-label={t(key)}
-      className="inline-flex size-4 items-center justify-center rounded-full bg-surface-2 text-ink-3"
-      role="img"
-      title={t(key)}
-    >
-      <CircleHelp aria-hidden="true" className="size-2.5" />
-    </span>
-  );
-}
-
-function auditLabel(
-  verdict: string,
-): "ai_audit_verified" | "ai_audit_contradicted" | "ai_audit_unsupported" | "ai_audit_unverified" {
-  return verdict === "verified"
-    ? "ai_audit_verified"
-    : verdict === "contradicted"
-      ? "ai_audit_contradicted"
-      : verdict === "unsupported"
-        ? "ai_audit_unsupported"
-        : "ai_audit_unverified";
-}
-
-function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearchAudit }) {
+function SourceCard({ source }: { source: AiSearchSource }) {
   const t = useT();
   // the traditional presentations' type adaptation: videos carry their
   // duration, torrents their filesize -- one badge string either way
@@ -149,10 +72,6 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
           </span>
         ) : null}
         <span className="ms-auto flex shrink-0 items-center gap-1.5">
-          {(() => {
-            const citation = audit?.citations[String(source.n)];
-            return citation ? <AuditBadge verdict={citation.verdict} /> : null;
-          })()}
           {source.crawled ? (
             <span
               aria-label={t("ai_source_crawled")}
@@ -184,7 +103,7 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
         </span>
       </div>
       <a
-        className="mt-1 line-clamp-2 block min-h-12 text-base font-medium leading-6 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
+        className="mt-1 line-clamp-2 block min-h-10 text-[13px] font-medium leading-5 text-ink decoration-accent/50 underline-offset-2 hover:text-accent hover:underline"
         dir="auto"
         href={source.url}
         rel="noreferrer"
@@ -204,7 +123,10 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
       >
         <div className="mt-1.5 flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <Snippet contentHtml={escapeHtml(source.content || t("no_description"))} />
+            <Snippet
+              contentHtml={escapeHtml(source.content || t("no_description"))}
+              textClass="text-[13px] leading-relaxed text-ink-2"
+            />
           </div>
           {source.img ? (
             <div className="relative hidden shrink-0 self-start sm:block">
@@ -255,118 +177,60 @@ function SourceCard({ source, audit }: { source: AiSearchSource; audit?: AiSearc
           ) : null}
         </div>
       ) : null}
-      {(() => {
-        const citation = audit?.citations[String(source.n)];
-        if (!citation) {
-          return null;
-        }
-        // the citation AUDIT's traceability: what was checked (the claim
-        // that carried this [n]), what came of it (verdict + confidence)
-        // -- the judged passage is this card's own snippet above
-        return (
-          <div className="mt-2 border-t border-line pt-2 text-xs">
-            <div className="flex items-center gap-1.5">
-              <AuditBadge verdict={citation.verdict} />
-              <span className="font-medium text-ink-2">{t(auditLabel(citation.verdict))}</span>
-              {citation.confidence > 0 ? (
-                <span className="tabular-nums text-ink-3">
-                  {t("ai_audit_confidence", { n: String(Math.round(citation.confidence * 100)) })}
-                </span>
-              ) : null}
-            </div>
-            {citation.claim ? (
-              <p className="mt-1 line-clamp-2 break-words text-ink-3" dir="auto">
-                {citation.claim}
-              </p>
-            ) : null}
-          </div>
-        );
-      })()}
     </div>
   );
 }
 
-export function AiSearchSources({ sources, audit }: { sources: AiSearchSource[]; audit?: AiSearchAudit }) {
+const RAIL_CAP = 4;
+/** The rail list's default footprint: the four newest cards. */
+
+export function AiSearchSources({
+  sources,
+  expanded,
+  onToggleExpanded,
+}: {
+  sources: AiSearchSource[];
+  /** CONTROLLED cap state (the parent expands it on a citation click and
+      may clear it when the user folds the list again) */
+  expanded: boolean;
+  onToggleExpanded: (next: boolean) => void;
+}) {
   const t = useT();
   if (sources.length === 0) {
     return null;
   }
+  const hidden = Math.max(0, sources.length - RAIL_CAP);
+  const view = [...(expanded ? sources : sources.slice(-RAIL_CAP))].reverse();
   return (
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
-    // cap; this section pins its heading and scrolls the cards) -- no
-    // expand/collapse toggle: every source is always one scroll away
-    <section aria-label={t("ai_search_sources")} className="flex min-h-0 flex-col lg:min-h-[16rem] lg:flex-1">
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+    // scroll); this section pins its heading and lists the cards
+    <section aria-label={t("ai_search_sources")} className="mb-5">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-1">
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{sources.length}</span>
-        {(() => {
-          // the audit's verdict summary beside the count: ✓x ⚡y –z ?w --
-          // the rail answers "how trustworthy are these" at a glance
-          if (!audit) {
-            return null;
-          }
-          const counts: Record<string, number> = {};
-          for (const citation of Object.values(audit.citations)) {
-            counts[citation.verdict] = (counts[citation.verdict] ?? 0) + 1;
-          }
-          const chips: Array<{ key: string; icon: "ok" | "warn" | "none" | "help" }> = [];
-          if (counts.verified) {
-            chips.push({ key: "ai_audit_verified", icon: "ok" });
-          }
-          if (counts.contradicted) {
-            chips.push({ key: "ai_audit_contradicted", icon: "warn" });
-          }
-          if (counts.unsupported) {
-            chips.push({ key: "ai_audit_unsupported", icon: "none" });
-          }
-          if (counts.unverified) {
-            chips.push({ key: "ai_audit_unverified", icon: "help" });
-          }
-          if (chips.length === 0) {
-            return null;
-          }
-          return (
-            <span className="flex items-center gap-1">
-              {chips.map((chip) => (
-                <span
-                  className={`${CHIP} shrink-0 tabular-nums text-ink-3`}
-                  key={chip.key}
-                  title={t(chip.key as "ai_audit_verified")}
-                >
-                  {chip.icon === "ok" ? (
-                    <ShieldCheck aria-hidden="true" className="size-3 text-ok" />
-                  ) : chip.icon === "warn" ? (
-                    <Zap aria-hidden="true" className="size-3 text-warning" />
-                  ) : chip.icon === "none" ? (
-                    <Minus aria-hidden="true" className="size-3" />
-                  ) : (
-                    <CircleHelp aria-hidden="true" className="size-3" />
-                  )}
-                  {counts[chip.key.slice(9)] ?? 0}
-                </span>
-              ))}
-            </span>
-          );
-        })()}
       </div>
-      {/* ~4 cards visible before the internal scroll takes over -- on every
-          breakpoint; on lg the section takes the rail's REMAINING height
-          (the plan and findings cards cap themselves) and scrolls ITS OWN
-          cards only */}
-      <div className="mt-3 grid max-h-[43rem] grid-cols-2 gap-2 overflow-y-auto overscroll-contain lg:mt-2 lg:min-h-0 lg:flex lg:flex-1 lg:flex-col">
-        {sources.map((source) => (
-          <SourceCard audit={audit} key={source.n} source={source} />
+      <div className="mt-3 flex flex-col gap-2 px-1">
+        {view.map((source) => (
+          <SourceCard key={source.n} source={source} />
         ))}
       </div>
+      <CapChip
+        className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        expanded={expanded}
+        hidden={hidden}
+        onToggle={() => {
+          onToggleExpanded(!expanded);
+        }}
+      />
     </section>
   );
 }
 
 /** Streaming placeholder: pulsing source cards shown while the agent's
     searches are still running (or before the first sources arrive) so the
-    section occupies its final footprint -- grid below lg, rail list from
-    lg (the same two presentations as the real section). */
+    section occupies its final footprint -- four cells, the same cap the
+    real section leads with. */
 export function AiSearchSourcesSkeleton() {
   const t = useT();
   return (
@@ -375,11 +239,11 @@ export function AiSearchSourcesSkeleton() {
         <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
         <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
       </div>
-      <div className="mt-3 grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto lg:mt-2 lg:flex lg:max-h-[42rem] lg:flex-col">
+      <div className="mt-3 flex flex-col gap-2">
         {/* one REAL card's resting height (title 2 lines + snippet slot +
             meta row) -- the swap must not grow the rail */}
         {[0, 1, 2, 3].map((i) => (
-          <div className="h-[208px] animate-pulse rounded-lg bg-surface-2/70 lg:h-[188px]" key={i} />
+          <div className="h-[188px] animate-pulse rounded-lg bg-surface-2/70" key={i} />
         ))}
       </div>
     </section>
