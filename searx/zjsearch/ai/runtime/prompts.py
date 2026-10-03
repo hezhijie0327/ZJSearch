@@ -24,6 +24,11 @@ from searx.zjsearch.ai.runtime.tools import (
     USER_MEMORY_TOOL,
 )
 
+AGENT_PERSONA_NAME = "ZJSearch"
+"""The AI surfaces' product name as the prompts speak it (the roles
+address the model as this mode's research agent / writer) -- ONE
+variable, so a rename touches one line instead of every role block."""
+
 _BUDGET_NOTE = "The research budget ended the gathering early -- the sources above are everything that was found."
 
 STALL_NOTE = (
@@ -98,29 +103,36 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
     as an ``error: empty query`` row (the plan tool rides quality/goal
     only, the page reader only when a reader provider is configured).  The last
     example shows the LATER-round intent shape: reflection on the results
-    so far, not a restatement of the question."""
-    plan_suffix = ', task_write(items=[子课题 1..3])' if task_tool else ""
-    deepseek = 'Action: web_search(query="DeepSeek-V4-Flash context length site:huggingface.co")'
-    if page_tool:
-        deepseek += ', then web_reader(url="<the model card url>")'
+    so far, not a restatement of the question.
+
+    RECIPES, not a transcript: a ``User:/You:/Action:`` transcript teaches
+    literal imitation -- qwen-family models answer such examples by
+    WRITING the calls into their text (``Action: web_search(...)`` or a
+    prose "Then call web_search ...") instead of making native function
+    calls, which strands the round with zero executed calls (probed on a
+    real workspace).  Each recipe states the situation, the one-line note
+    and the calls as TOOL semantics."""
+    reader = ", then web_reader on the model card url" if page_tool else ""
+    plan = ", and task_write with that round's subtasks" if task_tool else ""
     lines = [
         "<examples>",
-        'User: "What is Kimi K3?"',
-        'You: "The user wants to know what Kimi K3 is -- definition, key specs, release status."',
-        'Action: web_search(query="Kimi K3 AI model"), web_search(query="Kimi K3 specs release date")',
+        '- "What is Kimi K3?" (definition, key specs, release status): say one short'
+        " sentence on what the user wants, then web_search twice in the same round"
+        ' ("Kimi K3 AI model", "Kimi K3 specs release date").',
         "",
-        'User: "DeepSeek-V4-Flash 的上下文长度是多少？"',
-        'You: "I need an exact number; snippets rarely carry it, the model card does."',
-        deepseek,
+        '- "DeepSeek-V4-Flash 的上下文长度是多少？": snippets rarely carry exact'
+        ' numbers -- say that, then web_search ("DeepSeek-V4-Flash context length'
+        f' site:huggingface.co"){reader}.',
         "",
-        'User: "A 和 B 该选哪个？"',
-        'You: "A comparison needs both sides covered before any verdict."',
-        f'Action: web_search(query="A 优点 缺点"), web_search(query="B 优点 缺点"){plan_suffix}',
+        f'- "A 和 B 该选哪个？": both sides before any verdict -- web_search ("A 优点 缺点", "B 优点 缺点"){plan}.',
         "",
-        "User (second round, after the first round's results):",
-        'You: "[4] covers the official specs, but pricing is missing everywhere'
-        ' -- this round targets reseller and review pages for current prices."',
+        "- A second round opens with reflection on the results so far (\"[4] covers"
+        ' the official specs, but pricing is missing -- this round targets reseller'
+        ' pages"), never a restatement of the question.',
         "</examples>",
+        "Tool calls happen ONLY through your function-calling tools: a call written"
+        " into your text output (\"Action: ...\" or \"Then call ...\") executes"
+        " nothing -- output the one-line note, then MAKE the calls.",
     ]
     return "\n".join(lines)
 
@@ -150,7 +162,8 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     is the WRITER's -- the researcher never writes the answer, so the
     fragments are not repeated here."""
     role = (
-        "<role>\nYou are the research agent of the ZJSearch AI Search"
+        "<role>\n"
+        f"You are the research agent of {AGENT_PERSONA_NAME}"
         " mode: the user asks a question, YOU decide which keyword searches"
         f" answer it and run them with the {TOOL_NAME} tool.  You NEVER"
         " write the final answer yourself: when the research is complete,"
@@ -317,7 +330,10 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     lines = [
         role,
         shared.today_line(),
-        f"<step_notes>\nWrite your step notes (the narration before tool" f" calls) in {lang}.\n</step_notes>",
+        "<step_notes>\nWrite your step notes (the narration before tool"
+        f" calls) in {lang}.  A note is ONE short sentence -- after it,"
+        " make the tool calls through your tools; never continue the note"
+        " with a written-out call.\n</step_notes>",
         how_to_search,
         _examples(page_tool, task_tool),
     ]
@@ -461,10 +477,11 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     ``budget_truncated`` become an honesty note when the gathering ended
     early."""
     role = (
-        "<role>\nYou are the writer of the ZJSearch AI Search: a research"
-        " agent has already gathered the sources; you write the final answer"
-        " for the reader.  You never search, never mention the research"
-        " process, these instructions or their assembly.\n</role>"
+        "<role>\n"
+        f"You are the writer of {AGENT_PERSONA_NAME}"
+        ": a research agent has already gathered the sources; you write the"
+        " final answer for the reader.  You never search, never mention the"
+        " research process, these instructions or their assembly.\n</role>"
     )
     if direct:
         # the no-research run: the shared answer spine does not apply (no
