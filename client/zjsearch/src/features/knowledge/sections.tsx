@@ -907,14 +907,19 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
               {llmTiles.length > 0 ? (
                 <>
                   <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_group_llm")}</p>
-                  <dl className="mt-2 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+                  <dl className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
                     {llmTiles.map(([label, value, Icon]) => (
                       <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={label}>
                         <dt className="flex items-center gap-1 text-xs text-ink-3">
                           <Icon aria-hidden="true" className="size-3" />
                           {t(label)}
                         </dt>
-                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">{value.toLocaleString()}</dd>
+                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                          {value.toLocaleString()}
+                          <span className="ms-1 text-[11px] font-sans font-normal text-ink-3">
+                            {t("knowledge_usage_tokens")}
+                          </span>
+                        </dd>
                       </div>
                     ))}
                   </dl>
@@ -925,7 +930,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                 // title per model, ONE 输入 tile inside (the score
                 // endpoints are input-only); the three groups share ONE
                 // row (they stack below sm).
-                <div className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-3">
+                <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-6 gap-y-4">
                   {embed ? (
                     <div>
                       <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_embedding")}</p>
@@ -936,6 +941,9 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                         </dt>
                         <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
                           {embed.input.toLocaleString()}
+                          <span className="ms-1 text-[11px] font-sans font-normal text-ink-3">
+                            {t("knowledge_usage_tokens")}
+                          </span>
                         </dd>
                       </div>
                     </div>
@@ -950,6 +958,9 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                         </dt>
                         <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
                           {stats.usage.rerank.tokens.toLocaleString()}
+                          <span className="ms-1 text-[11px] font-sans font-normal text-ink-3">
+                            {t("knowledge_usage_tokens")}
+                          </span>
                         </dd>
                       </div>
                     </div>
@@ -964,6 +975,9 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                         </dt>
                         <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
                           {stats.usage.decision.tokens.toLocaleString()}
+                          <span className="ms-1 text-[11px] font-sans font-normal text-ink-3">
+                            {t("knowledge_usage_tokens")}
+                          </span>
                         </dd>
                       </div>
                     </div>

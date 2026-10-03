@@ -245,6 +245,7 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_deleted: "已删除",
   knowledge_memory_edit: "编辑",
   knowledge_usage_input: "输入",
+  knowledge_usage_tokens: "词元",
   knowledge_usage_output: "输出",
   knowledge_usage_thoughts: "思考",
   knowledge_usage_cached: "缓存命中",

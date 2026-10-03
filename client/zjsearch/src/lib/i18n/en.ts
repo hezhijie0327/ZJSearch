@@ -243,6 +243,7 @@ export const EN = {
   knowledge_deleted: "Deleted",
   knowledge_memory_edit: "Edit",
   knowledge_usage_input: "Input",
+  knowledge_usage_tokens: "Tokens",
   knowledge_usage_output: "Output",
   knowledge_usage_thoughts: "Thoughts",
   knowledge_usage_cached: "Cached",
