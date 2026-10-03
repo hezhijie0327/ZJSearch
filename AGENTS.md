@@ -1289,7 +1289,8 @@ redundant, both fused into ONE post-run extractor:
 ## DashScope + SystemOne decision surface (alibaba families)
 
 The SDK registry gained the DASHSCOPE family (``zjsearch.llm.sdk:
-dashscope``, `infra/sdk/dashscope.py`): the native qwen Generation API
+dashscope``, `infra/sdk/dashscope.py`) and the TYPEsafe decision family
+(`infra/sdk/typesafe.py`): the native qwen Generation API
 (thinking via ``reasoning_content``, function calling, mm auto-routing --
 a parts message carrying an image turns the call into
 MultiModalConversation) plus TextEmbedding through the same bound
@@ -1301,10 +1302,17 @@ embedding + rerank paths, but NOT the native text-generation path -- LLM
 on such a gateway = ``sdk: openai.chat_completions`` with
 ``base_url: {workspace}/compatible-mode/v1``.
 
-RERANK (`zjsearch.rerank.sdk`): ``dashscope`` (native TextReRank leg)
-joins ``cohere`` (the default: any Cohere-shaped POST `{base_url}/
-rerank`).  The cohere PYTHON SDK was evaluated and REJECTED: its fixed
-/v1|v2 path convention misses every gateway shape we serve.
+RERANK (`zjsearch.rerank.sdk`): THREE wires -- ``dashscope`` (native
+TextReRank leg, living on the DashscopeSdk family surface like
+Generation / TextEmbedding), ``openai`` (the OpenAI SDK's generic
+``client.post("/reranks")`` -- the dashscope compatible-api shape,
+probed 200 on the dedicated workspace), and ``cohere`` (the default
+raw POST: any Cohere-shaped `{base_url}/rerank` gateway -- bigmodel /
+Jina / SiliconFlow; the cohere PYTHON SDK itself was evaluated and
+REJECTED: its fixed /v1|v2 path convention misses every gateway shape
+we serve).  The provider legs live in `infra/rerank.py` (the rerank
+SERVICE: config + wires); the cascade POLICY (BM25 fusion, head
+selection, splice) stays in `runtime/rank.py`.
 
 The SystemOne DECISION capability (`zjsearch.decision`,
 `infra/decision.py` + `runtime/decision_route.py`: ``POST

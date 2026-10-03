@@ -268,6 +268,40 @@ class DashscopeSdk:
                 return str(message.content), usage_meta
         return "", usage_meta
 
+    def rerank(self, query: str, docs: list[str]) -> tuple[list[int] | None, int]:
+        """One TextReRank call: ``docs`` re-scored against ``query``.
+        ``(order, tokens)`` out -- the order is the model's ranking (a
+        full permutation of the incoming indices), the tokens the billed
+        total; ``(None, 0)`` on any failure (the caller's fail-open)."""
+        from dashscope import TextReRank  # pylint: disable=import-outside-toplevel
+
+        response = TextReRank.call(
+            api_key=str(self.cfg.get("api_key") or ""),
+            model=str(self.cfg.get("model")),
+            query=query,
+            documents=docs,
+            top_n=len(docs),
+            return_documents=False,
+        )
+        output = _field(response, "output")
+        results = _field(output, "results") if isinstance(output, dict) else getattr(output, "results", None)
+        results = results or []
+        order: list[int] = []
+        for item in results:
+            index = _field(item, "index", -1)
+            try:
+                index = int(index)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= index < len(docs) and index not in order:
+                order.append(index)
+        if not order:
+            return None, 0
+        order += [i for i in range(len(docs)) if i not in set(order)]
+        usage = _field(response, "usage")
+        tokens = int(_field(usage, "total_tokens", 0) or 0) if usage else 0
+        return order, tokens
+
     async def embed(self, texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
         """One TextEmbedding batch in input order (the width rides
         ``params.dimension``, DashScope's own name for it; the passthrough
