@@ -279,15 +279,23 @@ class AnthropicSdk:
         strict: bool,
     ) -> tuple[str, dict[str, t.Any] | None]:
         client = clients.anthropic_client(self.cfg, self.base, family=self.family)
+        # the deployment's params may carry their own ``output_config``
+        # (an effort knob) -- MERGE it under the gate's format key instead
+        # of passing both (a duplicate kwarg is a TypeError)
+        gate_kwargs = caching.model_kwargs(params(self.cfg), KIND, with_native_thinking=False)
+        user_output = gate_kwargs.pop("output_config", None)
+        output = {"format": {"type": "json_schema", "schema": schema}}
+        if isinstance(user_output, dict):
+            output = {**user_output, **output}
         response = await client.messages.create(
             model=str(self.cfg.get("model")),
             system=system_of(messages) or None,
             messages=_messages(messages, False),
-            output_config={"format": {"type": "json_schema", "schema": schema}},
+            output_config=output,
             timeout=clients.sdk_timeout(),
             extra_headers=extra_headers(self.cfg),
             extra_body=extra_body(self.cfg),
-            **caching.model_kwargs(params(self.cfg), KIND, with_native_thinking=False),
+            **gate_kwargs,
         )
         text = "".join(str(block.text) for block in response.content or [] if getattr(block, "type", "") == "text")
         raw_usage = getattr(response, "usage", None)

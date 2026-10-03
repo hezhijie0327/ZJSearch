@@ -77,6 +77,19 @@ converging -- the context-pressure signal reaches the MODEL (with the
 round's tool results) instead of only shaping the writer's input."""
 
 
+def _plan_review_instruction(items: list[dict[str, t.Any]]) -> str:
+    """The plan review's question, in the plan's own language (zh tasks
+    get zh criteria -- the decision model judges best in the
+    material's)."""
+    if has_cjk(" ".join(str(item.get("title") or "") for item in items)):
+        return "这个子课题能否通过独立的网络搜索来研究（具体、可搜索、不依赖另一个子课题的结论）？"
+    return (
+        "Can this subtask be researched through independent web searches"
+        " (concrete, searchable, not dependent on another subtask's"
+        " conclusion)?"
+    )
+
+
 class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-attributes
     """The ``web_search`` executor: real instance searches in a worker
     pool.  Yields the feature events for the wire protocol and ends with
@@ -309,7 +322,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 order = [ranked_head[i] for i in kept] + order[RERANK_HEAD:]
             gate_size = int(decision_features("sources_gate").get("head", 8) or 8)
             gate_head = order[:gate_size]
-            passed, conflicts, injections = gate_order(
+            passed, conflicts, injections, gate_tokens = gate_order(
                 query,
                 [
                     (str(_field(raw[i], "title", "") or ""), str(_field(raw[i], "content", "") or "")[:400])
@@ -317,6 +330,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 ],
             )
             if passed is not None:
+                if gate_tokens:
+                    self.decision_usage["calls"] += len(gate_head)
+                    self.decision_usage["tokens"] += gate_tokens
                 self.judgments.append(
                     {
                         "purpose": "sources_gate",
@@ -340,6 +356,56 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             # settlements down with it -- the engine order stands
             logger.exception("zjsearch_ai_search: ranking cascade failed -- keeping the engine order")
             return raw, []
+
+    def _plan_review(self, items: list[dict[str, t.Any]]) -> None:
+        """The plan REVIEW (fail-open): one decision pass asks per subtask
+        whether it is independently researchable -- a muddled plan gets
+        one early sharpen-note (the task feed carries it) instead of
+        three wasted rounds; the tokens join the run's
+        ``usage.decision`` account and the verdict joins the ledger."""
+        review = decision_features("plan_review")
+        if not items or not review.get("enabled") or not decision.enabled() or not decision.configured():
+            return
+        try:
+            max_tasks = int(review.get("max_tasks", 4) or 4)
+            questions = {
+                f"task_{i}": {
+                    "type": "noul",
+                    "instructions": _plan_review_instruction(items),
+                }
+                for i, item in enumerate(items[:max_tasks])
+            }
+            started = time.monotonic()
+            out = decision.judge(
+                {"subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]},
+                questions,
+                timeout=5.0,
+            )
+            answers = out.get("answers") if isinstance(out, dict) else None
+            if not isinstance(answers, dict) or not answers:
+                return
+            usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+            if usage.get("input_tokens"):
+                self.decision_usage["calls"] += len(answers)
+                self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
+            self.weak_tasks = [
+                str(items[int(name.split("_")[1])].get("title") or "")[:80]
+                for name, answer in answers.items()
+                if isinstance(answer, dict)
+                and float(answer.get("noul") or 1.0) < 0.5
+                and name.startswith("task_")
+                and int(name.split("_")[1]) < len(items)
+            ]
+            self.judgments.append(
+                {
+                    "purpose": "plan_review",
+                    "tasks": len(items[:max_tasks]),
+                    "weak": len(self.weak_tasks),
+                    "ms": int((time.monotonic() - started) * 1000),
+                }
+            )
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     def _finish(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
         self,
@@ -582,58 +648,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 # into facets -- the task card tracks which facets have
                 # sources, the researcher follows the plan step by step
                 self.coverage.task_list = items
-                # the plan REVIEW (fail-open): one decision pass asks per
-                # subtask whether it is independently researchable -- a
-                # muddled plan gets one early note instead of three wasted
-                # rounds
-                review = decision_features("plan_review")
-                if items and review.get("enabled") and decision.enabled() and decision.configured():
-                    try:
-                        max_tasks = int(review.get("max_tasks", 4) or 4)
-                        questions = {
-                            f"task_{i}": {
-                                "type": "noul",
-                                "instructions": (
-                                    (
-                                        "这个子课题能否通过独立的网络搜索来研究（具体、可搜索、不依赖另一个子课题的结论）？"
-                                        if has_cjk(" ".join(str(item.get("title") or "") for item in items))
-                                        else (
-                                            "Can this subtask be researched through independent web searches"
-                                            " (concrete, searchable, not dependent on another subtask's"
-                                            " conclusion)?"
-                                        )
-                                    )
-                                ),
-                            }
-                            for i, item in enumerate(items[:max_tasks])
-                        }
-                        started = time.monotonic()
-                        out = decision.judge(
-                            {"subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]},
-                            questions,
-                            timeout=5.0,
-                        )
-                        answers = out.get("answers") if isinstance(out, dict) else None
-                        if isinstance(answers, dict) and answers:
-                            weak = [
-                                str(items[int(name.split("_")[1])].get("title") or "")[:80]
-                                for name, answer in answers.items()
-                                if isinstance(answer, dict)
-                                and float(answer.get("noul") or 1.0) < 0.5
-                                and name.startswith("task_")
-                                and int(name.split("_")[1]) < len(items)
-                            ]
-                            self.judgments.append(
-                                {
-                                    "purpose": "plan_review",
-                                    "tasks": len(items[:max_tasks]),
-                                    "weak": len(weak),
-                                    "ms": int((time.monotonic() - started) * 1000),
-                                }
-                            )
-                            self.weak_tasks = weak
-                    except Exception:  # pylint: disable=broad-except
-                        pass
+                # the plan REVIEW (fail-open): one decision pass per subtask -- the
+                # weak ones get an early sharpen-note in the plan's feed
+                self._plan_review(items)
                 yield ("tasks", {"round": rnd, "id": wire_id, "items": items})
                 done = sum(1 for item in items if item["status"] == "done")
                 summary = f"{done}/{len(items)}"
@@ -1093,6 +1110,10 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
             injection = answers.get("contains_prompt_injection") if isinstance(answers, dict) else None
             if isinstance(injection, dict):
                 score = float(injection.get("noul") or 0.0)
+                gate_usage = out.get("usage") if isinstance(out, dict) and isinstance(out.get("usage"), dict) else {}
+                if gate_usage.get("input_tokens"):
+                    self.decision_usage["calls"] += 1
+                    self.decision_usage["tokens"] += int(gate_usage.get("input_tokens") or 0)
                 self.judgments.append(
                     {
                         "purpose": "read_gate",

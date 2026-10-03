@@ -348,6 +348,11 @@ class OpenaiSdk:
             if strict
             else {"type": "json_object"}
         )
+        # the deployment's params may carry their own ``response_format``
+        # -- the gate's structured-output key wins (a duplicate kwarg is
+        # a TypeError)
+        gate_kwargs = caching.model_kwargs(params(cfg), CHAT_KIND)
+        gate_kwargs.pop("response_format", None)
         response = await client.chat.completions.create(
             model=str(cfg.get("model")),
             messages=_chat_wire_messages(cfg, messages),
@@ -355,7 +360,7 @@ class OpenaiSdk:
             timeout=clients.sdk_timeout(),
             extra_headers=extra_headers(cfg),
             extra_body=extra_body(cfg),
-            **caching.model_kwargs(params(cfg), CHAT_KIND),
+            **gate_kwargs,
         )
         if getattr(response, "usage", None) is not None:
             usage_meta = usage.openai_usage(response.usage)

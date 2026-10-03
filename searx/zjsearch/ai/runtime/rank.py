@@ -191,7 +191,7 @@ def _gate_questions(query: str) -> dict[str, dict[str, t.Any]]:
     }
 
 
-def _gate_one(query: str, title: str, snippet: str) -> tuple[int, dict[str, float]]:
+def _gate_one(query: str, title: str, snippet: str) -> tuple[int, dict[str, float], int]:
     """One candidate's four-noul judgment: the probabilities dict out (or
     an empty dict on failure -- the caller treats it as unjudged)."""
     try:
@@ -201,9 +201,11 @@ def _gate_one(query: str, title: str, snippet: str) -> tuple[int, dict[str, floa
             timeout=GATE_TIMEOUT,
         )
     except Exception:  # pylint: disable=broad-except
-        return -1, {}
+        return -1, {}, 0
+    usage = out.get("usage") if isinstance(out, dict) and isinstance(out.get("usage"), dict) else {}
+    tokens = int(usage.get("input_tokens") or 0)
     if not out or not isinstance(out.get("answers"), dict):
-        return -1, {}
+        return -1, {}, tokens
     return 0, {
         name: float(answer.get("noul") or 0.0) for name, answer in out["answers"].items() if isinstance(answer, dict)
     }
@@ -212,7 +214,7 @@ def _gate_one(query: str, title: str, snippet: str) -> tuple[int, dict[str, floa
 def gate_order(
     query: str,
     candidates: list[tuple[str, str]],
-) -> tuple[list[int] | None, list[int], list[int]]:
+) -> tuple[list[int] | None, list[int], list[int], int]:
     """The decision gate (POLICY): every candidate's four nouls -- relevant
     / answers / contradicts-the-premise / prompt-injection -- judged in a
     small thread pool (one call per candidate; the questions run in
@@ -232,9 +234,9 @@ def gate_order(
     incoming position among the passed -- a lens, not a dependency."""
     cfg_block = decision_service.features("sources_gate")
     if not cfg_block.get("enabled") or not candidates:
-        return None, [], []
+        return None, [], [], 0
     if not decision_service.enabled() or not decision_service.configured():
-        return None, [], []
+        return None, [], [], 0
     injection_max = float(cfg_block.get("injection_max", 0.70))
     contradicts_min = float(cfg_block.get("contradicts_min", 0.70))
     relevant_min = float(cfg_block.get("relevant_min", 0.45))
@@ -266,4 +268,4 @@ def gate_order(
     # evidence-first, then the relevant-but-thin, then the unjudged in
     # their incoming order -- a judgment never DEMOTES a candidate below
     # an unjudged one
-    return order + unjudged, conflicts, injections
+    return order + unjudged, conflicts, injections, sum(entry[2] for entry in judged)

@@ -389,7 +389,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # the judgment ledger (the executor's structured verdicts) -- the
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
-        self.judgments = judgments or []
+        self.judgments = judgments if judgments is not None else []
         # the run's live Searches (the audit phase reads its numbered
         # entries) -- a cheap ref, the executor is done mutating by the
         # time the settle passes through here
@@ -479,8 +479,12 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 related_seen = True
             elif kind == "ask":
                 awaiting = True
+            # EVERY pre-content event buffers (the phase spine's "plan"
+            # precedes the first entry -- dropping it here would blind the
+            # strip to the run's opening stage); the content check only
+            # decides when the lazy tail takes over
+            self.buffer.append(wire.encode(event))
             if kind in _CONTENT_EVENTS:
-                self.buffer.append(wire.encode(event))
                 self.rest = self._to_settle(answer_parts, awaiting, related_seen)
                 self.primed = True
                 return

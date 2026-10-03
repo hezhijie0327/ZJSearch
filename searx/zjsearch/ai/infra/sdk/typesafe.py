@@ -69,7 +69,11 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
 
         client = TypeSafeClient(
             api_key=str(self.cfg.get("api_key") or ""),
-            base_url=(self.base.rstrip("/") if self.base else None) or None,
+            # a base ending in /v1 is always a misconfig (the SDK appends
+            # /v1/systemone itself -- the SystemOne contract's
+            # "{workspace}/compatible-mode" ending); strip it instead of
+            # serving the workspace a doubled /v1/v1 path
+            base_url=(self.base.rstrip("/").removesuffix("/v1") if self.base else None) or None,
             model=str(self.cfg.get("model")),
             timeout=timeout or sdk_timeout(),
             headers=extra_headers(self.cfg) or None,
