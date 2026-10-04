@@ -4,6 +4,7 @@ import { ArrowUpRight, Bug, Check, ChevronDown, CircleAlert, Copy, Globe, Loader
 import type { ReactNode } from "react";
 import type { AiSearchCall, AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
+import { formatMs } from "@/lib/format.ts";
 import { type Translate, useT } from "@/lib/i18n.ts";
 import { HOVER_CHIP, READ_PANE, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
@@ -98,7 +99,7 @@ export function CallRowShell({
         </span>
         <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">{metric}</span>
         <span className="w-16 shrink-0 text-end font-mono tabular-nums opacity-70">
-          {call.ms !== undefined ? `${call.ms}ms` : ""}
+          {call.ms !== undefined ? formatMs(call.ms) : ""}
         </span>
         {expandable ? (
           <ChevronDown

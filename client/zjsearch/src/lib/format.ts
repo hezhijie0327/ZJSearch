@@ -91,6 +91,24 @@ export function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+/** A wall-time duration in HUMAN units -- tool rows and decision rows
+    show these: 850 -> "850ms", 15000 -> "15s", 90500 -> "1.5m",
+    3660000 -> "1h".  Raw milliseconds stop being readable fast. */
+export function formatMs(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${round1(seconds)}s`;
+  }
+  const minutes = seconds / 60;
+  if (minutes < 60) {
+    return `${round1(minutes)}m`;
+  }
+  return `${round1(minutes / 60)}h`;
+}
+
 /** Capitalise the first letter (option labels, condition names). */
 export function cap(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);

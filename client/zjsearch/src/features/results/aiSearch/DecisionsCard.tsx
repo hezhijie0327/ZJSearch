@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import type { AiDecision } from "@/features/results/aiSearch/timeline.ts";
+import { formatMs } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
 
@@ -255,7 +256,7 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
                   {decision.target || decision.question || decision.purpose}
                 </span>
                 {decision.ms ? (
-                  <span className="shrink-0 font-mono tabular-nums text-ink-3">{decision.ms}ms</span>
+                  <span className="shrink-0 font-mono tabular-nums text-ink-3">{formatMs(decision.ms)}</span>
                 ) : null}
                 <ChevronDown
                   aria-hidden="true"
@@ -302,7 +303,7 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
                     {decision.target || decision.question || decision.purpose}
                   </span>
                   {decision.ms ? (
-                    <span className="shrink-0 font-mono tabular-nums text-ink-3">{decision.ms}ms</span>
+                    <span className="shrink-0 font-mono tabular-nums text-ink-3">{formatMs(decision.ms)}</span>
                   ) : null}
                   <ChevronDown
                     aria-hidden="true"
