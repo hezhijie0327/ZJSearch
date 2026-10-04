@@ -91,22 +91,31 @@ export function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-/** A wall-time duration in HUMAN units -- tool rows and decision rows
-    show these: 850 -> "850ms", 15000 -> "15s", 90500 -> "1.5m",
-    3660000 -> "1h".  Raw milliseconds stop being readable fast. */
+/** A wall-time duration in HUMAN units, composed per tier (Go-style) --
+    tool rows and decision rows show these: 850 -> "850ms",
+    2395 -> "2s395ms", 15000 -> "15s", 90500 -> "1m30s500ms",
+    3661500 -> "1h1m1s500ms".  Zero tiers drop ("15000ms" reading as a
+    digit string helps nobody); all-zero is "0ms". */
 export function formatMs(ms: number): string {
-  if (ms < 1000) {
-    return `${Math.round(ms)}ms`;
+  const rest = Math.max(0, Math.round(ms));
+  const hours = Math.floor(rest / 3_600_000);
+  const minutes = Math.floor((rest % 3_600_000) / 60_000);
+  const seconds = Math.floor((rest % 60_000) / 1000);
+  const millis = rest % 1000;
+  const parts: string[] = [];
+  if (hours) {
+    parts.push(`${hours}h`);
   }
-  const seconds = ms / 1000;
-  if (seconds < 60) {
-    return `${round1(seconds)}s`;
+  if (minutes) {
+    parts.push(`${minutes}m`);
   }
-  const minutes = seconds / 60;
-  if (minutes < 60) {
-    return `${round1(minutes)}m`;
+  if (seconds) {
+    parts.push(`${seconds}s`);
   }
-  return `${round1(minutes / 60)}h`;
+  if (millis) {
+    parts.push(`${millis}ms`);
+  }
+  return parts.join("") || "0ms";
 }
 
 /** Capitalise the first letter (option labels, condition names). */

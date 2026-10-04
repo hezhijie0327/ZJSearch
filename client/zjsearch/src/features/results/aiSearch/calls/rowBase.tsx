@@ -98,7 +98,7 @@ export function CallRowShell({
           {label}
         </span>
         <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">{metric}</span>
-        <span className="w-16 shrink-0 text-end font-mono tabular-nums opacity-70">
+        <span className="w-24 shrink-0 text-end font-mono tabular-nums opacity-70">
           {call.ms !== undefined ? formatMs(call.ms) : ""}
         </span>
         {expandable ? (
