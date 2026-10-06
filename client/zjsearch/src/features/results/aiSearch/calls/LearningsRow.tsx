@@ -49,7 +49,7 @@ export function LearningsRow({ call }: { call: AiSearchCall }) {
         {debuggable ? <DebugArgs rawArgs={rawArgs} /> : null}
       </Collapse>
       <Collapse className={open ? "mt-1" : ""} open={open && expandable}>
-        <ul className="space-y-1 px-1">
+        <ul className={`space-y-1 bg-surface-2/50 px-2.5 py-2`}>
           {facts.map((fact, index) => (
             <li className="flex items-start gap-2" key={index}>
               <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />

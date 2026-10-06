@@ -51,7 +51,7 @@ export function TaskRow({ call, results: _results }: { call: AiSearchCall; resul
         {debuggable ? <DebugArgs rawArgs={rawArgs} /> : null}
       </Collapse>
       <Collapse className={open ? "mt-1" : ""} open={open && expandable}>
-        <ul className="space-y-1 px-1">
+        <ul className={`space-y-1 bg-surface-2/50 px-2.5 py-2`}>
           {items.map((item, index) => {
             const status = String(item.status ?? "pending");
             const done = status === "done";

@@ -46,7 +46,7 @@ export function AskRow({ call, results: _results }: { call: AiSearchCall; result
         {debuggable ? <DebugArgs rawArgs={rawArgs} /> : null}
       </Collapse>
       <Collapse className={open ? "mt-1" : ""} open={open && expandable}>
-        <div className="space-y-1.5 px-1">
+        <div className={`space-y-1.5 bg-surface-2/50 px-2.5 py-2`}>
           {intro ? (
             <p className="break-words text-[13px] leading-relaxed text-ink-2" dir="auto">
               {intro}
