@@ -97,9 +97,19 @@ export function CallRowShell({
         <span className="truncate" dir="auto">
           {label}
         </span>
-        <span className="ms-auto shrink-0 ps-2 font-mono tabular-nums">{metric}</span>
-        <span className="w-24 shrink-0 text-end font-mono tabular-nums opacity-70">
-          {call.ms !== undefined ? formatMs(call.ms) : ""}
+        {/* ONE right-aligned cluster: the metric and the timing share a
+            single mono token (middot between) -- two competing number
+            groups read as clutter, one aligned edge reads as a table */}
+        <span className="ms-auto flex shrink-0 items-center gap-1 ps-2 font-mono text-[11px] tabular-nums">
+          <span>{metric}</span>
+          {call.ms !== undefined ? (
+            <>
+              <span aria-hidden="true" className="opacity-40">
+                ·
+              </span>
+              <span className="opacity-60">{formatMs(call.ms)}</span>
+            </>
+          ) : null}
         </span>
         {expandable ? (
           <ChevronDown
