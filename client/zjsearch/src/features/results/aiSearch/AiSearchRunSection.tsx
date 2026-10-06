@@ -78,28 +78,42 @@ import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
     (the crawled content itself).  The per-tool rows live in `calls/`;
     this is only the tool → row dispatch (an unknown tool falls through to
     the search-shaped row). */
-function CallRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
+function CallRow({
+  call,
+  results,
+  allSources,
+}: {
+  call: AiSearchCall;
+  results: AiSearchSource[];
+  allSources: AiSearchSource[];
+}) {
+  // a re-search whose hits were all already-numbered emits no new
+  // sources -- the call's dupes ARE its results (their existing [n]s)
+  const dupes = (call.dupes ?? [])
+    .map((n) => allSources.find((source) => source.n === n))
+    .filter((source): source is AiSearchSource => Boolean(source));
+  const merged = [...results, ...dupes.filter((dup) => !results.some((result) => result.n === dup.n))];
   switch (call.tool) {
     case "web_reader":
-      return <PageRow call={call} results={results} />;
+      return <PageRow call={call} results={merged} />;
     case "calculator":
-      return <CalcRow call={call} results={results} />;
+      return <CalcRow call={call} results={merged} />;
     case "user_memory":
-      return <MemoryRow call={call} results={results} />;
+      return <MemoryRow call={call} results={merged} />;
     case "past_research":
-      return <PastResearchRow call={call} results={results} />;
+      return <PastResearchRow call={call} results={merged} />;
     case "task_write":
-      return <TaskRow call={call} results={results} />;
+      return <TaskRow call={call} results={merged} />;
     case "learnings":
       return <LearningsRow call={call} />;
     case "ask_user":
-      return <AskRow call={call} results={results} />;
+      return <AskRow call={call} results={merged} />;
     case "judge":
-      return <JudgeRow call={call} results={results} />;
+      return <JudgeRow call={call} results={merged} />;
     case "mcp":
-      return <McpRow call={call} results={results} />;
+      return <McpRow call={call} results={merged} />;
     default:
-      return <SearchRow call={call} results={results} />;
+      return <SearchRow call={call} results={merged} />;
   }
 }
 
@@ -523,6 +537,7 @@ function StepSegment({
     <div className={`flex flex-col gap-0.5 ${index > 0 ? "mt-1.5" : ""}`}>
       {step.calls.map((call) => (
         <CallRow
+          allSources={run.sources}
           call={call}
           key={`${step.round}-${call.id}`}
           results={run.sources.filter((source) => source.round === step.round && source.callId === call.id)}

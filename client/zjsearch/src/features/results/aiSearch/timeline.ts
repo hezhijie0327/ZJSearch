@@ -89,6 +89,11 @@ export interface AiSearchCall {
       pooled calls time submit -> settlement, inline branches time
       themselves) */
   ms?: number;
+  /** web_search: a RE-search whose hits were all already-numbered
+      produced no new sources -- these are the KNOWN [n]s the row's
+      result strip resolves against the run's registry, so the row still
+      expands to what it found */
+  dupes?: number[];
 }
 
 /** One chronological segment of a run's research timeline, mirroring one
@@ -504,6 +509,13 @@ export function applyEvent(
                   ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
                   ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
                   ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
+                  ...(event.dupes !== undefined
+                    ? {
+                        dupes: (Array.isArray(event.dupes) ? event.dupes : [])
+                          .map((n) => Number(n) || 0)
+                          .filter((n) => n > 0),
+                      }
+                    : {}),
                   ...(event.preview !== undefined ? { text: String(event.preview ?? "") || undefined } : {}),
                   ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
                   ...(event.action !== undefined ? { name: String(event.action ?? "") } : {}),

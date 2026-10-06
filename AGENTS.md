@@ -175,10 +175,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   research|write,"round"}` opens an entry; `think`/`say` deltas carry
   that entry's id; `calls` announces the entry's batch; `call` settles
   ONE call (`{id, call, status, n/chars/result/text/preview/label/
-  action}` — the web_reader settlement rides it too: `chars` + `text`
-  carry the reading pane and the reader-cache archive; a reader read
-  NEVER emits its own event kind, the closed set has no `page` and a
-  stale producer crashes the stream by design); `tasks` is the task card's AUTHORITATIVE snapshot;
+  action/dupes}` — the web_reader settlement rides it too: `chars` +
+  `text` carry the reading pane and the reader-cache archive; `dupes`
+  rides a RE-search whose hits were all already-numbered (no new
+  `sources` emission): the known [n]s let the row still expand to what
+  it found; a reader read NEVER emits its own event kind, the closed
+  set has no `page` and a stale producer crashes the stream by design); `tasks` is the task card's AUTHORITATIVE snapshot;
   `learnings` is the FINDINGS LEDGER's authoritative snapshot (the researcher's
   own distillation of what the sources established — same
   snapshot-replace semantics as `tasks`); `sources` the global [n] registry; `answer` deltas are the writer's

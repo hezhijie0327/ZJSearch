@@ -52,7 +52,18 @@ export function PageRow({ call, results }: { call: AiSearchCall; results: AiSear
         debuggable={debuggable}
         debugOpen={debug}
         expandable={expandable}
-        icon={<BookOpen aria-hidden="true" className="size-3 shrink-0" />}
+        icon={
+          results[0]?.favicon ? (
+            <img
+              alt=""
+              aria-hidden="true"
+              className="size-3 shrink-0 rounded-[3px] object-contain"
+              src={results[0].favicon}
+            />
+          ) : (
+            <BookOpen aria-hidden="true" className="size-3 shrink-0" />
+          )
+        }
         label={pageLabel(call.url)}
         metric={
           call.status === "pending"

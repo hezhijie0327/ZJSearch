@@ -61,6 +61,7 @@ from searx.zjsearch.ai.runtime.tools import (
 
 logger = logging.getLogger(__name__)
 
+_REFEREE_MAX = 4
 MAX_PARALLEL = 3
 """Worker threads per parallel batch -- uncapped per-round call counts
 (the model's call) queue behind these few slots so a chatty round cannot
@@ -297,6 +298,26 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
         return search_obj.search().get_ordered_results()
 
+    def _known_dupes(self, items: list[t.Any], entries: list[dict[str, t.Any]]) -> list[int]:
+        """A RE-search whose hits are all already-numbered produces no new
+        entries -- the row would promise (12) with nothing to show and no
+        way to expand.  The KNOWN [n]s of this search's already-seen hits
+        ride the settle as ``dupes``: the client resolves them against the
+        run's registry and the row still expands to the result cards (the
+        same pages, their existing numbers)."""
+        new_urls = {str(entry.get("url") or "") for entry in entries}
+        dupes: list[int] = []
+        for item in items:
+            url = str(item.get("url") or "")
+            if not url or url in new_urls:
+                continue
+            known_n = self.reg.known(reader.normalize_url(url))
+            if known_n and known_n not in dupes:
+                dupes.append(known_n)
+            if len(dupes) >= 12:
+                break
+        return dupes
+
     def _ranked(self, query: str, raw: list[t.Any]) -> list[t.Any]:
         """One search's results through the THREE-stage cascade: engine
         order -> BM25 text relevance -> the rerank model re-scoring the
@@ -455,7 +476,18 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                     "title": str(entry.get("title") or ""),
                     "snippet": str(entry.get("content") or "")[:500],
                 }
-        yield ("call", {"call": idx, "status": "ok", "n": len(items), "ms": ms, "feed": feed_block[:800]})
+        dupes = self._known_dupes(items, entries)
+        yield (
+            "call",
+            {
+                "call": idx,
+                "status": "ok",
+                "n": len(items),
+                "ms": ms,
+                "feed": feed_block[:800],
+                **({"dupes": dupes} if dupes else {}),
+            },
+        )
         if entries:
             yield ("sources", {"items": entries})
 
@@ -1014,6 +1046,20 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         if round_judgments:
             yield ("decisions", {"round": rnd, "items": [dict(entry) for entry in round_judgments]})
 
+    def _referee_questions(self, open_tasks: list[dict[str, t.Any]]) -> dict[str, dict[str, t.Any]]:
+        """The coverage question per OPEN subtask (head-_REFEREE_MAX)."""
+        graded = open_tasks[:_REFEREE_MAX]
+        return {
+            f"task_{i}": {
+                "type": "noul",
+                "instructions": (
+                    "Do THIS round's new source titles sufficiently cover the subtask"
+                    " (enough to support the final answer)?"
+                ),
+            }
+            for i, _task in enumerate(graded)
+        }
+
     def _coverage_referee(self, feeds: list[str | None]) -> None:
         """Grade OPEN subtasks against THIS round's new source titles -- one
         noul per subtask (did this round's material cover it?) -- and advise
@@ -1027,22 +1073,12 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
         open_tasks = [t for t in self.coverage.task_list if t.get("status") != "done"]
         if not open_tasks or not self.round_new_titles:
             return
-        graded_count = min(len(open_tasks), 4)
-        questions = {
-            f"task_{i}": {
-                "type": "noul",
-                "instructions": (
-                    "Do THIS round's new source titles sufficiently cover the subtask"
-                    " (enough to support the final answer)?"
-                ),
-            }
-            for i, t in enumerate(open_tasks[:graded_count])
-        }
+        questions = self._referee_questions(open_tasks)
         started = time.monotonic()
         try:
             out = decision.judge(
                 {
-                    "subtasks": [str(t.get("title") or "") for t in open_tasks[:graded_count]],
+                    "subtasks": [str(t.get("title") or "") for t in open_tasks[:_REFEREE_MAX]],
                     "new_source_titles": self.round_new_titles[:20],
                 },
                 questions,
@@ -1068,9 +1104,9 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                 continue
             noul = float(answer.get("noul") or 0.0) if isinstance(answer, dict) else 0.0
             title = str(open_tasks[idx].get("title") or "")[:60]
-            band = "done" if noul >= done_min else "thin"
-            signature.append((title, band))
-            (done_candidates if band == "done" else thin).append(title)
+            covered = noul >= done_min
+            signature.append((title, "done" if covered else "thin"))
+            (done_candidates if covered else thin).append(title)
         # the 决策结果 card only learns of a verdict when it CHANGED: the
         # referee re-grades the same open subtasks every round, and eleven
         # identical rows read as noise, not assurance
@@ -1083,7 +1119,7 @@ class Searches:  # pylint: disable=too-few-public-methods, too-many-instance-att
                         "Per open subtask: covered by this round's new sources"
                         " (noul 0-1, above threshold suggests done)"
                     ),
-                    "target": " / ".join(str(t.get("title") or "")[:60] for t in open_tasks[:graded_count]),
+                    "target": " / ".join(str(t.get("title") or "")[:60] for t in open_tasks[:_REFEREE_MAX]),
                     "answers": answers,
                     "ms": int((time.monotonic() - started) * 1000),
                 }

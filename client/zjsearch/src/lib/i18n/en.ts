@@ -328,6 +328,7 @@ export const EN = {
   ai_elapsed_minutes: "researched {n}m {s}s",
   ai_search_row_duplicate: "duplicate",
   ai_debug: "Debug",
+  ai_debug_error: "Error",
   ai_debug_args: "Raw arguments",
   ai_debug_feed: "Model receipt",
   ai_clarify_more: "Add context (optional)",

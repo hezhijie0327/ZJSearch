@@ -123,7 +123,7 @@ export function CallRowShell({
           aria-label={t("ai_debug")}
           aria-pressed={debugOpen}
           className={`grid size-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-surface-2/50 hover:text-ink ${
-            debugOpen ? "text-accent" : ""
+            call.status === "error" ? "text-danger/80 hover:text-danger" : debugOpen ? "text-accent" : ""
           }`}
           onClick={onToggleDebug}
           title={t("ai_debug")}
@@ -176,15 +176,19 @@ export function DebugArgs({ rawArgs }: { rawArgs: string }) {
     executor fed back (what the model actually saw).  Same visual language
     as the args pane -- mono, scroll-capped, copyable -- with `dir="auto"`
     (feed text is prose, often CJK). */
-export function DebugFeed({ feed }: { feed: string }) {
+export function DebugFeed({ feed, error = false }: { feed: string; error?: boolean }) {
   const t = useT();
   const copyToast = useCopyToast();
   return (
     <div className="mt-1">
-      <DebugLabel label={t("ai_debug_feed")} />
+      <div className={error ? "px-1 pb-1 text-[11px] font-medium text-danger" : undefined}>
+        <DebugLabel label={error ? t("ai_debug_error") : t("ai_debug_feed")} />
+      </div>
       <div className="group relative">
         <div
-          className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
+          className={`max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words ${
+            error ? "text-danger/85" : "text-ink-2"
+          }`}
           dir="auto"
         >
           {feed}
@@ -213,7 +217,7 @@ export function DebugPanes({ call, rawArgs }: { call: AiSearchCall; rawArgs: str
   return (
     <>
       {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
-      {call.feed ? <DebugFeed feed={call.feed} /> : null}
+      {call.feed ? <DebugFeed error={call.status === "error"} feed={call.feed} /> : null}
     </>
   );
 }
