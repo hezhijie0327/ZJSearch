@@ -7,6 +7,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { configureBrowserInput } from "@/lib/browserInput.ts";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import { translateFor } from "@/lib/i18n.ts";
 import { configureKnowledge } from "@/lib/kb/shared.ts";
@@ -285,6 +286,7 @@ export function RouterProvider({
       configureEmbeddings(parsed.globals?.embedding ? { token: parsed.globals.embedding.tk } : null);
       const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai;
       configureKnowledge({ aiToken: aiCapLanding?.tk, embedModel: parsed.globals?.embedding?.model });
+      configureBrowserInput(aiCapLanding?.tk);
       setData(parsed);
       setLoading(false);
       document.title = pageTitle(parsed);

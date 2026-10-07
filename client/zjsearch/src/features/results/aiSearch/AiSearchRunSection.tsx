@@ -32,6 +32,7 @@ import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { Lightbox as AttachmentLightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
 import { AttachmentPreview } from "@/features/results/aiSearch/AttachmentPreview.tsx";
+import { BrowserMirrorSection } from "@/features/results/aiSearch/BrowserMirror.tsx";
 import { ToolRow } from "@/features/results/aiSearch/calls/ToolRow.tsx";
 import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
@@ -1134,6 +1135,7 @@ function AiSearchRunSectionImpl({
                 follow-up box.  The rail owns THE scroll; every section is
                 an ordinary block (cap-4 each), and the pb-44 keeps the
                 last card reachable above the follow-up box. */}
+            {run.browser ? <BrowserMirrorSection view={run.browser} /> : null}
             {run.attachments?.length ? (
               <section aria-label={t("ai_attach_section")} className="mb-5">
                 <RailHeader count={run.attachments.length} icon={Paperclip} title={t("ai_attach_section")} />

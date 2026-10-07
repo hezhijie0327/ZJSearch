@@ -219,7 +219,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         ],
       };
       const apply = (event: Record<string, unknown>) => {
-        appendRunEvents(`${threadId}:${runNo}`, [event]);
+        // the browser mirror's frames are VOLATILE: the event log keeps the
+        // meta (url/title/wait_left) but never the jpeg bytes -- a replay
+        // shows the session's trail without the megabytes
+        const persist = event.e === "browser" ? { ...event, img: "" } : event;
+        appendRunEvents(`${threadId}:${runNo}`, [persist]);
         setCore((prev) => {
           // LATE wire events (related/memory/tags/usage) trail the settle
           // BY DESIGN -- the settled phases must still fold them (the

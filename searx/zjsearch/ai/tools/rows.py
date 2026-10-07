@@ -20,6 +20,7 @@ from searx.zjsearch.ai.tools.learnings import LEARNINGS_TOOL
 from searx.zjsearch.ai.tools.memory import USER_MEMORY_TOOL
 from searx.zjsearch.ai.tools.past_research import PAST_RESEARCH_TOOL
 from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call
+from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
 from searx.zjsearch.ai.tools.web_reader import PAGE_TOOL, parse_page_call
 from searx.zjsearch.ai.tools.web_search import TOOL_NAME, parse_call
 
@@ -112,6 +113,18 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "tool": "mcp",
             "name": call_name.split("_", 2)[-1] if call_name.count("_") >= 2 else call_name,
             "args": raw_args(call),
+        }
+    if str(call.get("name") or "") == WEB_BROWSER_TOOL:
+        try:
+            browser_args = raw_args(call)
+        except Exception:  # pylint: disable=broad-except
+            browser_args = {}
+        return {
+            "id": idx,
+            "tool": WEB_BROWSER_TOOL,
+            "q": str(browser_args.get("url") or browser_args.get("action") or "")[:120],
+            "url": str(browser_args.get("url") or "")[:200],
+            "args": browser_args,
         }
     if str(call.get("name") or "") == CALCULATOR_TOOL:
         try:

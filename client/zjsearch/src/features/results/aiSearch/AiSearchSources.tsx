@@ -210,10 +210,11 @@ export function AiSearchSources({
     return null;
   }
   const hidden = Math.max(0, sources.length - RAIL_CAP);
-  // the newest four lead; the older tail folds in a Collapse (the +N
-  // reveal plays as a height animation)
-  const view = [...sources.slice(-RAIL_CAP)].reverse();
-  const extra = [...sources.slice(0, Math.max(0, sources.length - RAIL_CAP))].reverse();
+  // numbering order: the evidence list reads [1] -> [N] (the [n] chips in
+  // the answer index into this exact order); the older tail folds in a
+  // Collapse (the +N reveal plays as a height animation)
+  const view = sources.slice(0, RAIL_CAP);
+  const extra = sources.slice(RAIL_CAP);
   return (
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
     // scroll); this section pins its heading and lists the cards

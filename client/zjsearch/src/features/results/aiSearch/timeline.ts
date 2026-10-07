@@ -77,7 +77,8 @@ export interface AiSearchCall {
     | "judge"
     | "ask_user"
     | "extract_table"
-    | "view_image";
+    | "view_image"
+    | "web_browser";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
   name?: string;
@@ -278,6 +279,10 @@ export interface AiSearchRun {
   sections?: Record<string, string>;
   /** the recorded data tables (the ``artifact`` events, keyed by id) */
   artifacts?: Record<number, AiSearchArtifact>;
+  /** the interactive session's live mirror (the web_browser call's
+      viewport frames -- img stripped before persisting; null = no
+      session or the run replays) */
+  browser: { url: string; title: string; img: string; w: number; h: number; waitLeft?: number } | null;
 }
 
 /** The REPORT mode's outline snapshot (the wire's ``outline`` event): the
@@ -462,6 +467,7 @@ export function applyEvent(
         answer: "",
         clarify: String(event.text ?? ""),
         ask: null,
+        browser: null,
         wrappingUp: false,
         startedAt: Number(event.startedAt) || run.startedAt,
         endedAt: null,
@@ -613,6 +619,22 @@ export function applyEvent(
         const url = String(event.url ?? "");
         fx.archive(url, run.sources.find((source) => source.url === url)?.title ?? "", text);
       }
+      return { ...core, runs };
+    }
+    case "browser": {
+      // the interactive session's mirror frame: replaces wholesale (img
+      // stripped before persisting -- the event log keeps meta only)
+      runs[lastIdx] = {
+        ...run,
+        browser: {
+          url: String(event.url ?? ""),
+          title: String(event.title ?? ""),
+          img: String(event.img ?? ""),
+          w: Number(event.w) || 1280,
+          h: Number(event.h) || 800,
+          ...(event.wait_left !== undefined ? { waitLeft: Number(event.wait_left) || 0 } : {}),
+        },
+      };
       return { ...core, runs };
     }
     case "close":
@@ -852,6 +874,7 @@ export function applyEvent(
       const halt = typeof event.halt === "string" && event.halt ? event.halt : null;
       let next: AiSearchRun = {
         ...run,
+        browser: null,
         finish: event.finish ? String(event.finish) : (run.finish ?? null),
         model: typeof event.model === "string" && event.model ? event.model : (run.model ?? null),
         usage: usage
@@ -909,6 +932,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "ask_user",
   "extract_table",
   "view_image",
+  "web_browser",
 ]);
 
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {
@@ -952,5 +976,6 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     decisions: [],
     sections: {},
     artifacts: {},
+    browser: null,
   };
 }

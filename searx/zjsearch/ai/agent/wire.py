@@ -42,6 +42,12 @@ bug and :py:func:`encode` refuses it):
                         ``awaiting``.
 ``gallery``             a validated inline image group
                         ``{items: [{u, n}]}``.
+``browser``             the interactive browser session's MIRROR frame:
+                        ``{url, title, img, w, h, wait_left?}`` -- live
+                        while a ``web_browser`` call is pending (the
+                        frames double as the stream's heartbeats); the
+                        client renders them in the rail's browser card
+                        and strips ``img`` before persisting.
 ``related``             follow-up question suggestions.
 ``memory``              a durable fact the model saved about the user.
 ``settle``              the terminal state: ``{status: done|awaiting|
@@ -74,6 +80,7 @@ EVENTS: frozenset[str] = frozenset(
         "outline",
         "artifact",
         "section",
+        "browser",
         "related",
         "memory",
         "tags",

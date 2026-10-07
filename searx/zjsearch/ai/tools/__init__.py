@@ -30,6 +30,7 @@ from searx.zjsearch.ai.tools.past_research import (
 from searx.zjsearch.ai.tools.rows import display_item
 from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call, task_write_spec
 from searx.zjsearch.ai.tools.view_image import VIEW_IMAGE_TOOL, parse_view_image_call, view_image_spec
+from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL, parse_web_browser_call, web_browser_spec
 from searx.zjsearch.ai.tools.web_reader import PAGE_TOOL, parse_page_call, page_spec
 from searx.zjsearch.ai.tools.web_search import SEARCH_CATEGORIES, TOOL_NAME, parse_call, tool_spec
 
@@ -40,6 +41,7 @@ __all__ = [
     "EXTRACT_TOOL",
     "LEARNINGS_TOOL",
     "PAGE_TOOL",
+    "WEB_BROWSER_TOOL",
     "PAST_RESEARCH_TOOL",
     "SEARCH_CATEGORIES",
     "TASK_TOOL",
@@ -62,11 +64,13 @@ __all__ = [
     "parse_system_one_call",
     "parse_task_call",
     "parse_view_image_call",
+    "parse_web_browser_call",
     "past_research_spec",
     "raw_args",
     "system_one_spec",
     "task_write_spec",
     "view_image_spec",
+    "web_browser_spec",
     "tool_spec",
     "user_memory_spec",
 ]

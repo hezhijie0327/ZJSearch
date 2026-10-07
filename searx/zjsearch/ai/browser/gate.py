@@ -64,12 +64,26 @@ async def _resolve(host: str) -> tuple[str, ...] | None:
     return ips or None
 
 
+visual_pages: set[int] = set()
+"""Page object ids registered by the interactive session: their page
+renders FOR THE USER (the Lightbox takeover), so stylesheets, fonts and
+images load normally -- the resource-type rejection is a reader-only
+optimization.  The SSRF checks still apply to every request."""
+
+
 async def gate(route: t.Any) -> None:
     """The ``context.route("**/*")`` handler: abort or continue every
     request the page makes.  Abort reasons stay at debug level -- a page
     full of third-party trackers would otherwise flood the log."""
     request = route.request
     if request.resource_type in REJECT_RESOURCE_TYPES:
+        try:
+            # frame/page are PROPERTIES on playwright's request object
+            if id(request.frame.page) in visual_pages:
+                await route.continue_()
+                return
+        except Exception:  # pylint: disable=broad-except
+            pass
         await route.abort()
         return
     url = request.url

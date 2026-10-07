@@ -798,4 +798,146 @@ const DONE_STAGE: DebugScenario = {
   ],
 };
 
-export const DEBUG_SCENARIOS: DebugScenario[] = [FULL_STAGE, DONE_STAGE, AWAITING_STAGE, FAILED_STAGE];
+/** The browser session's login collaboration: the reader hits a sign-in
+    wall, the model opens the page in the browser, the mirror streams
+    frames while the user operates the Lightbox, and the post-operation
+    read hands the page back.  Frames are 1x1 stand-ins (the real wire
+    carries jpeg bytes; the event log strips them). */
+const TINY_JPEG =
+  "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwcJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==";
+
+const BROWSER_STAGE: DebugScenario = {
+  id: "browser",
+  label: "浏览器登录协作(镜像帧 × 等待用户)",
+  q: "打开小红书的探索页,登录后看看首页热门内容",
+  mode: "balanced",
+  events: [
+    { ...base },
+    { e: "phase", name: "research" },
+    { e: "say", id: 1, t: "先读一次目标页;被登录墙挡住就开浏览器,页面交给你来登录。" },
+    {
+      e: "think",
+      id: 1,
+      t: "web_reader 先行:返回内容若明显是登录表单,用 web_browser 打开同一页并 wait_user,把操作交给人。",
+    },
+    calls([
+      {
+        id: 1,
+        name: "web_reader",
+        arguments: '{"url": "https://www.xiaohongshu.com/explore"}',
+      },
+    ]),
+    {
+      e: "call",
+      call: 1,
+      status: "ok",
+      ms: 2840,
+      url: "https://www.xiaohongshu.com/explore",
+      chars: 186,
+      feed: "登录 小红书 -- 扫码或使用手机号验证码登录…",
+      text: "登录 小红书\n\n打开 App 扫码登录 · 使用手机验证码登录 · 其他登录方式\n\n未登录的访问只能看到登录引导页。\n\nLinks on the page:\n[登录](https://www.xiaohongshu.com/login)",
+    },
+    { e: "say", id: 1, t: "目标页是登录墙——开浏览器打开它,镜像已就绪,由你来完成登录。" },
+    calls([
+      {
+        id: 2,
+        name: "web_browser",
+        arguments: '{"action": "open", "url": "https://www.xiaohongshu.com/explore"}',
+      },
+    ]),
+    {
+      e: "browser",
+      url: "https://www.xiaohongshu.com/explore",
+      title: "小红书 - 你的生活指南",
+      img: TINY_JPEG,
+      w: 1280,
+      h: 800,
+    },
+    {
+      e: "call",
+      call: 2,
+      status: "ok",
+      ms: 4380,
+      feed: "opened https://www.xiaohongshu.com/explore -- 小红书 - 你的生活指南\n\ne1\tinput\t手机号\ne2\tbutton\t登录\ne3\ta\t扫码登录",
+    },
+    calls([
+      {
+        id: 3,
+        name: "web_browser",
+        arguments: '{"action": "wait_user", "seconds": 180}',
+      },
+    ]),
+    {
+      e: "browser",
+      url: "https://www.xiaohongshu.com/login",
+      title: "扫码登录",
+      img: TINY_JPEG,
+      w: 1280,
+      h: 800,
+      wait_left: 174,
+    },
+    {
+      e: "browser",
+      url: "https://www.xiaohongshu.com/login",
+      title: "扫码登录",
+      img: TINY_JPEG,
+      w: 1280,
+      h: 800,
+      wait_left: 170,
+    },
+    {
+      e: "browser",
+      url: "https://www.xiaohongshu.com/explore",
+      title: "小红书 - 你的生活指南",
+      img: TINY_JPEG,
+      w: 1280,
+      h: 800,
+      wait_left: 149,
+    },
+    {
+      e: "call",
+      call: 3,
+      status: "ok",
+      ms: 31200,
+      feed: "the user's operation window ended -- decide from the page below whether the goal is met or another window is needed.\n\nhttps://www.xiaohongshu.com/explore -- 小红书 - 你的生活指南\n\ne1\ta\t首页 e2\ta\t热门 e3\tbutton\t发布笔记",
+    },
+    calls([{ id: 4, name: "web_browser", arguments: '{"action": "read"}' }]),
+    {
+      e: "call",
+      call: 4,
+      status: "ok",
+      ms: 2050,
+      url: "https://www.xiaohongshu.com/explore",
+      chars: 3140,
+      feed: "小红书 - 你的生活指南\n\n首页推荐:Citywalk 路线合集 …",
+      text: "小红书 - 你的生活指南\n\n首页推荐:Citywalk 路线合集、秋季穿搭、新机测评、家居高性价比改造……\n\n热门话题标签:#citywalk #穿搭日记 #数码测评",
+    },
+    { e: "close", id: 1 },
+    { e: "phase", name: "write" },
+    {
+      e: "answer",
+      t: "登录后的首页热门内容集中在三类:**Citywalk 路线合集**(周末短途)、**秋季穿搭**(换季清单)和**新机测评**(影像对比为主)。整体以图文笔记为主,互动集中在评论区。",
+    },
+    { e: "close", id: 2 },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 5210,
+        output: 210,
+        thoughts: 260,
+        cached: 1024,
+        cache_write: 0,
+        research: { input: 5210, output: 40 },
+        write: { input: 4900, output: 170 },
+        gates: { input: 500, output: 22, calls: 2 },
+        rerank: null,
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+  ],
+};
+
+export const DEBUG_SCENARIOS: DebugScenario[] = [BROWSER_STAGE, FULL_STAGE, DONE_STAGE, AWAITING_STAGE, FAILED_STAGE];

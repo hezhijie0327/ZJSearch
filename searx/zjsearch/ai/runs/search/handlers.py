@@ -17,6 +17,7 @@ import typing as t
 
 from searx.zjsearch.ai.runs import attachments as uploads_fetch
 from searx.zjsearch.ai.tools import mcp
+from searx.zjsearch.ai.tools import web_browser as web_browser_tool
 from searx.zjsearch.ai.tools import web_reader as reader
 from searx.zjsearch.ai.tools import calculator
 from searx.zjsearch.ai.tools import past_research as past_research_cap
@@ -28,6 +29,7 @@ from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
     VIEW_IMAGE_TOOL,
+    WEB_BROWSER_TOOL,
     view_image_spec as _view_image_spec_unused,
     DECISION_TOOL,
     LEARNINGS_TOOL,
@@ -56,6 +58,68 @@ class DispatchMixin:  # pylint: disable=no-member
     """The per-tool execution branches and the round's job planning
     (the composed Searches state's members -- registry, ledger, feed --
     are inherent to the mixin pattern)."""
+
+    def _browser_call(self, call, wire_id, feeds):
+        """The interactive browser session: ONE action per call, inline
+        (the session is a serialized lane -- no parallel pool).  The
+        wait_user window streams mirror frames as wire events while it
+        blocks; the screenshot action rides the image-injection channel
+        (the model sees it next turn)."""
+        started = time.monotonic()
+        args = web_browser_tool.parse_web_browser_call(call)
+        action = str(args.get("action") or "")
+
+        def settle(status: str, feed: str, extra: dict | None = None):
+            feeds[wire_id - 1] = feed
+            payload = {
+                "call": wire_id,
+                "status": status,
+                "ms": int((time.monotonic() - started) * 1000),
+                "feed": feed[:800],
+            }
+            if extra:
+                payload.update(extra)
+            return ("call", payload)
+
+        if not action:
+            yield settle("error", "error: the web_browser action is required")
+            return
+        try:
+            if action == "wait_user":
+                for frame in web_browser_tool.wait_user_frames(int(args.get("seconds") or 180)):
+                    yield ("browser", frame)
+                feed = web_browser_tool.wait_user_snapshot(reader.max_chars())
+                yield settle("ok", feed, {"text": feed, "chars": len(feed)})
+                return
+            feed, frames, image_ref = web_browser_tool.run_action(args)
+        except Exception as exc:  # pylint: disable=broad-except
+            feed = f"error: {type(exc).__name__}: {str(exc)[:200]}"
+            yield settle("error", feed)
+            return
+        for frame in frames:
+            yield ("browser", frame)
+        if image_ref:
+            self.image_injections.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Attached: the screenshot you requested of the page you"
+                                " opened. Read it now and decide your next action from"
+                                " what is visible."
+                            ),
+                        },
+                        {"type": "image_url", "image_url": {"url": image_ref}},
+                    ],
+                }
+            )
+            yield settle("ok", "screenshot attached -- it is visible to you in the next turn.")
+            return
+        status = "error" if feed.startswith("error") else "ok"
+        extra = {"text": feed, "chars": len(feed)} if action == "read" else None
+        yield settle(status, feed, extra)
 
     def execute(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
         self, calls: list[dict[str, t.Any]]
@@ -572,6 +636,9 @@ class DispatchMixin:  # pylint: disable=no-member
                         "feed": feed[:800],
                     },
                 )
+                continue
+            if str(call.get("name") or "") == WEB_BROWSER_TOOL:
+                yield from self._browser_call(call, wire_id, feeds)
                 continue
             if str(call.get("name") or "") == PAGE_TOOL:
                 feed, event, page_url = self._page_plan(call, wire_id)

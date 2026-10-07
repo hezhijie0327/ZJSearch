@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "@/app.tsx";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import "@/lib/kb/debug.ts";
+import { configureBrowserInput } from "@/lib/browserInput.ts";
 import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { initPwaInstall } from "@/lib/pwa.ts";
@@ -67,6 +68,7 @@ async function bootstrap(): Promise<void> {
   // name recorded on every embedded row
   const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;
   configureKnowledge({ aiToken: aiCap?.tk, embedModel: embeddingCap?.model });
+  configureBrowserInput(aiCap?.tk);
   // boot payloads of the streamed search page: handled before the app takes
   // over (the static boot skeleton is still on screen until this point)
   if (initialData && isRedirectPageData(initialData)) {

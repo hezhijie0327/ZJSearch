@@ -8,7 +8,7 @@ import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 /** Compact label for a web_reader row: host + trimmed path -- the url is
     what identifies the read (two pages on one site must look different);
     a malformed url shows as-is. */
-function pageLabel(url: string | undefined): string {
+export function pageLabel(url: string | undefined): string {
   if (!url) {
     return "?";
   }

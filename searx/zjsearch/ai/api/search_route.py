@@ -21,7 +21,9 @@ import flask
 
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai.tools import mcp
+from searx.zjsearch.ai.tools import web_browser as web_browser_tool
 from searx.zjsearch.ai.tools import web_reader as reader
+from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.tools.past_research import parse_entries as parse_past_research
 from searx.zjsearch.ai.tools.memory import extract_insights, parse_memories
 from searx.zjsearch.ai.agent import loop as engine
@@ -220,6 +222,9 @@ def _search(
     # fully configured: an unconfigured reader simply leaves the tool
     # unregistered
     pages_on = reader.configured()
+    # the interactive browser session rides when the built-in engine is
+    # ready (zjsearch.browser): it is the login/interaction escape hatch
+    browser_on = browser_config.ready()
     # the MCP bridge (zjsearch.mcp, streamable-HTTP servers): an
     # unconfigured or package-less deployment registers nothing; a large
     # surface switches to PROGRESSIVE DISCLOSURE (one discovery tool
@@ -404,6 +409,7 @@ def _search(
         )
         + ([past_research_spec()] if past_research_entries else [])
         + ([page_spec()] if pages_on else [])
+        + ([web_browser_tool.web_browser_spec()] if browser_on else [])
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])
         + ([extract_spec()] if outline is not None else [])

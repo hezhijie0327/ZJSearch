@@ -65,8 +65,10 @@ def install(app: flask.Flask) -> None:
     (``searx.zjsearch``).  Route modules register their own endpoints and
     stay silent when not configured."""
     from searx.zjsearch.ai import runs  # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.api import browser_input  # pylint: disable=import-outside-toplevel
 
     if llm_config.llm_cfg().get("enabled") and settings.get("server", {}).get("secret_key") == "ultrasecretkey":
         logger.warning("zjsearch.ai runs with the default server.secret_key -- answer tokens are forgeable")
     runs.install(app)
+    browser_input.install(app)
     app.jinja_env.globals["zjs_ai_capabilities"] = _capabilities
