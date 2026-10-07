@@ -144,13 +144,10 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       <div className="mt-1.5 space-y-2">
         {rows.map((row) => (
           <div key={row.key}>
-            <div className="flex items-start gap-1.5">
-              <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-              <p className="min-w-0 flex-1 break-words text-[13px] text-ink-2" dir="auto">
-                {row.label}
-              </p>
-            </div>
-            <div className="flex items-start gap-1.5">
+            <p className="break-words text-[13px] font-medium text-ink" dir="auto">
+              {row.label}
+            </p>
+            <div className="mt-0.5 flex items-start gap-1.5">
               <CornerDownRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
               <div className="min-w-0 flex-1">
                 <AnswerValue answer={row.value} />

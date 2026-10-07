@@ -628,7 +628,8 @@ export function applyEvent(
           purpose: String(record.purpose ?? ""),
           question: typeof record.question === "string" ? record.question : undefined,
           target: typeof record.target === "string" ? record.target : undefined,
-          answer: record.answer ?? record.answers ?? record.raw ?? undefined,
+          // judge 工具的裁决键是 verdicts(其余是 answers)
+          answer: record.answer ?? record.answers ?? record.verdicts ?? record.raw ?? undefined,
           // record_questions(name→题文)并入 record,通用渲染器的
           // 标签解析链由此读取
           ...(record.record_questions ? { record_questions: record.record_questions } : {}),

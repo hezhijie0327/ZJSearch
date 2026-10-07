@@ -324,7 +324,7 @@ const FULL_STAGE: DebugScenario = {
           feed: "image fetched and attached -- it is visible to you in the next turn (source [4]).",
         },
         {
-          id: 10,
+          id: 11,
           tool: "extract_table",
           q: "",
           status: "error",
@@ -333,7 +333,7 @@ const FULL_STAGE: DebugScenario = {
           feed: "error: extract_table needs a title, 2+ columns and at least one row -- a table the writer can cite.",
         },
         {
-          id: 11,
+          id: 12,
           tool: "ask_user",
           q: "",
           status: "pending",
@@ -421,14 +421,23 @@ const FULL_STAGE: DebugScenario = {
         '{\n  "country": "中国",\n  "province": "广东省",\n  "city": "深圳市",\n  "district": "南山区",\n  "adcode": "440305",\n  "location": "113.9304,22.5333"\n}',
     },
     { e: "call", id: 2, call: 9, status: "ok", n: 4, ms: 6, feed: "table 1 recorded" },
-    { e: "call", id: 2, call: 10, status: "error", ms: 2, feed: "error: extract_table needs a title…" },
+    {
+      e: "call",
+      id: 2,
+      call: 10,
+      status: "ok",
+      ms: 1200,
+      preview: "https://chem.example.com/capacity-chart",
+      feed: "image fetched and attached -- it is visible to you in the next turn (source [4]).",
+    },
+    { e: "call", id: 2, call: 11, status: "error", ms: 2, feed: "error: extract_table needs a title…" },
     // ask_user settles TOO: in the real loop a solo ask_user call always
     // ENDS the run (awaiting) -- a permanently-pending ask row mid-timeline
     // is unrealistic and made the replay look stuck at the last row
     {
       e: "call",
       id: 2,
-      call: 11,
+      call: 12,
       status: "ok",
       ms: 300,
       feed: "ask recorded -- the run continues on the user's best interpretation",
