@@ -29,6 +29,7 @@ import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
+import { Lightbox as AttachmentLightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
 import { ToolRow } from "@/features/results/aiSearch/calls/ToolRow.tsx";
 import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
@@ -767,6 +768,8 @@ function AiSearchRunSectionImpl({
   const [findingsExpanded, setFindingsExpanded] = useState(false);
   const [gapsExpanded, setGapsExpanded] = useState(false);
   const locateSeq = useRef(0);
+  /** the attached image being viewed fullscreen (index into run.attachments) */
+  const [viewAttachment, setViewAttachment] = useState<number | null>(null);
   const handleCite = (n: number) => {
     // a cited [n] this run never gathered (a past-research recall, a
     // previous run's numbering) has no rail card -- the page-level
@@ -878,6 +881,20 @@ function AiSearchRunSectionImpl({
           run blocks on these questions, so focus moves in and is trapped
           (useDialogFocus), Escape means skip, the scrim fades (never
           pops). */}
+      {viewAttachment !== null && run.attachments?.length
+        ? createPortal(
+            <AttachmentLightbox
+              images={run.attachments.map((attachment) => ({
+                alt: attachment.name ?? t("attach_images"),
+                src: attachment.data ?? "",
+              }))}
+              initialIndex={viewAttachment}
+              onClose={() => setViewAttachment(null)}
+            />,
+            document.body,
+          )
+        : null}
+
       {awaiting && run.ask
         ? createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -896,13 +913,14 @@ function AiSearchRunSectionImpl({
       {run.attachments?.length ? (
         <div className="flex flex-wrap gap-2">
           {run.attachments.map((attachment, index) => (
-            <a
+            <button
               aria-label={attachment.name ?? t("attach_images")}
-              className="group relative block overflow-hidden rounded-lg border border-line"
-              href={attachment.data}
+              className="group relative block cursor-zoom-in overflow-hidden rounded-lg border border-line"
               key={index}
-              rel="noreferrer"
-              target="_blank"
+              onClick={() => {
+                setViewAttachment(index);
+              }}
+              type="button"
             >
               {attachment.data ? (
                 <img
@@ -915,7 +933,7 @@ function AiSearchRunSectionImpl({
                   {attachment.mime.replace("image/", "")}
                 </span>
               )}
-            </a>
+            </button>
           ))}
         </div>
       ) : null}
