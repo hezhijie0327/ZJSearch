@@ -470,6 +470,16 @@ const FULL_STAGE: DebugScenario = {
           ms: 940,
         },
         {
+          purpose: "coverage",
+          question: "Per open subtask: covered by this round's new sources (noul 0-1, above threshold suggests done)",
+          target: "全球竞争格局与头部玩家 / 产能与投资对比",
+          answers: {
+            task_0: { noul: 0.77, type: "noul" },
+            task_1: { noul: 0.77, type: "noul" },
+          },
+          ms: 583,
+        },
+        {
           purpose: "depth_probe",
           question: "How deep and broad does the research need to be (score 0-4)?",
           target: "多肽原料药全球竞争格局…",

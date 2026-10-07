@@ -108,94 +108,37 @@ function pctOf(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
-/** 决策条目按用途展开成 Q&A 行(问 = 判据,答 = 原语渲染):
-    plan_review 逐子课题 / judge 逐问题 / evidence 逐源通过失败;
-    单答案原语(noul / choice / score)直接渲染。 */
+/** 决策条目的展开:evidence 逐源通过失败(自有语义);其余「命名裁决
+    映射」形状(judge / plan_review / coverage / read_gate …—— 任何答案为
+    {名字: 原语裁决} 的决策)统一走通用逐行 Q&A 渲染器,标签按
+    questions → target 标题序列 → 键名 解析;单答案原语直接渲染;
+    真正未知的形状才退到原始 JSON。新增 decision 用途时,只要答案遵守
+    {名字: choice|score|noul} 协议就自动获得结构化渲染,零分支。*/
+/** 单答案原语:noul / choice / score 之一(顶层直接渲染的形状)。 */
+function isPrimitiveAnswer(value: Record<string, unknown>): boolean {
+  return "noul" in value || value.type === "noul" || value.type === "choice" || value.type === "score";
+}
+
 function DecisionBody({ decision }: { decision: AiDecision }) {
   const t = useT();
   const record = (decision.record ?? {}) as Record<string, unknown>;
   const asObject =
     decision.answer && typeof decision.answer === "object" ? (decision.answer as Record<string, unknown>) : null;
 
-  // ── judge(模型判定): questions × answers 逐行 Q&A ──
-  if (decision.purpose === "judge" && asObject) {
-    // the questions' name->instructions mapping rides the record when the
-    // server sent it; the answers map alone still renders (name keys shown
-    // only when the mapping is missing)
-    const questions = Array.isArray(decision.record?.questions)
-      ? (decision.record.questions as Array<{ name: string; instructions?: string }>)
-      : [];
-    const answers = asObject;
-    const single = questions.length === 1;
-    const rows = questions.length
-      ? questions.map((question) => ({ label: question.instructions ?? question.name, value: answers[question.name] }))
-      : Object.entries(answers).map(([label, value]) => ({ label, value }));
+  // ── evidence: 逐源 通过/失败(数字分 + 失败标记,自有语义) ──
+  if (decision.purpose === "evidence" && record.graded && typeof record.graded === "object") {
+    const graded = record.graded as Record<string, number>;
+    const failing = (Array.isArray(record.failing) ? record.failing : []).map(Number);
     return (
-      <div className="mt-1.5 space-y-2">
-        {rows.map((row, index) => (
-          <div key={index}>
-            <div className="flex items-start gap-1.5">
-              <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-              <p className="min-w-0 flex-1 break-words text-[13px] text-ink-2" dir="auto">
-                {String(row.label ?? "")}
-              </p>
-            </div>
-            {row.value !== undefined ? (
-              <div className="flex items-start gap-1.5">
-                <CornerDownRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
-                <div className="min-w-0 flex-1">
-                  <AnswerValue answer={row.value} />
-                </div>
-              </div>
-            ) : (
-              <p className="ps-5 text-ink-3">—</p>
-            )}
+      <div className="mt-1.5 space-y-1">
+        {Object.entries(graded).map(([nStr, score]) => (
+          <div className="flex items-center gap-2" key={nStr}>
+            <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-3">#{nStr}</span>
+            <span className="min-w-0 flex-1">
+              <ProbBar highlight={score >= 0.45} label={failing.includes(Number(nStr)) ? "✕" : "✓"} pct={score} />
+            </span>
           </div>
         ))}
-        {single ? null : null}
-      </div>
-    );
-  }
-  // ── plan_review: 逐子课题 noul ──
-  if (decision.purpose === "plan_review" && asObject) {
-    const titles = (decision.target ?? "").split(" / ");
-    return (
-      <div className="mt-1.5 space-y-1.5">
-        {Object.entries(asObject).map(([key, value]) => {
-          const idx = Number(key.replace("task_", ""));
-          const noulValue =
-            typeof value === "object" && value ? (value as Record<string, unknown>).noul : Number(value) || 0;
-          return (
-            <div key={key}>
-              <p className="break-words text-[13px] text-ink-2" dir="auto">
-                {titles[idx] ?? key}
-              </p>
-              <AnswerValue answer={{ type: "noul", noul: noulValue }} />
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-  // ── coverage(覆盖裁判): 与 plan_review 同构 —— target 按序携带开放
-  //    子课题标题,answers 键为 task_N,逐个渲染 noul 支撑度条 ──
-  if (decision.purpose === "coverage" && asObject) {
-    const titles = (decision.target ?? "").split(" / ");
-    return (
-      <div className="mt-1.5 space-y-1.5">
-        {Object.entries(asObject).map(([key, value]) => {
-          const idx = Number(key.replace("task_", ""));
-          const noulValue =
-            typeof value === "object" && value ? (value as Record<string, unknown>).noul : Number(value) || 0;
-          return (
-            <div key={key}>
-              <p className="break-words text-[13px] text-ink-2" dir="auto">
-                {titles[idx] ?? key}
-              </p>
-              <AnswerValue answer={{ type: "noul", noul: noulValue }} />
-            </div>
-          );
-        })}
       </div>
     );
   }
@@ -228,28 +171,46 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       </div>
     );
   }
-  // ── evidence: 逐源 通过/失败 ──
-  if (decision.purpose === "evidence" && record.graded && typeof record.graded === "object") {
-    const graded = record.graded as Record<string, number>;
-    const failing = (Array.isArray(record.failing) ? record.failing : []).map(Number);
+  // ── 命名裁决映射(万能形态): judge / plan_review / coverage /
+  //    read_gate 的答案都是同一种形状 —— {名字: choice|score|noul 裁决}。
+  //    一个渲染器覆盖全部现有与未来的这类决策:逐条渲染「标签 + 概率条」,
+  //    标签按 最佳可用来源 解析 —— record.questions 的题文映射、target 的
+  //    " / " 标题序列(task_N 约定)、退回键名本身。裸数值归一为 noul。 ──
+  if (asObject && !isPrimitiveAnswer(asObject)) {
+    const questions = Array.isArray(decision.record?.questions)
+      ? (decision.record.questions as Array<{ name: string; instructions?: string }>)
+      : [];
+    const titles = typeof decision.target === "string" && decision.target ? decision.target.split(" / ") : [];
+    const rows = Object.entries(asObject).map(([key, value]) => {
+      const byQuestion = questions.find((q) => q.name === key);
+      const idx = Number(key.replace("task_", ""));
+      const label = byQuestion?.instructions ?? titles[idx] ?? key;
+      const value2 = typeof value === "object" && value ? value : { type: "noul", noul: Number(value) || 0 };
+      return { key, label, value: value2 };
+    });
     return (
-      <div className="mt-1.5 space-y-1">
-        {Object.entries(graded).map(([nStr, score]) => (
-          <div className="flex items-center gap-2" key={nStr}>
-            <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-3">#{nStr}</span>
-            <span className="min-w-0 flex-1">
-              <ProbBar highlight={score >= 0.45} label={failing.includes(Number(nStr)) ? "✕" : "✓"} pct={score} />
-            </span>
+      <div className="mt-1.5 space-y-2">
+        {rows.map((row) => (
+          <div key={row.key}>
+            <div className="flex items-start gap-1.5">
+              <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
+              <p className="min-w-0 flex-1 break-words text-[13px] text-ink-2" dir="auto">
+                {row.label}
+              </p>
+            </div>
+            <div className="flex items-start gap-1.5">
+              <CornerDownRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
+              <div className="min-w-0 flex-1">
+                <AnswerValue answer={row.value} />
+              </div>
+            </div>
           </div>
         ))}
       </div>
     );
   }
   // ── 单答案原语(noul / choice / score)直接渲染 ──
-  if (
-    asObject &&
-    ("noul" in asObject || asObject.type === "noul" || asObject.type === "choice" || asObject.type === "score")
-  ) {
+  if (asObject && isPrimitiveAnswer(asObject)) {
     return <AnswerValue answer={asObject} />;
   }
   // ── fallback: raw JSON ──
