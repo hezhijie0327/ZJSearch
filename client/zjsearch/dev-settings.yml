@@ -78,7 +78,7 @@ outgoing:
   networks:
     # the page reader's dedicated network: the LAN browserless below is
     # plain http, and the app-initialized DEFAULT network is https-only
-    # (see searx/zjsearch/ai/capabilities/reader/fetch.py)
+    # (see searx/zjsearch/ai/tools/web_reader/fetch.py)
     zjsearch-reader:
       enable_http: true
 

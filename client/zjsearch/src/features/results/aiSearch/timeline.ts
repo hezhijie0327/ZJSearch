@@ -49,8 +49,7 @@ export interface AiAskQuestion {
 export interface AiSearchCall {
   /** 1-based position of the call within its round */
   id: number;
-  /** which tool produced the row (legacy threads may still carry the old
-      "web_crawler" name) */
+  /** which tool produced the row */
   tool:
     | "web_search"
     | "web_reader"
@@ -855,34 +854,25 @@ export function applyEvent(
   }
 }
 
+const KNOWN_TOOLS: ReadonlySet<string> = new Set([
+  "web_search",
+  "web_reader",
+  "calculator",
+  "mcp",
+  "user_memory",
+  "past_research",
+  "task_write",
+  "learnings",
+  "judge",
+  "ask_user",
+  "extract_table",
+]);
+
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {
   const tool = String(item.tool ?? "");
   return {
     id: Number(item.id) || 0,
-    // the tool name carries no versioning -- browser-stored legacy threads
-    // may still say "web_crawler": normalize it in
-    tool:
-      tool === "web_reader"
-        ? ("web_reader" as const)
-        : tool === "calculator"
-          ? ("calculator" as const)
-          : tool === "mcp"
-            ? ("mcp" as const)
-            : tool === "user_memory"
-              ? ("user_memory" as const)
-              : tool === "past_research"
-                ? ("past_research" as const)
-                : tool === "task_write"
-                  ? ("task_write" as const)
-                  : tool === "learnings"
-                    ? ("learnings" as const)
-                    : tool === "judge"
-                      ? ("judge" as const)
-                      : tool === "ask_user"
-                        ? ("ask_user" as const)
-                        : tool === "extract_table"
-                          ? ("extract_table" as const)
-                          : ("web_search" as const),
+    tool: (KNOWN_TOOLS.has(tool) ? tool : "web_search") as AiSearchCall["tool"],
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
     q: String(item.q ?? ""),

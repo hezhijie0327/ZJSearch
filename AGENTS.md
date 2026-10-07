@@ -123,11 +123,16 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   errors fall through to the upstream view unchanged. `_render_context` in
   the module mirrors `webapp.render`'s context building — re-sync it if
   upstream changes `render`.
-- The AI stack (`searx/zjsearch/ai/`) is a THREE-LAYER architecture --
-  infra / framework / runtime; the dependency direction is strictly
-  downwards:
+- The AI stack (`searx/zjsearch/ai/`) is a SEVEN-package architecture --
+  core / llm / agent / prompts / tools / runs / api; the dependency
+  direction is strictly downwards (api -> runs -> tools -> agent -> llm
+  -> core; prompts is material consumed by runs and tools):
 
-  - **infra/** — the providers. `sdk/` holds ONE factory per SDK family
+  - **core/** — cross-cutting foundations with zero AI semantics: the
+    settings-block readers (`config`), the HMAC token gate (`security`),
+    the shared text guards (`text`), the ONE SSRF gate (`guard`) and the
+    shared NDJSON stream wrapper (`ndjson`).
+  - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
     (openai with both chat wire shapes + embeddings, anthropic,
     gemini), centrally registered in `sdk.resolve()`; the stream
     queue-bridge (`streaming.LlmStream`), the canonical finish/usage
@@ -137,7 +142,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     runtime route), the HMAC gate (`security`) and the shared route
     prologue (`http`).  Adding a provider = one module under `sdk/`
     with a `factory()` + one line in `resolve()`.
-  - **framework/** — the provider-agnostic agent ENGINE. `loop.py` is
+  - **agent/** — the provider-agnostic agent ENGINE. `loop.py` is
     the phase machine (RESEARCH tool turns → WRITE turn; ask_user is a
     first-class turn outcome) that YIELDS WIRE EVENTS; `wire.py` is the
     CLOSED event set (open/think/say/calls/call/close/tasks/sources/
@@ -147,8 +152,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     channel doctrine, the cross-dialect reasoning echo payloads and the
     stream fence splitter.  Every delta carries its entry id and
     channel — the client appends, it never reconstructs.
-  - **runtime/** — the concrete tasks ON the engine. AI Search
-    (`runtime/search/`: profile/prompts/gates/tools/executor/route;
+  - **runs/** — the concrete tasks ON the engine. AI Search
+    (`runs/search/`: profile/prompts/gates/tools/executor/route;
     four depth modes = budget/decomposition/output-shape differences on
     ONE loop; the executor splits into `registry` ([n]/dedup/gallery
     whitelist), `coverage` (the task card's bidirectional-containment
@@ -163,11 +168,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     fails open, rerank rides searx's curl_cffi network layer with a
     `zjsearch-rerank` network escape hatch, and its prompt tokens
     accumulate into the settle's `usage.rerank` bucket) and the
-    Searches facade) and the AI OVERVIEW (`runtime/overview.py` — the
+    Searches facade) and the AI OVERVIEW (`runs/overview.py` — the
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
     shared prompt spine (identity/citations/markdown/voice/answer
-    contract) is `runtime/spine.py`; the reader/calculator/past_research/user_memory/mcp
+    contract) is `prompts/spine.py`; the reader/calculator/past_research/user_memory/mcp
     tool implementations are self-contained packages under `ai/tools/`
   (one package per tool: spec + sanitizer + service; `core/`, `prompts/`,
   `runs/`, `api/` complete the layout — see NEXTGEN-DESIGN.md).
@@ -1172,7 +1177,7 @@ loses the event -- shipped bug).
   mode + task titles) at settle; the post-run extractor
   (`extract_insights` in ai/tools/memory.py -- ONE completion
   returns {facts, tags}); and `POST /zjsearch/ai/tags`
-  (runtime/tag_route.py, the AI Search token, embed-route shape) which
+  (api/tag_route.py, the AI Search token, embed-route shape) which
   folds batches of raw tags into 2-6 concept tags per row (language
   merge, host/noise drop).  Rows carry `meta.tnormed`; a failed
   normalization keeps raw tags.  Tags are a jsonb column + segmented
@@ -1360,8 +1365,8 @@ redundant, both fused into ONE post-run extractor:
 ## DashScope + SystemOne decision surface (alibaba families)
 
 The SDK registry gained the DASHSCOPE family (``zjsearch.llm.sdk:
-dashscope``, `infra/sdk/dashscope.py`) and the TYPEsafe decision family
-(`infra/sdk/typesafe.py`): the native qwen Generation API
+dashscope``, `llm/sdk/dashscope.py`) and the TYPEsafe decision family
+(`llm/sdk/typesafe.py`): the native qwen Generation API
 (thinking via ``reasoning_content``, function calling, mm auto-routing --
 a parts message carrying an image turns the call into
 MultiModalConversation, and ``zjsearch.llm.surface: multimodal`` forces
@@ -1399,7 +1404,7 @@ dedicated workspace (2026-10):
   same; the ``preserve_thinking`` / ``clear_thinking`` knobs themselves
   ride ``params`` verbatim).
 - Embeddings: the native TextEmbedding path (``params.dimension`` is
-  DashScope's width key -- ``infra/config.dimensions`` reads it per
+  DashScope's width key -- ``llm/config.dimensions`` reads it per
   family; ``text_type`` / ``output_type`` / ``instruct`` ride the params
   passthrough) and the MultiModal-Embedding path via
   ``zjsearch.embedding.surface: multimodal`` (input items become
@@ -1426,10 +1431,10 @@ Jina / SiliconFlow; the cohere PYTHON SDK itself was evaluated and
 REJECTED: its fixed /v1|v2 path convention misses every gateway shape
 we serve).  The provider legs live in `infra/rerank.py` (the rerank
 SERVICE: config + wires); the cascade POLICY (BM25 fusion, head
-selection, splice) stays in `runtime/rank.py`.
+selection, splice) stays in `runs/search/rank.py`.
 
 The SystemOne DECISION capability (`zjsearch.decision`,
-`infra/decision.py` + `runtime/decision_route.py`: ``POST
+`llm/decision.py` + `api/decision_route.py`: ``POST
 /zjsearch/ai/decision``, HMAC-gated like the embed proxy): one forward
 pass answers NAMED questions about a state -- choice / score / noul,
 each with its probability distribution -- no text generation.  SDK

@@ -75,7 +75,7 @@ function AiBootGhost({ q, t }: { q: string; t: Translate }) {
         <div className="flex flex-wrap items-center gap-2">
           <span aria-hidden="true" className="size-5 animate-pulse rounded-full bg-surface-2" />
           <span className="text-xl font-medium text-ink">{t("ai_search_process")}</span>
-          <span className="text-xs text-ink-3">{t("ai_elapsed_seconds", { n: "0" })}</span>
+          <span className="text-xs text-ink-3">{t("ai_elapsed_prefix", { time: "0s" })}</span>
         </div>
         {/* the phase strip's ghost: the three-segment spine paints the
             moment the first phase event lands -- the ghost holds its line

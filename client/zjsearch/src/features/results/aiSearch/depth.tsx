@@ -13,13 +13,8 @@ import type { Translate } from "@/lib/i18n.ts";
     research depths; the report flag is the output shape on top). */
 const DEPTH_MODES: readonly AiSearchMode[] = ["speed", "balanced", "report"];
 
-/** Parse a raw `mode` param: legacy `deep` URLs map to the report tier
-    (the deep tier and the report shape merged); anything unknown falls
-    back to balanced. */
+/** Parse a raw `mode` param: anything unknown falls back to balanced. */
 export function parseDepthMode(raw: string | null | undefined): AiSearchMode {
-  if (raw === "deep") {
-    return "report";
-  }
   return DEPTH_MODES.includes(raw as AiSearchMode) ? (raw as AiSearchMode) : "balanced";
 }
 

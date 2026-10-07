@@ -130,10 +130,9 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # live-search incentive).  The user-memory snapshot and the
     # past-research index (reader heads + corpus sources) ride the same
     # pre-send: the model searches them through their tools, saves flow
-    # back as events.  (``web_memory`` is the retired payload key -- a
-    # browser still running the previous bundle during a deploy window.)
+    # back as events.
     user_memories = parse_memories(payload.get("user_memories"))
-    past_research_entries = parse_past_research(payload.get("past_research") or payload.get("web_memory"))
+    past_research_entries = parse_past_research(payload.get("past_research"))
     past_sources: list[dict[str, str]] = []
     raw_past = payload.get("history_sources")
     if isinstance(raw_past, list):
@@ -198,7 +197,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             except Exception:  # pylint: disable=broad-except
                 clarify_worth_asking = True
     if research_needed and clarify_worth_asking and clarify_state == "ask" and not history:
-        gate = clarify_gate(cfg, q, lang, mode, gate_usage)
+        gate = clarify_gate(cfg, q, lang, gate_usage)
         if gate:
             stream = _Ndjson(_clarify_events(gate), cfg, q, lang, gate_usage)
             return _respond(stream)

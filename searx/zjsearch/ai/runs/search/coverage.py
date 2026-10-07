@@ -25,7 +25,7 @@ class Coverage:
     """The living task list plus its term-matching tracker."""
 
     def __init__(self) -> None:
-        # the goal/quality task list (the task_write tool maintains it;
+        # the task_write task list (the task_write tool maintains it;
         # the client renders it as the STATUS card)
         self.task_list: list[dict[str, t.Any]] = []
 

@@ -148,21 +148,17 @@ def standalone_question(
 
 
 def clarify_gate(
-    cfg: dict[str, t.Any], question: str, lang: str, mode: str, usage_out: UsageOut = None
+    cfg: dict[str, t.Any], question: str, lang: str, usage_out: UsageOut = None
 ) -> dict[str, t.Any] | None:
     """The pre-research human-in-loop gate: one small completion decides
-    whether the run should ask the user for direction first (quality:
-    only on a genuinely ambiguous request; goal: prefers asking when the
-    goal statement lacks a target; BOTH: always on a high-stakes
-    deliverable whose assumptions change the answer).  Answers the
-    sanitized question set, or None on any failure or a ``no`` -- the run
-    then researches directly (fail-open: a broken gate must never block
-    research)."""
+    whether the run should ask the user for direction first (ask ONLY when
+    the direction genuinely depends on the user's intent, and ALWAYS on a
+    high-stakes deliverable whose assumptions change the answer).  Answers
+    the sanitized question set, or None on any failure or a ``no`` -- the
+    run then researches directly (fail-open: a broken gate must never
+    block research)."""
     posture = (
-        " The request reads as a GOAL the user wants reached: prefer asking"
-        " when the target, constraints or success criteria are unstated."
-        if mode == "goal"
-        else " Ask ONLY when the research direction genuinely depends on the"
+        " Ask ONLY when the research direction genuinely depends on the"
         " user's intent and guessing wrong would waste the whole run."
     )
     messages = [
