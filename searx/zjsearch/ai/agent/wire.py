@@ -18,6 +18,12 @@ bug and :py:func:`encode` refuses it):
                         ``items`` are the display rows.
 ``call``                ONE call settled: ``{id, call, status, ...}``
                         (n/ms/chars/text/result/preview per tool kind).
+                        ``web_browser`` rows add ``page`` {url,title},
+                        ``snapshot`` (the fresh outline) and ``img``
+                        (the volatile frame jpeg -- the client strips
+                        it before persisting, the reading pane of the
+                        ``read`` action is ``text``/``chars`` as
+                        usual).
 ``close``               entry ``id`` is final.
 ``phase``               the run's macro stage: ``{name: plan|
                         research|write}`` -- the timeline's one

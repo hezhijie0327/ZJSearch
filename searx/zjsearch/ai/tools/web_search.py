@@ -17,6 +17,7 @@ import json
 import re
 import typing as t
 
+from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
 from searx.zjsearch.ai.tools.web_reader import PAGE_TOOL
 
 TOOL_NAME = "web_search"
@@ -28,15 +29,15 @@ _BANG_PREFIX_RE = re.compile(r"^(?:\s*![a-z0-9_-]+)*(?:\s+|$)", re.IGNORECASE)
 _TIME_RANGES = ("day", "week", "month", "year")
 
 
-def tool_spec(with_pages: bool) -> dict[str, t.Any]:
+def tool_spec(with_pages: bool, with_browser: bool = False) -> dict[str, t.Any]:
     """The ``web_search`` tool in the dialect-neutral llm shape; with the
-    page reader configured, the description cross-references it (a model
-    that never sees ``web_reader`` must not be told about it).  The
-    ``included_sites``/``excluded_sites`` parameters carry the user's
-    source preference (Morphic's domain filters): they are appended to the
-    query as ``site:``/``-site:`` operators, which the engine's
-    advanced_search_syntax plugin enforces AUTHORITATIVELY on every result
-    regardless of engine support."""
+    page reader / browser session configured, the description
+    cross-references them (a model that never sees a tool must not be
+    told about it).  The ``included_sites``/``excluded_sites`` parameters
+    carry the user's source preference (Morphic's domain filters): they
+    are appended to the query as ``site:``/``-site:`` operators, which
+    the engine's advanced_search_syntax plugin enforces AUTHORITATIVELY
+    on every result regardless of engine support."""
     return {
         "name": TOOL_NAME,
         "description": (
@@ -54,11 +55,24 @@ def tool_spec(with_pages: bool) -> dict[str, t.Any]:
             " explicitly names an engine (then prefix the query, e.g. \"!baidu"
             " keywords\") -- a category search already fans out across every"
             " engine in that vertical. Results arrive as globally numbered [n]"
-            " sources to cite in the final answer."
+            " sources to cite in the final answer.  Instant answers: a query"
+            ' of exactly "$SYMBOL" (e.g. "$AAPL") or ending in " stock" /'
+            ' " quote" (e.g. "AAPL stock") triggers the stock-quote plugin --'
+            " the live quote rides the results as a Direct answer. Prefer it"
+            " for ticker questions (finance pages are often JS-walled or"
+            " stale)."
             + (
                 "  When a result's snippet promises the exact missing detail,"
                 f" the {PAGE_TOOL} tool can read that result's page in full."
                 if with_pages
+                else ""
+            )
+            + (
+                "  When the engines are bot-walled / captcha'd / all-empty, the"
+                f" {WEB_BROWSER_TOOL} tool's search action runs the same query as a"
+                " LIVE search-engine SERP (bing/baidu/google/duckduckgo) through the"
+                " real browser."
+                if with_browser
                 else ""
             )
         ),

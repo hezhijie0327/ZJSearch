@@ -93,6 +93,18 @@ export interface AiSearchCall {
   n?: number;
   /** web_reader: characters of readable content returned */
   chars?: number;
+  /** web_browser rows: the page state the action left the session on --
+      the row's expansion renders it as the location line */
+  page?: { url: string; title: string };
+  /** web_browser rows: the volatile frame jpeg (data URL) the action
+      captured -- the screenshot's shot, the others' mirror frame.  NEVER
+      persisted (stripped before the event log); a replay shows the
+      trail without the bytes */
+  img?: string;
+  /** web_browser rows: the fresh element outline (open / snapshot / a
+      click-through navigation) -- the expansion renders the session's
+      interactive-element list */
+  snapshot?: string;
   /** calculator: the exact evaluated result (the row shows expr = result) */
   result?: string;
   /** judge: the STRUCTURED verdict (question name -> choice/score/noul
@@ -606,6 +618,19 @@ export function applyEvent(
                   ...(event.preview !== undefined ? { text: String(event.preview ?? "") || undefined } : {}),
                   ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
                   ...(event.action !== undefined ? { name: String(event.action ?? "") } : {}),
+                  // web_browser settlements: the page state, the volatile
+                  // frame jpeg and the fresh outline (img stripped from
+                  // the persisted copy by the stream consumer)
+                  ...(event.page !== undefined && event.page !== null
+                    ? {
+                        page: {
+                          url: String((event.page as Record<string, unknown>).url ?? ""),
+                          title: String((event.page as Record<string, unknown>).title ?? ""),
+                        },
+                      }
+                    : {}),
+                  ...(event.img !== undefined ? { img: String(event.img ?? "") || undefined } : {}),
+                  ...(event.snapshot !== undefined ? { snapshot: String(event.snapshot ?? "") || undefined } : {}),
                 }
               : call,
           ),

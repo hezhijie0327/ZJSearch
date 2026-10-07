@@ -35,6 +35,12 @@ from searx.zjsearch.ai.runs.search.rank import (
 logger = logging.getLogger(__name__)
 
 
+_ANSWER_FEED_MAX = 3
+"""Plugin instant answers per search carried into the feed."""
+
+_ANSWER_FEED_CHARS = 600
+"""One plugin answer's feed cap (the stock card's text form fits)."""
+
 MAX_PARALLEL = 6
 """Worker threads per parallel batch -- uncapped per-round call counts
 (the model's call) queue behind these slots so a chatty round cannot
@@ -43,7 +49,7 @@ request carries its own per-request timeout, which is what bounds a
 batch -- no artificial wall clock."""
 
 
-class GatherMixin:  # pylint: disable=no-member
+class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
     """The pool, the search/page settlements and the ranking cascade
     (the composed Searches state's members are inherent to the mixin
     pattern)."""
@@ -71,7 +77,7 @@ class GatherMixin:  # pylint: disable=no-member
             form["language"] = self.search_language
         search_query, _raw, _unknown, _notoken, _locale = get_search_query_from_webapp(self.prefs, form)
         search_obj = SearchWithPlugins(search_query, sxng_request, self.user_plugins)
-        return search_obj.search().get_ordered_results()
+        return search_obj.search()
 
     def _known_dupes(self, items: list[t.Any], entries: list[dict[str, t.Any]]) -> list[int]:
         """A RE-search whose hits are all already-numbered produces no new
@@ -137,13 +143,19 @@ class GatherMixin:  # pylint: disable=no-member
         query: str,
         category: str,
         dedup_key: str,
-        fut: "concurrent.futures.Future[list[t.Any]]",
+        fut: "concurrent.futures.Future[t.Any]",
         started: float,
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         ms = int((time.monotonic() - started) * 1000)
         try:
-            raw = fut.result()[:RESULTS_CAP]
+            container = fut.result()
+            raw = container.get_ordered_results()[:RESULTS_CAP]
+            plugin_answers = [
+                " ".join(str(answer.answer or "").split())
+                for answer in container.answers
+                if str(getattr(answer, "answer", "") or "").strip()
+            ]
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch_ai_search: search %d/%d failed: %r", rnd, idx, exc)
             feed_text = "error: the search failed"
@@ -158,6 +170,16 @@ class GatherMixin:  # pylint: disable=no-member
             raw = self._ranked(query, raw)
             items = serialize_results(raw, query)
             feed_block, entries = build_search_feed(self.reg, query, category, items)
+            # the PLUGINS' instant answers ride the same feed block: the
+            # stock/calculator/time answerers' output is exactly the kind
+            # of direct fact the researcher should quote -- without this
+            # the plugins' work was computed and silently dropped
+            # (a `$AAPL` search answered 0 results and the model starved)
+            if plugin_answers:
+                answer_lines = ["Direct answers (from this instance's plugins -- authoritative, cite the query):"]
+                answer_lines += [f"- {text[:_ANSWER_FEED_CHARS]}" for text in plugin_answers[:_ANSWER_FEED_MAX]]
+                block = feed_block.split("\n")
+                feed_block = "\n".join(block[:1] + answer_lines + block[1:])
         except Exception as exc:  # pylint: disable=broad-except
             # one malformed result must never unwind _dispatch's settlement
             # loop -- THIS call degrades to an error row, the round's
@@ -168,7 +190,9 @@ class GatherMixin:  # pylint: disable=no-member
             feeds[idx - 1] = feed_text
             yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
             return
-        if items:
+        if items or plugin_answers:
+            # an answer-only search ($AAPL) IS productive: without this the
+            # stall detector would punish exactly the plugin-blessed queries
             self.round_new_hits += 1
         for entry in entries:
             entry["round"] = rnd

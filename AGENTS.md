@@ -167,8 +167,24 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (`zjsearch.browser.mode`): `headless` default everywhere,
     `virtual` (camoufox Xvfb) for display-less Linux servers,
     `headed` (real window) on desktops — the strongest tier and the
-    login stage's interaction carrier.  The tool package importing
-    this layer: `tools/web_reader` (one backend, no provider).
+    login stage's interaction carrier.  `session` is the ONE interactive page the
+    ``web_browser`` tool drives (a serialized lane beside the reader's
+    parallel reads, same cookie store): snapshot refs via injected
+    `data-zjs-ref` attributes, click/type/press that return the FRESH
+    outline automatically when the action navigated (refs die on
+    navigation — the re-snapshot doctrine is automatic; a ref dead to a
+    plain re-render fails FAST with the recovery recipe), native text
+    extraction over the live DOM (`read` — the reader's pipeline, the
+    reader's `max_chars` cap), and the raw input primitives the user's
+    Lightbox takeover forwards.  The open lane runs the reader's
+    public-url gate itself (`file://` never reaches `context.route`).
+    The engine self-heals: a "closed"-flavored failure drops the
+    poisoned context and the next action relaunches; a launch failure
+    with a locked profile kills the stale holder of THIS profile and
+    retries once; an atexit hook closes the browser on clean exits
+    (granian workers skip it — the launch retry is the real net).
+    Tool packages importing this layer: `tools/web_reader` (one
+    backend, no provider) and `tools/web_browser` (the session).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
     (openai with both chat wire shapes + embeddings, anthropic,
     gemini), centrally registered in `sdk.resolve()`; the stream
@@ -224,7 +240,20 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   rides a RE-search whose hits were all already-numbered (no new
   `sources` emission): the known [n]s let the row still expand to what
   it found; a reader read NEVER emits its own event kind, the closed
-  set has no `page` and a stale producer crashes the stream by design); `tasks` is the task card's AUTHORITATIVE snapshot;
+  set has no `page` and a stale producer crashes the stream by design).
+  The `web_browser` settlement rides the same event: `page`
+  {url,title} (where the action left the session), `img` (a VOLATILE
+  frame jpeg — the screenshot's shot or the action's mirror frame;
+  the client strips it before persisting, a replay keeps the record
+  not the bytes), `snapshot`+`n` (the fresh outline + element count
+  for open/snapshot/a click-through navigation) and `text`/`chars`
+  for the read action (the clean content, archived under `url`).  The
+  session's pages JOIN the [n] registry (open mints the identity,
+  read/wait_user register the full text — the writer cites what the
+  model drove; coverage + entries ride along; about:blank mints
+  nothing).  The `browser` mirror event ends the wait window with one
+  frame WITHOUT `wait_left`: the countdown and the mobile wait bar
+  retire at the window's end, not at the next model action); `tasks` is the task card's AUTHORITATIVE snapshot;
   `learnings` is the FINDINGS LEDGER's authoritative snapshot (the researcher's
   own distillation of what the sources established — same
   snapshot-replace semantics as `tasks`); `sources` the global [n] registry; `answer` deltas are the writer's
@@ -264,9 +293,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   an explicit user toggle always wins; the write-turn spinner lines /
   the report document carry the silence).
 
-- The AI run's RIGHT RAIL is one uniform surface (five sections, one
-  section language — icon+title+count header, 13px body rows, cap-and-
-  expand): 已确认方向 (the clarify archive) → 调研计划 (task card,
+- The AI run's RIGHT RAIL is one uniform surface (five sections plus
+  the browser session's TRANSIENT card pinned FIRST while it lives,
+  one section language — icon+title+count header, 13px body rows, cap-
+  and-expand): 浏览器实况 (the web_browser mirror — live frames, the
+  takeover entry, the mobile wait bar; unmounts at the settle) →
+  已确认方向 (the clarify archive) → 调研计划 (task card,
   plan order, never capped) → 研究发现 (findings + 未决缺口: open gaps
   read as colored DOTS, closed ones as checks; facts render inline [n]
   marks as accent chip BUTTONS) → 来源 (source cards) → 决策结果
@@ -1105,6 +1137,55 @@ halt itself — that note (`STALL_NOTE`) stays the writer's honesty
 context.  A settlement generator guards everything after its future
 resolves: one malformed result degrades THAT call to an error row, the
 round's remaining calls still settle.
+
+PLUGIN ANSWERS ARE MODEL-VISIBLE: the AI search runs the real
+`SearchWithPlugins` path, and a query that triggers an answerer
+(`$AAPL` / `AAPL stock` -> stock_quote) now carries the answer as the
+FIRST line of that search's feed block ("Direct answers") --
+SearchWithPlugins computed answers all along and the old code dropped
+them at `get_ordered_results()`; an answer-only search also counts as
+productive for the stall detector, and the web_search spec teaches the
+trigger syntax.  The `web_browser` tool's `search` action runs a LIVE
+SERP (bing/baidu/google/duckduckgo) on the session page through the
+anti-detect fingerprint -- the escape hatch when the engines are
+bot-walled/captcha'd/empty (the web_search description
+cross-references it); the scrape carries a relevance guard (rows
+sharing no query token = one settle-and-rescrape, then an honest "no
+results parsed" that points at snapshot); `engine`/`query` params, the
+timeline row shows `ENGINE · query…` with a live-results metric, and a
+SERP needs no refs so no outline rides along.
+
+THE SESSION'S PLATFORM DOCTRINE: the web_browser spec explicitly
+licenses driving the session at ANY public platform (xiaohongshu /
+zhihu / bilibili / weibo / e-commerce / forums) -- open the site's
+on-site search URL (`xiaohongshu.com/search_result?keyword=...`) or
+drive its search box via snapshot+click+type, then read/click/
+screenshot like a user.  The model constructs the URL itself (verified
+live: it went straight to XHS's search_result page); a login wall is
+reported honestly and the wait_user mirror is the user's way through.
+
+THE BROWSER-USE DIVISION OF LABOR: `web_reader` and `web_browser` are
+deliberately TWO tools over ONE engine, not merged — `web_reader` is
+the PARALLEL one-shot read (worker pool, TTL cache, read dedup; many
+pages per round), `web_browser` is the SERIALIZED session (ONE page
+the model drives and the user can take over; clicks, typing,
+screenshots, the human's login window).  The spec's doctrine says
+"web_reader first": the session is for pages a read cannot see through
+(sign-in walls, verification) or when interaction is the only way
+through.  A session page becomes a FIRST-CLASS source: `open` mints
+its [n] (citable identity), `read`/the post-`wait_user` snapshot
+register the full text under it (corpus + writer feed + coverage, the
+reader settlement's exact pattern) — the answer can cite what the user
+logged into.  The takeover UX contract (the rail's live mirror card
+pins FIRST; a `wait_user` window AUTO-OPENS the takeover ONCE per
+window — the run blocks on the user, a prompt hidden behind a rail
+card would stall the run silently; the window-end frame retires the
+countdown; below lg a FIXED bottom bar keeps the window reachable from
+anywhere on the page; the timeline's web_browser rows render the
+ACTION's result — the screenshot shows its shot (click zooms), open/
+snapshot render the session's interactive-element outline, click/type/
+press/scroll render the location line, read/wait_user render the
+reading pane; the images are volatile, replays keep the record).
 
 THE READER'S RENDER CONTRACT (the built-in browser): the reader has
 exactly ONE render backend — the local Camoufox anti-detect Firefox

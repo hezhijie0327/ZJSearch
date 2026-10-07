@@ -46,9 +46,7 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
   // vocabulary; the view owns pending + ok
   const metric =
     call.status === "interrupted" || call.status === "duplicate" || call.status === "error"
-      ? call.status === "error"
-        ? settledCallText(call, t)
-        : settledCallText(call, t)
+      ? settledCallText(call, t)
       : view.metric(props);
   return (
     <div>
@@ -57,7 +55,7 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
         debuggable={debuggable}
         debugOpen={debug}
         expandable={expandable}
-        icon={<view.Icon aria-hidden="true" className="size-3 shrink-0" />}
+        icon={view.iconFor ? view.iconFor(props) : <view.Icon aria-hidden="true" className="size-3 shrink-0" />}
         label={view.label(props)}
         metric={metric ?? ""}
         onToggle={() => {
@@ -78,6 +76,3 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
     </div>
   );
 }
-
-/** Re-exported for the registry's default-body parity check. */
-export type { AiSearchCall, AiSearchSource };

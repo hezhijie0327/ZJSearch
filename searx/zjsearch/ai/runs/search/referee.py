@@ -36,7 +36,7 @@ def _plan_review_instruction() -> str:
     )
 
 
-class RefereeMixin:  # pylint: disable=no-member
+class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
     """The plan review, the coverage referee and the evidence check
     (the composed Searches state's members are inherent to the mixin
     pattern)."""

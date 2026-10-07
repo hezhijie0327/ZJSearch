@@ -21,11 +21,12 @@ import logging
 import re
 import threading
 import typing as t
+from urllib.parse import quote_plus
 
 from searx.network.client import get_loop
 from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.browser import gate
-from searx.zjsearch.ai.browser.engine import _context
+from searx.zjsearch.ai.browser.engine import _context, drop_context
 
 if t.TYPE_CHECKING:
     from playwright.async_api import Page
@@ -72,6 +73,43 @@ _SNAPSHOT_JS = """
 """ % SNAPSHOT_MAX_ELEMENTS
 
 
+_SEARCH_ENGINES = {
+    "bing": "https://www.bing.com/search?q={q}",
+    "baidu": "https://www.baidu.com/s?wd={q}",
+    "google": "https://www.google.com/search?q={q}",
+    "duckduckgo": "https://duckduckgo.com/?q={q}",
+}
+"""The session's live-SERP engines: real browser searches carry the
+anti-detect fingerprint (camoufox) instead of searx's engine clients --
+the fallback when the normal engines are bot-walled or captcha'd."""
+
+_SEARCH_MAX_RESULTS = 10
+
+_SEARCH_SCRAPE_JS = """
+(engine) => {
+  const conf = {
+    bing: { row: '#b_results > li.b_algo', title: 'h2 a', snippet: '.b_caption p, p' },
+    baidu: { row: '#content_left .result, #content_left .c-container', title: 'h3 a',
+             snippet: '.c-abstract, .c-span-last, [class*="content"]' },
+    google: { row: '#search div.g, #rso div.g', title: 'a h3', snippet: '.VwiC3b, div[data-snf]' },
+    duckduckgo: { row: '#links article, article[data-testid="result"]', title: 'h2 a',
+                  snippet: '[data-result="snippet"], div span' },
+  }[engine];
+  if (!conf) return '';
+  const out = [];
+  for (const row of document.querySelectorAll(conf.row)) {
+    const a = row.querySelector(conf.title);
+    if (!a || !a.href) continue;
+    const clean = (t) => (t || '').replace(/\\s+/g, ' ').trim();
+    const text = clean(row.querySelector(conf.snippet)?.textContent).slice(0, 220);
+    out.push(clean(a.textContent).slice(0, 120) + '\\t' + a.href + '\\t' + text);
+    if (out.length >= %d) break;
+  }
+  return out.join('\\n');
+}
+""" % _SEARCH_MAX_RESULTS
+
+
 class SessionError(Exception):
     """A session action failed -- the message travels to the model."""
 
@@ -90,6 +128,15 @@ def _run(coro: t.Any, timeout: float = 45.0) -> t.Any:
     except SessionError:
         raise
     except Exception as exc:  # pylint: disable=broad-except
+        msg = str(exc).lower()
+        # playwright's crash/closed vocabulary only -- a plain dead
+        # upstream ("net::ERR_CONNECTION_CLOSED") must NOT drop the warm
+        # context and cost a relaunch
+        if "has been closed" in msg or ("closed" in msg and ("browser" in msg or "context" in msg or "target" in msg)):
+            # the browser died mid-run: drop the poisoned context so the
+            # next action relaunches (the engine's read path heals the
+            # same way) -- without this every later action fails forever
+            drop_context()
         raise SessionError(f"browser session failed: {type(exc).__name__}: {_brief(exc)}") from exc
 
 
@@ -101,8 +148,11 @@ async def _ensure_page() -> "Page":
     page = await context.new_page()
     await page.set_viewport_size({"width": 1280, "height": 800})
     # the session page renders FOR THE USER: its stylesheets/fonts/images
-    # pass the gate (the reader's pages stay text-only)
-    gate.visual_pages.add(id(page))
+    # pass the gate (the reader's pages stay text-only) -- strong refs
+    # keyed by id(), the stale entry dropped on replace
+    if _page is not None:
+        gate.visual_pages.pop(id(_page), None)
+    gate.visual_pages[id(page)] = page
     _page = page
     return page
 
@@ -163,40 +213,83 @@ def snapshot() -> dict[str, str]:
         return _run(run())
 
 
-def click(ref: str) -> dict[str, str]:
+async def _post_action_state(page: "Page", before_url: str, settle_wait_ms: int) -> dict[str, t.Any]:
+    """The state after one mutating action: url + title, PLUS a fresh
+    outline when the action navigated (navigation invalidates every
+    injected ref -- riding the new outline with the action's result is
+    one model round saved, the re-snapshot doctrine made automatic)."""
+    try:
+        await page.wait_for_load_state("load", timeout=5_000)
+    except Exception:  # pylint: disable=broad-except
+        pass
+    await page.wait_for_timeout(settle_wait_ms)
+    out: dict[str, t.Any] = {"url": str(page.url), "title": await page.title()}
+    if out["url"] != before_url:
+        await _settle_page(page)
+        out["snapshot"] = await page.evaluate(_SNAPSHOT_JS)
+    return out
+
+
+async def _settle_page(page: "Page") -> None:
+    """The open_url settle treatment for a navigated page: best-effort
+    network idle, then the configured hydration wait."""
+    try:
+        await page.wait_for_load_state("networkidle", timeout=3_500)
+    except Exception:  # pylint: disable=broad-except
+        pass
+    await page.wait_for_timeout(browser_config.settle_ms())
+
+
+async def _resolve_live(page: "Page", ref: str) -> str:
+    """The selector for a snapshot ref, verified present: a ref that died
+    to a re-render (no navigation -- refs only die to navigation) fails
+    HERE with the recovery recipe instead of burning the action timeout
+    on a locator wait."""
+    sel = _resolve_selector(ref)
+    if not await page.locator(sel).count():
+        raise SessionError(
+            f"ref {ref} is no longer on the page (it re-rendered under you)"
+            " -- take a fresh snapshot and address the element by its new ref"
+        )
+    return sel
+
+
+def click(ref: str) -> dict[str, t.Any]:
     with _LOCK:
 
-        async def run() -> dict[str, str]:
+        async def run() -> dict[str, t.Any]:
             page = await _ensure_page()
-            await page.click(_resolve_selector(ref), timeout=_ACTION_TIMEOUT_MS)
-            await page.wait_for_timeout(600)
-            return {"url": str(page.url), "title": await page.title()}
+            before = str(page.url)
+            sel = await _resolve_live(page, ref)
+            await page.click(sel, timeout=_ACTION_TIMEOUT_MS)
+            return await _post_action_state(page, before, 600)
 
         return _run(run())
 
 
-def type_text(ref: str, text: str, submit: bool) -> dict[str, str]:
+def type_text(ref: str, text: str, submit: bool) -> dict[str, t.Any]:
     with _LOCK:
 
-        async def run() -> dict[str, str]:
+        async def run() -> dict[str, t.Any]:
             page = await _ensure_page()
-            await page.fill(_resolve_selector(ref), str(text), timeout=_ACTION_TIMEOUT_MS)
+            before = str(page.url)
+            sel = await _resolve_live(page, ref)
+            await page.fill(sel, str(text), timeout=_ACTION_TIMEOUT_MS)
             if submit:
                 await page.keyboard.press("Enter")
-            await page.wait_for_timeout(400)
-            return {"url": str(page.url), "title": await page.title()}
+            return await _post_action_state(page, before, 400)
 
         return _run(run())
 
 
-def press_key(key: str) -> dict[str, str]:
+def press_key(key: str) -> dict[str, t.Any]:
     with _LOCK:
 
-        async def run() -> dict[str, str]:
+        async def run() -> dict[str, t.Any]:
             page = await _ensure_page()
+            before = str(page.url)
             await page.keyboard.press(str(key))
-            await page.wait_for_timeout(300)
-            return {"url": str(page.url), "title": await page.title()}
+            return await _post_action_state(page, before, 300)
 
         return _run(run())
 
@@ -261,6 +354,48 @@ def extract(max_chars: int | None) -> dict[str, str]:
     return {"url": page_state["url"], "title": title, "text": text}
 
 
+def _serp_relevant(raw: str, query: str) -> bool:
+    """Cheap sanity check on a scraped SERP: at least one query token
+    must appear in the rows -- the engines occasionally serve a degraded
+    first frame (trending filler to a fresh fingerprint), and feeding
+    that to the model as "results" is worse than an honest retry."""
+    tokens = [t for t in re.split(r"[\s\-+,.;:]+", str(query or "").lower()) if len(t) > 2]
+    if not tokens:
+        return True
+    hay = raw.lower()
+    return any(token in hay for token in tokens)
+
+
+def search_results(engine: str, query: str) -> dict[str, str]:
+    """One LIVE search-engine query on the session page: navigate the
+    engine's SERP and scrape the organic hits (title/url/snippet).  The
+    compact result block is the payload -- a SERP needs no refs, so no
+    outline rides along."""
+    template = _SEARCH_ENGINES.get(str(engine or "").strip().lower())
+    if template is None:
+        raise SessionError(f"unknown engine {engine!r} -- bing / baidu / google / duckduckgo")
+    url = template.format(q=quote_plus(str(query or "")[:400]))
+    with _LOCK:
+
+        async def run() -> dict[str, str]:
+            page = await _ensure_page()
+            try:
+                await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
+            except Exception as exc:  # pylint: disable=broad-except
+                raise SessionError(f"the search page could not open ({_brief(exc)})") from exc
+            await _settle_page(page)
+            raw = str(await page.evaluate(_SEARCH_SCRAPE_JS, str(engine).strip().lower()) or "")
+            if raw and not _serp_relevant(raw, query):
+                # degraded first frame: one settle-and-rescrape before
+                # giving up (the relevance guard, not heuristics about
+                # content -- a genuinely odd SERP still passes through)
+                await page.wait_for_timeout(2_000)
+                raw = str(await page.evaluate(_SEARCH_SCRAPE_JS, str(engine).strip().lower()) or "")
+            return {"url": str(page.url), "title": await page.title(), "results": raw}
+
+        return _run(run())
+
+
 def close_page() -> None:
     """Close the session page -- the persistent context (and its cookies)
     stays; the next action opens a fresh page."""
@@ -268,7 +403,8 @@ def close_page() -> None:
     with _LOCK:
         page = _page
         _page = None
-        gate.visual_pages.discard(id(page))
+        if page is not None:
+            gate.visual_pages.pop(id(page), None)
         _wait_done.set()
 
         async def run() -> None:

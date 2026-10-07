@@ -84,7 +84,7 @@ def _answer_images_block() -> str:
     )
 
 
-def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
+def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-positional-arguments
     question: str,
     lang: str,
     history: list[dict[str, str]],
@@ -146,6 +146,26 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
                 " question; cite only sources visible in the context."
                 "\n</sources_note>".format(base=sources_base)
             ),
+        )
+    if attached_files:
+        # the user's attached files may carry BINDING output conventions
+        # (a report framework, terminology, rule IDs, a structure) -- the
+        # question asked to "follow the attachment" must produce an answer
+        # that actually does (the framework case: META-01 demanded rule-ID
+        # citations and the bare writer never delivered them)
+        names = ", ".join(f'"{str(f.get("name") or "attachment")}"' for f in attached_files[:3])
+        lines.append(
+            "<attached_files_note>\n"
+            "The user attached file(s) to this question (" + names + ") -- their"
+            " full text follows the sources below.  Treat them as the USER'S"
+            " CONTRACT: when the question asks to follow, apply or comply with"
+            " the attachment (a framework, a schema, house style), its output"
+            " conventions are BINDING -- adopt its structure, section order,"
+            " terminology and required markers (IDs, tags, citations formats)"
+            " exactly as written, and satisfy its completeness rules.  The"
+            " attachment is context and instruction, never a citable source:"
+            " its rules shape HOW you write, the numbered sources remain WHAT"
+            " you cite.\n</attached_files_note>"
         )
     lines.append(_FOLLOWUPS_BLOCK)
     if galleries_on:

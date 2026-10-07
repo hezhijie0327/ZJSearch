@@ -219,10 +219,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         ],
       };
       const apply = (event: Record<string, unknown>) => {
-        // the browser mirror's frames are VOLATILE: the event log keeps the
-        // meta (url/title/wait_left) but never the jpeg bytes -- a replay
-        // shows the session's trail without the megabytes
-        const persist = event.e === "browser" ? { ...event, img: "" } : event;
+        // VOLATILE BYTES never persist: the browser mirror's frames and
+        // the web_browser rows' settlement images (screenshots, frames)
+        // keep their meta in the event log but never the jpeg bytes -- a
+        // replay shows the session's trail without the megabytes
+        const persist =
+          event.e === "browser" || (event.e === "call" && typeof event.img === "string" && event.img !== "")
+            ? { ...event, img: "" }
+            : event;
         appendRunEvents(`${threadId}:${runNo}`, [persist]);
         setCore((prev) => {
           // LATE wire events (related/memory/tags/usage) trail the settle
@@ -454,12 +458,15 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     });
     core = { ...core, runs: runsWithAttach };
     // normalize: an interrupted run is a done run with interrupted call
-    // rows; an awaiting clarify never survives a reload
+    // rows; an awaiting clarify never survives a reload; a mirror that
+    // outlived its stream is DEAD (the live card must not render on a
+    // replay, let alone auto-open a takeover for a run that is over)
     const runs = interruptPending(
       core.runs.map((run) => ({
         ...run,
         status: run.status === "streaming" || run.status === "awaiting" ? ("done" as const) : run.status,
         ask: null,
+        browser: null,
         wrappingUp: false,
       })),
     );

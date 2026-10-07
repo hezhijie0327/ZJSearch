@@ -137,6 +137,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | AI Overview | results page → AI Overview trigger | stream, thinking fold, [n] chips, show more, regen, copy |
 | AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
 | AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources).  With a non-empty browser corpus the researcher gains a `past_research` RAG round (full-text heads + source identities as history [n] rows); the audit mock falls back to a plain search when the tool is not registered — the audited timeline must show NO error row either way: every row settles (the reader row with its char count, the TWO task_write rows 0/2 → 2/2) and the web_reader settlement must not kill the stream (a wire-v2 closed-set violation once crashed every successful page read — §7.8) |
+| AI browser session | the debug stage (`?aidebug` on a thread url) → the 浏览器登录协作 scenario: ALL rows settle (4 research entries + the write entry — interrupted tails mean a stale chunk, restart the instance); open renders the location line + the interactive-element outline (e1/e2/e3 chips); wait_user AUTO-OPENS the takeover (scrub into the wait frames) and the window-end frame retires the countdown; below lg a fixed bottom bar opens the same takeover; the screenshot row renders its shot (click → the zoom lightbox); replaying a stored thread NEVER shows the live card nor auto-opens (resume nulls `browser`).  Live: a `web_browser open` run mints a [n] source the writer cites (the rail's card carries the dashed cited frame); the settlement's `img` never reaches the evt log |
 | AI clarify / ask_user | an ambiguous query in quality/goal (live), or the mock's clarify fixture | the clarify modal with the 2-question form (提交 / 跳过); answering seeds a clarify step at the timeline head; a mid-research ask_user renders as a call row + the same modal |
 | AI memory | any researched run (live model) | stored facts ride the run's `<user_memory>` block; a `user_memory` save renders a memory row AFTER settle; the extractor's saves appear in the drawer's 记忆 tab |
 | Knowledge base (知识库) | header LibraryBig icon (`KnowledgeDrawer`) | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them + the ×N cross-session badge (N = past runs that referenced the url, from the PRE-run recall); EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab; the keyword/semantic/hybrid modes come from the deployment (`history_search`) |
@@ -479,6 +480,116 @@ coverage grew -- the researcher fixture now drives a `learnings` call
 `user_memory_extract` (the LATE memory/tags events + the memory tab),
 so the audited timeline exercises both new surfaces offline.)
 
+## 7.2 Round record — 2026-10 (the browser-use round)
+
+Scope: the `web_browser` interactive session's capability + UI pass
+(its first audit since landing), the client's per-action row rendering,
+the mirror/takeover UX, and the session lane's integration with the
+research machinery. Highlights that must not regress:
+
+- **The session lane mints [n] sources** (open = identity, read /
+  post-wait snapshot = full text): the writer can cite browser-gathered
+  material, coverage/entries ride along, about:blank mints nothing.
+  Regression: one browser run — the rail's source card carries the
+  dashed cited frame and the answer's [n] resolves to it.
+- **The settlement's `img` is VOLATILE** (stripped before the evt log):
+  a replay keeps the record, never the bytes — the screenshot row shows
+  the honest placeholder after a reload.
+- **The takeover keyboard contract**: interactive targets are EXEMPT
+  from direct typing (Tab/Enter/Space on the takeover's own buttons
+  stay client-side — a keyboard user can otherwise never close the
+  modal); Tab is trapped by useDialogFocus (role=dialog sits on the
+  SAME element the hook's ref holds — the trap's owner check compares
+  against it); the full dialog contract (fading scrim, fade-up,
+  aria-label) rides the AttachmentPreview pattern.
+- **The open lane's URL guard**: `open` runs the reader's public-url
+  gate (scheme check FIRST — file://localhost would ride the
+  allow_hosts exemption) because `context.route` never sees a
+  navigation target.
+- **Engine self-heal**: a "closed"-flavored failure drops the poisoned
+  context (match playwright's vocabulary — `net::ERR_CONNECTION_CLOSED`
+  must NOT drop a warm context); a locked-profile launch failure kills
+  the stale holder of THIS profile (pkill scoped to the exact path, off
+  the shared loop) and retries once; the atexit close is best-effort
+  (granian workers skip it).
+- **The wait window lifecycle**: frames ARE the heartbeats; 3
+  consecutive frame failures end the window early (a dead engine must
+  not leave a silent wire); the window-end frame (no `wait_left`)
+  retires the countdown + the mobile bar; back-to-back windows re-arm
+  the auto-open via that same reset.
+- **The debug fixture is display-shaped and entry-per-round**: the
+  simulator replays through the REAL fold, so raw `{name, arguments}`
+  items or call events missing their entry `id` render as broken
+  web_search rows / interrupted tails — a new tool row or wire event
+  ships with a fixture event sequence that SETTLES (the simulator
+  doctrine: if it can't show it, the UI can't render it).  The row→
+  source join reads source.round === step.round, so fixture sources
+  must carry their entry's round.
+- **Latent bug the round caught**: the session `read` action called
+  `browser_config.max_chars()` (never existed) — every read errored;
+  the cap lives in `web_reader.reader.max_chars`.
+
+Audit-methodology additions: the WhiteNoise staleness note extends to
+the LAZY chunks — iterating on them needs an instance RESTART, not
+reloads (the earlier reloads kept serving the old chunk and faked
+"the fix didn't work"); the IAB stale-frame recipes (§5) apply double
+during palette flips (wait out the 350ms stand-down before capturing).
+
+## 7.3 Round record — 2026-10 (the real-case round: Kelun-Biotech report)
+
+Scope: a REAL production run — the 57KB BP-intelligence framework MD
+attached through the composer, 深度调研 mode, a full commercial-
+intelligence report (77 calls / 19 rounds / ~18 min / 0 error rows /
+92 citation chips / 400+ sources) — plus the fixes and features it
+pulled in:
+
+- **Plugin answers reach the model**: `SearchWithPlugins` always
+  computed the answerers' output and `_search_one` dropped it at
+  `get_ordered_results()`.  Now `gather._finish` extracts
+  `container.answers` into the feed block's FIRST lines ("Direct
+  answers"), and an answer-only search counts as productive (the stall
+  detector punished exactly the `$AAPL`-style queries before).  Test
+  vector: `$AAPL 股价` speed run — the model searches `AAPL stock`, the
+  quote rides the feed.  NOTE: the answerers only fire on their trigger
+  shapes (`$SYM`, `SYM stock`/`quote` suffix) — the web_search spec now
+  teaches them.
+- **`web_browser` search action**: live SERPs on the session page
+  (bing/baidu/google/duckduckgo), relevance-guarded (degraded first
+  frames were observed ONCE on bing — trending filler to a fresh
+  fingerprint; the guard rescrapes once then admits failure honestly).
+  google through a CN-exit proxy serves 0 parseable rows (consent/bot
+  wall) — bing/baidu are the reliable pair on this deployment.
+- **The writer treats attached frameworks as a contract**
+  (`<attached_files_note>`): the big report's body carried ZERO rule-ID
+  citations despite the researcher obviously reading the framework —
+  the writer had the file but no instruction to honor its OUTPUT
+  conventions.  After the note, a speed-mode framework run cites real
+  IDs (META-02 / REG-CNPV / RULE-AFFILIATE-07).  Regression: attach the
+  framework, ask for a schema-shaped signal, expect framework rule IDs
+  in `rules_applied`.
+- **AUDIT METHODOLOGY — the double-instance trap**: `pkill -f "granian
+  searx.webapp"` NEVER matches (`granian wsgi 127.0.0.1:8888` — the
+  pattern string is not contiguous in the command line), so "restarts"
+  silently stacked a second granian on the same port and every python
+  change "didn't take" while requests round-robinned between old and
+  new code.  Kill with `pkill -f granian` and verify ONE instance via
+  `ps -eo pid,etime,command | grep granian` before concluding anything
+  about server-side changes.
+- **Composer file injection for browser QA**: the IAB cannot drive the
+  native file chooser; inject through the REAL picker path instead —
+  `new File([text], name)` + `DataTransfer` on the mounted
+  `input[type='file']` + a change event (the picker's readDocument runs
+  for real).  The hero picker only mounts when AI mode is ON.
+- Also verified end-to-end: the attachment travels to BOTH prompts
+  (researcher 30K cap / writer 30K cap — the 29,976-char framework fits
+  by 24 chars; a bigger file truncates with an honest notice).
+
+Known-red (pre-existing, untouched files): pylint R09xx findings in
+`ai/tools/rows.py`, `ai/core/guard.py`, `ai/api/search_route.py`,
+`ai/runs/report/synth.py` (the branch accumulated them as pylint 4.x
+tightened; my areas hold 10.00) — a future cleanup round owns them.
+The AI thread page's Lighthouse red (§7.1) stands.
+
 ## 8. Known environment traps
 
 - `pnpm run audit` needs a Chromium browser (`ChromeNotInstalledError`) —
@@ -496,6 +607,11 @@ so the audited timeline exercises both new surfaces offline.)
 - `$AAPL` is `%24AAPL` — a mis-encoded test vector once sent the audit
   chasing a non-existent stock-plugin bug. Double-check encodings before
   suspecting the code.
+- After killing the dev instance the built-in browser can LINGER and
+  hold the persistent profile's lock — the next launch fails until it
+  dies. The engine self-heals (kills the stale holder of the exact
+  profile path + retries once), and the error hint names the manual
+  `pkill -f Camoufox` escape.
 - `dev-settings.yml` ships PLACEHOLDER keys (the tree is public) — a
   fresh clone has NO working LLM/embedding/MCP endpoint until the real
   keys are pasted in locally; "the AI test failed with 401/403" on a new

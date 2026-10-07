@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-/** The interactive browser session's mirror: the rail's transient card
-    (live frames while a ``web_browser`` call is pending) plus the
-    Lightbox takeover (the user's clicks/wheel/keys forwarded to the
-    session's page).  The frames ride the run's ``browser`` wire events;
-    the bytes never persist. */
+/** The interactive browser session's mirror: the rail's live card (the
+    model-driven page, streamed frame by frame) plus the Lightbox
+    takeover (the user's clicks/wheel/keys forwarded to the session's
+    page) and the MOBILE wait bar (below lg the rail stacks under the
+    answer -- a fixed bottom pill keeps the operation window reachable
+    from anywhere on the page).  A wait_user window AUTO-OPENS the
+    takeover once: the run blocks on the user, so hiding the prompt
+    behind a rail card would stall the run silently.  The frames ride
+    the run's ``browser`` wire events; the bytes never persist. */
 
-import { AppWindow, Check, Minimize2 } from "lucide-react";
+import { Check, ExternalLink, Minimize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
@@ -33,54 +37,31 @@ function frameCoords(event: {
   };
 }
 
-function LiveFrame({ onOpen, view }: { onOpen: () => void; view: MirrorView }) {
-  const t = useT();
-  return (
-    <button
-      aria-label={t("ai_browser_full")}
-      className="block w-full cursor-zoom-in overflow-hidden rounded-xl border border-line bg-ink/5"
-      onClick={onOpen}
-      type="button"
-    >
-      <img
-        alt={view.title || view.url}
-        className="aspect-[16/10] w-full object-contain object-top"
-        src={`data:image/jpeg;base64,${view.img}`}
-      />
-    </button>
-  );
+/** The session page's host (the card header's second slot). */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
 }
 
-/** The rail's transient section: pinned FIRST while a session is live. */
-export function BrowserMirrorSection({ view }: { view: MirrorView }) {
-  const t = useT();
-  const [full, setFull] = useState(false);
+function LivePulse() {
   return (
-    <section aria-label={t("ai_browser_live")} className="mb-5">
-      <div className="flex items-center gap-2 px-1">
-        <span className="relative flex size-2.5 shrink-0">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-          <span className="relative inline-flex size-2.5 rounded-full bg-accent" />
-        </span>
-        <h3 className="text-base font-semibold text-ink">{t("ai_browser_live")}</h3>
-        {view.waitLeft !== undefined ? (
-          <span className="shrink-0 text-xs tabular-nums text-ink-3">
-            {t("ai_browser_wait").replace("{s}", String(view.waitLeft))}
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-3">
-        <LiveFrame onOpen={() => setFull(true)} view={view} />
-        <p className="mt-2 px-1 text-xs leading-relaxed text-ink-3">{t("ai_browser_hint")}</p>
-      </div>
-      {full ? <BrowserLightbox onClose={() => setFull(false)} view={view} /> : null}
-    </section>
+    <span className="relative flex size-2 shrink-0">
+      <span
+        aria-hidden="true"
+        className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60"
+      />
+      <span aria-hidden="true" className="relative inline-flex size-2 rounded-full bg-accent" />
+    </span>
   );
 }
 
 /** The takeover: the live page at full size, the user's clicks/wheel/keys
-    forwarded to the session. */
-function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorView }) {
+    forwarded to the session.  Mobile-safe: the stage keeps the frame
+    contain-fit, the keyboard bar wraps its two actions. */
+export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorView }) {
   const t = useT();
   const dialogRef = useDialogFocus<HTMLDivElement>();
   const [draft, setDraft] = useState("");
@@ -114,11 +95,14 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
 
   // DIRECT TYPING: with the takeover focused, every key lands on the
   // session's page (latin keys as keypresses; the text bar below stays
-  // for IME/Chinese composition, which cannot forward key-by-key)
+  // for IME/Chinese composition, which cannot forward key-by-key).
+  // Interactive targets are EXEMPT -- their keys stay client-side, or a
+  // keyboard user could never activate the close/done buttons (and Tab
+  // must keep traversing the dialog's own controls).
   const onDialogKeyDown = (event: React.KeyboardEvent) => {
     const target = event.target as HTMLElement;
-    if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") {
-      return; // the keyboard bar's own field composes locally
+    if (target.closest("input, textarea, select, button, a")) {
+      return; // the takeover's own controls compose/activate locally
     }
     if (event.metaKey || event.ctrlKey || event.altKey) {
       return; // client-side shortcuts stay client-side
@@ -127,7 +111,7 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
       event.preventDefault();
       send({ type: "type", text: event.key });
     } else if (
-      ["Enter", "Backspace", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(event.key)
+      ["Enter", "Backspace", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(event.key)
     ) {
       event.preventDefault();
       send({ type: "key", key: event.key });
@@ -140,33 +124,35 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
   };
 
   return createPortal(
-    <div
-      aria-modal
-      className="fixed inset-0 z-50 flex flex-col bg-black/80 p-3 outline-none backdrop-blur-sm sm:p-6"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-      onKeyDown={onDialogKeyDown}
-      role="dialog"
-    >
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/80 p-2 backdrop-blur-sm sm:p-6">
+      <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/70" onClick={onClose} />
       <div
-        className="mx-auto flex h-full w-full max-w-5xl flex-col rounded-2xl border border-line bg-surface p-3 shadow-card outline-none sm:p-4"
+        aria-label={t("ai_browser_live")}
+        aria-modal
+        className="relative z-10 mx-auto flex h-full w-full max-w-5xl animate-fade-up flex-col rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4"
+        onKeyDown={onDialogKeyDown}
         ref={dialogRef}
+        role="dialog"
         tabIndex={-1}
       >
         <div className="flex min-h-9 items-center gap-2 pb-2">
-          <span className="relative flex size-2 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
-            <span className="relative inline-flex size-2 rounded-full bg-accent" />
-          </span>
+          <LivePulse />
           <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2" title={view.url}>
             {view.title || view.url}
           </span>
+          <a
+            aria-label={t("open_source")}
+            className="hidden shrink-0 text-ink-3 transition-colors hover:text-accent sm:block"
+            href={view.url}
+            rel="noreferrer"
+            target="_blank"
+            title={view.url}
+          >
+            <ExternalLink aria-hidden="true" className="size-4" />
+          </a>
           {view.waitLeft !== undefined ? (
             <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
-              {t("ai_browser_wait").replace("{s}", String(view.waitLeft))}
+              {t("ai_browser_wait", { s: String(view.waitLeft) })}
             </span>
           ) : null}
           <button aria-label={t("ai_browser_close")} className={ICON_BTN} onClick={onClose} type="button">
@@ -222,12 +208,13 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
             }}
           >
             <input
-              className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-[13px] text-ink placeholder:text-ink-3"
+              className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-accent"
               onChange={(event) => setDraft(event.target.value)}
               placeholder={t("ai_browser_type_hint")}
               value={draft}
             />
             <button
+              aria-label={t("ai_browser_kb_esc")}
               className="min-h-9 shrink-0 rounded-lg border border-line px-2.5 text-[13px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
               onClick={() => {
                 send({ type: "key", key: "Escape" });
@@ -255,5 +242,81 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
   );
 }
 
-/** The rail section's own AppWindow export (the header icon). */
-export { AppWindow as BrowserMirrorIcon };
+/** The rail's transient section: pinned FIRST while a session is live.
+    A wait_user window auto-opens the takeover ONCE per window (the run
+    blocks on the user); minimizing keeps it closed until the next
+    window.  Also renders the MOBILE wait bar (fixed bottom pill, below
+    lg) so the same window stays reachable from anywhere on the page. */
+export function BrowserMirrorSection({ view }: { view: MirrorView }) {
+  const t = useT();
+  const [full, setFull] = useState(false);
+  const windowOpen = useRef(false);
+  useEffect(() => {
+    if (view.waitLeft === undefined) {
+      windowOpen.current = false;
+      return;
+    }
+    if (!windowOpen.current) {
+      windowOpen.current = true;
+      setFull(true);
+    }
+  }, [view.waitLeft]);
+  const waiting = view.waitLeft !== undefined;
+  return (
+    <section aria-label={t("ai_browser_live")} className="mb-5">
+      <div className="flex items-center gap-2 px-1">
+        <LivePulse />
+        <h3 className="text-base font-semibold text-ink">{t("ai_browser_live")}</h3>
+        {waiting ? (
+          <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
+            {t("ai_browser_wait", { s: String(view.waitLeft) })}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
+        <div className="flex min-w-0 items-center gap-1.5 border-b border-line bg-surface px-2.5 py-1.5">
+          <span className="min-w-0 flex-1 truncate text-xs text-ink-2" title={view.url}>
+            {view.title || view.url}
+          </span>
+          <span className="hidden shrink-0 font-mono text-[11px] text-ink-3 sm:inline">{hostOf(view.url)}</span>
+        </div>
+        <button
+          aria-label={t("ai_browser_full")}
+          className="block w-full cursor-zoom-in"
+          onClick={() => setFull(true)}
+          type="button"
+        >
+          <img
+            alt={view.title || view.url}
+            className="w-full object-contain object-top"
+            src={`data:image/jpeg;base64,${view.img}`}
+            style={{ aspectRatio: `${view.w || VIEWPORT_W} / ${view.h || VIEWPORT_H}` }}
+          />
+        </button>
+      </div>
+      <p className="mt-2 px-1 text-xs leading-relaxed text-ink-3">{t("ai_browser_hint")}</p>
+      {waiting
+        ? createPortal(
+            <div className="fixed inset-x-4 bottom-4 z-40 flex justify-center lg:hidden">
+              <button
+                className="flex w-full max-w-md items-center gap-2.5 rounded-2xl border border-accent-strong/40 bg-surface px-4 py-3 text-start shadow-card transition-colors hover:border-accent"
+                onClick={() => setFull(true)}
+                type="button"
+              >
+                <LivePulse />
+                <span className="min-w-0 flex-1 leading-snug">
+                  <span className="block text-[13px] font-medium text-ink">{t("ai_browser_wait_bar")}</span>
+                  <span className="block truncate text-xs text-ink-3">{view.title || hostOf(view.url)}</span>
+                </span>
+                <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[13px] font-medium text-accent-contrast">
+                  {t("ai_browser_open")}
+                </span>
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+      {full ? <BrowserLightbox onClose={() => setFull(false)} view={view} /> : null}
+    </section>
+  );
+}

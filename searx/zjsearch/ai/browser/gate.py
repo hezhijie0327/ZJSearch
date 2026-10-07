@@ -64,11 +64,13 @@ async def _resolve(host: str) -> tuple[str, ...] | None:
     return ips or None
 
 
-visual_pages: set[int] = set()
-"""Page object ids registered by the interactive session: their page
-renders FOR THE USER (the Lightbox takeover), so stylesheets, fonts and
-images load normally -- the resource-type rejection is a reader-only
-optimization.  The SSRF checks still apply to every request."""
+visual_pages: dict[int, t.Any] = {}
+"""Page OBJECTS registered by the interactive session, keyed by id(): their
+page renders FOR THE USER (the Lightbox takeover), so stylesheets, fonts
+and images load normally -- the resource-type rejection is a reader-only
+optimization.  The SSRF checks still apply to every request.  Strong refs:
+a closed page's id() can be recycled by a fresh reader page, and a bare
+int set would then grant the bypass to the wrong page."""
 
 
 async def gate(route: t.Any) -> None:

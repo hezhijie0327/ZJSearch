@@ -10,6 +10,7 @@ the model decides from ``web_reader``'s content that a page needs a
 human, and the tool only opens, mirrors, waits and extracts."""
 
 from searx.zjsearch.ai.tools.web_browser.service import (
+    final_frame,
     run_action,
     wait_user_frames,
     wait_user_snapshot,
@@ -22,6 +23,7 @@ from searx.zjsearch.ai.tools.web_browser.spec import (
 
 __all__ = [
     "WEB_BROWSER_TOOL",
+    "final_frame",
     "parse_web_browser_call",
     "run_action",
     "wait_user_frames",

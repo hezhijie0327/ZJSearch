@@ -27,9 +27,12 @@ the reader has no opinions about content quality.
 """
 
 import asyncio
+import atexit
 import concurrent.futures
 import logging
 import os
+import subprocess
+import time
 import typing as t
 
 from searx.network.client import get_loop
@@ -105,6 +108,27 @@ def _merge_params(launch_kwargs: dict[str, t.Any]) -> None:
     launch_kwargs.update({k: v for k, v in params.items() if k not in _CODE_OWNED_KEYS})
 
 
+def _kill_stale_holders(profile: str) -> None:
+    """One launch-failure self-heal: a previous instance's browser may
+    still live and hold the persistent profile's lock (a hard worker
+    exit skips the atexit close -- granian's workers do).  Kill the
+    camoufox processes whose command line carries THIS profile path --
+    scoped to the exact directory, nothing else -- and give the OS a
+    moment.  Best effort on every platform (no pkill = the error hint
+    stands).  Runs OFF the shared loop (the caller awaits it in a
+    thread): the pkill + settle would otherwise freeze every other
+    network caller for ~2s."""
+    try:
+        subprocess.run(["pkill", "-f", f"camoufox.*{profile}"], check=False, timeout=5)  # noqa: S603, S607
+        time.sleep(1.0)
+    except Exception:  # pylint: disable=broad-except
+        pass
+
+
+async def _kill_stale_holders_async(profile: str) -> None:
+    await asyncio.to_thread(_kill_stale_holders, profile)
+
+
 async def _launch() -> "BrowserContext":
     from camoufox.addons import DefaultAddons  # pylint: disable=import-outside-toplevel
     from camoufox.async_api import AsyncNewBrowser  # pylint: disable=import-outside-toplevel
@@ -142,11 +166,32 @@ async def _launch() -> "BrowserContext":
     try:
         context = await AsyncNewBrowser(pw, **launch_kwargs)
     except Exception as exc:  # pylint: disable=broad-except
-        raise browser_config.RenderError(
-            f"the built-in browser could not launch ({_brief(exc)}) --"
-            " install it with `python -m searx.zjsearch.ai.browser.install`"
-        ) from exc
+        retried = False
+        if "failed to launch" in str(exc).lower():
+            # the classic cause after an unclean restart: the previous
+            # instance's browser process still lives and holds the
+            # persistent profile's lock -- clean it and retry ONCE
+            await _kill_stale_holders_async(profile)
+            try:
+                context = await AsyncNewBrowser(pw, **launch_kwargs)
+                retried = True
+                logger.warning(
+                    "zjsearch browser: a stale process held the profile lock and was"
+                    " killed -- the launch retry succeeded (profile %s)",
+                    profile,
+                )
+            except Exception as exc2:  # pylint: disable=broad-except
+                exc = exc2
+        if not retried:
+            raise browser_config.RenderError(
+                f"the built-in browser could not launch ({_brief(exc)}) --"
+                " install it with `python -m searx.zjsearch.ai.browser.install`;"
+                " a previous instance's browser process may also still hold the"
+                " profile lock -- stop it (pkill -f Camoufox) or point"
+                " zjsearch.browser.profile elsewhere"
+            ) from exc
     await context.route("**/*", gate.gate)
+    _register_shutdown()
     logger.info(
         "zjsearch browser: launched (camoufox, %s, adblock %s, profile %s)",
         browser_config.mode(),
@@ -156,12 +201,45 @@ async def _launch() -> "BrowserContext":
     return context
 
 
+_SHUTDOWN_REGISTERED = False
+
+
+def _register_shutdown() -> None:
+    """The atexit hook (registered once, at the first successful launch):
+    close the persistent context so the camoufox process never outlives
+    the server -- an orphaned browser locks the profile and every later
+    launch fails until someone kills it by hand."""
+    global _SHUTDOWN_REGISTERED  # pylint: disable=global-statement
+    if _SHUTDOWN_REGISTERED:
+        return
+    _SHUTDOWN_REGISTERED = True
+
+    def _shutdown() -> None:
+        context = _state.get("context")
+        if context is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(context.close(), get_loop()).result(timeout=5)
+            logger.info("zjsearch browser: closed at shutdown")
+        except Exception:  # pylint: disable=broad-except
+            logger.warning("zjsearch browser: the shutdown close failed -- the process may linger")
+
+    atexit.register(_shutdown)
+
+
 async def _context() -> "BrowserContext":
     context = _state.get("context")
     if context is None:
         context = await _launch()
         _state["context"] = context
     return context
+
+
+def drop_context() -> None:
+    """Forget the cached context (the browser died mid-run): the next
+    read or session action relaunches instead of failing forever with
+    the same "closed" error.  Safe from any thread (dict pop)."""
+    _state.pop("context", None)
 
 
 def _brief(exc: BaseException) -> str:

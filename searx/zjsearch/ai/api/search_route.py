@@ -401,7 +401,7 @@ def _search(
             image_parts=image_parts or None,
             attached_files=attached_files or None,
         ),
-        tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec(), learnings_spec()]
+        tools=[tool_spec(pages_on, browser_on), calculator_spec(), user_memory_spec(), learnings_spec()]
         + (
             [system_one_spec()]
             if decision.enabled() and decision.configured() and decision.sdk_missing() is None

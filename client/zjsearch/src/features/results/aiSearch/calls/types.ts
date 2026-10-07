@@ -23,6 +23,9 @@ export interface ToolRowProps {
 export interface ToolView {
   /** the row's leading lucide icon (size-3, ink-inherit) */
   Icon: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  /** Per-row icon override (web_browser's per-action icons): return the
+      row's leading element -- it replaces `Icon` when present. */
+  iconFor?(props: ToolRowProps): ReactNode;
   /** the row label (the query / url / table title / fixed verb) */
   label(props: ToolRowProps): string;
   /**

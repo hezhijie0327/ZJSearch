@@ -13,6 +13,7 @@ import concurrent.futures
 import logging
 import time
 import typing as t
+from urllib.parse import urlsplit
 
 
 from searx.zjsearch.ai.runs import attachments as uploads_fetch
@@ -54,18 +55,170 @@ from searx.zjsearch.ai.runs.search.state import MAX_PARALLEL, _FEED_SOFT_LIMIT
 logger = logging.getLogger(__name__)
 
 
-class DispatchMixin:  # pylint: disable=no-member
+class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
     """The per-tool execution branches and the round's job planning
     (the composed Searches state's members -- registry, ledger, feed --
     are inherent to the mixin pattern)."""
+
+    def _browser_source(
+        self,
+        rnd: int,
+        wire_id: int,
+        url: str,
+        title: str,
+        crawled: bool,
+        text: str,
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """The session's current page joins the [n] registry exactly like a
+        ``web_reader`` settlement: a fresh url mints its number (the
+        writer can cite what the model drove), a known one re-emits its
+        [n] -- with ``crawled`` set when the page's full text was
+        actually read (read action / the post-wait snapshot), which also
+        feeds the corpus, the writer's compact [n] block and the read
+        dedup.  Non-web pages (about:blank after a close/crash) mint
+        nothing -- a junk source would also mute the stall detector.  The
+        task card's coverage and the writer's entry index ride along like
+        every reader settlement.  Yields the sources event; returns the
+        cite line for the model's feed (the ``yield from`` expression's
+        value, empty when nothing was minted)."""
+        if not url.lower().startswith(("http://", "https://")):
+            return ""
+        norm = reader.normalize_url(url)
+        known_n = self.reg.known(norm)
+        if known_n is not None:
+            n = known_n
+            cite = f"already your source [{n}] -- cite it as [{n}]"
+        else:
+            n = self.reg.mint()
+            self.reg.note_url(norm, n)
+            cite = f"NEW source [{n}] -- cite it as [{n}]"
+            self.round_new_hits += 1
+        if crawled:
+            self.reg.note_read(norm)
+        if text:
+            self.corpus.add(text, ref_n=n, title=title[:160], url=url, kind="page")
+            self.feed.append(f'Opened {url} (title: "{title}"; {cite}):\n\n{text}')
+            self.feed_chars += len(text)
+        self.entries[n] = {"title": title[:160], "snippet": (text or "")[:500]}
+        if self.coverage.task_list:
+            try:
+                self.coverage.track(url, [title] if title else None, [n])
+            except Exception as exc:  # pylint: disable=broad-except
+                # coverage bookkeeping must never kill the settlement
+                logger.warning("zjsearch_ai_search: browser source coverage tracking failed: %r", exc)
+        netloc = urlsplit(url).netloc
+        yield (
+            "sources",
+            {
+                "items": [
+                    {
+                        "n": n,
+                        "round": rnd,
+                        "id": wire_id,
+                        "idx": 0,
+                        "title": title,
+                        "url": url,
+                        "netloc": netloc,
+                        "favicon": "",
+                        "pretty_url": url,
+                        "published_date": "",
+                        "crawled": crawled,
+                    }
+                ]
+            },
+        )
+        return cite
+
+    def _browser_wait(self, args, rnd, wire_id, settle) -> t.Iterator[tuple[str, t.Any]]:
+        """The wait_user branch: the human's operation window -- the
+        mirror frames stream while it blocks, then the post-window page
+        is numbered (read-in-full when its text was extracted) so the
+        writer can cite what the user's hands produced.  The window-end
+        frame (no ``wait_left``) streams as a browser event: the mirror's
+        countdown retires and the mobile wait bar stands down at the
+        window's end, not at the next model action.  The settlement's
+        ``text`` is the page's READABLE TEXT (the client archives it as
+        the document); the composite feed (header + outline + text) stays
+        the model's receipt.  Yields the wire events; returns whether the
+        window gathered material."""
+        for frame in web_browser_tool.wait_user_frames(int(args.get("seconds") or 180)):
+            yield ("browser", frame)
+        outcome = web_browser_tool.wait_user_snapshot(reader.max_chars())
+        feed = str(outcome["feed"])
+        page = {"url": str(outcome["url"]), "title": str(outcome["title"])}
+        text = str(outcome.get("text") or "")
+        cite = ""
+        if page["url"]:
+            cite = yield from self._browser_source(rnd, wire_id, page["url"], page["title"], bool(text), text)
+        if cite and text:
+            feed += f"\n\n(the page is {cite})"
+        extra: dict[str, t.Any] = {"page": page, "url": page["url"] if cite else ""}
+        if cite and text:
+            # the ARCHIVED document is the pure readable text -- the
+            # outline header is feed material, not recall content
+            extra["text"] = text
+            extra["chars"] = len(text)
+        frame = web_browser_tool.final_frame()
+        if frame:
+            yield ("browser", frame)
+            extra["img"] = f"data:image/jpeg;base64,{frame['img']}"
+        yield settle("ok", feed, extra)
+        return bool(text or cite)
+
+    def _browser_finish(self, action, result, rnd, wire_id) -> t.Iterator[tuple[str, t.Any]]:
+        """A completed action's settlement assembly: the last mirror frame
+        becomes the row's volatile image, the fresh outline (open /
+        snapshot / a click-through navigation) rides ``snapshot``/``n``,
+        and the session page joins the source registry when the action
+        put MATERIAL on the table (open mints its identity -- the outline
+        is what the model saw; read registers the full text).  Yields the
+        sources event; returns ``(feed, extra, gathered)``."""
+        feed = result.feed
+        extra: dict[str, t.Any] = {"page": result.page}
+        if result.frames:
+            extra["img"] = f"data:image/jpeg;base64,{result.frames[-1]['img']}"
+        if result.snapshot is not None:
+            extra["snapshot"] = result.snapshot
+            extra["n"] = result.elements
+        gathered = action == "search"  # a live SERP query is real work
+        cite = ""
+        if action == "open" and result.page and result.page["url"]:
+            cite = yield from self._browser_source(rnd, wire_id, result.page["url"], result.page["title"], False, "")
+            gathered = bool(cite)
+            if cite:
+                feed += f"\n\n(this page is {cite})"
+                extra["url"] = result.page["url"]
+        elif action == "read" and result.page and result.page["url"]:
+            text = feed.split("\n\n", 1)[-1]
+            cite = yield from self._browser_source(rnd, wire_id, result.page["url"], result.page["title"], True, text)
+            gathered = bool(cite)
+            if cite:
+                feed = feed.replace("\n\n", f"\n\n({cite})\n\n", 1)
+                extra["url"] = result.page["url"]
+        if cite and action == "read":
+            # the reading pane + the client's document archive ride the
+            # settlement only when the page actually JOINED the registry --
+            # an error feed as `text` would archive junk under an empty
+            # url; the ARCHIVED text is the clean content (title + body),
+            # the cite line stays the feed's alone
+            clean = f"{result.page['title']}\n\n{text}"
+            extra["text"] = clean
+            extra["chars"] = len(clean)
+        return feed, extra, gathered
 
     def _browser_call(self, call, wire_id, feeds):
         """The interactive browser session: ONE action per call, inline
         (the session is a serialized lane -- no parallel pool).  The
         wait_user window streams mirror frames as wire events while it
         blocks; the screenshot action rides the image-injection channel
-        (the model sees it next turn)."""
+        (the model sees it next turn) and every settlement carries the
+        action's page state + a volatile frame image so the timeline row
+        renders WHAT HAPPENED (the mirror card is the live view, the row
+        is the record).  Returns True when the action gathered material
+        (a page opened or read) -- the round's progress machinery counts
+        the session lane like the pooled jobs."""
         started = time.monotonic()
+        rnd = self.round_no
         args = web_browser_tool.parse_web_browser_call(call)
         action = str(args.get("action") or "")
 
@@ -83,22 +236,17 @@ class DispatchMixin:  # pylint: disable=no-member
 
         if not action:
             yield settle("error", "error: the web_browser action is required")
-            return
+            return False
         try:
             if action == "wait_user":
-                for frame in web_browser_tool.wait_user_frames(int(args.get("seconds") or 180)):
-                    yield ("browser", frame)
-                feed = web_browser_tool.wait_user_snapshot(reader.max_chars())
-                yield settle("ok", feed, {"text": feed, "chars": len(feed)})
-                return
-            feed, frames, image_ref = web_browser_tool.run_action(args)
+                return (yield from self._browser_wait(args, rnd, wire_id, settle))
+            result = web_browser_tool.run_action(args)
         except Exception as exc:  # pylint: disable=broad-except
-            feed = f"error: {type(exc).__name__}: {str(exc)[:200]}"
-            yield settle("error", feed)
-            return
-        for frame in frames:
+            yield settle("error", f"error: {type(exc).__name__}: {str(exc)[:200]}")
+            return False
+        for frame in result.frames:
             yield ("browser", frame)
-        if image_ref:
+        if result.image:
             self.image_injections.append(
                 {
                     "role": "user",
@@ -111,15 +259,29 @@ class DispatchMixin:  # pylint: disable=no-member
                                 " what is visible."
                             ),
                         },
-                        {"type": "image_url", "image_url": {"url": image_ref}},
+                        {"type": "image_url", "image_url": {"url": result.image}},
                     ],
                 }
             )
-            yield settle("ok", "screenshot attached -- it is visible to you in the next turn.")
-            return
+            yield settle(
+                "ok",
+                "screenshot attached -- it is visible to you in the next turn.",
+                {"img": result.image, "page": result.page},
+            )
+            return False
+        try:
+            feed, extra, gathered = yield from self._browser_finish(action, result, rnd, wire_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            # the settlement assembly (source minting, corpus, feed) failed:
+            # the row degrades honestly instead of taking the round down
+            # (a [n] may already be on the wire -- the sources card still renders)
+            logger.warning("zjsearch_ai_search: browser settlement assembly failed: %r", exc)
+            feed = f"error: the web_browser action ran but its settlement failed ({type(exc).__name__})"
+            yield settle("error", feed)
+            return False
         status = "error" if feed.startswith("error") else "ok"
-        extra = {"text": feed, "chars": len(feed)} if action == "read" else None
         yield settle(status, feed, extra)
+        return gathered
 
     def execute(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
         self, calls: list[dict[str, t.Any]]
@@ -638,7 +800,11 @@ class DispatchMixin:  # pylint: disable=no-member
                 )
                 continue
             if str(call.get("name") or "") == WEB_BROWSER_TOOL:
-                yield from self._browser_call(call, wire_id, feeds)
+                # the session lane reports whether it gathered (a page
+                # opened or read) -- the round's stall/progress machinery
+                # counts it like the pooled jobs
+                if (yield from self._browser_call(call, wire_id, feeds)):
+                    gathered = True
                 continue
             if str(call.get("name") or "") == PAGE_TOOL:
                 feed, event, page_url = self._page_plan(call, wire_id)
