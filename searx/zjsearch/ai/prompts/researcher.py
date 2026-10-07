@@ -116,6 +116,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     page_tool: bool = False,
     task_tool: bool = False,
     user_memories: list[dict[str, str]] | None = None,
+    image_parts: list[dict[str, t.Any]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -341,6 +342,16 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         )
     if follow_up:
         run_context += f"{follow_up}\n"
+    if image_parts:
+        run_context += (
+            "<attached_images>\nThe user attached image(s) to this"
+            " question.  READ them -- text, charts, products, screenshots --"
+            " and factor what they show into your research plan: search for"
+            " the entities, figures and context they reveal.  They are"
+            " question material, not search results: never treat them as"
+            " sources.\n</attached_images>\n"
+        )
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"
-    return shared.build_messages("\n".join(lines), f"{run_context}<q>{question}</q>", history)
+    user_text = f"{run_context}<q>{question}</q>"
+    return shared.build_messages("\n".join(lines), shared.user_message(user_text, image_parts), history)

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { continueBrief } from "@/features/results/aiSearch/ledger.ts";
 import {
+  type AiSearchAttachment,
   type AiSearchMode,
   applyEvent,
   type Core,
@@ -14,6 +15,7 @@ import {
   settle,
 } from "@/features/results/aiSearch/timeline.ts";
 import { fetchEventStream } from "@/lib/http.ts";
+import { loadThreadAttachments, saveAttachments } from "@/lib/kb/attachments.ts";
 import { appendRunEvents, loadThreadEvents } from "@/lib/kb/events.ts";
 import { archiveDocument, loadMemories, saveMemory, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
@@ -68,8 +70,20 @@ const REPLAY_FX: FoldFx = {
 };
 
 export interface AiSearchState extends Core {
-  start(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
-  followup(q: string, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
+  start(
+    q: string,
+    lang: string,
+    mode?: AiSearchMode,
+    searchLanguage?: string,
+    attachments?: AiSearchAttachment[],
+  ): void;
+  followup(
+    q: string,
+    lang: string,
+    mode?: AiSearchMode,
+    searchLanguage?: string,
+    attachments?: AiSearchAttachment[],
+  ): void;
   /** answer the awaiting run's clarify questions (null = skip) and start
       its research on the SAME run */
   submitClarify(text: string | null, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
@@ -132,6 +146,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     searchLanguage: string,
     runNo: number,
     clarify?: { state: "answered" | "skipped"; text: string },
+    attachments?: AiSearchAttachment[],
   ) => {
     if (!capability) {
       return;
@@ -147,6 +162,16 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     // visible, replayable run behind (the continue path's storage);
     // settleRun updates the same row, so this never double-counts
     startRun(threadId, { runNo, q, mode, startedAt: Date.now() });
+    // the attachment BYTES land in the browser's own table (the server
+    // stores nothing); the evt log carries metadata only
+    const wireAttachments: Array<{ kind: "image"; mime: string; name?: string; bytes?: number; data?: string }> = (
+      attachments ?? []
+    ).map(({ kind, mime, name, bytes, data }) => ({ kind, mime, name, bytes, data }));
+    saveAttachments(
+      threadId,
+      `${threadId}:${runNo}`,
+      wireAttachments.filter((item): item is AiSearchAttachment & { data: string } => Boolean(item.data)),
+    );
     void (async () => {
       // the browser recalls its knowledge BEFORE the POST, on TWO
       // dimensions: the corpus (sources + past answers, WRITER-phase only)
@@ -175,6 +200,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         // research depths)
         mode: mode === "report" ? "deep" : mode,
         report: mode === "report" ? true : undefined,
+        attachments: wireAttachments.length ? wireAttachments : undefined,
         history,
         sources_base: sourcesBase,
         search_language: searchLanguage,
@@ -221,7 +247,13 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     })();
   };
 
-  const start = (q: string, lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
+  const start = (
+    q: string,
+    lang: string,
+    mode: AiSearchMode = "balanced",
+    searchLanguage = "",
+    attachments?: AiSearchAttachment[],
+  ) => {
     if (!capability) {
       return;
     }
@@ -234,17 +266,40 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       ),
       threadId: threadIdRef.current,
     }));
-    appendRunEvents(`${threadIdRef.current}:1`, [{ e: "client.start", q, runNo: 1, mode, startedAt: Date.now() }]);
-    beginRun(q, lang, [], 0, mode, searchLanguage, 1);
+    const meta = (attachments ?? []).map(({ kind, mime, name, bytes }) => ({ kind, mime, name, bytes }));
+    appendRunEvents(`${threadIdRef.current}:1`, [
+      { e: "client.start", q, runNo: 1, mode, startedAt: Date.now(), attachments: meta },
+    ]);
+    beginRun(q, lang, [], 0, mode, searchLanguage, 1, undefined, attachments);
+    // the LIVE run shows the staged bytes immediately (the evt log only
+    // carries metadata; the table owns the bytes for the replay path)
+    const staged = (attachments ?? []).filter((item) => item.data);
+    if (staged.length) {
+      setCore((prev) => {
+        const runs = [...prev.runs];
+        const last = runs[runs.length - 1];
+        if (last) {
+          runs[runs.length - 1] = { ...last, attachments: staged };
+        }
+        return { ...prev, runs };
+      });
+    }
   };
 
-  const followup = (q: string, lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
+  const followup = (
+    q: string,
+    lang: string,
+    mode: AiSearchMode = "balanced",
+    searchLanguage = "",
+    attachments?: AiSearchAttachment[],
+  ) => {
     if (core.phase !== "done" || !q.trim()) {
       return;
     }
     const runNo = core.runs.length + 1;
+    const meta = (attachments ?? []).map(({ kind, mime, name, bytes }) => ({ kind, mime, name, bytes }));
     appendRunEvents(`${threadIdRef.current}:${runNo}`, [
-      { e: "client.start", q: q.trim(), runNo, mode, startedAt: Date.now() },
+      { e: "client.start", q: q.trim(), runNo, mode, startedAt: Date.now(), attachments: meta },
     ]);
     beginRun(
       q.trim(),
@@ -254,11 +309,16 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       mode,
       searchLanguage,
       runNo,
+      undefined,
+      attachments,
     );
     setCore((prev) => ({
       ...prev,
       phase: "streaming",
-      runs: [...prev.runs, emptyRun(runNo, q.trim(), mode)],
+      runs: [
+        ...prev.runs,
+        { ...emptyRun(runNo, q.trim(), mode), attachments: (attachments ?? []).filter((item) => item.data) },
+      ],
     }));
   };
 
@@ -377,6 +437,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!core.runs.length) {
       return false;
     }
+    // the attachments' BYTES load from the browser's table (the evt log
+    // carries metadata only) -- a replayed run re-shows what was attached
+    const attachmentsByRun = await loadThreadAttachments(threadId).catch(() => new Map());
+    const runsWithAttach = core.runs.map((run) => {
+      const rows = attachmentsByRun.get(`${threadId}:${run.runNo}`);
+      return rows?.length ? { ...run, attachments: rows } : run;
+    });
+    core = { ...core, runs: runsWithAttach };
     // normalize: an interrupted run is a done run with interrupted call
     // rows; an awaiting clarify never survives a reload
     const runs = interruptPending(

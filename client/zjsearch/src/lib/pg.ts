@@ -287,6 +287,21 @@ async function createSchema(db: Pg): Promise<void> {
     n       bigint NOT NULL DEFAULT 0,
     bytes   bigint NOT NULL DEFAULT 0
   )`);
+  // user-uploaded attachments (AI Search's paperclip): the BYTES stay
+  // browser-local (data URLs) -- the server stores and never sees them
+  // again after forwarding the parts to the vision model
+  await db.query(`CREATE TABLE IF NOT EXISTS attachment (
+    id        text PRIMARY KEY,
+    run_id    text NOT NULL,
+    thread_id text NOT NULL,
+    kind      text NOT NULL,
+    mime      text NOT NULL,
+    name      text NOT NULL DEFAULT '',
+    bytes     integer NOT NULL DEFAULT 0,
+    data      text NOT NULL,
+    created   double precision NOT NULL DEFAULT 0
+  )`);
+  await db.query("CREATE INDEX IF NOT EXISTS attachment_run ON attachment (run_id)");
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
   );

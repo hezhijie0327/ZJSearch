@@ -184,3 +184,35 @@ def attach_images(payload: dict[str, t.Any], cfg: dict[str, t.Any]) -> list[dict
         if data:
             parts.append({"type": "image_url", "image_url": {"url": data}})
     return parts
+
+
+MAX_UPLOADS = 4
+"""Client-uploaded images per question -- four is what a vision model can
+meaningfully consider and what keeps a request body sane."""
+_UPLOAD_MIMES = ("image/jpeg", "image/png", "image/webp")
+_MAX_UPLOAD_B64 = 4 * 1024 * 1024
+"""Base64 length cap per image (~3 MB decoded) -- the client compresses to
+well under this; the cap only guards abuse."""
+
+
+def parse_uploads(raw):
+    """Client-UPLOADED attachments -> validated image parts for the first
+    user turn.  The bytes travel as data URLs in the request body and are
+    FORWARDED VERBATIM -- the server stores nothing (the browser's own
+    knowledge base is the only storage; see the client's attachment table).
+    Anything wrong-kind, wrong-mime or oversized is dropped silently: an
+    attachment is a bonus to the question, never a gate on it."""
+    if not isinstance(raw, list):
+        return []
+    parts = []
+    for item in raw[:MAX_UPLOADS]:
+        if not isinstance(item, dict) or item.get("kind") != "image":
+            continue
+        mime = str(item.get("mime") or "").lower()
+        data = str(item.get("data") or "")
+        if mime not in _UPLOAD_MIMES or not data.startswith("data:" + mime + ";base64,"):
+            continue
+        if len(data) - len("data:" + mime + ";base64,") > _MAX_UPLOAD_B64:
+            continue
+        parts.append({"type": "image_url", "image_url": {"url": data}})
+    return parts

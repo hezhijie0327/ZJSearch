@@ -335,6 +335,8 @@ export const EN = {
   ai_report_progress: "{done}/{total} sections written",
   ai_debug: "Debug",
   ai_debug_stage: "AI debug stage",
+  attach_images: "Attach images",
+  remove: "Remove",
   ai_debug_animate: "Replay stream",
   ai_dec_gate_passed: "Spot check passed -- delivered as written",
   ai_dec_gate_rewritten: "Unsupported claims were rewritten before delivery",

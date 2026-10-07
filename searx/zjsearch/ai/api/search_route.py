@@ -37,6 +37,7 @@ from searx.zjsearch.ai.runs.search.executor import Searches
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.runs.report import synth as report_synth
+from searx.zjsearch.ai.runs import attachments as uploads
 from searx.zjsearch.ai.runs.search.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runs.search.gates import (
     clarify_gate,
@@ -99,7 +100,9 @@ def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
 
 
-def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
+def _search(
+    degraded: bool = False,
+) -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     """AI Search: the researcher/writer split on the shared agent loop."""
     cfg = llm_config.llm_cfg()
     # every gate completion's token account lands here -- the settle's
@@ -130,9 +133,13 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     # live-search incentive).  The user-memory snapshot and the
     # past-research index (reader heads + corpus sources) ride the same
     # pre-send: the model searches them through their tools, saves flow
-    # back as events.
+    # back as events.  Uploaded images travel as data URLs and are FORWARDED
+    # verbatim to the researcher's first turn -- the server stores nothing
+    # (the browser's knowledge base is the only attachment storage); a run
+    # whose transport rejects them retries ONCE as text-only (below).
     user_memories = parse_memories(payload.get("user_memories"))
     past_research_entries = parse_past_research(payload.get("past_research"))
+    image_parts = [] if degraded else uploads.parse_uploads(payload.get("attachments"))
     past_sources: list[dict[str, str]] = []
     raw_past = payload.get("history_sources")
     if isinstance(raw_past, list):
@@ -213,9 +220,18 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
     if not research_needed:
         # the no-research run: the writer alone -- the zero-tool case of the
         # shared loop (one streamed write turn whose prose IS the answer)
-        events = engine.run(cfg, writer_messages(q, lang, history, [], mode, None, False, sources_base, direct=True))
+        events = engine.run(
+            cfg,
+            writer_messages(
+                q, lang, history, [], mode, None, False, sources_base, direct=True, image_parts=image_parts or None
+            ),
+        )
         stream = _Ndjson(events, cfg, q, lang, gate_usage)
-        return _respond(stream)
+        response = _respond(stream)
+        if response.status_code == 502 and image_parts and not degraded:
+            logger.warning("zjsearch_ai_search: multimodal request rejected -- retrying text-only")
+            return _search(degraded=True)
+        return response
 
     # 万物皆工具: the task list registers for EVERY mode -- the mode's
     # BEHAVIOR note (speed's "do not bother") shapes its use, the surface
@@ -359,6 +375,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             page_tool=pages_on,
             task_tool=register_tasks,
             user_memories=user_memories,
+            image_parts=image_parts or None,
         ),
         tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec(), learnings_spec()]
         + (
@@ -391,7 +408,7 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
     )
-    return _respond(
+    response = _respond(
         _Ndjson(
             events,
             cfg,
@@ -413,6 +430,13 @@ def _search() -> flask.Response:  # pylint: disable=too-many-branches, too-many-
             ),
         )
     )
+    if response.status_code == 502 and image_parts and not degraded:
+        # the transport rejected the multimodal turn (a text-only model, a
+        # vision-less gateway): the WHOLE run retries as text-only -- the
+        # question itself never needed the images to be answerable
+        logger.warning("zjsearch_ai_search: multimodal request rejected -- retrying text-only")
+        return _search(degraded=True)
+    return response
 
 
 def _respond(stream: "_Ndjson") -> flask.Response:

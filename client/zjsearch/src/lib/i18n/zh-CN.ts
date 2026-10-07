@@ -336,6 +336,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_report_progress: "已完成 {done}/{total} 节",
   ai_debug: "调试",
   ai_debug_stage: "AI 调试台",
+  attach_images: "添加图片",
+  remove: "移除",
   ai_debug_animate: "回放流",
   ai_dec_gate_passed: "抽检通过,按原文交付",
   ai_dec_gate_rewritten: "未过项已在交付前重写",

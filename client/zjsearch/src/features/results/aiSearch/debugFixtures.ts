@@ -96,7 +96,24 @@ const FULL_STAGE: DebugScenario = {
   q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研",
   mode: "report",
   events: [
-    { e: "client.start", runNo: 1, q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研", mode: "report" },
+    {
+      e: "client.start",
+      runNo: 1,
+      q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研",
+      mode: "report",
+      // attachment METADATA only -- the bytes live in the browser's
+      // attachment table; the simulator inlines a tiny SVG so the thumb
+      // renders (the real flow loads them from the attachment table)
+      attachments: [
+        {
+          kind: "image",
+          mime: "image/svg+xml",
+          name: "产能分布草图.svg",
+          bytes: 480,
+          data: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='8' fill='%23f0e6d2'/><rect x='10' y='34' width='12' height='20' fill='%23b08c3e'/><rect x='26' y='24' width='12' height='30' fill='%238c6800'/><rect x='42' y='12' width='12' height='42' fill='%235c4400'/></svg>",
+        },
+      ],
+    },
     { ...base },
     { e: "phase", name: "plan" },
     { e: "say", id: 1, t: "拆解为竞争格局、产能对比与深圳价格矩阵三条线,先做行业面,再落到片区数据。" },

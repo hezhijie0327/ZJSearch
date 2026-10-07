@@ -8,7 +8,9 @@ import { Shell } from "@/components/Shell.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiDebugStage } from "@/features/results/aiSearch/AiDebugStage.tsx";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
+import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
+import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
@@ -77,6 +79,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   const aiLang = themeLocaleTag(uiLocale || globals.locale || "en");
   const aiSearch = useAiSearch(globals.ai_search);
   const [followupQuery, setFollowupQuery] = useState("");
+  const [followupAttachments, setFollowupAttachments] = useState<AiSearchAttachment[]>([]);
   const [researchMode, setResearchMode] = useState<AiSearchMode>("balanced");
 
   // restore once per page instance (the router remounts pages per payload);
@@ -125,7 +128,8 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
       return;
     }
     setFollowupQuery("");
-    aiSearch.followup(value, aiLang, researchMode);
+    aiSearch.followup(value, aiLang, researchMode, "", followupAttachments);
+    setFollowupAttachments([]);
   };
 
   const lastMode = aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode;
@@ -231,6 +235,11 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                     placeholder={t("ai_search_followup")}
                     value={followupQuery}
                   />
+                  {followupAttachments.length ? (
+                    <div className="mt-3">
+                      <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex items-center justify-between gap-2">
                     <Dropdown
                       ariaLabel={t("research_mode")}
@@ -240,11 +249,18 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                       options={depthOptions(t)}
                       value={lastMode}
                     />
-                    <SubmitCircle
-                      disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
-                      label={t("ai_search_followup")}
-                      send
-                    />
+                    <div className="flex items-center gap-2">
+                      <AttachmentPicker
+                        disabled={aiSearch.phase !== "done"}
+                        items={followupAttachments}
+                        onChange={setFollowupAttachments}
+                      />
+                      <SubmitCircle
+                        disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
+                        label={t("ai_search_followup")}
+                        send
+                      />
+                    </div>
                   </div>
                 </form>
               </div>

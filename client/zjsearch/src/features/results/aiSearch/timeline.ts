@@ -40,6 +40,19 @@ export type AiSearchStage = "plan" | "research" | "write";
     lives on until they answer (or skip) via submitClarify. */
 export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error";
 
+/** One user-attached image on a run (the composer's paperclip): METADATA
+    only in the event log / fold -- the bytes live in the browser's
+    attachment table and are filled in by the resume path (`data`). */
+export interface AiSearchAttachment {
+  kind: "image";
+  mime: string;
+  name?: string;
+  bytes?: number;
+  /** the compressed data URL -- present in the live run and after the
+      attachment-table join, absent from the folded event metadata */
+  data?: string;
+}
+
 export interface AiAskQuestion {
   q: string;
   type: "single" | "multi";
@@ -251,6 +264,9 @@ export interface AiSearchRun {
       entry per decision call -- the rail's 决策结果 card renders them
       with click-through raw answers */
   decisions: AiDecision[];
+  /** the user's attached images for THIS question (metadata; `data`
+      filled live / by the resume's attachment-table join) */
+  attachments?: AiSearchAttachment[];
   /** the REPORT mode's document skeleton (the wire's ``outline``
       snapshot): absent = the single-write answer shape */
   outline?: AiSearchOutline;
@@ -404,6 +420,20 @@ export function applyEvent(
   if (kind === "client.start") {
     const fresh = emptyRun(Number(event.runNo) || 1, String(event.q ?? ""), (event.mode as AiSearchMode) ?? "balanced");
     fresh.startedAt = Number(event.startedAt) || fresh.startedAt;
+    // attachment METADATA rides the bootstrap event (the bytes live in the
+    // browser's attachment table, never in the event log)
+    const rawAttach = (Array.isArray(event.attachments) ? event.attachments : []) as Array<Record<string, unknown>>;
+    if (rawAttach.length) {
+      // the simulator's fixtures inline the bytes (no attachment table in
+      // the debug stage); the live wire event carries metadata only
+      fresh.attachments = rawAttach.map((raw) => ({
+        kind: "image" as const,
+        mime: String(raw.mime ?? ""),
+        name: String(raw.name ?? "") || undefined,
+        bytes: Number(raw.bytes) || 0,
+        data: String(raw.data ?? "") || undefined,
+      }));
+    }
     return { ...core, runs: [...core.runs, fresh], phase: "streaming" };
   }
   const runs = [...core.runs];

@@ -23,6 +23,7 @@ import {
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
+import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
@@ -371,7 +372,15 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       return;
     }
     aiSearchRan.current = true;
-    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language);
+    // the index hero hands staged images over through sessionStorage (the
+    // first question is URL-borne and cannot carry bytes) -- pick them up
+    // at run start and clear the hand-off
+    const handoff = window.sessionStorage.getItem("zjs-attach-handoff");
+    const handoffAttachments = handoff ? (JSON.parse(handoff) as AiSearchAttachment[]) : [];
+    if (handoff) {
+      window.sessionStorage.removeItem("zjs-attach-handoff");
+    }
+    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language, handoffAttachments);
   });
   // AI Overview auto-open (audit/QA deep link): `&ai_overview=1` opens the
   // answer card WITHOUT a click once the results settled -- the Lighthouse

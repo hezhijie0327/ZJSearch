@@ -9,7 +9,9 @@ import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
 import { CategoryTabs, defaultFilterValues, type FilterValues, SearchFilters } from "@/components/SearchControls.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
+import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
+import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -84,12 +86,22 @@ export function IndexPage({ data }: { data: IndexData }) {
       : [globals.default_category],
   );
   const [filters, setFilters] = useState<FilterValues>(() => defaultFilterValues(globals));
+  // the hero's staged images (AI mode): handed to the AI takeover through
+  // sessionStorage -- the first question itself is URL-borne and cannot
+  // carry bytes; the takeover picks the hand-off up when it starts the run
+  const [heroAttachments, setHeroAttachments] = useState<AiSearchAttachment[]>([]);
   const [optionsOpen, setOptionsOpen] = useState(false);
 
   const submitSearch = (q: string, categories = selected) => {
     const trimmed = q.trim();
     if (!trimmed) {
       return;
+    }
+    if (aiMode && heroAttachments.length) {
+      window.sessionStorage.setItem(
+        "zjs-attach-handoff",
+        JSON.stringify(heroAttachments.map(({ kind, mime, name, bytes, data }) => ({ kind, mime, name, bytes, data }))),
+      );
     }
     search({
       q: trimmed,
@@ -195,6 +207,9 @@ export function IndexPage({ data }: { data: IndexData }) {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {aiSearchCap && aiMode ? (
+                <AttachmentPicker items={heroAttachments} onChange={setHeroAttachments} />
+              ) : null}
               <SubmitCircle
                 disabled={!query.trim()}
                 label={t("search")}

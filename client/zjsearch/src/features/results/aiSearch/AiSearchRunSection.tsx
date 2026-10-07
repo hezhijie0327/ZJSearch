@@ -890,6 +890,35 @@ function AiSearchRunSectionImpl({
           )
         : null}
 
+      {/* the user's attached images for THIS question: a compact thumb
+          strip -- click opens the full image (the browser-local data URL);
+          metadata-only replays render as a muted placeholder chip */}
+      {run.attachments?.length ? (
+        <div className="flex flex-wrap gap-2">
+          {run.attachments.map((attachment, index) => (
+            <a
+              aria-label={attachment.name ?? t("attach_images")}
+              className="group relative block overflow-hidden rounded-lg border border-line"
+              href={attachment.data}
+              key={index}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {attachment.data ? (
+                <img
+                  alt={attachment.name ?? ""}
+                  className="h-16 w-16 object-cover transition-transform group-hover:scale-105"
+                  src={attachment.data}
+                />
+              ) : (
+                <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-[11px] text-ink-3">
+                  {attachment.mime.replace("image/", "")}
+                </span>
+              )}
+            </a>
+          ))}
+        </div>
+      ) : null}
       {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
               the prose keeps its reading measure on the left, the run's
               source cards become a sticky rail on the right; below lg
