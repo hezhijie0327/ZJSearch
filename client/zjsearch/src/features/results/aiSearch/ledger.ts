@@ -155,7 +155,7 @@ export function completeTasks(tasks: AiSearchRun["tasks"]): AiSearchRun["tasks"]
     its recorded facts AND its open gaps as the resume brief -- the
     researcher picks up exactly where the ledger stands instead of
     restarting. */
-export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGap[] = []): string {
+export function continueBrief(lang: string, q: string, learnings: LedgerFact[], gaps: LedgerGap[] = []): string {
   const findings = learnings
     .filter((fact) => fact.status === "active")
     .map((fact) => `- ${fact.text}`)
@@ -164,10 +164,23 @@ export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGa
     .filter((gap) => gap.status === "open")
     .map((gap) => `- ${gap.q}`)
     .join("\n");
+  // model-facing prompt block: ENGLISH by default, Simplified Chinese for
+  // zh* -- the same two-language rule the server's language_directive uses
+  // (the quoted task titles / findings stay in their own language: content)
+  if (lang.startsWith("zh")) {
+    return (
+      `这是对上一轮被中断调研的继续(同一问题,不要从头开始):「${q}」。` +
+      `中断前已确立的研究发现:\n${findings || "(暂无记录)"}\n` +
+      (open ? `尚未解决的缺口:\n${open}\n` : "") +
+      `从中断处继续:覆盖尚未研究的面,不要重复已搜索过的角度。`.slice(0, 2000)
+    );
+  }
   return (
-    `这是对上一轮被中断调研的继续(同一问题,不要从头开始):「${q}」。` +
-    `中断前已确立的研究发现:\n${findings || "(暂无记录)"}\n` +
-    (open ? `尚未解决的缺口:\n${open}\n` : "") +
-    `从中断处继续:覆盖尚未研究的面,不要重复已搜索过的角度。`.slice(0, 2000)
+    `This continues the previous INTERRUPTED research (same question -- do` +
+    ` not start over): "${q}".\n` +
+    `Established findings before the interruption:\n${findings || "(none recorded)"}\n` +
+    (open ? `Unresolved gaps:\n${open}\n` : "") +
+    `Continue from where it stopped: cover the unresearched facets; do not` +
+    ` repeat angles already searched.`.slice(0, 2000)
   );
 }

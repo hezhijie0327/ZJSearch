@@ -391,7 +391,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return; // a run that produced an answer has nothing to continue
     }
     const runNo = core.runs.length + 1;
-    const text = continueBrief(last.q, last.learnings ?? [], last.gaps ?? []);
+    const text = continueBrief(lang, last.q, last.learnings ?? [], last.gaps ?? []);
     appendRunEvents(`${threadIdRef.current}:${runNo}`, [
       { e: "client.start", q: last.q, runNo, mode, startedAt: Date.now(), continued: true },
     ]);
