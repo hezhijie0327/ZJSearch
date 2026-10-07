@@ -439,3 +439,128 @@ features/results/aiSearch/
 - **调试台**:`/zjsearch/ai/thread/<uuid>?aidebug` —— fixture wire 流走真实 fold+渲染管线,覆盖全部工具行×状态/报告进行中/澄清门/失败态,支持流式回放。
 - **真实环境验证**:balanced 模式端到端(79 次工具调用、15 轮、465 源、rerank 级联 61 次、ledger 59 条事实、calculator 验算、4/4 子任务关闭,7 分钟);report 模式验证了 clarify 预 gate(高风险交付物先对齐,`settle: awaiting`)。浏览器视觉校验通过(暗色,调试台四场景)。
 - **已知环境约束**:共享代理出口 IP 高频检索会触发引擎 CAPTCHA/限流(真实部署应使用独享出口或官方搜索 API);这属于部署网络层,与本次重构无关。
+
+---
+
+## 附:架构图解(Mermaid)
+
+> 与代码同步维护:改结构先改图。四种视图——七包分层、一次请求的 wire 时序、RESEARCH 共用循环、三档模式与报告 SYNTHESIZE。
+
+### 1. 七包分层与依赖方向
+
+依赖严格向下:`api → runs → tools → agent → llm → core`;`prompts` 是被 runs/tools 消费的素材库。
+
+```mermaid
+flowchart TB
+  subgraph B["浏览器(React + PGlite)"]
+    UI["AI 时间线 / 调试台"]
+    KB[("知识库(事件日志 + 投影)")]
+  end
+  subgraph S["SearXNG 实例"]
+    direction TB
+    API["api/ — 端点 · HMAC · NDJSON"]
+    RUNS["runs/ — search · report · overview"]
+    TOOLS["tools/ — 一工具一包"]
+    AGENT["agent/ — loop · wire · echo · fences"]
+    PROMPTS["prompts/ — 提示词库"]
+    LLM["llm/ — sdk · embed · rerank · decision"]
+    CORE["core/ — config · security · guard · text · ndjson"]
+  end
+  ENG["搜索引擎"]
+  BR["Browserless 阅读器"]
+  LLMX["LLM 供应商"]
+  UI -- "POST /zjsearch/ai/search(NDJSON 事件流返回)" --> API
+  API --> RUNS
+  RUNS --> TOOLS
+  RUNS --> AGENT
+  RUNS --> PROMPTS
+  TOOLS --> AGENT
+  TOOLS --> LLM
+  RUNS --> LLM
+  AGENT --> LLM
+  LLM --> CORE
+  TOOLS --> CORE
+  RUNS --> CORE
+  AGENT --> CORE
+  API --> CORE
+  TOOLS -- "web_search" --> ENG
+  TOOLS -- "web_reader" --> BR
+  LLM -- "chat / embed / rerank / decision" --> LLMX
+  UI -- "settle 时投影" --> KB
+```
+
+### 2. 一次请求的 wire 时序
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as 浏览器
+  participant R as api/search_route
+  participant L as agent.loop
+  participant X as tools(执行)
+  C->>R: POST q · depth · report · tk
+  R->>R: research_gate(带 URL 直通)
+  R->>R: clarify 预 gate + clarify_gate(或跳过)
+  R->>R: standalone_question 追问改写 + depth 探针(0-4 分定阶梯)
+  R->>L: run(初始消息 · 工具面 · executor · synthesizer?)
+  loop RESEARCH(至 ledger 关闭 / 停滞 / 轮顶)
+    L->>X: 本轮调用批(calls 事件:pending 行)
+    X-->>C: 逐调用 settle(n / chars / text / preview / dupes)
+    L-->>C: sources · tasks · learnings · decisions
+  end
+  L->>L: 写前证据检查(最多 8 个头源)
+  alt 单写(speed / balanced)
+    L-->>C: answer 增量(related fence 服务端拦截)
+  else 报告(deep 档 + report)
+    L-->>C: outline(目录)→ 逐节 section 增量(+artifact 表格)
+    L->>L: 节级引用 gate(决策模型,不过即重写一次)
+  end
+  L-->>C: settle(finish · usage · judgments)
+  L-->>C: related · memory · tags(晚到事件)
+```
+
+### 3. RESEARCH 循环(三档共用引擎)
+
+```mermaid
+flowchart TB
+  ROUND["第 N 轮:模型输出 thinking + 一批工具调用"] --> SPLIT{"调用分类"}
+  SPLIT -->|"web_search / web_reader"| POOL["并发池(6 worker,FIRST_COMPLETED)"]
+  SPLIT -->|"其余内联"| INLINE["calculator · learnings · task_write<br/>judge · memory · past_research · mcp · extract_table"]
+  POOL --> SETTLE["逐调用 settle:[n] 入账 · 排序级联<br/>(BM25 → rerank → 多样性) · 语料入库 · 完成时 dedup"]
+  INLINE --> SETTLE
+  SETTLE --> LEDGER["belief ledger(事实 / 缺口)+ 任务卡 provenance"]
+  LEDGER --> REF["referee:计划评审 · 覆盖评审 · 写前证据检查"]
+  REF --> JUDGE{"轮判定"}
+  JUDGE -->|"有新源"| NEXT["下一轮继续"]
+  JUDGE -->|"连续无新源 × stall_rounds"| HALT["STALL_NOTE → 带已有材料进写出口"]
+  JUDGE -->|"零调用但 ledger 未关"| NUDGE["continuation 提示(至多 2 次)"]
+  NEXT --> ROUND
+```
+
+### 4. 三档模式与报告 SYNTHESIZE
+
+| 档 | 轮数 | 停滞出口 | 写出口 | 产物 |
+|---|---|---|---|---|
+| speed | 1 波内(≤6 轮顶) | 1 轮无新源即停 | 单写 | 短答 |
+| balanced | 阶梯 4 / 8 / 16 / 24 / 32 | 3 轮 | 单写 | 适中答案 |
+| 深度调研 | 阶梯 12 / 24 / 48 / 96 / 120 | 4 轮 | **报告(强制)** | 分节报告文档 |
+
+```mermaid
+flowchart TB
+  SP["speed:一轮打满,无 ledger"] --> W1["单写出口(一次补全)"]
+  BA["balanced:阶梯定轮数,轻 ledger"] --> W1
+  DE["深度调研:阶梯定轮数,全 ledger"] --> OUT
+  W1 --> DONE1(["settle done"])
+  OUT["大纲 gate(json 结构化)→ outline 事件(目录即进度)"] --> LOOP["RESEARCH(上图循环,语料持续入库)"]
+  LOOP -->|"ledger 关闭 / stall"| SYN
+  subgraph SYN["SYNTHESIZE:逐节循环"]
+    PACK["corpus.pack(节问题 → 预算内关键材料)"] --> WRITE["节 write(流式 section 事件)"]
+    WRITE --> GATE{"节级引用门(决策模型)"}
+    GATE -->|"不过"| REWRITE["带违规点重写一次"]
+    GATE -->|"通过"| DONE["节落格"]
+    REWRITE --> DONE
+  end
+  DONE --> SUM["执行摘要(最后写,看全部节成品)"]
+  SUM --> METHOD["方法论脚注(机器生成:轮次 / 来源 / 耗时 / 局限)"]
+  METHOD --> SETTLE(["settle done"])
+```
