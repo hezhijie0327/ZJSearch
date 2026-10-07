@@ -17,11 +17,12 @@
  *   questions.
  * - `tools` present is the researcher: the opener streams a one-line intent
  *   plus TWO calls — a web_search carrying the page's own `zjaudit <kind>`
- *   fixture query AND a web_reader reading the fixture result the search
- *   just numbered (the executor renders it through the MOCK BROWSERLESS
- *   endpoint below — the same server answers `POST .../content` with a
- *   fixed fixture page, so the reading-pane path runs offline; re-reading
- *   an already-numbered url exercises the read-in-full badge); the
+ *   fixture query AND a web_reader reading the fixture page this same
+ *   server serves at `GET /read-fixture` (the built-in browser renders it
+ *   for real -- the SSRF gates let the loopback host through per
+ *   audit-settings.yml's zjsearch.browser.allow_hosts -- so the
+ *   reading-pane path, the char count and the read-in-full badge run
+ *   fully offline); the
  *   follow-up turn (its request carries tool results) streams closing
  *   prose and NO calls, which ends the research and hands over to the
  *   writer.
@@ -119,18 +120,18 @@ const OVERVIEW_ANSWER = `**Audit overview** -- the quick answer card renders the
 
 const CLOSING_PROSE = "The fixture search answered the question; the writer can cite these sources as they are.";
 
-/** The mock Browserless page (POST .../content): a small fixture document
-    whose headings/list/table survive the reader's markdown extraction --
-    the model receives real condensed markdown, the client's call row
-    shows a real character count. */
+/** The reader's fixture page (GET /read-fixture): a small fixture
+    document whose headings/list/table survive the reader's markdown
+    extraction -- the model receives real condensed markdown, the
+    client's call row shows a real character count. */
 const PAGE_HTML = `<!doctype html>
 <html>
 <head><title>Audit fixture result #1</title></head>
 <body>
 <article>
 <h1>Audit fixture result #1</h1>
-<p>The page reader renders this fixture document in the mock browser and
-condenses it to markdown for the model -- the reading pane under the
+<p>The page reader renders this fixture document in the built-in browser
+and condenses it to markdown for the model -- the reading pane under the
 call row shows exactly this text.</p>
 <ul>
 <li>headings, lists and emphasis survive extraction</li>
@@ -139,7 +140,7 @@ call row shows exactly this text.</p>
 <table>
 <tr><th>Field</th><th>Value</th></tr>
 <tr><td>Kind</td><td>offline fixture</td></tr>
-<tr><td>Transport</td><td>mock browserless</td></tr>
+<tr><td>Render</td><td>built-in browser</td></tr>
 </table>
 <h2>Extended section (progressive disclosure fixture)</h2>
 <p>This trailing section pushes the extracted markdown past the reading
@@ -282,7 +283,7 @@ function gate(name, messages, res) {
   jsonCompletion(res, { research: true });
 }
 
-function researcher(answered, messages, res, tools = []) {
+function researcher(answered, messages, res, tools = [], port = PORT) {
   if (answered) {
     // the round after the tool results: STOP researching (no tool calls)
     // -- the writer phase takes over
@@ -291,7 +292,7 @@ function researcher(answered, messages, res, tools = []) {
   }
   const args = JSON.stringify({ query: questionOf(messages) || "zjaudit general" });
   const half = Math.ceil(args.length / 2);
-  const pageArgs = JSON.stringify({ url: "https://example.com/zjaudit/general/1" });
+  const pageArgs = JSON.stringify({ url: `http://127.0.0.1:${port}/read-fixture` });
   const pageHalf = Math.ceil(pageArgs.length / 2);
   // the RAG round only when the server REGISTERED the tool (the client
   // pre-sends the index; a fresh audit browser has an empty corpus) --
@@ -512,12 +513,12 @@ function route(body, res) {
 export function startAiMock(port = PORT) {
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
-      // the reader's request carries ?token=... — route on the PATH only
       const path = (req.url ?? "").split("?")[0];
-      if (req.method === "POST" && path.endsWith("/content")) {
-        // the mock Browserless (audit-settings.yml points
-        // zjsearch.reader here): the page reader POSTs and reads
-        // the body as the rendered HTML
+      if (req.method === "GET" && path === "/read-fixture") {
+        // the reader's fixture page: the built-in browser navigates here
+        // (audit-settings.yml exempts 127.0.0.1 via
+        // zjsearch.browser.allow_hosts) and the extraction takes it from
+        // there
         res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
         res.end(PAGE_HTML);
         return;

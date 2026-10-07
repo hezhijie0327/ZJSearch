@@ -45,3 +45,12 @@ html-to-markdown==3.15.1
 # -- MIT; streamable-HTTP client over the shared network loop; without it the
 # mcp config degrades to silence
 mcp==2.2.0
+
+# zjsearch theme: the page reader's render engine (searx/zjsearch/ai/browser/)
+# -- MIT python package driving the Camoufox anti-detect Firefox build (uBlock
+# Origin rides along as a default addon = the adblock).  The PACKAGE is
+# optional at run time (an absent install leaves the reader -- and with it the
+# web_reader tool -- unregistered); the browser BUNDLE downloads at build time
+# via `python -m searx.zjsearch.ai.browser.install` (the Docker recipe lives in
+# AGENTS.md's render-contract section)
+camoufox[geoip]==0.5.8

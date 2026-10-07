@@ -724,7 +724,7 @@ class DispatchMixin:  # pylint: disable=no-member
                 None,
             )
         # the READ GATE (fail-open): with the page's feed metadata on
-        # file, one injection noul decides whether the Browserless round
+        # file, one injection noul decides whether the reader round
         # trip is worth spending -- a page whose snippet tries to
         # hijack the answering system never gets read (the model is
         # told to move on; a no-context url -- the model's own

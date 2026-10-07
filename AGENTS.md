@@ -64,6 +64,9 @@ lockfile, untouched).
 - Local instance for theme work (default_theme: zjsearch, all search formats on):
   `SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/dev-settings.yml ./manage webapp.run`
 - First setup: `./manage pyenv.install` (Python venv in `./local/py3`).
+- One-time browser install for the built-in page reader (or a system
+  Chrome suffices, no download):
+  `./local/py3/bin/python -m searx.zjsearch.ai.browser.install`
 - No test infrastructure by design: `client/zjsearch` has no vitest/jest setup
   and must not gain `*.test.*` files or test dependencies (user decision).
   Quality gates are `make themes.zjsearch.lint` (biome + tsc) and a successful
@@ -82,7 +85,9 @@ lockfile, untouched).
   `searx/static` — as an ignored `zjsearch-theme.patch` for `git apply` + `pnpm run
   build` on the target. Templates and python must ship together: new templates
   reading `answer.data` against old python only log jinja2 Undefined warnings and
-  render raw-text answers.
+  render raw-text answers.  The reader's render engine needs its browser on the
+  target too: run `python -m searx.zjsearch.ai.browser.install` once on the
+  host (Docker: the build recipe in the render-contract section below).
 
 ## zjsearch architecture (Page-Data pattern)
 
@@ -123,15 +128,43 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   errors fall through to the upstream view unchanged. `_render_context` in
   the module mirrors `webapp.render`'s context building — re-sync it if
   upstream changes `render`.
-- The AI stack (`searx/zjsearch/ai/`) is a SEVEN-package architecture --
-  core / llm / agent / prompts / tools / runs / api; the dependency
-  direction is strictly downwards (api -> runs -> tools -> agent -> llm
-  -> core; prompts is material consumed by runs and tools):
+- The AI stack (`searx/zjsearch/ai/`) is an EIGHT-package architecture --
+  core / browser / llm / agent / prompts / tools / runs / api; the dependency
+  direction is strictly downwards (api -> runs -> tools -> agent -> llm ->
+  core, with browser beside llm: tools -> browser -> core; prompts is
+  material consumed by runs and tools):
 
   - **core/** — cross-cutting foundations with zero AI semantics: the
     settings-block readers (`config`), the HMAC token gate (`security`),
     the shared text guards (`text`), the ONE SSRF gate (`guard`) and the
     shared NDJSON stream wrapper (`ndjson`).
+  - **browser/** — the built-in render engine: ONE Camoufox
+    (anti-detect Firefox) in a PERSISTENT context (the cookie store
+    survives runs — the login stages build on it), behind the reader's
+    rendered-HTML seam.  `config` reads the opt-in `zjsearch.browser`
+    block (enabled/mode/profile/adblock/proxy/allow_hosts/budgets) and
+    owns the availability gate (`ready()` — enabled AND the `camoufox`
+    package importable, warn-once otherwise); `gate` is the
+    REQUEST-level SSRF fence (`context.route("**/*")`: string checks
+    via the shared `core.guard` + resolve-and-demand-global-address per
+    host + the `allow_hosts` exemption both gates honor; resource-type
+    rejection of image/media/font/stylesheet); `engine` lazy-launches
+    the persistent context (Camoufox: C++-level fingerprint coherence,
+    no CDP — the strongest open position against the login-walled,
+    JS-heavy pages the reader exists for; `block_webrtc` closes the one
+    un-routable leak; uBlock Origin rides along as a default addon =
+    the adblock, `adblock: false` excludes it) and bridges every call
+    onto the shared network loop via `run_coroutine_threadsafe` (the
+    mcp tool's pattern); `install` is the build-time browser
+    downloader (`python -m searx.zjsearch.ai.browser.install` →
+    `camoufox fetch`).  The engine RENDERS AND EXTRACTS, nothing more:
+    a sign-in wall is the model's judgment on the returned content (the
+    web_reader spec says so), not an engine heuristic.  Display tiers
+    (`zjsearch.browser.mode`): `headless` default everywhere,
+    `virtual` (camoufox Xvfb) for display-less Linux servers,
+    `headed` (real window) on desktops — the strongest tier and the
+    login stage's interaction carrier.  The tool package importing
+    this layer: `tools/web_reader` (one backend, no provider).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
     (openai with both chat wire shapes + embeddings, anthropic,
     gemini), centrally registered in `sdk.resolve()`; the stream
@@ -1069,15 +1102,55 @@ context.  A settlement generator guards everything after its future
 resolves: one malformed result degrades THAT call to an error row, the
 round's remaining calls still settle.
 
-THE READER'S PROVIDER CONTRACT (Browserless v2 manual): LAUNCH
-parameters (`stealth`/`blockAds`/`launch`) ride the POST URL's query
-string — `zjsearch.reader.query` (dict/list values serialize to the
-launch-JSON form, `launch={"stealth":true}`) — while BODY properties
-(`gotoOptions`/`waitForTimeout`/`rejectResourceTypes`) belong to
-`zjsearch.reader.params`; launch params in the body trip the schema's
-"must NOT have additional properties" (which 400'd EVERY read once).
-On a 400 the reader retries once without the NON-structural params
-extras and lets a still-400 fail loudly.
+THE READER'S RENDER CONTRACT (the built-in browser): the reader has
+exactly ONE render backend — the local Camoufox anti-detect Firefox
+(`searx/zjsearch/ai/browser/`, opt-in via `zjsearch.browser.enabled`;
+the Browserless provider code was REMOVED, and with it the whole
+`zjsearch.reader` provider surface — `base_url`/`api_key`/`query`/
+`params` are dead keys, only `enabled`/`max_chars` remain).  Reads
+dispatch onto the shared loop, one page per read under a `max_pages`
+semaphore, `load` + network-quiet + settle, then the lxml extraction
+(the pipeline is unchanged — same markdown, same links appendix).
+uBlock Origin (camoufox's default addon) is the adblock — default ON,
+`adblock: false` excludes it (the offline audit sets that; a first
+launch without network would otherwise try an addons.mozilla.org
+download, which fails open with a log line and retries next launch).
+Firefox does NOT inherit the shell's proxy env — a proxied deployment
+names it in `zjsearch.browser.proxy` (the `{server, bypass, username,
+password}` shape).
+Deployments: install the browser once with
+`python -m searx.zjsearch.ai.browser.install` (= `camoufox fetch`,
+lands in the user cache).  Docker bakes it in at build WITHOUT any
+Dockerfile change in this repo being required — the recipe, if/when
+you build the image:
+
+    # builder stage, after the searx/ COPY:
+    ARG ZJSEARCH_BROWSER="true"
+    RUN set -eux; mkdir -p /usr/local/searxng/cache; \
+        if [ "$ZJSEARCH_BROWSER" = "true" ]; then \
+            XDG_CACHE_HOME=/usr/local/searxng/cache \
+                ./.venv/bin/python -m searx.zjsearch.ai.browser.install; \
+        fi
+    # dist stage, after the .venv COPY:
+    ARG ZJSEARCH_BROWSER="true"
+    ENV XDG_CACHE_HOME="/usr/local/searxng/cache"
+    COPY --chown=977:977 --from=builder /usr/local/searxng/cache/ ./cache/
+    # the ONE playwright command that remains: camoufox fetch ships the
+    # browser BINARY only, and camoufox has no system-deps installer of
+    # its own -- playwright's CLI (a transitive dep) carries the
+    # maintained Firefox package list.  Desktop dev never needs this.
+    RUN set -eux; if [ "$ZJSEARCH_BROWSER" = "true" ]; then \
+            apt-get update -qq; \
+            ./.venv/bin/python -m playwright install-deps firefox; \
+            apt-get clean; rm -rf /var/lib/apt/lists/*; \
+        fi
+
+(Point `zjsearch.browser.profile` into the
+container's data volume so the cookie store survives recreation.)
+`zjsearch.browser.allow_hosts` is the sanctioned intranet escape
+hatch: exact hosts both SSRF gates (the reader's string-level
+`guard_url` AND the browser's request gate) let through — it is how
+the audit reads its loopback fixture offline.
 
 THE FINDINGS LEDGER (`learnings` tool, dzhng's learnings as a
 first-class surface): the researcher records what the sources
@@ -1246,7 +1319,7 @@ loses the event -- shipped bug).
   the knowledge base reads as EMPTY (shipped bug, caught by the 2026-10
   browser audit).
 - ENV keys: `ZJSEARCH_AI_KEY` / `ZJSEARCH_EMBEDDING_KEY` /
-  `ZJSEARCH_READER_KEY` / `ZJSEARCH_RERANK_KEY` (api_key stays "" in
+  `ZJSEARCH_RERANK_KEY` (api_key stays "" in
   dev-settings.yml -- the rerank key NEVER lives in the file).
 - USAGE STATS: the admin panel sums the runs' + overviews'
   `meta.usage` (input/output/thoughts/cached) from the knowledge table;
@@ -1581,8 +1654,10 @@ LOADED/NOT LOADED).
   the writer via the `<follow_ups>` system marker, everything else the
   overview).  The audited AI pages: `?q=zjaudit+general&ai=1` (the full
   takeover: reasoning timeline + intent + a web_search AND a web_reader
-  round -- the same mock server answers the reader's `POST /content` with
-  a fixture document, exercising the reading-pane path, the char count
+  round -- the browser engine reads the mock's own fixture page
+  (`GET /read-fixture`, reachable because audit-settings.yml exempts
+  127.0.0.1 via `zjsearch.browser.allow_hosts`), exercising the real
+  render+extract path, the reading-pane, the char count
   and the read-in-full badge offline -- plus the cited synthesis with an
   inline gallery strip) and
   `?q=zjaudit+general&ai_overview=1` (the classic page whose answer card

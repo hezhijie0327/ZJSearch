@@ -28,14 +28,6 @@ search:
   # no remote autocompleter calls during audits
   autocomplete: ""
 
-# the audit browserless mock speaks plain http on loopback: the reader's
-# dedicated network opts into http (the app-initialized default network is
-# https-only -- see searx/zjsearch/ai/capabilities/reader/fetch.py)
-outgoing:
-  networks:
-    zjsearch-reader:
-      enable_http: true
-
 ui:
   default_theme: zjsearch
 
@@ -117,6 +109,16 @@ zjsearch:
     base_url: "http://127.0.0.1:8909"
     api_key: "zjaudit"
     model: "zjaudit-decision"
-  reader:
-    base_url: "http://127.0.0.1:8909/browserless"
-    api_key: "zjaudit"
+  # the reader's render engine IS the built-in browser now: the mock's
+  # fixture page (http://127.0.0.1:8909/read-fixture) is reachable only
+  # because allow_hosts exempts the loopback host from the SSRF gates
+  # (the audit runs fully offline; the browser rejects every other
+  # private address as usual).  adblock: false keeps the launch
+  # deterministic offline -- a first launch would otherwise try to
+  # download uBlock Origin from addons.mozilla.org (it fails open, but
+  # the audit wants zero network attempts)
+  browser:
+    enabled: true
+    adblock: false
+    allow_hosts:
+      - 127.0.0.1

@@ -240,7 +240,7 @@ searx/zjsearch/
       ask_user/  memory/  past_research/  judge/  mcp/
       extract/                #   【新】表格/数据点产物工具(§3.4)
       (每包:spec.py 模式+描述 | run.py 执行 | settle.py receipt+feed 贡献)
-      web_reader/ 内含原 capabilities/reader 的 fetch/extract/config 三件套
+      web_reader/ = reader.py(spec+knobs+guard+TTL 缓存,一文件全工具)+ extract.py(底层,共享错误类型);渲染引擎另立 ai/browser/(Camoufox 反检测 Firefox + uBlock Origin,Browserless 已移除)
     runs/                     # 【= runtime 业务核心】具体任务
       profile.py              #   模式/预算(修死键)
       search/
@@ -286,7 +286,7 @@ class Tool(Protocol):
 | `runtime/executor.py` 派发分支 | `tools/registry.py` | if-chain → dict |
 | `runtime/tools/rows.py` | 删除(前端 settlement-view 取代;后端仅在 Receipt 里带 label/metric 语义字段) | |
 | `capabilities/calculator.py` | `tools/calculator/`(eval+settle 并入) | 消灭上向 import |
-| `capabilities/reader/*` | `tools/web_reader/` | 三模块原样迁 |
+| `capabilities/reader/*` | `tools/web_reader/`(后收拢为 reader.py + extract.py;Browserless 移除,渲染由 ai/browser/ 引擎承担) | 迁后二次收拢 |
 | `capabilities/mcp.py` | `tools/mcp/`(拆 config/connection/spec/discovery 四模块) | |
 | `capabilities/user_memory.py` | `tools/memory/` | |
 | `capabilities/past_research.py` | `tools/past_research/` | |
@@ -464,10 +464,10 @@ flowchart TB
     AGENT["agent/ — loop · wire · echo · fences"]
     PROMPTS["prompts/ — 提示词库"]
     LLM["llm/ — sdk · embed · rerank · decision"]
+    BROWSER["browser/ — Camoufox 引擎 · SSRF 请求门 · uBlock"]
     CORE["core/ — config · security · guard · text · ndjson"]
   end
   ENG["搜索引擎"]
-  BR["Browserless 阅读器"]
   LLMX["LLM 供应商"]
   UI -- "POST /zjsearch/ai/search(NDJSON 事件流返回)" --> API
   API --> RUNS
@@ -484,7 +484,8 @@ flowchart TB
   AGENT --> CORE
   API --> CORE
   TOOLS -- "web_search" --> ENG
-  TOOLS -- "web_reader" --> BR
+  TOOLS -- "web_reader" --> BROWSER
+  BROWSER --> CORE
   LLM -- "chat / embed / rerank / decision" --> LLMX
   UI -- "settle 时投影" --> KB
 ```

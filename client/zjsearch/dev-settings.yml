@@ -75,12 +75,6 @@ outgoing:
   proxies:
     all://:
       - http://10.192.7.1:7890
-  networks:
-    # the page reader's dedicated network: the LAN browserless below is
-    # plain http, and the app-initialized DEFAULT network is https-only
-    # (see searx/zjsearch/ai/tools/web_reader/fetch.py)
-    zjsearch-reader:
-      enable_http: true
 
 # tor_check plugin: fetches check.torproject.org through the outgoing proxy
 # above (reachable that way on this network).  NOTE: a `plugins:` override
@@ -386,37 +380,37 @@ zjsearch:
         # the real key stays local: this checked-in example carries a
         # placeholder -- swap yours in here (and never commit it)
         url: "https://mcp.amap.com/mcp?key=YOUR_AMAP_KEY"
-  reader:
-    # enabled: true              # default ON; false = web_reader never
-    #                            # registers
-    base_url: "http://10.172.226.199:8082"
-    # api_key: ""                # or the ZJSEARCH_READER_KEY env
-    # max_chars: 20000           # UNSET = NO cap -- the whole readable
-    #                            # text goes to the model; set to cap
-    # -- query: the provider's LAUNCH parameters -- they ride the POST
-    # -- URL's query string next to token (Browserless v2's stealth /
-    # -- blockAds / launch configure the BROWSER LAUNCH; in the BODY they
-    # -- trip the schema: "must NOT have additional properties")
-    query:
-      blockAds: true
-      # launch: the launch-JSON form -- dict/list values serialize to
-      # launch={"stealth":true} automatically.  NOTE: THIS build answers
-      # HTTP 500 on stealth launches (the self-hosted chromium lacks the
-      # plugin) -- keep off unless your provider supports it.
-      # launch:
-      #   stealth: true
-    # -- params: the provider's OWN request BODY properties, pass-through 1:1
-    # -- into the render body.  EVERY structural field is overridable
-    # -- here (gotoOptions / waitForTimeout / rejectResourceTypes too --
-    # -- a key replaces the WHOLE value); url stays the tool's argument.
-    # -- code defaults you can override (examples):
-    #   gotoOptions: {waitUntil: networkidle2, timeout: 60000}
-    #     waitUntil: load (default, fastest) | domcontentloaded |
-    #     networkidle0 (full network quiet, slowest) | networkidle2
-    #   waitForTimeout: 2000
-    #   rejectResourceTypes: [image, media, font]   # default also
-    #     rejects stylesheet (it gates the load event) -- drop entries
-    #     to re-enable a type on a site that misbehaves without it
-    # params:
-    #   blockAds: true        # WRONG SHAPE for launch params -- they go
-    #                          # in `query` above
+  browser:
+    # -- the page reader's render engine: Camoufox (anti-detect Firefox)
+    # -- in a persistent profile (the cookie store survives runs -- the
+    # -- login stages build on it).  This is the ONE reader backend; a
+    # -- deployment without it (enabled: false or the package missing)
+    # -- simply has no web_reader tool.  One-time browser install:
+    # --   ./local/py3/bin/python -m searx.zjsearch.ai.browser.install
+    enabled: true
+    # adblock: true             # uBlock Origin rides along as a default
+    #                          # addon (default ON); false excludes it
+    #                          # (the offline audit sets this)
+    proxy:                    # the browser does NOT inherit the shell's
+      server: "http://10.192.7.1:7890"  # proxy env -- name it here
+    geoip: true               # align fingerprint locale/timezone with
+    #                          # the proxy exit (camoufox warns without
+    #                          # it; needs the camoufox[geoip] extra)
+    # allow_hosts: []          # hosts the SSRF gates let through anyway
+    #                          # (intranet targets; the audit's loopback
+    #                          # fixtures) -- exact hostnames/IPs
+    # mode: headless           # headless (default, everywhere) |
+    #                          # virtual (camoufox Xvfb, display-less
+    #                          # Linux servers -- needs the SYSTEM
+    #                          # xvfb binary, e.g. apt-get install
+    #                          # xvfb) |
+    #                          # headed (real window on desktops -- the
+    #                          # strongest tier, and the login stage's
+    #                          # interaction surface)
+    # profile: ~/.cache/zjsearch-browser  # the cookie store -- a Docker
+    #                          # deployment points this into its data
+    #                          # volume
+    # launch_args: []          # extra Firefox args (Camoufox `args`)
+    # max_pages: 2             # concurrent pages, 1-4
+    # goto_timeout_ms: 30000   # one navigation's budget, 5000-60000
+    # settle_ms: 1200          # post-load hydration wait, 0-5000

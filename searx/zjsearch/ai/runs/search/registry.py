@@ -34,7 +34,7 @@ class SourcesRegistry:
         self.url_n: dict[str, int] = {}
         # the url's feed metadata (title + snippet head) -- the read
         # gate's judgment material (what the model knows about the page
-        # BEFORE spending the Browserless round trip)
+        # BEFORE spending the reader round trip)
         self.url_meta: dict[str, dict[str, str]] = {}
         # image urls fed to the model (img=... lines) -> their global [n]:
         # the validated whitelist of the writer's ``zjs-images`` fence

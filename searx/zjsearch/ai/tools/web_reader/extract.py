@@ -17,9 +17,15 @@ from urllib.parse import urljoin
 
 from lxml import etree, html as lhtml
 
-from searx.zjsearch.ai.tools.web_reader.fetch import PageReadError
-
 logger = logging.getLogger(__name__)
+
+
+class PageReadError(Exception):
+    """A page could not be read -- the message travels to the model as the
+    tool result (a dead end it is taught to move on from).  The shared
+    error type of the whole ``web_reader`` package, defined here at its
+    bottom module: guard, render and extraction all raise it."""
+
 
 try:  # html-to-markdown 3.x -- MIT, zero runtime deps, a compiled core
     from html_to_markdown import ConversionOptions, HeadingStyle, convert
