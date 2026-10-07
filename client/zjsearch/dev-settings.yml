@@ -388,29 +388,74 @@ zjsearch:
     # -- simply has no web_reader tool.  One-time browser install:
     # --   ./local/py3/bin/python -m searx.zjsearch.ai.browser.install
     enabled: true
-    # adblock: true             # uBlock Origin rides along as a default
-    #                          # addon (default ON); false excludes it
-    #                          # (the offline audit sets this)
-    proxy:                    # the browser does NOT inherit the shell's
-      server: "http://10.192.7.1:7890"  # proxy env -- name it here
-    geoip: true               # align fingerprint locale/timezone with
-    #                          # the proxy exit (camoufox warns without
-    #                          # it; needs the camoufox[geoip] extra)
+
+    # -- identity & runtime ------------------------------------------------
+    # mode: headless           # = camoufox `headless`: headless (default,
+    #                          # everywhere) | virtual (camoufox Xvfb,
+    #                          # display-less Linux servers -- needs the
+    #                          # SYSTEM xvfb binary, e.g. apt-get install
+    #                          # xvfb) | headed (a real window on desktops
+    #                          # -- the strongest tier, and the login
+    #                          # stage's interaction surface)
+    # profile: ~/.cache/zjsearch-browser  # the cookie store -- a Docker
+    #                          # deployment points this into its data volume
+    proxy:                    # = camoufox `proxy` -- the browser does NOT
+      server: "http://10.192.7.1:7890"  # inherit the shell's proxy env
+    geoip: true               # = camoufox `geoip` -- align the fingerprint's
+    #                          # locale/timezone with the proxy exit
+    #                          # (camoufox warns without it; needs the
+    #                          # camoufox[geoip] extra)
+
+    # -- content & gates ---------------------------------------------------
+    # adblock: true             # = camoufox `exclude_addons`: uBlock Origin
+    #                          # rides along as a default addon (default
+    #                          # ON); false excludes it (the offline audit
+    #                          # sets this)
     # allow_hosts: []          # hosts the SSRF gates let through anyway
     #                          # (intranet targets; the audit's loopback
     #                          # fixtures) -- exact hostnames/IPs
-    # mode: headless           # headless (default, everywhere) |
-    #                          # virtual (camoufox Xvfb, display-less
-    #                          # Linux servers -- needs the SYSTEM
-    #                          # xvfb binary, e.g. apt-get install
-    #                          # xvfb) |
-    #                          # headed (real window on desktops -- the
-    #                          # strongest tier, and the login stage's
-    #                          # interaction surface)
-    # profile: ~/.cache/zjsearch-browser  # the cookie store -- a Docker
-    #                          # deployment points this into its data
-    #                          # volume
-    # launch_args: []          # extra Firefox args (Camoufox `args`)
+
+    # -- budgets -----------------------------------------------------------
     # max_pages: 2             # concurrent pages, 1-4
     # goto_timeout_ms: 30000   # one navigation's budget, 5000-60000
     # settle_ms: 1200          # post-load hydration wait, 0-5000
+
+    # -- native passthrough --------------------------------------------------
+    # -- params: pass-through 1:1 into the camoufox launch (its own
+    # -- launch_options kwargs), merged over the code-built fields LAST.
+    # -- The keys with a semantic knob above (headless via mode / proxy /
+    # -- geoip / exclude_addons via adblock) plus the identity pins
+    # -- (os / block_webrtc / humanize) and the engine's runtime shape
+    # -- (persistent_context / user_data_dir) are CODE-OWNED -- a params
+    # -- key for one warns once and is dropped.  Everything else camoufox
+    # -- natively accepts flows through verbatim (defaults per the docs):
+    #   args: ["-wait-for-browser"]  # extra Firefox launch args
+    #   block_images: false          # kill image requests browser-wide
+    #   block_webgl: false           # disable WebGL entirely (a signal in
+    #                                # itself -- prefer leaving off)
+    #   disable_coop: false          # relax cross-origin opener policy
+    #   webgl_config: ["Intel", "Intel(R) UHD Graphics"]   # pin the exact
+    #                                # GPU vendor/renderer pair
+    #   geoip_db: /path/to.mmdb      # local GeoIP database (else downloaded)
+    #   locale: ["zh-CN", "en"]      # claimed locales (geoip wins when on)
+    #   addons:                      # EXTRA addon paths -- uBlock rides
+    #     - /path/to/extension       # along already; login helpers land here
+    #   fonts: ["Arial", "Tahoma"]   # font families the identity claims
+    #   custom_fonts_only: false     # claim ONLY the fonts list above
+    #   allow_addon_new_tab: false   # let addons open tabs
+    #   main_world_eval: true        # page.evaluate("mw: ...") runs in the
+    #                                # page's main world
+    #   executable_path: /path/to/camoufox   # a custom browser build
+    #   firefox_user_prefs:          # raw about:config prefs
+    #     privacy.resistFingerprinting: false
+    #   enable_cache: true           # the browser's http cache
+    #   env: {MOZ_LOG: "..." }       # browser process env
+    #   debug: true                  # camoufox debug logging
+    #   pin_cpu_cores: true          # pin the driver to the identity's
+    #                                # reported core count (real CPU cost)
+    #   fingerprint: {}              # a full custom identity (advanced;
+    #                                # login-stage identity persistence
+    #                                # will land here)
+    #   i_know_what_im_doing: true   # unlock the unsafe knobs
+    # params:
+    #   locale: ["zh-CN", "en"]

@@ -58,10 +58,51 @@ _NETWORK_IDLE_MS = 3_500
 moment; chatty pages (analytics, sockets) never go idle and hit this
 budget instead, which is what it is for."""
 
+_CODE_OWNED_KEYS = frozenset(
+    {
+        "persistent_context",
+        "user_data_dir",
+        "headless",
+        "os",
+        "block_webrtc",
+        "humanize",
+        "proxy",
+        "geoip",
+        "exclude_addons",
+    }
+)
+"""The launch keys ``zjsearch.browser.params`` may NOT override: the
+identity pins, the keys with their own semantic config knob (``proxy``/
+``geoip`` -- the paired network block; ``exclude_addons`` -- the adblock
+switch; ``headless`` -- the mode tiers), and the engine's runtime
+shape.  A params key for one warns once and is dropped."""
+
+_PARAMS_OVERRIDE_WARNED = False
+
 _state: dict[str, t.Any] = {}
 """Loop-side engine state: ``{"context": BrowserContext}`` after a
 successful launch.  Every access happens inside a task on the shared
 loop -- there is nothing for the worker threads to lock."""
+
+
+def _merge_params(launch_kwargs: dict[str, t.Any]) -> None:
+    """``zjsearch.browser.params`` merged LAST over the code-built launch
+    fields (the openai-transport ``params`` pattern): the deployment's
+    own camoufox ``launch_options`` kwargs -- ``locale``, ``addons``,
+    ``webgl_config``, ``firefox_user_prefs``, ``screen``, ... -- win over
+    everything except the code-owned identity/security keys."""
+    global _PARAMS_OVERRIDE_WARNED  # pylint: disable=global-statement
+    params = browser_config.params()
+    dropped = sorted(_CODE_OWNED_KEYS & params.keys())
+    if dropped and not _PARAMS_OVERRIDE_WARNED:
+        _PARAMS_OVERRIDE_WARNED = True
+        logger.warning(
+            "zjsearch.browser.params tries to override code-owned launch"
+            " key(s) %s -- dropped (these pins keep the claimed identity"
+            " coherent); reconcile the settings block",
+            dropped,
+        )
+    launch_kwargs.update({k: v for k, v in params.items() if k not in _CODE_OWNED_KEYS})
 
 
 async def _launch() -> "BrowserContext":
@@ -83,13 +124,16 @@ async def _launch() -> "BrowserContext":
         "headless": {"headed": False, "virtual": "virtual"}.get(browser_config.mode(), True),
         "window": WINDOW,
         "block_webrtc": True,
+        # humanized cursor trajectories for every playwright click/scroll --
+        # inert for the reader's pure reads, load-bearing the moment the
+        # login stage starts touching pages
+        "humanize": True,
         # the fingerprint's OS is PINNED to linux, not configurable: the
         # image build strips camoufox's bundled font library down to the
         # system font packages (a linux set), so a spoofed mac/windows
         # would enumerate fewer fonts than it claims -- the one coherent
         # identity this stack can present is a linux one
         "os": "linux",
-        "args": browser_config.launch_args(),
     }
     if browser_config.proxy() is not None:
         launch_kwargs["proxy"] = browser_config.proxy()
@@ -100,6 +144,7 @@ async def _launch() -> "BrowserContext":
             launch_kwargs["geoip"] = True
     if not browser_config.adblock():
         launch_kwargs["exclude_addons"] = [DefaultAddons.UBO]
+    _merge_params(launch_kwargs)
     try:
         context = await AsyncNewBrowser(pw, **launch_kwargs)
     except Exception as exc:  # pylint: disable=broad-except

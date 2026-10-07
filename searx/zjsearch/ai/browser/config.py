@@ -69,14 +69,6 @@ def profile_dir() -> str:
     return os.path.join(os.path.expanduser("~"), ".cache", "zjsearch-browser")
 
 
-def launch_args() -> list[str]:
-    """Extra Firefox launch arguments (``zjsearch.browser.launch_args``,
-    a string list) -- deployment escape hatches passed to Camoufox's
-    ``args``."""
-    raw = cfg().get("launch_args")
-    return [str(item) for item in raw] if isinstance(raw, (list, tuple)) else []
-
-
 def proxy() -> dict[str, t.Any] | None:
     """``zjsearch.browser.proxy`` -- the browser's own proxy, passed
     through to Camoufox in the standard ``{server, bypass, username,
@@ -107,6 +99,21 @@ def geoip() -> bool:
     lookup per launch and needs the ``camoufox[geoip]`` extra; any
     deployment that sets ``proxy`` should set this too."""
     return cfg().get("geoip") is True
+
+
+def params() -> dict[str, t.Any]:
+    """``zjsearch.browser.params`` -- pass-through 1:1 into the camoufox
+    launch (its own ``launch_options`` kwargs: ``locale``, ``addons``,
+    ``webgl_config``, ``firefox_user_prefs``, ``screen``, ``enable_cache``,
+    ...), merged over the code-built fields LAST like the openai-transport
+    ``params`` pattern.  The identity/security keys are CODE-OWNED and a
+    params key for one warns once and is dropped (``os``/``block_webrtc``/
+    ``humanize`` -- the coherent-identity pins; ``persistent_context``/
+    ``user_data_dir``/``headless`` -- the engine's runtime shape;
+    ``proxy``/``geoip``/``args``/``exclude_addons`` -- each has its own
+    config key already)."""
+    raw = cfg().get("params")
+    return raw if isinstance(raw, dict) else {}
 
 
 def max_pages() -> int:

@@ -142,7 +142,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (anti-detect Firefox) in a PERSISTENT context (the cookie store
     survives runs — the login stages build on it), behind the reader's
     rendered-HTML seam.  `config` reads the opt-in `zjsearch.browser`
-    block (enabled/mode/profile/adblock/proxy/allow_hosts/budgets) and
+    block (enabled/mode/profile/adblock/proxy/allow_hosts/budgets +
+    `params` -- a 1:1 passthrough into camoufox's launch_options whose
+    identity/security keys (os/block_webrtc/humanize/persistent_context/
+    user_data_dir/headless/proxy/geoip/args/exclude_addons) are
+    code-owned and warn-drop) and
     owns the availability gate (`ready()` — enabled AND the `camoufox`
     package importable, warn-once otherwise); `gate` is the
     REQUEST-level SSRF fence (`context.route("**/*")`: string checks
