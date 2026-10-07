@@ -685,10 +685,16 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         if entry["text"]:
                             blocks.append(f"[{n}] {entry['title']} -- {entry['url']}\n{entry['text']}")
                         else:
+                            # the re-read pointer names the page reader only
+                            # when it is actually registered -- never teach
+                            # a tool the model does not have
+                            re_read = (
+                                f" re-read it with {PAGE_TOOL} before relying on its details."
+                                if reader.configured()
+                                else ""
+                            )
                             blocks.append(
-                                f"[{n}] {entry['title']} -- {entry['url']}\n"
-                                "(past source, identity only -- re-read it with"
-                                f" {PAGE_TOOL} before relying on its details.)"
+                                f"[{n}] {entry['title']} -- {entry['url']}\n(past source, identity only.{re_read})"
                             )
                         events.append(
                             {

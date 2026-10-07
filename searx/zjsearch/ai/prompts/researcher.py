@@ -39,9 +39,12 @@ _DEPTH_RESEARCH: dict[str, str] = {
     # the answer, so the two halves are prompted separately).
     "speed": "Depth: SPEED -- the user mostly wants to know WHAT this is."
     "  You get ONE round: cover the core facet with 2-3 targeted searches,"
-    " make them count, and stop after it.  Do NOT use task_write or"
-    " learnings (no time to maintain a ledger the writer will not read"
-    " twice), and do not ask the user anything.",
+    " read the one or two pages that carry the answer when the snippets"
+    " are thin, and stop after it.  task_write is optional here -- a"
+    " light 2-3 item plan only when the facets are genuinely distinct"
+    " (most speed runs search directly) -- and keep learnings to ONE"
+    " final call with the facts that survive.  Do not ask the user"
+    " anything.",
     "balanced": "Depth: BALANCED -- a handful of rounds covering the main"
     " facets: what it is, how it works or why it matters, and whatever"
     " context the reader needs not to be misled.  Keep a LIGHT findings"
@@ -84,6 +87,7 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
     and the calls as TOOL semantics."""
     reader = ", then web_reader on the model card url" if page_tool else ""
     plan = ", and task_write with that round's subtasks" if task_tool else ""
+    reflect_reader = f", reading the two strongest hits with {PAGE_TOOL}" if page_tool else ""
     lines = [
         "<examples>",
         '- "What is Kimi K3?" (definition, key specs, release status): say one short'
@@ -97,8 +101,9 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
         f'- "A 和 B 该选哪个？": both sides before any verdict -- web_search ("A 优点 缺点", "B 优点 缺点"){plan}.',
         "",
         "- A second round opens with reflection on the results so far (\"[4] covers"
-        ' the official specs, but pricing is missing -- this round targets reseller'
-        ' pages"), never a restatement of the question.',
+        " the official specs, but pricing is missing -- this round targets"
+        f' reseller pages{reflect_reader}'
+        '"), never a restatement of the question.',
         "</examples>",
         "Tool calls happen ONLY through your function-calling tools: a call written"
         " into your text output (\"Action: ...\" or \"Then call ...\") executes"
@@ -128,7 +133,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     (Vane's): ``<role>`` (research only -- a separate writer writes the
     answer), ``<today>``, ``<step_notes>`` language, ``<how_to_search>``,
     ``<examples>`` (few-shot), the tool-capability blocks
-    (``<page_reader>``/``<answer_planning>``/``<ambiguity_escape>``),
+    (``<page_reader>``/``<ambiguity_escape>``),
     ``<depth>`` (the round policy half -- output shape belongs to the
     writer), ``<research_policy>`` and the clarify round-trip blocks.
     The SHARED answer contract (citations, markdown, grounding, voice)
@@ -177,6 +182,15 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " with its engine bang, e.g. !baidu) -- without one, the"
             " category parameter already fans out across every engine in"
             " that vertical.",
+            (
+                "- Close a facet with reads, not just hits: when the searches"
+                f" surface the pages that answer it, spend {PAGE_TOOL} calls on"
+                " the strongest sources before moving to the next facet --"
+                " snippets are heads, and the answer's depth comes from what"
+                " you read,"
+                if page_tool
+                else ""
+            ),
             "- Record what you ESTABLISH with the"
             f" {LEARNINGS_TOOL} tool as you go (one call, up to 6 facts);"
             " do not summarize your findings in prose narration -- the"
@@ -187,6 +201,8 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             "</how_to_search>",
         ]
     )
+    # a gated line drops to "" -- keep the bullet list tight
+    how_to_search = "\n".join(line for line in how_to_search.split("\n") if line.strip())
     page_reader = ""
     if page_tool:
         browser_note = ""
@@ -258,15 +274,24 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     )
     task_block = ""
     if task_tool:
-        task_block = (
-            "<task_list>\nYour research is DECOMPOSED:\n1. FIRST round:"
-            f" call {TASK_TOOL} with 2-4 concrete, independent subtasks"
-            " (each answerable by its own keyword searches).\n2. Search"
-            " each subtask's keywords -- the system tracks coverage"
-            " automatically (a subtask with sources is marked done).\n3."
-            " When all subtasks are covered, stop calling tools -- the"
-            " writer builds the answer from everything gathered.\n</task_list>"
-        )
+        if depth == "speed":
+            task_block = (
+                "<task_list>\nYour research is SHORT (one round): a"
+                f" {TASK_TOOL} plan is OPTIONAL -- write one (2-3 items)"
+                " only when the facets are genuinely distinct; otherwise"
+                " search directly.  The system still tracks which sources"
+                " landed where.\n</task_list>"
+            )
+        else:
+            task_block = (
+                "<task_list>\nYour research is DECOMPOSED:\n1. FIRST round:"
+                f" call {TASK_TOOL} with 2-4 concrete, independent subtasks"
+                " (each answerable by its own keyword searches).\n2. Search"
+                " each subtask's keywords -- the system tracks coverage"
+                " automatically (a subtask with sources is marked done).\n3."
+                " When all subtasks are covered, stop calling tools -- the"
+                " writer builds the answer from everything gathered.\n</task_list>"
+            )
     learnings_block = (
         "<learnings>\n"
         f"The {LEARNINGS_TOOL} tool is your findings ledger: whenever a"

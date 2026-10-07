@@ -48,8 +48,8 @@ def past_research_spec() -> dict[str, t.Any]:
             " knowledge base): pages you (or a previous session) already"
             " read in full, and sources earlier runs already touched."
             "  Full-text matches return their content head; source-only"
-            " matches return their identity -- re-read one with web_reader"
-            " before relying on its details.  Use it when a past page"
+            " matches return their identity -- re-read one with your page"
+            " reader before relying on its details.  Use it when a past page"
             " plausibly holds the missing detail (the user references"
             ' "之前查过的/上次看的", or a prior topic recurs).  Past content'
             " may be OUTDATED -- it supplements, never replaces, live"
