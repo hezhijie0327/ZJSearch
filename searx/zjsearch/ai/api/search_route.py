@@ -140,6 +140,13 @@ def _search(
     user_memories = parse_memories(payload.get("user_memories"))
     past_research_entries = parse_past_research(payload.get("past_research"))
     image_parts = [] if degraded else uploads.parse_uploads(payload.get("attachments"))
+    # the clarify gates are TEXT-only completions -- without this note they
+    # answer "no image came through" about an image the researcher WILL see
+    gate_note = (
+        "\n(The user has attached image(s) to this question; the research" " agent can see them.)"
+        if image_parts
+        else ""
+    )
     past_sources: list[dict[str, str]] = []
     raw_past = payload.get("history_sources")
     if isinstance(raw_past, list):
@@ -204,7 +211,7 @@ def _search(
             except Exception:  # pylint: disable=broad-except
                 clarify_worth_asking = True
     if research_needed and clarify_worth_asking and clarify_state == "ask" and not history:
-        gate = clarify_gate(cfg, q, lang, gate_usage)
+        gate = clarify_gate(cfg, q, lang, gate_usage, attachments_note=gate_note)
         if gate:
             stream = _Ndjson(_clarify_events(gate), cfg, q, lang, gate_usage)
             return _respond(stream)
@@ -250,7 +257,7 @@ def _search(
             if ladder:
                 started = time.monotonic()
                 out = decision.judge(
-                    research_q if research_q else q,
+                    (research_q if research_q else q) + gate_note,
                     {
                         "depth": {
                             "type": "score",

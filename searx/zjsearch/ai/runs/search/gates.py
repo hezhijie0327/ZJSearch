@@ -148,7 +148,11 @@ def standalone_question(
 
 
 def clarify_gate(
-    cfg: dict[str, t.Any], question: str, lang: str, usage_out: UsageOut = None
+    cfg: dict[str, t.Any],
+    question: str,
+    lang: str,
+    usage_out: UsageOut = None,
+    attachments_note: str = "",
 ) -> dict[str, t.Any] | None:
     """The pre-research human-in-loop gate: one small completion decides
     whether the run should ask the user for direction first (ask ONLY when
@@ -185,7 +189,7 @@ def clarify_gate(
                 f" start directly.  Write in {lang}."
             ),
         },
-        {"role": "user", "content": f"<q>{question}</q>"},
+        {"role": "user", "content": f"<q>{question}</q>{attachments_note}"},
     ]
     value, usage = jsongate.json_completion(cfg, messages, "clarify_gate", _CLARIFY_SCHEMA)
     if usage_out is not None and usage:
