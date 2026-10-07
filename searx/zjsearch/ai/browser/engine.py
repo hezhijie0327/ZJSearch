@@ -128,12 +128,6 @@ async def _launch() -> "BrowserContext":
         # inert for the reader's pure reads, load-bearing the moment the
         # login stage starts touching pages
         "humanize": True,
-        # the fingerprint's OS is PINNED to linux, not configurable: the
-        # image build strips camoufox's bundled font library down to the
-        # system font packages (a linux set), so a spoofed mac/windows
-        # would enumerate fewer fonts than it claims -- the one coherent
-        # identity this stack can present is a linux one
-        "os": "linux",
     }
     if browser_config.proxy() is not None:
         launch_kwargs["proxy"] = browser_config.proxy()
