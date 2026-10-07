@@ -241,12 +241,20 @@ def make_synthesizer(
             verdicts.append({"claim": claim[:120], "p": round(p, 3)})
             if p < float(gate_cfg.get("support_min", 0.5)):
                 failed.append(claim)
+        # NAMED-VERDICT-MAP shape: one noul per sampled claim (name c_<i>),
+        # claim texts in record.questions -- same protocol as the referee
         state.judgments.append(
             {
                 "purpose": "citation_gate",
-                "question": f"『{sec['title']}』的抽检引用是否被来源支撑",
+                "question": "Spot check: are the sampled citations supported by their sources?",
                 "target": sec["title"][:120],
-                "answer": {"verdicts": verdicts, "passed": not failed},
+                "answers": {
+                    f"c_{i}": {"type": "noul", "noul": round(float(v.get("p") or 0), 3)} for i, v in enumerate(verdicts)
+                },
+                "record_questions": [
+                    {"name": f"c_{i}", "instructions": str(v.get("claim") or "")[:200]} for i, v in enumerate(verdicts)
+                ],
+                "rewritten": bool(failed),
                 "ms": int((time.monotonic() - started) * 1000),
             }
         )

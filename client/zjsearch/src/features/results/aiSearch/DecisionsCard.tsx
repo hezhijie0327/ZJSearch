@@ -120,57 +120,9 @@ function isPrimitiveAnswer(value: Record<string, unknown>): boolean {
 }
 
 function DecisionBody({ decision }: { decision: AiDecision }) {
-  const t = useT();
-  const record = (decision.record ?? {}) as Record<string, unknown>;
   const asObject =
     decision.answer && typeof decision.answer === "object" ? (decision.answer as Record<string, unknown>) : null;
 
-  // ── evidence: 逐源 通过/失败(数字分 + 失败标记,自有语义) ──
-  if (decision.purpose === "evidence" && record.graded && typeof record.graded === "object") {
-    const graded = record.graded as Record<string, number>;
-    const failing = (Array.isArray(record.failing) ? record.failing : []).map(Number);
-    return (
-      <div className="mt-1.5 space-y-1">
-        {Object.entries(graded).map(([nStr, score]) => (
-          <div className="flex items-center gap-2" key={nStr}>
-            <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-3">#{nStr}</span>
-            <span className="min-w-0 flex-1">
-              <ProbBar highlight={score >= 0.45} label={failing.includes(Number(nStr)) ? "✕" : "✓"} pct={score} />
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  // ── citation_gate(报告形态的节级引用抽检): 逐条声明 + 支撑度 ──
-  if (decision.purpose === "citation_gate" && asObject) {
-    const verdicts = Array.isArray(asObject.verdicts) ? (asObject.verdicts as Array<Record<string, unknown>>) : [];
-    if (!verdicts.length) {
-      return null;
-    }
-    const passed = asObject.passed;
-    return (
-      <div className="mt-1.5 space-y-1">
-        {verdicts.map((verdict, index) => {
-          const p = Number(verdict.p) || 0;
-          const supported = p >= 0.5;
-          return (
-            <div className="flex items-start gap-2" key={index}>
-              <span className={`mt-0.5 shrink-0 font-mono text-[11px] ${supported ? "text-ok" : "text-warning"}`}>
-                {supported ? "✓" : "✕"}
-              </span>
-              <span className="min-w-0 flex-1">
-                <ProbBar highlight={supported} label={String(verdict.claim ?? "")} pct={p} />
-              </span>
-            </div>
-          );
-        })}
-        {typeof passed === "boolean" ? (
-          <p className="text-[11px] text-ink-3">{passed ? t("ai_dec_gate_passed") : t("ai_dec_gate_rewritten")}</p>
-        ) : null}
-      </div>
-    );
-  }
   // ── 命名裁决映射(万能形态): judge / plan_review / coverage /
   //    read_gate 的答案都是同一种形状 —— {名字: choice|score|noul 裁决}。
   //    一个渲染器覆盖全部现有与未来的这类决策:逐条渲染「标签 + 概率条」,

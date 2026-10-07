@@ -629,6 +629,9 @@ export function applyEvent(
           question: typeof record.question === "string" ? record.question : undefined,
           target: typeof record.target === "string" ? record.target : undefined,
           answer: record.answer ?? record.answers ?? record.raw ?? undefined,
+          // record_questions(name→题文)并入 record,通用渲染器的
+          // 标签解析链由此读取
+          ...(record.record_questions ? { record_questions: record.record_questions } : {}),
           ms: typeof record.ms === "number" ? record.ms : undefined,
           record,
         };

@@ -236,11 +236,21 @@ class RefereeMixin:  # pylint: disable=no-member
             for n, score in pool.map(_one, candidates):
                 graded[n] = score
         failing = sorted(n for n, score in graded.items() if score < float(gate.get("pass_min", 0.45)))
+        # NAMED-VERDICT-MAP shape: one noul per deep source (name s_<n>),
+        # labels in record.questions -- the client's generic renderer needs
+        # zero per-purpose branches
         entry = {
             "purpose": "evidence",
             "question": "Per deep source: reliable substantive evidence (noul 0-1, low scores flagged do-not-cite)",
             "target": f"pre-write check of {len(candidates)} deep sources",
-            "graded": {str(n): round(score, 2) for n, score in sorted(graded.items())},
+            "answers": {f"s_{n}": {"type": "noul", "noul": round(score, 2)} for n, score in sorted(graded.items())},
+            "record_questions": [
+                {
+                    "name": f"s_{n}",
+                    "instructions": f"Deep source [{n}]: {str(self.entries.get(n, {}).get('title') or '')[:120]}",
+                }
+                for n, _score in sorted(graded.items())
+            ],
             "failing": failing,
             "ms": int((time.monotonic() - started) * 1000),
         }

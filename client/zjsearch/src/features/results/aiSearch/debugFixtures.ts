@@ -494,7 +494,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           purpose: "citation_gate",
-          question: "『全球竞争格局』的抽检引用是否被来源支撑",
+          question: "Spot check: are the sampled citations supported by their sources?",
           target: "全球竞争格局与头部玩家",
           answer: { verdicts: [{ claim: "中国 CDMO 产能占全球 28%[4]", p: 0.87 }], passed: true },
           ms: 640,
