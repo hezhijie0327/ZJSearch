@@ -834,16 +834,13 @@ function AiSearchRunSectionImpl({
   // in flight
   const roundCount = run.steps.filter((step) => step.kind === "calls").length;
   // the process timeline is the record of how the report was made: OPEN
-  // through the research phase, FOLDED once the writer takes over (the
-  // answer becomes the focus; the record is one click away) -- an explicit
-  // user toggle always wins
-  // the box folds when the ANSWER starts streaming, not when the write
-  // turn opens: the writer's own reasoning streams into the open box (it
-  // IS the visible feedback during the longest silent stretch), and the
-  // two-column wrapper keeps the height its absolute rail pins to
+  // through the research phase, FOLDED the moment the writer takes over
+  // (the phase(write) flip -- the answer/report becomes the focus, the
+  // record is one click away) -- an explicit user toggle always wins
   const researchOpen =
     researchForced ??
-    ((streaming && run.answer === "" && !run.direct) || (run.status === "awaiting" && run.ask !== null));
+    ((streaming && run.answer === "" && run.stage !== "write" && !run.direct) ||
+      (run.status === "awaiting" && run.ask !== null));
   // a settled run without an answer is a FAILURE the user must see (the
   // writer can degrade to an empty/fence-only stream after a full
   // research phase -- silent nothing reads as a hung page), EXCEPT when

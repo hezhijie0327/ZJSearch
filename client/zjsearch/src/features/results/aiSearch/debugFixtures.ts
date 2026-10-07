@@ -241,7 +241,10 @@ const FULL_STAGE: DebugScenario = {
           status: "ok",
           ms: 940,
           result: "choice: 中国CDMO (p=0.72)",
-          args: { state: "…", questions: [{ name: "aggressive", type: "choice" }] },
+          args: {
+            state: "…",
+            questions: [{ name: "aggressive", instructions: "哪家 CDMO 产能扩张最激进?", type: "choice" }],
+          },
         },
         {
           id: 5,
@@ -472,10 +475,7 @@ const FULL_STAGE: DebugScenario = {
               confidence: 0.72,
             },
           },
-          record: {
-            purpose: "judge",
-            questions: [{ name: "aggressive", instructions: "哪家 CDMO 产能扩张最激进?", type: "choice" }],
-          },
+          record_questions: [{ name: "aggressive", instructions: "哪家 CDMO 产能扩张最激进?" }],
           ms: 940,
         },
         {

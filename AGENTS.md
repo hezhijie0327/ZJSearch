@@ -196,7 +196,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   terminal state (`status: done|awaiting|error` + finish/usage/model/
   halt).  `decisions` batches the run's DECISION RESULTS (framework gates
   + the model's own judge) once per round — the rail's 决策结果 card
-  renders them click-through (score/choice/noul bars); `phase` moves the
+  renders them click-through; every decision speaks the ONE
+  NAMED-VERDICT-MAP protocol (`answers: {name: choice|score|noul}` +
+  `record_questions: [{name, instructions}]` — the judge tool's entry
+  included; bare numbers normalize to noul), so the client's one generic
+  renderer covers every present and future purpose with zero
+  per-purpose branches, and the in-card question line only appears when
+  a row's label fell back to its raw key; `phase` moves the
   规划→检索→撰写 spine (the closed stage set has no `audit` — the
   post-write citation audit was REMOVED: the pre-write evidence check
   already gates what the writer leans on, and a verdict that arrives
@@ -215,8 +221,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   step (the confirmed direction) at the answered run's timeline head;
   the task card is STATUS-ONLY (pending dot / active ping / done check
   / `missed` warning — a subtask that never gathered a source is NOT
-  flipped to done), and the research box stays OPEN through the run's
-  whole life (it IS the record of how the report was made).
+  flipped to done), and the research box is OPEN through the research
+  phase and FOLDS the moment the writer takes over (`phase: write` —
+  the answer/report becomes the focus, the record is one click away;
+  an explicit user toggle always wins; the write-turn spinner lines /
+  the report document carry the silence).
 
 - The AI run's RIGHT RAIL is one uniform surface (five sections, one
   section language — icon+title+count header, 13px body rows, cap-and-

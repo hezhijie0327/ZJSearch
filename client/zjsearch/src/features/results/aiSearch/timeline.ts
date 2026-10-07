@@ -320,6 +320,9 @@ export interface AiDecision {
   /** the wire entry verbatim (structured renderers read purpose-specific
       fields off it -- verdicts/citations/counts) */
   record?: Record<string, unknown>;
+  /** the name→题文 map the generic verdict renderer labels rows with
+      (server judgments carry it beside `answers`) */
+  record_questions?: Array<{ name?: unknown; instructions?: unknown }>;
 }
 
 /** The fold's state: the threaded runs plus the thread-wide surfaces
@@ -632,7 +635,9 @@ export function applyEvent(
           answer: record.answer ?? record.answers ?? record.verdicts ?? record.raw ?? undefined,
           // record_questions(name→题文)并入 record,通用渲染器的
           // 标签解析链由此读取
-          ...(record.record_questions ? { record_questions: record.record_questions } : {}),
+          ...(Array.isArray(record.record_questions)
+            ? { record_questions: record.record_questions as AiDecision["record_questions"] }
+            : {}),
           ms: typeof record.ms === "number" ? record.ms : undefined,
           record,
         };

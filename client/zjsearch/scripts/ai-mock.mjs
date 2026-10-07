@@ -75,7 +75,7 @@ function systemOneAnswer(body) {
         type,
         score: Math.min(1, levels.length - 1),
         legend: Object.fromEntries(levels.map((label, index) => [String(index), label])),
-        probabilities: Object.fromEntries(levels.map((label, index) => [String(index), index === 1 ? 0.9 : 0.1])),
+        probabilities: Object.fromEntries(levels.map((_label, index) => [String(index), index === 1 ? 0.9 : 0.1])),
         confidence: 0.9,
       };
     } else {
@@ -444,9 +444,7 @@ function researcher(answered, messages, res, tools = []) {
             index: 6,
             function: {
               arguments:
-                '{"facts": ["The zjaudit fixture page is served at https://example.com/zjaudit/general/1."]}'.slice(
-                  40,
-                ),
+                '{"facts": ["The zjaudit fixture page is served at https://example.com/zjaudit/general/1."]}'.slice(40),
             },
           },
         ],

@@ -108,12 +108,13 @@ function pctOf(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
-/** 决策条目的展开:evidence 逐源通过失败(自有语义);其余「命名裁决
-    映射」形状(judge / plan_review / coverage / read_gate …—— 任何答案为
-    {名字: 原语裁决} 的决策)统一走通用逐行 Q&A 渲染器,标签按
-    questions → target 标题序列 → 键名 解析;单答案原语直接渲染;
-    真正未知的形状才退到原始 JSON。新增 decision 用途时,只要答案遵守
-    {名字: choice|score|noul} 协议就自动获得结构化渲染,零分支。*/
+/** 决策条目的展开:「命名裁决映射」形状(judge / plan_review / coverage /
+    read_gate / evidence / citation_gate …—— 任何答案为 {名字: 原语裁决}
+    的决策)统一走通用逐行渲染器,标签按 record_questions 题文 → target
+    标题序列 → 键名 解析,卡内题文行只在行标签退化为裸键名时兜底(协议
+    原文对用户是机器噪音);单答案原语直接渲染;真正未知的形状才退到原始
+    JSON。新增 decision 用途时,只要答案遵守 {名字: choice|score|noul}
+    协议就自动获得结构化渲染,零分支。*/
 /** 单答案原语:noul / choice / score 之一(顶层直接渲染的形状)。 */
 function isPrimitiveAnswer(value: Record<string, unknown>): boolean {
   return "noul" in value || value.type === "noul" || value.type === "choice" || value.type === "score";
@@ -122,55 +123,80 @@ function isPrimitiveAnswer(value: Record<string, unknown>): boolean {
 function DecisionBody({ decision }: { decision: AiDecision }) {
   const asObject =
     decision.answer && typeof decision.answer === "object" ? (decision.answer as Record<string, unknown>) : null;
+  // 题文行(卡内上下文):仅当展开内容自身带不给出处时兜底 ——
+  // 映射形状的行标签已解析(题文/标题)时协议原文是机器噪音,不渲染;
+  // 原语与原始 JSON 没有行标签,题文行始终渲染。
+  const questionLine =
+    decision.question && asObject && !isPrimitiveAnswer(asObject) ? null : decision.question ? (
+      <div className="flex items-start gap-1.5">
+        <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
+        <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
+          {decision.question}
+        </p>
+      </div>
+    ) : null;
 
   // ── 命名裁决映射(万能形态): judge / plan_review / coverage /
   //    read_gate 的答案都是同一种形状 —— {名字: choice|score|noul 裁决}。
   //    一个渲染器覆盖全部现有与未来的这类决策:逐条渲染「标签 + 概率条」,
-  //    标签按 最佳可用来源 解析 —— record.questions 的题文映射、target 的
-  //    " / " 标题序列(task_N 约定)、退回键名本身。裸数值归一为 noul。 ──
+  //    标签按 最佳可用来源 解析 —— record_questions 的题文映射、target 的
+  //    " / " 标题序列(task_N 约定)、退回键名本身;裸键名行在题文行在场时
+  //    隐藏(题文已是上下文,键名只是噪音)。裸数值归一为 noul。 ──
   if (asObject && !isPrimitiveAnswer(asObject)) {
-    const questions = Array.isArray(decision.record?.questions)
-      ? (decision.record.questions as Array<{ name: string; instructions?: string }>)
-      : [];
+    const questions = Array.isArray(decision.record_questions) ? decision.record_questions : [];
     const titles = typeof decision.target === "string" && decision.target ? decision.target.split(" / ") : [];
     const rows = Object.entries(asObject).map(([key, value]) => {
-      const byQuestion = questions.find((q) => q.name === key);
+      const byQuestion = questions.find((q) => String(q.name ?? "") === key);
       const idx = Number(key.replace("task_", ""));
-      const label = byQuestion?.instructions ?? titles[idx] ?? key;
+      const label = byQuestion?.instructions ? String(byQuestion.instructions) : (titles[idx] ?? key);
       const value2 = typeof value === "object" && value ? value : { type: "noul", noul: Number(value) || 0 };
       return { key, label, value: value2 };
     });
+    const bareKeys = rows.some((row) => row.label === row.key);
     return (
-      <div className="mt-1.5 space-y-2">
-        {rows.map((row) => (
-          <div key={row.key}>
-            <p className="break-words text-[13px] font-medium text-ink" dir="auto">
-              {row.label}
-            </p>
-            <div className="mt-0.5 flex items-start gap-1.5">
-              <CornerDownRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
-              <div className="min-w-0 flex-1">
-                <AnswerValue answer={row.value} />
+      <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
+        {bareKeys ? questionLine : null}
+        <div className="mt-1.5 space-y-2">
+          {rows.map((row) => (
+            <div key={row.key}>
+              {row.label === row.key && bareKeys ? null : (
+                <p className="break-words font-medium text-ink" dir="auto">
+                  {row.label}
+                </p>
+              )}
+              <div className="mt-0.5 flex items-start gap-1.5">
+                <CornerDownRight aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-ink-3" />
+                <div className="min-w-0 flex-1">
+                  <AnswerValue answer={row.value} />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
   // ── 单答案原语(noul / choice / score)直接渲染 ──
   if (asObject && isPrimitiveAnswer(asObject)) {
-    return <AnswerValue answer={asObject} />;
+    return (
+      <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
+        {questionLine}
+        <AnswerValue answer={asObject} />
+      </div>
+    );
   }
   // ── fallback: raw JSON ──
   if (decision.answer !== undefined) {
     return (
-      <pre
-        className="mt-1 max-h-40 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words text-[11px] text-ink-2"
-        dir="ltr"
-      >
-        {JSON.stringify(decision.answer, null, 2)}
-      </pre>
+      <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
+        {questionLine}
+        <pre
+          className="mt-1 max-h-40 overflow-y-auto overscroll-contain whitespace-pre-wrap break-words text-[11px] text-ink-2"
+          dir="ltr"
+        >
+          {JSON.stringify(decision.answer, null, 2)}
+        </pre>
+      </div>
     );
   }
   return null;
@@ -217,17 +243,7 @@ function DecisionRow({ decision, open, onToggle }: { decision: AiDecision; open:
         />
       </button>
       <Collapse className={open ? "mt-1" : ""} open={open}>
-        <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
-          {decision.question ? (
-            <div className="flex items-start gap-1.5">
-              <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-              <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
-                {decision.question}
-              </p>
-            </div>
-          ) : null}
-          <DecisionBody decision={decision} />
-        </div>
+        <DecisionBody decision={decision} />
       </Collapse>
     </li>
   );
@@ -280,17 +296,7 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
                 />
               </button>
               <Collapse className={expandedRow ? "mt-1" : ""} open={expandedRow}>
-                <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
-                  {decision.question ? (
-                    <div className="flex items-start gap-1.5">
-                      <CircleHelp aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-accent" />
-                      <p className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
-                        {decision.question}
-                      </p>
-                    </div>
-                  ) : null}
-                  <DecisionBody decision={decision} />
-                </div>
+                <DecisionBody decision={decision} />
               </Collapse>
             </li>
           );

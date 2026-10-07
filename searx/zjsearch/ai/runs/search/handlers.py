@@ -330,18 +330,22 @@ class DispatchMixin:  # pylint: disable=no-member
                     usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
                     self.decision_usage["calls"] += 1
                     self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
+                    # SAME named-verdict-map protocol as the referee and the
+                    # citation gate: answers + record_questions (name→label),
+                    # so the client's one generic renderer covers the judge too
                     self.judgments.append(
                         {
                             "purpose": "judge",
-                            "questions": [
-                                {
-                                    "name": name,
-                                    "instructions": str(q.get("instructions") or "")[:200],
-                                    "type": q.get("type"),
-                                }
+                            "question": (
+                                " / ".join(
+                                    str(q.get("instructions") or "").strip() or name for name, q in questions.items()
+                                )
+                            )[:200],
+                            "answers": out.get("answers") if isinstance(out.get("answers"), dict) else {},
+                            "record_questions": [
+                                {"name": name, "instructions": str(q.get("instructions") or "")[:200]}
                                 for name, q in questions.items()
                             ],
-                            "verdicts": out.get("answers") if isinstance(out.get("answers"), dict) else {},
                             "ms": ms,
                         }
                     )
