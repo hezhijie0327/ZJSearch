@@ -178,6 +178,7 @@ class DispatchMixin:  # pylint: disable=no-member
                         },
                     )
                     continue
+                images_mode = str(self.cfg.get("images") or "base64").lower()
                 if not uploads_fetch.check_image_url(url):
                     feed_text = f"error: refusing a non-public image URL: {url[:120]}"
                     feeds[wire_id - 1] = feed_text
@@ -191,20 +192,27 @@ class DispatchMixin:  # pylint: disable=no-member
                         },
                     )
                     continue
-                (data_url,) = uploads_fetch.fetch_image_data_urls([url])
-                if not data_url:
-                    feed_text = "error: the image could not be fetched -- move on or re-run the search."
-                    feeds[wire_id - 1] = feed_text
-                    yield (
-                        "call",
-                        {
-                            "call": wire_id,
-                            "status": "error",
-                            "ms": int((time.monotonic() - started_vi) * 1000),
-                            "feed": feed_text[:800],
-                        },
-                    )
-                    continue
+                if images_mode == "url":
+                    # URL 直传:公开网图把引用交给端点自取(不落服务器)
+                    image_ref = url
+                    how = "as a URL reference"
+                else:
+                    (fetched,) = uploads_fetch.fetch_image_data_urls([url])
+                    if not fetched:
+                        feed_text = "error: the image could not be fetched -- move on or re-run the search."
+                        feeds[wire_id - 1] = feed_text
+                        yield (
+                            "call",
+                            {
+                                "call": wire_id,
+                                "status": "error",
+                                "ms": int((time.monotonic() - started_vi) * 1000),
+                                "feed": feed_text[:800],
+                            },
+                        )
+                        continue
+                    image_ref = fetched
+                    how = "inline"
                 label = f"source [{int(call.get('n') or 0)}]" if call.get("n") else url[:120]
                 self.image_injections.append(
                     {
@@ -213,15 +221,15 @@ class DispatchMixin:  # pylint: disable=no-member
                             {
                                 "type": "text",
                                 "text": (
-                                    f"Attached: the image you fetched from {label}."
+                                    f"Attached: the image from {label} ({how})."
                                     " Read it now and factor what it shows into the research."
                                 ),
                             },
-                            {"type": "image_url", "image_url": {"url": data_url}},
+                            {"type": "image_url", "image_url": {"url": image_ref}},
                         ],
                     }
                 )
-                feed_text = f"image fetched and attached -- it is visible to you in the next turn ({label})."
+                feed_text = f"image attached ({how}) -- it is visible to you in the next turn ({label})."
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",

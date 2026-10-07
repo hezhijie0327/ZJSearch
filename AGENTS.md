@@ -1351,6 +1351,11 @@ redundant, both fused into ONE post-run extractor:
   the spine's `<figures>` rule does the honest second half: derive only
   from cited inputs, keep the derivation visible, never present a
   computed number as if a source stated it.
+- `view_image`(AI 工具,`searx/zjsearch/ai/tools/view_image.py`):
+  研究者的眼睛——feed 来源行带 `img=` 标记,该工具抓取该图并作为下一轮
+  user 消息回灌(user turn 全方言接受图片 parts)。SSRF 门校验;图片传输
+  遵循 `zjsearch.llm.images` 设置(`base64` 服务端抓取内联,默认;
+  `url` 直传公开引用给端点自取)。
 - `stock_quote`: `$AAPL`, `AAPL stock` render the `Stock.tsx` DDG-style
   card: price hero, change with the locale's red/green convention (zh-CN:
   red up), range pills (1D/5D/1M/YTD/1Y/5Y/MAX, all series pre-fetched in

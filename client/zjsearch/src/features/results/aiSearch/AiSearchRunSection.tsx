@@ -885,14 +885,19 @@ function AiSearchRunSectionImpl({
           run blocks on these questions, so focus moves in and is trapped
           (useDialogFocus), Escape means skip, the scrim fades (never
           pops). */}
-      {viewAttachment !== null && run.attachments?.length
+      {viewAttachment !== null && run.attachments?.some((attachment) => attachment.kind === "image")
         ? createPortal(
             <AttachmentLightbox
-              images={run.attachments.map((attachment) => ({
-                alt: attachment.name ?? t("attach_files"),
-                src: attachment.data ?? "",
-              }))}
-              initialIndex={viewAttachment}
+              images={run.attachments
+                .filter((attachment) => attachment.kind === "image")
+                .map((attachment) => ({
+                  alt: attachment.name ?? t("attach_files"),
+                  src: attachment.data ?? "",
+                }))}
+              initialIndex={Math.max(
+                0,
+                run.attachments.slice(0, viewAttachment).filter((attachment) => attachment.kind === "image").length,
+              )}
               onClose={() => setViewAttachment(null)}
             />,
             document.body,
