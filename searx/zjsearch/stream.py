@@ -29,7 +29,7 @@ from searx.extended_types import sxng_request
 from searx.locales import RTL_LOCALES, match_locale
 from searx.webadapter import get_search_query_from_webapp
 from searx.webutils import get_translated_errors, highlight_content
-from searx.zjsearch.ai import runtime as ai_search
+from searx.zjsearch.ai import runs as ai_search
 
 logger = logger.getChild('zjsearch_stream')
 

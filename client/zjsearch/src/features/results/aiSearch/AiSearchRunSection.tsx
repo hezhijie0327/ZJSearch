@@ -29,19 +29,12 @@ import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
-import { AskRow } from "@/features/results/aiSearch/calls/AskRow.tsx";
-import { CalcRow } from "@/features/results/aiSearch/calls/CalcRow.tsx";
-import { JudgeRow } from "@/features/results/aiSearch/calls/JudgeRow.tsx";
-import { LearningsRow } from "@/features/results/aiSearch/calls/LearningsRow.tsx";
-import { McpRow } from "@/features/results/aiSearch/calls/McpRow.tsx";
-import { MemoryRow } from "@/features/results/aiSearch/calls/MemoryRow.tsx";
-import { PageRow } from "@/features/results/aiSearch/calls/PageRow.tsx";
-import { PastResearchRow } from "@/features/results/aiSearch/calls/PastResearchRow.tsx";
-import { SearchRow } from "@/features/results/aiSearch/calls/SearchRow.tsx";
-import { TaskRow } from "@/features/results/aiSearch/calls/TaskRow.tsx";
+import { ToolRow } from "@/features/results/aiSearch/calls/ToolRow.tsx";
 import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
 import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
+import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
+import { DocumentView } from "@/features/results/aiSearch/report/DocumentView.tsx";
 import type {
   AiAskQuestion,
   AiSearchCall,
@@ -53,6 +46,7 @@ import { Snippet } from "@/features/results/cardParts.tsx";
 import { citedSourceNumbers, citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
+import { formatDuration } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml } from "@/lib/print.ts";
@@ -93,28 +87,7 @@ function CallRow({
     .map((n) => allSources.find((source) => source.n === n))
     .filter((source): source is AiSearchSource => Boolean(source));
   const merged = [...results, ...dupes.filter((dup) => !results.some((result) => result.n === dup.n))];
-  switch (call.tool) {
-    case "web_reader":
-      return <PageRow call={call} results={merged} />;
-    case "calculator":
-      return <CalcRow call={call} results={merged} />;
-    case "user_memory":
-      return <MemoryRow call={call} results={merged} />;
-    case "past_research":
-      return <PastResearchRow call={call} results={merged} />;
-    case "task_write":
-      return <TaskRow call={call} results={merged} />;
-    case "learnings":
-      return <LearningsRow call={call} />;
-    case "ask_user":
-      return <AskRow call={call} results={merged} />;
-    case "judge":
-      return <JudgeRow call={call} results={merged} />;
-    case "mcp":
-      return <McpRow call={call} results={merged} />;
-    default:
-      return <SearchRow call={call} results={merged} />;
-  }
+  return <ToolRow call={call} results={merged} />;
 }
 
 /** The living task list (the task_write tool maintains it): a STATUS-ONLY
@@ -130,13 +103,7 @@ function TaskCard({ tasks }: { tasks: AiSearchRun["tasks"] }) {
   const done = tasks.filter((task) => task.status === "done").length;
   return (
     <div className="mb-5">
-      <div className="flex items-center gap-2 px-1">
-        <ListTodo aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-        <h3 className="text-base font-semibold text-ink">{t("ai_task_card")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">
-          {done}/{tasks.length}
-        </span>
-      </div>
+      <RailHeader count={`${done}/${tasks.length}`} icon={ListTodo} title={t("ai_task_card")} />
       <ul className="mt-3 space-y-1.5">
         {tasks.map((task, index) => (
           <TaskItem key={`${index}-${task.title}`} task={task} />
@@ -225,11 +192,7 @@ function FindingsCard({
   const factExtra = [...learnings.slice(0, Math.max(0, learnings.length - 4))].reverse();
   return (
     <div className="mb-5">
-      <div className="flex items-center gap-2 px-1">
-        <NotebookPen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-        <h3 className="text-base font-semibold text-ink">{t("ai_findings_card")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">{active.length}</span>
-      </div>
+      <RailHeader count={active.length} icon={NotebookPen} title={t("ai_findings_card")} />
       <ul className="mt-3 space-y-1.5">
         {factView.map((fact) => (
           <li className="flex items-start gap-2" key={fact.id}>
@@ -329,11 +292,7 @@ function GapsCard({
   const gapExtra = [...gaps.slice(0, Math.max(0, gaps.length - 4))].reverse();
   return (
     <div className="mb-5">
-      <div className="flex items-center gap-2 px-1">
-        <CircleHelp aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-        <h3 className="text-base font-semibold text-ink">{t("ai_findings_gaps")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">{gaps.length}</span>
-      </div>
+      <RailHeader count={gaps.length} icon={CircleHelp} title={t("ai_findings_gaps")} />
       <ul className="mt-3 space-y-1.5">
         {gapView.map((gap) => (
           <li className="flex items-start gap-2" key={gap.id}>
@@ -565,11 +524,7 @@ function ElapsedTimer({ startedAt, endedAt }: { startedAt: number; endedAt: numb
       window.clearInterval(timer);
     };
   }, [endedAt]);
-  const seconds = Math.max(0, Math.round(((endedAt ?? now) - startedAt) / 1000));
-  const label =
-    seconds < 60
-      ? t("ai_elapsed_seconds", { n: String(seconds) })
-      : t("ai_elapsed_minutes", { n: String(Math.floor(seconds / 60)), s: String(seconds % 60) });
+  const label = t("ai_elapsed_prefix", { time: formatDuration((endedAt ?? now) - startedAt) });
   return <span className="ms-auto shrink-0 tabular-nums text-xs text-ink-3">{label}</span>;
 }
 
@@ -683,7 +638,7 @@ function AskCard({
       </div>
       <input
         aria-label={t("ai_clarify_more")}
-        className="mt-3 h-9 w-full shrink-0 rounded-lg border border-line bg-transparent px-3 text-base text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+        className="mt-3 h-9 w-full shrink-0 rounded-lg border border-line bg-transparent px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
         dir="auto"
         onChange={(event) => {
           setNote(event.target.value);
@@ -747,11 +702,7 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
   const view = [...items].reverse().slice(0, 4);
   return (
     <section aria-label={t("ai_clarify_summary")} className="mb-5">
-      <div className="flex items-center gap-2 px-1">
-        <MessageCircleQuestion aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-        <h3 className="text-base font-semibold text-ink">{t("ai_clarify_summary")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">{items.length}</span>
-      </div>
+      <RailHeader count={items.length} icon={MessageCircleQuestion} title={t("ai_clarify_summary")} />
       <ul className="mt-3 space-y-1.5">
         {view.map((item) => (
           <li className="flex items-start gap-2 text-[13px]" key={`${item.q}-${item.a}`}>
@@ -1013,17 +964,18 @@ function AiSearchRunSectionImpl({
             </Collapse>
           </section>
           {/* the budget took the tools away: the model was told to summarize
-          and is rewriting the complete answer (partial prose discarded) */}
-          {run.wrappingUp && streaming ? (
+          and is rewriting the complete answer (partial prose discarded).
+          The REPORT shape renders neither line -- its progress surface is
+          the document itself (the TOC's per-section spinners and the
+          N/M counter); a spinner here would read as a stalled run. */}
+          {run.wrappingUp && streaming && !run.outline ? (
             <p className="flex items-center gap-1.5 text-xs text-ink-3">
               <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
               {t("ai_wrapup")}
             </p>
           ) : null}
           {/* the answer column continues below */}
-          {streaming &&
-          !run.answer &&
-          (run.wrappingUp || run.direct || run.steps.some((step) => step.kind === "calls")) ? (
+          {streaming && !run.answer && (run.wrappingUp || run.direct) && !run.outline ? (
             <p className="flex items-center gap-1.5 text-xs text-ink-3">
               <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
               {t("ai_answer_writing")}
@@ -1036,13 +988,22 @@ function AiSearchRunSectionImpl({
               (buttons) that live inside it — they are report content */}
           {run.answer ? (
             <div className="zjs-answer-body text-sm leading-relaxed text-ink">
-              <MarkdownAnswer
-                galleries={run.galleries}
-                markdown={citeToLinks(run.answer)}
-                meta={sourceMeta}
-                onCite={handleCite}
-                settled={!streaming}
-              />
+              {run.outline ? (
+                <DocumentView
+                  meta={sourceMeta}
+                  onCite={handleCite}
+                  run={{ galleries: run.galleries, outline: run.outline, sections: run.sections, runNo: run.runNo }}
+                  settled={!streaming}
+                />
+              ) : (
+                <MarkdownAnswer
+                  galleries={run.galleries}
+                  markdown={citeToLinks(run.answer)}
+                  meta={sourceMeta}
+                  onCite={handleCite}
+                  settled={!streaming}
+                />
+              )}
             </div>
           ) : null}
           {!streaming && isLast && run.answer ? (

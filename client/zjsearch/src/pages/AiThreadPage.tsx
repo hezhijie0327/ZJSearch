@@ -6,6 +6,7 @@ import { Dropdown } from "@/components/Dropdown.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
+import { AiDebugStage } from "@/features/results/aiSearch/AiDebugStage.tsx";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -24,6 +25,27 @@ import type { AiThreadPageData } from "@/lib/types.ts";
     reads the store (the per-tab mirror may miss; PGlite is the fallback)
     the main column rendered BLANK -- a shared thread link read as dead.
     The ghost mirrors AiSearchRunSection's zero-event state. */
+/** The page entry: `?aidebug` diverts to the AI debug stage (the UI's
+    own audit surface -- fixture wire-event scripts through the real fold
+    + renderers, no server surface, no tokens).  The flag lives on a
+    HOOKLESS wrapper so the impl's hook order is unconditional. */
+export function AiThreadPage({ data }: { data: AiThreadPageData }) {
+  if (typeof window !== "undefined" && new window.URLSearchParams(window.location.search).has("aidebug")) {
+    return (
+      <Shell globals={data.globals}>
+        {/* the SAME horizontal geometry as the real thread page's main
+            below: a fixed-measure container, so layouts tuned on the debug
+            stage hold on the live page (a shrink-to-fit main drifts with
+            the content -- research vs report read as a width change) */}
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
+          <AiDebugStage />
+        </main>
+      </Shell>
+    );
+  }
+  return <AiThreadPageImpl data={data} />;
+}
+
 function ThreadGhost() {
   return (
     <div aria-busy="true" className="mt-4 animate-fade-up space-y-5">
@@ -47,7 +69,7 @@ function ThreadGhost() {
   );
 }
 
-export function AiThreadPage({ data }: { data: AiThreadPageData }) {
+function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   const globals = data.globals;
   const t = useT();
   const { navigate, search } = useRouter();

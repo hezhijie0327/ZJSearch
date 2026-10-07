@@ -129,3 +129,11 @@ body {
     font-size: 16px;
   }
 }
+
+/* the debug stage's event-timeline scrubber: accent thumb on a hairline
+   track, sized to the 24px interactive floor */
+.zjs-range {
+  accent-color: var(--accent-strong);
+  height: 1rem;
+  cursor: pointer;
+}

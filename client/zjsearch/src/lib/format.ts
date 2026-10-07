@@ -161,3 +161,21 @@ export function formatFilesize(size: string | number | undefined): string | null
   }
   return `${value >= 100 || unit === 0 ? Math.round(value) : round1(value)} ${units[unit]}`;
 }
+
+/** Run-level duration on the SAME tier vocabulary as `formatMs` (one
+    duration language on the page): minutes/seconds composed, sub-minute
+    reads "42s", an hour reads "1h2m".  The run header's elapsed timer
+    uses this -- not a second hand-rolled format. */
+export function formatDuration(ms: number): string {
+  const rest = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(rest / 3600);
+  const minutes = Math.floor((rest % 3600) / 60);
+  const seconds = rest % 60;
+  if (hours) {
+    return minutes ? `${hours}h${minutes}m` : `${hours}h`;
+  }
+  if (minutes) {
+    return seconds ? `${minutes}m${seconds}s` : `${minutes}m`;
+  }
+  return `${seconds}s`;
+}

@@ -168,7 +168,9 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     zero separate design), plus `embed_route` and the thread page.  The
     shared prompt spine (identity/citations/markdown/voice/answer
     contract) is `runtime/spine.py`; the reader/calculator/past_research/user_memory/mcp
-    tool implementations are `ai/capabilities/`.
+    tool implementations are self-contained packages under `ai/tools/`
+  (one package per tool: spec + sanitizer + service; `core/`, `prompts/`,
+  `runs/`, `api/` complete the layout — see NEXTGEN-DESIGN.md).
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
   silently): events are TIMELINE OPERATIONS — `{"e":"open","id","kind":
@@ -1168,7 +1170,7 @@ loses the event -- shipped bug).
   too ("you researched this before").
 - TAGS, three layers: the mechanical derive (query tokens + hosts +
   mode + task titles) at settle; the post-run extractor
-  (`extract_insights` in capabilities/user_memory.py -- ONE completion
+  (`extract_insights` in ai/tools/memory.py -- ONE completion
   returns {facts, tags}); and `POST /zjsearch/ai/tags`
   (runtime/tag_route.py, the AI Search token, embed-route shape) which
   folds batches of raw tags into 2-6 concept tags per row (language
@@ -1284,7 +1286,7 @@ redundant, both fused into ONE post-run extractor:
   `<user_memory>` block — ALWAYS rendered (the empty state carries the
   save guidance; small models never call the tool unprompted).
 - WRITE: the `user_memory` tool (action=save yields a `memory` wire
-  event), AND `extract_insights` (capabilities/user_memory.py): one
+  event), AND `extract_insights` (ai/tools/memory.py): one
   json_completion after the settle returns BOTH durable facts and
   concept tags -- the belt-and-braces for small models that never call
   the save tool.  The `memory` / `tags` wire events trail `end` and
@@ -1336,7 +1338,7 @@ redundant, both fused into ONE post-run extractor:
 - `time_zone`: an unknown location is silence (ValueError swallowed), not a
   plugin error.  The filler word "in" is stripped from the search term, so
   "time in tokyo" resolves like "time tokyo" instead of going silent.
-- `calculator` (AI capability, `searx/zjsearch/ai/capabilities/calculator.py`):
+- `calculator` (AI tool, `searx/zjsearch/ai/tools/calculator.py`):
   the researcher's NON-NEGOTIABLE number rule — every non-trivial figure
   (ratios, growth, averages, financial/forecast math) goes through the
   tool, never in-head; the `<calculator>` prompt block names earnings and

@@ -27,7 +27,10 @@ import {
  * no-op persistence -- a stored run and a live run hit one renderer.
  */
 
-export type AiSearchMode = "speed" | "balanced" | "deep";
+export type AiSearchMode = "speed" | "balanced" | "deep" | "report";
+/** "report" is a UI-level depth: it POSTs `mode: "deep"` + `report: true`
+    (the server's output-shape flag) -- the wire itself only knows the
+    three research depths plus the report flag. */
 
 /** The run's macro stages (the wire's ``phase`` events -- Qwen Deep
     Research's spine): one value active at a time, the history kept for
@@ -58,7 +61,8 @@ export interface AiSearchCall {
     | "task_write"
     | "learnings"
     | "judge"
-    | "ask_user";
+    | "ask_user"
+    | "extract_table";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
   name?: string;
@@ -75,6 +79,10 @@ export interface AiSearchCall {
   chars?: number;
   /** calculator: the exact evaluated result (the row shows expr = result) */
   result?: string;
+  /** judge: the STRUCTURED verdict (question name -> choice/score/noul
+      answer with its probability distribution) -- the row's expansion
+      renders the same probability bars as the rail's decision card */
+  answers?: Record<string, unknown>;
   /** web_reader: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
@@ -244,6 +252,41 @@ export interface AiSearchRun {
       entry per decision call -- the rail's 决策结果 card renders them
       with click-through raw answers */
   decisions: AiDecision[];
+  /** the REPORT mode's document skeleton (the wire's ``outline``
+      snapshot): absent = the single-write answer shape */
+  outline?: AiSearchOutline;
+  /** the report's per-section markdown buffers (the ``section`` deltas,
+      keyed by section id -- the document renders them in outline order) */
+  sections?: Record<string, string>;
+  /** the recorded data tables (the ``artifact`` events, keyed by id) */
+  artifacts?: Record<number, AiSearchArtifact>;
+}
+
+/** The REPORT mode's outline snapshot (the wire's ``outline`` event): the
+    document's TOC -- the server synthesizes the summary/method sections,
+    their status rides the same snapshot. */
+export interface AiSearchOutlineSection {
+  id: string;
+  title: string;
+  brief?: string;
+  status: "pending" | "writing" | "done";
+}
+
+export interface AiSearchOutline {
+  title: string;
+  subtitle?: string;
+  sections: AiSearchOutlineSection[];
+}
+
+/** One recorded data table (the ``extract_table`` tool's ``artifact``
+    event, snapshot-replace per id): the researcher's structured
+    evidence with per-row [n] refs resolved against the run's sources. */
+export interface AiSearchArtifact {
+  id: number;
+  title: string;
+  columns: string[];
+  rows: Array<{ cells: string[]; refs: number[] }>;
+  note?: string;
 }
 
 /** One decision-model call (loop gates or the model's judge tool): the
@@ -508,6 +551,9 @@ export function applyEvent(
                   ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
                   ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
                   ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
+                  ...(event.answers !== undefined && event.answers !== null
+                    ? { answers: event.answers as Record<string, unknown> }
+                    : {}),
                   ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
                   ...(event.dupes !== undefined
                     ? {
@@ -625,6 +671,68 @@ export function applyEvent(
       }
       runs[lastIdx] = { ...run, sources: merged };
       return { ...core, runs, sources: flat };
+    }
+    case "outline": {
+      // the REPORT mode's authoritative snapshot -- replace, never merge
+      const rawSections = (Array.isArray(event.sections) ? event.sections : []) as Array<Record<string, unknown>>;
+      if (!rawSections.length) {
+        return core;
+      }
+      runs[lastIdx] = {
+        ...run,
+        outline: {
+          title: String(event.title ?? ""),
+          subtitle: String(event.subtitle ?? "") || undefined,
+          sections: rawSections.map((raw) => ({
+            id: String(raw.id ?? ""),
+            title: String(raw.title ?? ""),
+            brief: String(raw.brief ?? "") || undefined,
+            status: (["pending", "writing", "done"].includes(String(raw.status)) ? String(raw.status) : "pending") as
+              | "pending"
+              | "writing"
+              | "done",
+          })),
+        },
+        sections: run.sections ?? {},
+        artifacts: run.artifacts ?? {},
+      };
+      return { ...core, runs };
+    }
+    case "artifact": {
+      // ONE recorded table -- snapshot-replace per id
+      const id = Number(event.id) || 0;
+      const item = event.item as Record<string, unknown> | undefined;
+      if (!id || !item) {
+        return core;
+      }
+      const artifact: AiSearchArtifact = {
+        id,
+        title: String(item.title ?? ""),
+        columns: ((item.columns as unknown[]) ?? []).map(String),
+        rows: ((item.rows as Array<Record<string, unknown>>) ?? []).map((row) => ({
+          cells: ((row.cells as unknown[]) ?? []).map(String),
+          refs: ((row.refs as unknown[]) ?? []).map((ref) => Number(ref) || 0).filter((ref) => ref > 0),
+        })),
+        note: String(item.note ?? "") || undefined,
+      };
+      runs[lastIdx] = { ...run, artifacts: { ...(run.artifacts ?? {}), [id]: artifact } };
+      return { ...core, runs };
+    }
+    case "section": {
+      // the report's per-section markdown delta -- the section buffer AND
+      // the answer document grow together (the answer field stays the one
+      // full-text the knowledge projection and the copy path read)
+      const id = String(event.id ?? "");
+      const delta = String(event.t ?? "");
+      if (!id || !delta) {
+        return core;
+      }
+      runs[lastIdx] = {
+        ...run,
+        sections: { ...(run.sections ?? {}), [id]: (run.sections?.[id] ?? "") + delta },
+        answer: run.answer + delta,
+      };
+      return { ...core, runs };
     }
     case "answer": {
       // the writer's answer buffer -- ITS OWN channel, never narration
@@ -772,7 +880,9 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
                       ? ("judge" as const)
                       : tool === "ask_user"
                         ? ("ask_user" as const)
-                        : ("web_search" as const),
+                        : tool === "extract_table"
+                          ? ("extract_table" as const)
+                          : ("web_search" as const),
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
     q: String(item.q ?? ""),
@@ -807,5 +917,7 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     stages: [],
     gaps: [],
     decisions: [],
+    sections: {},
+    artifacts: {},
   };
 }

@@ -170,7 +170,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         tk: capability.tk,
         q,
         lang,
-        mode,
+        // the UI's "report" depth is the wire's deep mode + the report
+        // output-shape flag (the server's SEARCH_MODES stay the three
+        // research depths)
+        mode: mode === "report" ? "deep" : mode,
+        report: mode === "report" ? true : undefined,
         history,
         sources_base: sourcesBase,
         search_language: searchLanguage,

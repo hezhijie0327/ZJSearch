@@ -101,12 +101,17 @@ export function CallRowShell({
             single mono token (middot between) -- two competing number
             groups read as clutter, one aligned edge reads as a table */}
         <span className="ms-auto flex shrink-0 items-center gap-1 ps-2 font-mono text-[11px] tabular-nums">
-          <span>{metric}</span>
+          {/* an EMPTY metric renders the bare timing -- the middot is the
+              metric/timing separator, never a leading ornament (an empty
+              slot must not leave an orphan `· <time>` cluster) */}
+          {metric ? <span>{metric}</span> : null}
           {call.ms !== undefined ? (
             <>
-              <span aria-hidden="true" className="opacity-40">
-                ·
-              </span>
+              {metric ? (
+                <span aria-hidden="true" className="opacity-40">
+                  ·
+                </span>
+              ) : null}
               <span className="opacity-60">{formatMs(call.ms)}</span>
             </>
           ) : null}

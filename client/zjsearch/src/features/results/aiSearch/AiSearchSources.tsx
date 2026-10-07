@@ -4,6 +4,7 @@ import { Award, BookOpen, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
 import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
+import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
@@ -217,11 +218,7 @@ export function AiSearchSources({
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
     // scroll); this section pins its heading and lists the cards
     <section aria-label={t("ai_search_sources")} className="mb-5">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 px-1">
-        <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-        <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
-        <span className="shrink-0 text-xs tabular-nums text-ink-3">{sources.length}</span>
-      </div>
+      <RailHeader count={sources.length} icon={BookOpen} title={t("ai_search_sources")} />
       <div className="mt-3 flex flex-col gap-2 px-1">
         {view.map((source) => (
           <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
