@@ -177,6 +177,28 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       </div>
     );
   }
+  // ── coverage(覆盖裁判): 与 plan_review 同构 —— target 按序携带开放
+  //    子课题标题,answers 键为 task_N,逐个渲染 noul 支撑度条 ──
+  if (decision.purpose === "coverage" && asObject) {
+    const titles = (decision.target ?? "").split(" / ");
+    return (
+      <div className="mt-1.5 space-y-1.5">
+        {Object.entries(asObject).map(([key, value]) => {
+          const idx = Number(key.replace("task_", ""));
+          const noulValue =
+            typeof value === "object" && value ? (value as Record<string, unknown>).noul : Number(value) || 0;
+          return (
+            <div key={key}>
+              <p className="break-words text-[13px] text-ink-2" dir="auto">
+                {titles[idx] ?? key}
+              </p>
+              <AnswerValue answer={{ type: "noul", noul: noulValue }} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   // ── citation_gate(报告形态的节级引用抽检): 逐条声明 + 支撑度 ──
   if (decision.purpose === "citation_gate" && asObject) {
     const verdicts = Array.isArray(asObject.verdicts) ? (asObject.verdicts as Array<Record<string, unknown>>) : [];
