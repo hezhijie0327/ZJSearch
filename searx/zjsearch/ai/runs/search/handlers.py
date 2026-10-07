@@ -15,6 +15,7 @@ import time
 import typing as t
 
 
+from searx.zjsearch.ai.runs import attachments as uploads_fetch
 from searx.zjsearch.ai.tools import mcp
 from searx.zjsearch.ai.tools import web_reader as reader
 from searx.zjsearch.ai.tools import calculator
@@ -26,6 +27,8 @@ from searx.zjsearch.ai.runs.search.progress import BUDGET_LAST_ROUND_NOTE, FEED_
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
+    VIEW_IMAGE_TOOL,
+    view_image_spec as _view_image_spec_unused,
     DECISION_TOOL,
     LEARNINGS_TOOL,
     PAGE_TOOL,
@@ -37,6 +40,7 @@ from searx.zjsearch.ai.tools import (
     parse_system_one_call,
     parse_extract_call,
     parse_task_call,
+    parse_view_image_call,
     EXTRACT_TOOL,
     PAST_RESEARCH_TOOL,
     TASK_TOOL,
@@ -153,6 +157,79 @@ class DispatchMixin:  # pylint: disable=no-member
                         "status": "ok",
                         "q": summary,
                         "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                    },
+                )
+                continue
+            if tool_name == VIEW_IMAGE_TOOL:
+                # 研究者的眼睛:抓一张结果图,注入下一轮的 user 消息
+                url = str(parse_view_image_call(call))
+                started_vi = time.monotonic()
+                if not url:
+                    feed_text = "error: view_image needs the img= URL copied verbatim from a source line."
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "ms": int((time.monotonic() - started_vi) * 1000),
+                            "feed": feed_text[:800],
+                        },
+                    )
+                    continue
+                if not uploads_fetch.check_image_url(url):
+                    feed_text = f"error: refusing a non-public image URL: {url[:120]}"
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "ms": int((time.monotonic() - started_vi) * 1000),
+                            "feed": feed_text[:800],
+                        },
+                    )
+                    continue
+                (data_url,) = uploads_fetch.fetch_image_data_urls([url])
+                if not data_url:
+                    feed_text = "error: the image could not be fetched -- move on or re-run the search."
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "ms": int((time.monotonic() - started_vi) * 1000),
+                            "feed": feed_text[:800],
+                        },
+                    )
+                    continue
+                label = f"source [{int(call.get('n') or 0)}]" if call.get("n") else url[:120]
+                self.image_injections.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    f"Attached: the image you fetched from {label}."
+                                    " Read it now and factor what it shows into the research."
+                                ),
+                            },
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    }
+                )
+                feed_text = f"image fetched and attached -- it is visible to you in the next turn ({label})."
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "ms": int((time.monotonic() - started_vi) * 1000),
+                        "preview": url[:600],
                         "feed": feed_text[:800],
                     },
                 )

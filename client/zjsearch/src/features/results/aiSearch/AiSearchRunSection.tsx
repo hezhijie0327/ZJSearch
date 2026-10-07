@@ -15,6 +15,7 @@ import {
   LoaderCircle,
   MessageCircleQuestion,
   NotebookPen,
+  Paperclip,
   Play,
   RefreshCw,
   Repeat2,
@@ -916,58 +917,6 @@ function AiSearchRunSectionImpl({
           )
         : null}
 
-      {/* the user's attachments for THIS question: a compact strip --
-          images open the lightbox; document chips are display-only (their
-          text rode the research); metadata-only replays render a muted
-          placeholder chip */}
-      {run.attachments?.length ? (
-        <div className="flex flex-wrap gap-2">
-          {run.attachments.map((attachment, index) =>
-            attachment.kind === "file" ? (
-              <button
-                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1.5 text-[11px] text-ink-2 transition-colors hover:border-accent"
-                key={index}
-                onClick={() => {
-                  setViewFile(index);
-                }}
-                title={t("ai_attach_preview")}
-                type="button"
-              >
-                {attachment.name}
-                {attachment.bytes ? (
-                  <span className="font-mono text-ink-3">
-                    {attachment.bytes < 1024
-                      ? `${attachment.bytes}B`
-                      : `${Math.max(1, Math.round(attachment.bytes / 1024))}K`}
-                  </span>
-                ) : null}
-              </button>
-            ) : (
-              <button
-                aria-label={attachment.name ?? t("attach_files")}
-                className="group relative block cursor-zoom-in overflow-hidden rounded-lg border border-line"
-                key={index}
-                onClick={() => {
-                  setViewAttachment(index);
-                }}
-                type="button"
-              >
-                {attachment.data ? (
-                  <img
-                    alt={attachment.name ?? ""}
-                    className="h-16 w-16 object-cover transition-transform group-hover:scale-105"
-                    src={attachment.data}
-                  />
-                ) : (
-                  <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-[11px] text-ink-3">
-                    {attachment.mime.replace("image/", "")}
-                  </span>
-                )}
-              </button>
-            ),
-          )}
-        </div>
-      ) : null}
       {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
               the prose keeps its reading measure on the left, the run's
               source cards become a sticky rail on the right; below lg
@@ -1183,6 +1132,57 @@ function AiSearchRunSectionImpl({
                 follow-up box.  The rail owns THE scroll; every section is
                 an ordinary block (cap-4 each), and the pb-44 keeps the
                 last card reachable above the follow-up box. */}
+            {run.attachments?.length ? (
+              <section aria-label={t("ai_attach_section")} className="mb-5">
+                <RailHeader count={run.attachments.length} icon={Paperclip} title={t("ai_attach_section")} />
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {run.attachments.map((attachment, index) =>
+                    attachment.kind === "file" ? (
+                      <button
+                        className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1.5 text-[11px] text-ink-2 transition-colors hover:border-accent"
+                        key={index}
+                        onClick={() => {
+                          setViewFile(index);
+                        }}
+                        title={t("ai_attach_preview")}
+                        type="button"
+                      >
+                        {attachment.name}
+                        {attachment.bytes ? (
+                          <span className="font-mono text-ink-3">
+                            {attachment.bytes < 1024
+                              ? `${attachment.bytes}B`
+                              : `${Math.max(1, Math.round(attachment.bytes / 1024))}K`}
+                          </span>
+                        ) : null}
+                      </button>
+                    ) : (
+                      <button
+                        aria-label={attachment.name ?? t("attach_files")}
+                        className="group relative block cursor-zoom-in overflow-hidden rounded-lg border border-line"
+                        key={index}
+                        onClick={() => {
+                          setViewAttachment(index);
+                        }}
+                        type="button"
+                      >
+                        {attachment.data ? (
+                          <img
+                            alt={attachment.name ?? ""}
+                            className="h-16 w-16 object-cover transition-transform group-hover:scale-105"
+                            src={attachment.data}
+                          />
+                        ) : (
+                          <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-[11px] text-ink-3">
+                            {attachment.mime.replace("image/", "")}
+                          </span>
+                        )}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </section>
+            ) : null}
             {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
             <DecisionsCard decisions={run.decisions ?? []} />
             {run.tasks.length > 0 ? <TaskCard tasks={run.tasks} /> : null}

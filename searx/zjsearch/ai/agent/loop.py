@@ -212,6 +212,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     ask_shape: t.Callable[[str], dict[str, t.Any] | None] | None = None,
     display: t.Callable[[list[dict[str, t.Any]]], list[dict[str, t.Any]]] | None = None,
     writer: t.Callable[[str | None], list[dict[str, t.Any]] | t.Any] | None = None,
+    post_round_injections: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     synthesizer: t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]] | None = None,
     writer_sources: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     gallery_validator: t.Callable[[str], list[dict[str, t.Any]]] | None = None,
@@ -337,6 +338,11 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 messages.append(
                     echo.tool_result_message(call, pair[1] if pair else f"error: the {call.get('name')} tool failed")
                 )
+            if post_round_injections is not None:
+                # e.g. view_image's fetched pictures ride the next turn as a
+                # USER message -- user turns accept image parts on every dialect
+                for message in post_round_injections():
+                    messages.append(message)
             yield {"e": "close", "id": entry}
             if round_progress is not None:
                 # the progress verdict lands AFTER the round's results are in

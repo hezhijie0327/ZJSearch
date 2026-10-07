@@ -10,6 +10,7 @@ import { mcpView } from "@/features/results/aiSearch/calls/views/mcp.ts";
 import { memoryView } from "@/features/results/aiSearch/calls/views/memory.tsx";
 import { pastResearchView } from "@/features/results/aiSearch/calls/views/pastResearch.ts";
 import { tasksView } from "@/features/results/aiSearch/calls/views/tasks.tsx";
+import { viewImageView } from "@/features/results/aiSearch/calls/views/viewImage.tsx";
 import { webReaderView } from "@/features/results/aiSearch/calls/views/webReader.tsx";
 import { webSearchView } from "@/features/results/aiSearch/calls/views/webSearch.ts";
 import type { AiSearchCall } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -32,4 +33,5 @@ export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
   past_research: pastResearchView,
   mcp: mcpView,
   extract_table: extractTableView,
+  view_image: viewImageView,
 };

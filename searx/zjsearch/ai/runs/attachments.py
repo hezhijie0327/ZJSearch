@@ -227,3 +227,14 @@ def parse_uploads(raw):
         elif item.get("kind") == "file" and mime in _UPLOAD_FILE_MIMES and data:
             files.append({"name": name or "attachment.txt", "text": data[:_MAX_FILE_CHARS]})
     return images, files
+
+
+def check_image_url(url: str) -> bool:
+    """Public gate for tool-fetched result images (the SSRF question)."""
+    return _check_url(url)
+
+
+def fetch_image_data_urls(urls: list[str]) -> list[str]:
+    """Fetch images as data URLs (the sync bridge over the shared loop) --
+    the tool path's fetch; failed slots come back empty."""
+    return _fetch_images_b64(urls)

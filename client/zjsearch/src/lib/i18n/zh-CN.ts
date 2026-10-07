@@ -337,6 +337,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_debug: "调试",
   ai_debug_stage: "AI 调试台",
   attach_files: "添加图片或文件",
+  ai_attach_section: "附件",
   remove: "移除",
   ai_debug_animate: "回放流",
   ai_attach_preview: "预览附件",

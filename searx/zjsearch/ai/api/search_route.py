@@ -51,6 +51,7 @@ from searx.zjsearch.ai.prompts.researcher import initial_messages
 from searx.zjsearch.ai.runs.search.writer import writer_messages
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
+    view_image_spec,
     ask_user_spec,
     calculator_spec,
     display_item,
@@ -406,8 +407,10 @@ def _search(
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])
         + ([extract_spec()] if outline is not None else [])
+        + [view_image_spec()]
         + mcp_tools,
         executor=state.execute,
+        post_round_injections=state.drain_image_injections,
         max_rounds=max_rounds,
         round_progress=round_progress(state, budget("stall_rounds", mode, 2), budget("max_seconds", mode, 0)),
         continuation=continuation,

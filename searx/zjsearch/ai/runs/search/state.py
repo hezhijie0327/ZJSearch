@@ -149,6 +149,16 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # synthesis time
         self.artifacts: list[dict[str, t.Any]] = []
         self._artifact_seq = 0
+        # view_image 的注入队列:抓到的图作为下一轮的 user 消息回灌对话
+        # (工具结果本身是文本通道,图走 user turn 是全供应商通用的形态)
+        self.image_injections: list[dict[str, t.Any]] = []
+
+    def drain_image_injections(self) -> list[dict[str, t.Any]]:
+        """view_image's fetched pictures, drained into the next model turn
+        as user messages (the loop consults this after each executor batch)."""
+        out = self.image_injections
+        self.image_injections = []
+        return out
 
     def ledger_open_items(self) -> tuple[list[str], list[str]]:
         """The ledger's OPEN items: (open subtask titles, open gap

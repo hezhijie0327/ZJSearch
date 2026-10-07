@@ -76,7 +76,8 @@ export interface AiSearchCall {
     | "learnings"
     | "judge"
     | "ask_user"
-    | "extract_table";
+    | "extract_table"
+    | "view_image";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
   name?: string;
@@ -898,6 +899,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "judge",
   "ask_user",
   "extract_table",
+  "view_image",
 ]);
 
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {

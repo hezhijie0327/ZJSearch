@@ -312,6 +312,19 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 10,
+          tool: "view_image",
+          q: "source [4] 产能图",
+          status: "ok",
+          ms: 1200,
+          args: {
+            url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='8' fill='%23e8e0cc'/><circle cx='32' cy='32' r='20' fill='%238c6800'/></svg>",
+            n: 4,
+          },
+          preview: "https://chem.example.com/capacity-chart",
+          feed: "image fetched and attached -- it is visible to you in the next turn (source [4]).",
+        },
+        {
+          id: 10,
           tool: "extract_table",
           q: "",
           status: "error",

@@ -336,6 +336,7 @@ export const EN = {
   ai_debug: "Debug",
   ai_debug_stage: "AI debug stage",
   attach_files: "Attach images or files",
+  ai_attach_section: "Attachments",
   remove: "Remove",
   ai_debug_animate: "Replay stream",
   ai_attach_preview: "Preview attachment",
