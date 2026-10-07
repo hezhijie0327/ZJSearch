@@ -23,6 +23,7 @@ from searx.zjsearch.ai.tools import (
     PAGE_TOOL,
     TASK_TOOL,
     TOOL_NAME,
+    WEB_BROWSER_TOOL,
     USER_MEMORY_TOOL,
 )
 
@@ -54,9 +55,12 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " current, and let the gaps pick the next round's angle -- definition,"
     " mechanics, comparisons, recent developments, use cases, limitations,"
     " expert and community reception, whatever the question actually needs."
-    "  Read pages, not just snippets: a load-bearing number or claim"
-    " deserves its web_reader call.  Cross-verify load-bearing claims"
-    " against independent sources.  The research ends when the LEDGER"
+    "  Read pages, not just snippets: snippets are 300-character HEADS --"
+    " after a search round surfaces the promising hits, spend the NEXT"
+    " round reading the 2-4 sources you will actually build on"
+    " (web_reader), and read whenever a figure, quote or claim your"
+    " answer will lean on only exists as a snippet head.  Cross-verify"
+    " load-bearing claims against independent sources.  The research ends when the LEDGER"
     " closes -- every subtask covered, every gap answered or explicitly"
     " abandoned -- not when you feel done.",
 }
@@ -103,7 +107,7 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
     return "\n".join(lines)
 
 
-def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
+def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches, too-many-positional-arguments, too-many-statements
     question: str,
     lang: str,
     history: list[dict[str, str]],
@@ -115,6 +119,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     register_ask: bool = False,
     page_tool: bool = False,
     task_tool: bool = False,
+    browser_tool: bool = False,
     user_memories: list[dict[str, str]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
@@ -184,26 +189,40 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     )
     page_reader = ""
     if page_tool:
+        browser_note = ""
+        if browser_tool:
+            browser_note = (
+                "  For pages a plain read cannot see through -- sign-in"
+                " walls, interactive apps, platforms like xiaohongshu or"
+                f" zhihu -- the {WEB_BROWSER_TOOL} session goes further:"
+                " it opens the site, clicks and screenshots like a user."
+            )
         page_reader = (
             "<page_reader>\n"
             f"The {PAGE_TOOL} tool reads ONE url's current full content in a"
-            " real browser and returns it as markdown: reach for it when a"
-            " source's snippet promises exactly the missing detail (specs,"
-            " prices, tables, documentation, exact numbers) or when a"
-            " load-bearing claim deserves a first-hand check.  If the"
-            " question contains an explicit URL and asks about that page"
-            " (summarize it, read it, extract from it), open the page with"
+            " real browser and returns it as markdown.  SNIPPETS ARE HEADS,"
+            " NOT SOURCES: the [n] lines carry ~300 characters, and an"
+            " answer assembled only from them stays shallow -- its numbers"
+            " are unverified and its claims rest on out-of-context"
+            " fragments.  Make reading a rhythm, not an exception:"
+            " after a search round surfaces promising hits, READ the 2-4"
+            " sources you will actually build on before chasing new"
+            " facets; read on sight of a figure, quote, table, spec or"
+            " claim your answer will lean on; read to resolve two"
+            " snippets that disagree; a source that keeps reappearing"
+            " across rounds deserves one read.  If the question contains"
+            " an explicit URL and asks about that page (summarize it,"
+            " read it, extract from it), open it with"
             f" {PAGE_TOOL} FIRST -- do not search for what the page itself"
-            " contains.  Open"
-            " sparingly: only pages whose snippet already promises what you"
-            " need -- never to \"see what is there\", never in place of a"
-            " search round.  A failed or empty page is a dead end: search a"
-            " different source instead of retrying it.  Opened content"
-            " carries the source's [n] label -- the number it already had"
-            " among your sources, or a fresh one appended for a url that was"
-            " not among the results.  Very long pages arrive truncated: for"
-            " long documents prefer one targeted site:-search over opening"
-            " page after page.\n</page_reader>"
+            " contains.  Do not drown either: skip obviously thin"
+            " results, never open pages just to \"see what is there\""
+            " once you hold the detail, and for long documents prefer"
+            " one targeted site:-search over opening page after page."
+            "  A failed or empty page is a dead end: search a different"
+            " source instead of retrying it.  Opened content carries the"
+            " source's [n] label -- the number it already had among your"
+            " sources, or a fresh one appended for a url that was not"
+            " among the results." + browser_note + "\n</page_reader>"
         )
     facts = "\n".join(f"- {item['content']}" for item in user_memories or [])
     memory_block = (

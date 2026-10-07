@@ -397,6 +397,7 @@ def _search(
             register_ask=True,
             page_tool=pages_on,
             task_tool=register_tasks,
+            browser_tool=browser_on,
             user_memories=user_memories,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
