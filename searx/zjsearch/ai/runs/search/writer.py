@@ -100,6 +100,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
     learnings: list[dict[str, t.Any]] | None = None,
     gaps: list[dict[str, t.Any]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
+    attached_files: list[dict[str, str]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The WRITER's fresh conversation (Vane's writer): a system prompt of
     XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
@@ -206,6 +207,9 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals
         f"<question>{question}</question>\n<context>\n"
         f"{context if not direct else 'No sources: this answer does not need them.'}\n</context>"
     )
+    for file in attached_files or []:
+        text = str(file.get("text") or "")[:30_000]
+        user += f'\n<attached_file name="{file.get("name") or "attachment.md"}">\n' f"{text}\n</attached_file>"
     if image_parts:
         user = shared.user_message(user, image_parts)
     return shared.build_messages("\n".join(lines), user, history)

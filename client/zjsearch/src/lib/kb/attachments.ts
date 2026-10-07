@@ -25,14 +25,13 @@ const meta = (row: { kind: string; mime: string; name: string; bytes: number; da
 export function saveAttachments(
   threadId: string,
   runId: string,
-  items: Array<{ kind: "image"; mime: string; name?: string; bytes?: number; data: string }>,
+  items: Array<{ kind: "image" | "file"; mime: string; name?: string; bytes?: number; data: string }>,
 ): void {
   if (!items.length) {
     return;
   }
   void (async () => {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]!;
+    for (const [i, item] of items.entries()) {
       await pgQuery(
         `INSERT INTO attachment (id, run_id, thread_id, kind, mime, name, bytes, data, created)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)

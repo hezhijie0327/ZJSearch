@@ -164,9 +164,13 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     startRun(threadId, { runNo, q, mode, startedAt: Date.now() });
     // the attachment BYTES land in the browser's own table (the server
     // stores nothing); the evt log carries metadata only
-    const wireAttachments: Array<{ kind: "image"; mime: string; name?: string; bytes?: number; data?: string }> = (
-      attachments ?? []
-    ).map(({ kind, mime, name, bytes, data }) => ({ kind, mime, name, bytes, data }));
+    const wireAttachments: Array<{
+      kind: "image" | "file";
+      mime: string;
+      name?: string;
+      bytes?: number;
+      data?: string;
+    }> = (attachments ?? []).map(({ kind, mime, name, bytes, data }) => ({ kind, mime, name, bytes, data }));
     saveAttachments(
       threadId,
       `${threadId}:${runNo}`,

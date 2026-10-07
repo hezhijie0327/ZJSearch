@@ -139,7 +139,7 @@ def _search(
     # whose transport rejects them retries ONCE as text-only (below).
     user_memories = parse_memories(payload.get("user_memories"))
     past_research_entries = parse_past_research(payload.get("past_research"))
-    image_parts = [] if degraded else uploads.parse_uploads(payload.get("attachments"))
+    image_parts, attached_files = ([], []) if degraded else uploads.parse_uploads(payload.get("attachments"))
     # the clarify gates are TEXT-only completions -- without this note they
     # answer "no image came through" about an image the researcher WILL see
     gate_note = (
@@ -230,7 +230,17 @@ def _search(
         events = engine.run(
             cfg,
             writer_messages(
-                q, lang, history, [], mode, None, False, sources_base, direct=True, image_parts=image_parts or None
+                q,
+                lang,
+                history,
+                [],
+                mode,
+                None,
+                False,
+                sources_base,
+                direct=True,
+                image_parts=image_parts or None,
+                attached_files=attached_files or None,
             ),
         )
         stream = _Ndjson(events, cfg, q, lang, gate_usage)
@@ -383,6 +393,7 @@ def _search(
             task_tool=register_tasks,
             user_memories=user_memories,
             image_parts=image_parts or None,
+            attached_files=attached_files or None,
         ),
         tools=[tool_spec(pages_on), calculator_spec(), user_memory_spec(), learnings_spec()]
         + (

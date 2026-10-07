@@ -193,26 +193,37 @@ _UPLOAD_MIMES = ("image/jpeg", "image/png", "image/webp")
 _MAX_UPLOAD_B64 = 4 * 1024 * 1024
 """Base64 length cap per image (~3 MB decoded) -- the client compresses to
 well under this; the cap only guards abuse."""
+_UPLOAD_FILE_MIMES = ("text/markdown", "text/plain")
+"""The first FILE kind: markdown documents (the browser reads the text and
+ships it as the attachment's `data` -- no server-side parsing needed).
+PDF/DOCX would add kinds with their own extraction paths."""
+_MAX_FILE_CHARS = 60_000
+"""Per-file text cap the server forwards -- the researcher's prompt block
+caps each file again (30K) so two big files still fit the context."""
 
 
 def parse_uploads(raw):
-    """Client-UPLOADED attachments -> validated image parts for the first
-    user turn.  The bytes travel as data URLs in the request body and are
-    FORWARDED VERBATIM -- the server stores nothing (the browser's own
-    knowledge base is the only storage; see the client's attachment table).
+    """Client-UPLOADED attachments -> validated pieces for the first user
+    turn.  The bytes/text travel in the request body and are FORWARDED
+    VERBATIM -- the server stores nothing (the browser's own knowledge
+    base is the only storage; see the client's attachment table).
     Anything wrong-kind, wrong-mime or oversized is dropped silently: an
-    attachment is a bonus to the question, never a gate on it."""
+    attachment is a bonus to the question, never a gate on it.
+    RETURNS ``(images, files)`` -- image parts for the multimodal turn and
+    markdown files as ``{name, text}`` for the prompt blocks."""
+    images: list = []
+    files: list = []
     if not isinstance(raw, list):
-        return []
-    parts = []
+        return images, files
     for item in raw[:MAX_UPLOADS]:
-        if not isinstance(item, dict) or item.get("kind") != "image":
+        if not isinstance(item, dict):
             continue
         mime = str(item.get("mime") or "").lower()
         data = str(item.get("data") or "")
-        if mime not in _UPLOAD_MIMES or not data.startswith("data:" + mime + ";base64,"):
-            continue
-        if len(data) - len("data:" + mime + ";base64,") > _MAX_UPLOAD_B64:
-            continue
-        parts.append({"type": "image_url", "image_url": {"url": data}})
-    return parts
+        name = str(item.get("name") or "")[:200]
+        if item.get("kind") == "image" and mime in _UPLOAD_MIMES and data.startswith("data:" + mime + ";base64,"):
+            if len(data) - len("data:" + mime + ";base64,") <= _MAX_UPLOAD_B64:
+                images.append({"type": "image_url", "image_url": {"url": data}})
+        elif item.get("kind") == "file" and mime in _UPLOAD_FILE_MIMES and data:
+            files.append({"name": name or "attachment.txt", "text": data[:_MAX_FILE_CHARS]})
+    return images, files

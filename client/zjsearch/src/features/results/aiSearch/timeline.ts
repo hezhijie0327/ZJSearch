@@ -44,12 +44,14 @@ export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error"
     only in the event log / fold -- the bytes live in the browser's
     attachment table and are filled in by the resume path (`data`). */
 export interface AiSearchAttachment {
-  kind: "image";
+  /** "image" = data URL bytes; "file" = the document's TEXT (md/txt) */
+  kind: "image" | "file";
   mime: string;
   name?: string;
   bytes?: number;
-  /** the compressed data URL -- present in the live run and after the
-      attachment-table join, absent from the folded event metadata */
+  /** image: the compressed data URL; file: the document's TEXT -- present
+      in the live run and after the attachment-table join, absent from the
+      folded event metadata */
   data?: string;
 }
 
@@ -427,7 +429,7 @@ export function applyEvent(
       // the simulator's fixtures inline the bytes (no attachment table in
       // the debug stage); the live wire event carries metadata only
       fresh.attachments = rawAttach.map((raw) => ({
-        kind: "image" as const,
+        kind: (raw.kind === "file" ? "file" : "image") as AiSearchAttachment["kind"],
         mime: String(raw.mime ?? ""),
         name: String(raw.name ?? "") || undefined,
         bytes: Number(raw.bytes) || 0,

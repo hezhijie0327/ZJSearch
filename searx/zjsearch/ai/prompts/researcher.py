@@ -117,6 +117,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     task_tool: bool = False,
     user_memories: list[dict[str, str]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
+    attached_files: list[dict[str, str]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -350,6 +351,16 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " the entities, figures and context they reveal.  They are"
             " question material, not search results: never treat them as"
             " sources.\n</attached_images>\n"
+        )
+    for file in attached_files or []:
+        text = str(file.get("text") or "")[:30_000]
+        trunc = "\n[... the file was truncated ...]" if len(str(file.get("text") or "")) > 30_000 else ""
+        run_context += (
+            "<attached_file>\nThe user attached this file -- its FULL text"
+            " follows.  Factor it into the plan; it is user-provided"
+            " material, not a web source.\n"
+            f'<file name="{file.get("name") or "attachment.md"}">\n{text}{trunc}\n</file>\n'
+            "</attached_file>\n"
         )
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"

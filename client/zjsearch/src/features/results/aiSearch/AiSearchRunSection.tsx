@@ -30,6 +30,7 @@ import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { Lightbox as AttachmentLightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
+import { AttachmentPreview } from "@/features/results/aiSearch/AttachmentPreview.tsx";
 import { ToolRow } from "@/features/results/aiSearch/calls/ToolRow.tsx";
 import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
@@ -770,6 +771,8 @@ function AiSearchRunSectionImpl({
   const locateSeq = useRef(0);
   /** the attached image being viewed fullscreen (index into run.attachments) */
   const [viewAttachment, setViewAttachment] = useState<number | null>(null);
+  /** the attached DOCUMENT being previewed (index into run.attachments) */
+  const [viewFile, setViewFile] = useState<number | null>(null);
   const handleCite = (n: number) => {
     // a cited [n] this run never gathered (a past-research recall, a
     // previous run's numbering) has no rail card -- the page-level
@@ -885,12 +888,18 @@ function AiSearchRunSectionImpl({
         ? createPortal(
             <AttachmentLightbox
               images={run.attachments.map((attachment) => ({
-                alt: attachment.name ?? t("attach_images"),
+                alt: attachment.name ?? t("attach_files"),
                 src: attachment.data ?? "",
               }))}
               initialIndex={viewAttachment}
               onClose={() => setViewAttachment(null)}
             />,
+            document.body,
+          )
+        : null}
+      {viewFile !== null && run.attachments?.[viewFile]
+        ? createPortal(
+            <AttachmentPreview attachment={run.attachments[viewFile]} onClose={() => setViewFile(null)} />,
             document.body,
           )
         : null}
@@ -907,34 +916,56 @@ function AiSearchRunSectionImpl({
           )
         : null}
 
-      {/* the user's attached images for THIS question: a compact thumb
-          strip -- click opens the full image (the browser-local data URL);
-          metadata-only replays render as a muted placeholder chip */}
+      {/* the user's attachments for THIS question: a compact strip --
+          images open the lightbox; document chips are display-only (their
+          text rode the research); metadata-only replays render a muted
+          placeholder chip */}
       {run.attachments?.length ? (
         <div className="flex flex-wrap gap-2">
-          {run.attachments.map((attachment, index) => (
-            <button
-              aria-label={attachment.name ?? t("attach_images")}
-              className="group relative block cursor-zoom-in overflow-hidden rounded-lg border border-line"
-              key={index}
-              onClick={() => {
-                setViewAttachment(index);
-              }}
-              type="button"
-            >
-              {attachment.data ? (
-                <img
-                  alt={attachment.name ?? ""}
-                  className="h-16 w-16 object-cover transition-transform group-hover:scale-105"
-                  src={attachment.data}
-                />
-              ) : (
-                <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-[11px] text-ink-3">
-                  {attachment.mime.replace("image/", "")}
-                </span>
-              )}
-            </button>
-          ))}
+          {run.attachments.map((attachment, index) =>
+            attachment.kind === "file" ? (
+              <button
+                className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2 py-1.5 text-[11px] text-ink-2 transition-colors hover:border-accent"
+                key={index}
+                onClick={() => {
+                  setViewFile(index);
+                }}
+                title={t("ai_attach_preview")}
+                type="button"
+              >
+                {attachment.name}
+                {attachment.bytes ? (
+                  <span className="font-mono text-ink-3">
+                    {attachment.bytes < 1024
+                      ? `${attachment.bytes}B`
+                      : `${Math.max(1, Math.round(attachment.bytes / 1024))}K`}
+                  </span>
+                ) : null}
+              </button>
+            ) : (
+              <button
+                aria-label={attachment.name ?? t("attach_files")}
+                className="group relative block cursor-zoom-in overflow-hidden rounded-lg border border-line"
+                key={index}
+                onClick={() => {
+                  setViewAttachment(index);
+                }}
+                type="button"
+              >
+                {attachment.data ? (
+                  <img
+                    alt={attachment.name ?? ""}
+                    className="h-16 w-16 object-cover transition-transform group-hover:scale-105"
+                    src={attachment.data}
+                  />
+                ) : (
+                  <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-[11px] text-ink-3">
+                    {attachment.mime.replace("image/", "")}
+                  </span>
+                )}
+              </button>
+            ),
+          )}
         </div>
       ) : null}
       {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --

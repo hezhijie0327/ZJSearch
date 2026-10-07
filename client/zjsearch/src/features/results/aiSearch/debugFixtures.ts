@@ -106,6 +106,13 @@ const FULL_STAGE: DebugScenario = {
       // renders (the real flow loads them from the attachment table)
       attachments: [
         {
+          kind: "file",
+          mime: "text/markdown",
+          name: "background.md",
+          bytes: 96,
+          data: "# 背景\n\n- 2025 深圳新房成交均价 5.8 万/㎡(限购松绑后)\n- 多肽原料药 GLP-1 供应链为主要增量",
+        },
+        {
           kind: "image",
           mime: "image/svg+xml",
           name: "产能分布草图.svg",
