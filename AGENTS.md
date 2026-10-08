@@ -1324,8 +1324,19 @@ request-thread `_Ndjson` the clarify/no-research paths still use), and
 the late work (related fallback / memory extraction) runs there too —
 a detached client costs neither.  `flask.copy_current_request_context`
 is captured in `SearchesCore.__init__` (the driver thread has no request
-context).  Steer/preempt/wrap directives + per-subagent flags land on
-the same ControlBox in R2/R3.
+context).  R2 landed the FULL control plane on that ControlBox: the
+wire's `steer` event (`{text, delivery: guide|preempt, status:
+drained|discarded}`) records every user steering — Enter queues a guide
+(ONE drain per round boundary, FIFO, cap 3; a steer outranks the
+continuation note and injects as `<user_steering>` — the researcher
+prompt's block teaches: latest steer wins, act don't re-ask), ⚡/Shift+
+Enter PREEMPTS (the in-flight turn cancels via the same interrupted
+outcome and the run CONTINUES on the steered course), and the write
+phase closes the lane with VISIBLE discards.  The composer is dual-mode
+(`useAiSteer`: streaming = amber steer box + pending chips; settled =
+follow-up as before); the 收尾 button (`handle.wrap()`) ends the
+research gracefully into the writer.  Per-subagent flags land on the
+same box in R3.
 usage) AFTER the settle — memory saves persist live, tags park before
 settleRun; everything else post-settle stays dropped.
 

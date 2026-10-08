@@ -143,6 +143,17 @@ export type AiSearchStep =
   | { kind: "think"; text: string; entry?: number }
   | { kind: "intent"; text: string; entry?: number }
   | { kind: "clarify"; pairs: Array<{ q: string; a: string }> }
+  | {
+      kind: "steer";
+      /** the user's steered course correction (the 引述行) */
+      text: string;
+      /** guide = injected at the round boundary; preempt = interrupted
+          the in-flight turn and injected immediately */
+      delivery: "guide" | "preempt";
+      /** discarded = the write phase had already closed the guide lane
+          (the composer's pending chip flips to 未送达) */
+      status: "drained" | "discarded";
+    }
   | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] };
 
 export interface AiSearchSource {
@@ -566,6 +577,19 @@ export function applyEvent(
       } else {
         steps.push({ kind: "intent", text, entry: entryId });
       }
+      runs[lastIdx] = { ...run, steps };
+      return { ...core, runs };
+    }
+    case "steer": {
+      // a user steering of the live run: the 引述行 rides the timeline
+      // (the record shows WHERE the course changed)
+      const steps = [...run.steps];
+      steps.push({
+        kind: "steer",
+        text: String(event.text ?? ""),
+        delivery: String(event.delivery ?? "guide") === "preempt" ? "preempt" : "guide",
+        status: String(event.status ?? "drained") === "discarded" ? "discarded" : "drained",
+      });
       runs[lastIdx] = { ...run, steps };
       return { ...core, runs };
     }

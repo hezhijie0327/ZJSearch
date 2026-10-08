@@ -152,13 +152,17 @@ class _Run:
         first_event_timeout: float,
         idle_timeout: float,
         tools: list[dict[str, t.Any]] | None = None,
-        stop_check: t.Callable[[], bool] | None = None,
+        interrupt_check: t.Callable[[], tuple[str, str] | None] | None = None,
     ) -> None:
         self.cfg = cfg
         self.first_event_timeout = first_event_timeout
         self.idle_timeout = idle_timeout
         self.tools = tools
-        self.stop_check = stop_check
+        self.interrupt_check = interrupt_check
+        # the LAST mid-turn interrupt as (kind, text): "stop" or the
+        # preempt's steering text -- the loop reads it when the turn
+        # comes back ``interrupted``
+        self.last_interrupt: tuple[str, str] = ("stop", "")
         self.tally = _Tally()
         self.entries = 0
         # the write turn's gallery counter (the {{zjs-gallery:i}} indexes)
@@ -195,11 +199,14 @@ class _Run:
                     if kind != "timeout":
                         break
                     waited += _CONTROL_SLICE
-                    if self.stop_check is not None and self.stop_check():
-                        stream.cancel()
-                        outcome = "interrupted"
-                        kind, payload = "end", None
-                        break
+                    if self.interrupt_check is not None:
+                        hit = self.interrupt_check()
+                        if hit is not None:
+                            stream.cancel()
+                            self.last_interrupt = hit
+                            outcome = "interrupted"
+                            kind, payload = "end", None
+                            break
                     if waited >= budget:
                         kind, payload = "error", "LLM stream idle timeout"
                         break
@@ -251,8 +258,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     gallery_validator: t.Callable[[str], list[dict[str, t.Any]]] | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
-    control: t.Callable[[], list[dict[str, t.Any]]] | None = None,
-    stop_check: t.Callable[[], bool] | None = None,
+    control: t.Any = None,
 ) -> t.Iterator[dict[str, t.Any]]:
     """Drive one run, yielding wire events.  See the module docstring for
     the phase machine; the parameters:
@@ -279,15 +285,18 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       the shared loop), ``writer_sources() -> entries``: the WRITE phase.
     - ``gallery_validator(body) -> items``: the ``zjs-images`` fence
       whitelist (invented urls are dropped server-side).
-    - ``control() -> directives``: the RUN HOST's boundary poll (polled
-      at the round boundary and on the zero-calls path) -- ``stop`` ends
-      the research without the writer, ``wrap`` halts INTO the writer
-      with the material gathered (the detach grace's graceful ending).
-    - ``stop_check() -> bool``: the mid-turn stop flag -- the event wait
-      is sliced so a stop cancels the in-flight stream within ~1s (an
-      interrupted turn is a deliberate end, never an error).
+    - ``control``: the RUN HOST handle (duck-typed: ``directives()``,
+      ``interrupt()``, ``poll_steer()``, ``drain_steers()``) -- boundary
+      directives (``stop`` ends the research without the writer; ``wrap``
+      halts INTO the writer with the material gathered; ``steer``
+      injects the user's message) and the mid-turn interrupt check (the
+      event wait is sliced so a stop/preempt cancels the in-flight
+      stream within ~1s; a preempt carries its steering text and the run
+      CONTINUES on the steered course).
     """
-    run_state = _Run(cfg, first_event_timeout, idle_timeout, tools, stop_check=stop_check)
+    run_state = _Run(
+        cfg, first_event_timeout, idle_timeout, tools, interrupt_check=control.interrupt if control else None
+    )
     researching = bool(tools and executor is not None)
     rounds = 0
     halt_message: str | None = None
@@ -295,16 +304,19 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     refusals = 0
     stop_requested = False
 
-    def poll_control() -> None:
-        """Fold the host's boundary directives into the loop's state."""
+    def poll_control() -> str | None:
+        """Fold the host's boundary directives into the loop's state;
+        RETURNS the one drained steer text (the caller injects it and
+        yields the steer event) or ``None``."""
         nonlocal stop_requested, halt_message, carried_error
         if control is None:
-            return
+            return None
         try:
-            directives = control()
+            directives = control.directives()
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch loop: control poll failed: %r", exc)
-            return
+            return None
+        steer_text = None
         for directive in directives:
             action = str(directive.get("action") or "")
             if action == "stop":
@@ -315,6 +327,13 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 # record shows WHY a done run ended mid-research)
                 halt_message = halt_message or _WRAP_HALT
                 carried_error = carried_error or _WRAP_HALT
+            elif action == "steer":
+                steer_text = str(directive.get("text") or "") or None
+        return steer_text
+
+    def inject_steering(text: str) -> None:
+        """One steered course correction as the newest user message."""
+        messages.append({"role": "user", "content": f"<user_steering>{text}</user_steering>"})
 
     if researching:
         # the coarse phase spine (the closed set's one coarse event): the
@@ -329,9 +348,16 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             yield {"e": "open", "id": entry, "kind": _RESEARCH, "round": rounds + 1}
             turn_text, turn_reasoning, calls, meta, outcome = yield from run_state.stream_turn(entry, messages, True)
             if outcome == "interrupted":
-                # the stop flag fired mid-turn: a deliberate end, never an
-                # error -- the research phase closes without the writer
+                # the interrupt fired mid-turn: a deliberate end, never an
+                # error -- a STOP closes the research without the writer;
+                # a PREEMPT injects its steering text and the loop
+                # CONTINUES on the steered course
+                ikind, itext = run_state.last_interrupt or ("stop", "")
                 yield {"e": "close", "id": entry}
+                if ikind == "preempt" and itext:
+                    yield {"e": "steer", "text": itext, "delivery": "preempt", "status": "drained"}
+                    inject_steering(itext)
+                    continue
                 stop_requested = True
                 break
             if outcome == "died":
@@ -357,10 +383,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     yield wire.settle("error", halt="the model asked an unusable question")
                 return
             if not calls:
-                poll_control()
+                steer_text = poll_control()
                 if stop_requested:
                     yield {"e": "close", "id": entry}
                     break
+                if steer_text:
+                    # a steer outranks the ledger-closure contract: the
+                    # steered course correction takes the next user slot
+                    # and the run keeps researching on it
+                    yield {"e": "steer", "text": steer_text, "delivery": "guide", "status": "drained"}
+                    inject_steering(steer_text)
+                    continue
                 # the model stopped researching: the phase is over --
                 # UNLESS the ledger-closure contract says otherwise (the
                 # run ends when the LEDGER closes, not when the model got
@@ -426,9 +459,12 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("zjsearch loop: round progress check failed: %r", exc)
                     halt_message = None
-            poll_control()
+            steer_text = poll_control()
             if stop_requested:
                 break
+            if steer_text:
+                yield {"e": "steer", "text": steer_text, "delivery": "guide", "status": "drained"}
+                inject_steering(steer_text)
 
         if stop_requested:
             # a stop SKIPS the write phase on purpose: stopping means
@@ -437,6 +473,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             # this settle is what a second tab / a replay sees)
             yield wire.settle("error", halt=_STOP_HALT, **run_state.tally.settle_kwargs())
             return
+        if control is not None:
+            # the guide lane CLOSES at the write phase: the leftovers die
+            # VISIBLY (the client's pending chips flip to 未送达), never
+            # silently
+            try:
+                leftovers = control.drain_steers()
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("zjsearch loop: steer drain failed: %r", exc)
+                leftovers = []
+            for text in leftovers:
+                yield {"e": "steer", "text": text, "delivery": "guide", "status": "discarded"}
 
         if synthesizer is not None or writer is not None:
             # the PRE-WRITE verification pass (核验): runs under its own

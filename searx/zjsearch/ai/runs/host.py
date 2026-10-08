@@ -20,14 +20,14 @@ terminal handle is retained for a short TTL so a late attacher can
 still fetch the true ending; then the sweep drops it (transient by
 design -- the knowledge base stays the only persistent store).
 
-The ``ControlBox`` is the run's inbound control plane: R1 carries the
-stop flag only (the wire's stop button is an explicit instruction, not
-a broken connection); steering/preempt/wrap directives land here in v2.1
-R2.  The loop observes the box through two narrow callables -- boundary
-directive polling and a mid-turn stop check (the event wait is sliced
-so a stop is seen within ~1s without weakening the idle-timeout
-contract).  Pure stdlib threading: no flask, no event loop -- unit
-tests run it bare.
+The ``ControlBox`` is the run's inbound control plane: the stop flag,
+the steer lane (FIFO, one drain per round boundary) and the preempt
+slot (an immediate mid-turn interrupt carrying its own steering text).
+The loop observes the box through narrow callables -- boundary directive
+polling, a mid-turn interrupt check (the event wait is sliced so an
+interrupt is seen within ~1s without weakening the idle-timeout
+contract) and the guide lane's drain.  Pure stdlib threading: no flask,
+no event loop -- unit tests run it bare.
 """
 
 import logging
@@ -36,6 +36,7 @@ import secrets
 import threading
 import time
 import typing as t
+from collections import deque
 
 from searx.zjsearch.ai.agent import wire
 
@@ -54,13 +55,22 @@ POLL_SLICE = 1.0
 """The subscription wait slice: subscriber cancellation and the driver
 finished-flag are observed within about a second."""
 
+MAX_PENDING_STEERS = 3
+"""The steer lane's queue cap: a chatty user cannot pile unbounded
+instructions onto one boundary; an overflow answers the CONTROL
+endpoint 422 and the client's chip never pends."""
+
 
 class ControlBox:
-    """The run's inbound controls.  R1: the stop flag only."""
+    """The run's inbound controls: the stop flag, the steer lane (FIFO,
+    ONE drain per round boundary) and the preempt slot (an immediate
+    mid-turn interrupt carrying its own steering text)."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._stop = False
+        self._preempt: str | None = None
+        self._steers: "deque[str]" = deque()
 
     def stop(self) -> None:
         with self._lock:
@@ -69,6 +79,46 @@ class ControlBox:
     def stopped(self) -> bool:
         with self._lock:
             return self._stop
+
+    def steer(self, text: str, preempt: bool = False) -> bool:
+        """Queue one steering message; ``False`` when the guide lane's
+        queue is full (the endpoint answers 422)."""
+        with self._lock:
+            if preempt:
+                self._preempt = text
+                return True
+            if len(self._steers) >= MAX_PENDING_STEERS:
+                return False
+            self._steers.append(text)
+            return True
+
+    def interrupt(self) -> tuple[str, str] | None:
+        """The mid-turn observation, in priority order: ``("stop", "")``,
+        ``("preempt", text)`` or ``None``.  The preempt slot is CONSUMED
+        here (a one-shot interrupt)."""
+        with self._lock:
+            if self._stop:
+                return ("stop", "")
+            if self._preempt is not None:
+                text = self._preempt
+                self._preempt = None
+                return ("preempt", text)
+        return None
+
+    def poll_steer(self) -> str | None:
+        """The boundary's ONE guide-lane drain (FIFO)."""
+        with self._lock:
+            if self._steers:
+                return self._steers.popleft()
+        return None
+
+    def drain_steers(self) -> list[str]:
+        """Everything the guide lane never delivered (the write phase
+        closed the lane -- the leftovers surface as visible discards)."""
+        with self._lock:
+            out = list(self._steers)
+            self._steers.clear()
+            return out
 
 
 class Subscription:  # pylint: disable=too-few-public-methods
@@ -98,6 +148,7 @@ class RunHandle:
         self._settled_at = 0.0
         self._finished = False
         self._detached_at: float | None = None
+        self._wrap = False
 
     @property
     def settled(self) -> bool:
@@ -189,13 +240,37 @@ class RunHandle:
 
     def directives(self) -> list[dict[str, t.Any]]:
         """The loop's round-boundary control poll: an explicit user stop
-        wins over the detach grace (both are terminal for the research
-        phase -- the stop skips the writer, the wrap walks into it)."""
+        wins over wrap/grace, and the boundary's ONE steer drain rides
+        along (both are terminal/steering for the research phase -- the
+        stop skips the writer, the wrap walks into it)."""
+        out: list[dict[str, t.Any]] = []
         if self.control.stopped():
             return [{"action": "stop"}]
-        if self.grace_expired():
-            return [{"action": "wrap"}]
-        return []
+        if self._wrap or self.grace_expired():
+            out.append({"action": "wrap"})
+        text = self.control.poll_steer()
+        if text is not None:
+            out.append({"action": "steer", "text": text})
+        return out
+
+    def wrap(self) -> None:
+        """The user's 收尾 (wrap-up): the run finishes its round, then
+        walks into the writer with the material gathered -- the same
+        graceful exit the detach grace takes."""
+        with self._lock:
+            self._wrap = True
+
+    def interrupt(self) -> tuple[str, str] | None:
+        """The loop's mid-turn observation (see :py:meth:`ControlBox.interrupt`)."""
+        return self.control.interrupt()
+
+    def poll_steer(self) -> str | None:
+        """The boundary's one guide-lane drain."""
+        return self.control.poll_steer()
+
+    def drain_steers(self) -> list[str]:
+        """The guide lane's undelivered leftovers (visible discards)."""
+        return self.control.drain_steers()
 
     def grace_expired(self) -> bool:
         with self._lock:

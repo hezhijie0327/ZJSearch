@@ -125,6 +125,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     page_tool: bool = False,
     task_tool: bool = False,
     browser_tool: bool = False,
+    steerable: bool = False,
     user_memories: list[dict[str, str]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
@@ -355,6 +356,19 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if task_block:
         lines.append(task_block)
     lines.append(learnings_block)
+
+    if steerable:
+        lines.append(
+            "<user_steering>\nThe user can steer this run LIVE: a message"
+            " wrapped in <user_steering> may arrive between your rounds"
+            " (or interrupt one).  It OVERRIDES your current plan -- act on"
+            " it: revise the task list via task_write (drop, add or reshape"
+            " subtasks), redirect the searches, change the reading"
+            " targets.  Earlier steered instructions stay binding for the"
+            " rest of the run.  Respond by ACTING, never by re-asking what"
+            " the user just told you; if a steered instruction conflicts"
+            " with an earlier one, the LATEST wins.\n</user_steering>"
+        )
 
     lines.append(f"<depth>\n{depth}\n</depth>")
     if max_rounds:

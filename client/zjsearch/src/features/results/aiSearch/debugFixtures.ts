@@ -1025,4 +1025,109 @@ const BROWSER_STAGE: DebugScenario = {
   ],
 };
 
-export const DEBUG_SCENARIOS: DebugScenario[] = [BROWSER_STAGE, FULL_STAGE, DONE_STAGE, AWAITING_STAGE, FAILED_STAGE];
+/** The intervention surface: a drained guide steer at the boundary, a
+    preempt interrupt mid-run, and a discarded steer at the write phase
+    (the guide lane's visible death). */
+const STEER_STAGE: DebugScenario = {
+  id: "steer",
+  label: "引导(边界注入 · 抢占 · 未送达)",
+  q: "对比主流新能源品牌 2025 年的销量与产能布局",
+  mode: "balanced",
+  events: [
+    { e: "client.start", q: "对比主流新能源品牌 2025 年的销量与产能布局", runNo: 1, mode: "balanced", startedAt: 0 },
+    { e: "phase", name: "plan" },
+    { e: "open", id: 1, kind: "research", round: 1 },
+    { e: "say", id: 1, t: "先并行检索全球销量榜与头部产能公告。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_search",
+        q: "2025 新能源车企 全球销量 排名",
+        status: "ok",
+        n: 8,
+        ms: 1834,
+        args: { query: "2025 新能源车企 全球销量 排名" },
+        feed: "plan: 5 deep + 5 shallow lines [1][2]…",
+      },
+      {
+        id: 2,
+        tool: "web_search",
+        q: "新能源 产能布局 工厂 2025 公告",
+        status: "ok",
+        n: 6,
+        ms: 2210,
+        args: { query: "新能源 产能布局 工厂 2025 公告" },
+        feed: "plan: 4 deep + 2 shallow lines [3][4]…",
+      },
+    ]),
+    { e: "sources", items: [SOURCES[0], SOURCES[1]] },
+    { e: "close", id: 1 },
+    { e: "steer", text: "重点看国内品牌,海外厂商一笔带过就行", delivery: "guide", status: "drained" },
+    { e: "open", id: 2, kind: "research", round: 2 },
+    { e: "say", id: 2, t: "收到引导:转向国内品牌,重查比亚迪/吉利/长安的销量与产能。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_search",
+        q: "比亚迪 2025 销量 同比",
+        status: "ok",
+        n: 7,
+        ms: 1450,
+        args: { query: "比亚迪 2025 销量 同比" },
+        feed: "plan: 5 deep + 2 shallow lines [5][6]…",
+      },
+      {
+        id: 2,
+        tool: "learnings",
+        q: "3 条",
+        status: "ok",
+        ms: 640,
+        args: {
+          facts: [
+            { text: "比亚迪 2025 年前三季度销量同比 +18%[5]", refs: [5] },
+            { text: "吉利银河系列产能向西安/宝鸡基地集中[6]", refs: [6] },
+          ],
+        },
+        feed: "ledger: +2 facts",
+      },
+    ]),
+    { e: "close", id: 2 },
+    { e: "steer", text: "别管产能了,只对比销量与同比增速", delivery: "preempt", status: "drained" },
+    { e: "steer", text: "顺便加一段出口数据", delivery: "guide", status: "discarded" },
+    { e: "open", id: 3, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "answer",
+      t: "按最新引导,只对比**销量与同比增速**(产能布局折叠为背景):\n\n- **比亚迪**:2025 前三季度销量同比 +18%[5],规模断层领先;\n- **吉利**:银河系列放量,增速跑赢行业[6];\n- 海外品牌按引导一笔带过。\n\n出口数据与产能明细未纳入本轮(引导未送达)。",
+    },
+    { e: "close", id: 3 },
+    { e: "related", items: ["比亚迪 2025 出口数据怎么样?", "吉利银河 vs 比亚迪 单车型对比?"] },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 9210,
+        output: 380,
+        thoughts: 540,
+        cached: 4880,
+        cache_write: 0,
+        research: { input: 6510, output: 210 },
+        write: { input: 2700, output: 170 },
+        gates: { input: 320, output: 24, calls: 2 },
+        rerank: { calls: 1, tokens: 760 },
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+  ],
+};
+
+export const DEBUG_SCENARIOS: DebugScenario[] = [
+  BROWSER_STAGE,
+  FULL_STAGE,
+  STEER_STAGE,
+  DONE_STAGE,
+  AWAITING_STAGE,
+  FAILED_STAGE,
+];

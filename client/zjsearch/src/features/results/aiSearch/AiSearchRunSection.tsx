@@ -11,6 +11,7 @@ import {
   Copy,
   CornerDownRight,
   Lightbulb,
+  ListEnd,
   ListTodo,
   LoaderCircle,
   MessageCircleQuestion,
@@ -486,6 +487,28 @@ function StepSegment({
       </div>
     );
   }
+  if (step.kind === "steer") {
+    // the user's live course correction: an 引述行 in the record (WHERE
+    // the run changed direction and why); a discarded steer (the write
+    // phase had closed the guide lane) reads dimmed with the 未送达 mark
+    return (
+      <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
+        <Compass
+          aria-hidden="true"
+          className={`mt-1 size-3 shrink-0 ${step.status === "discarded" ? "text-ink-3/50" : "text-accent"}`}
+        />
+        <p
+          className={`py-0.5 text-[13px] leading-relaxed ${
+            step.status === "discarded" ? "text-ink-3 line-through decoration-ink-3/40" : "font-medium text-ink-2"
+          }`}
+          dir="auto"
+        >
+          {step.text}
+          {step.status === "discarded" ? <span className="ms-1.5 text-xs text-ink-3 no-underline">未送达</span> : null}
+        </p>
+      </div>
+    );
+  }
   if (step.kind === "intent") {
     return (
       <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
@@ -738,6 +761,7 @@ function AiSearchRunSectionImpl({
   onFallback,
   onRelated,
   onStop,
+  onWrap,
   onSubmitClarify,
 }: {
   run: AiSearchRun;
@@ -756,6 +780,9 @@ function AiSearchRunSectionImpl({
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
   onStop?: () => void;
+  /** 收尾: the run finishes its round and the writer answers from the
+      material gathered (the graceful end beside the hard stop) */
+  onWrap?: () => void;
   /** the awaiting run's clarify card was answered (null = skipped) */
   onSubmitClarify?: (text: string | null) => void;
 }) {
@@ -963,15 +990,28 @@ function AiSearchRunSectionImpl({
                 </span>
               ) : null}
               {streaming ? (
-                <button
-                  aria-label={t("stop")}
-                  className={`${CHIP_BTN} shrink-0`}
-                  onClick={onStop}
-                  title={t("stop")}
-                  type="button"
-                >
-                  <CircleStop className="size-3.5" />
-                </button>
+                <>
+                  {onWrap ? (
+                    <button
+                      aria-label={t("ai_wrap_up")}
+                      className={`${CHIP_BTN} shrink-0`}
+                      onClick={onWrap}
+                      title={t("ai_wrap_up")}
+                      type="button"
+                    >
+                      <ListEnd className="size-3.5" />
+                    </button>
+                  ) : null}
+                  <button
+                    aria-label={t("stop")}
+                    className={`${CHIP_BTN} shrink-0`}
+                    onClick={onStop}
+                    title={t("stop")}
+                    type="button"
+                  >
+                    <CircleStop className="size-3.5" />
+                  </button>
+                </>
               ) : null}
             </div>
             {/* the macro-stage spine: visible even when the timeline folds --

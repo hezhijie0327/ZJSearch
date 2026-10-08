@@ -25,6 +25,10 @@ from searx.zjsearch.ai.runs.profile import enabled
 logger = logging.getLogger(__name__)
 
 
+_MAX_TEXT = 2000
+"""One steering message's character budget."""
+
+
 def _gate() -> bool:
     return enabled() and llm_config.configured(llm_config.llm_cfg())
 
@@ -49,11 +53,24 @@ def _control_view() -> t.Any:
     if handle is None:
         return flask.jsonify({"ok": False, "error": "unknown run"}), 404
     action = str(payload.get("action") or "")
-    if action != "stop":
-        # R2 adds the steer/preempt lanes (the ControlBox instruction
-        # queue); until then the control plane carries the stop flag only
-        return flask.jsonify({"ok": False, "error": "action must be stop (steer lands in v2.1 R2)"}), 422
-    handle.control.stop()
+    error = ""
+    if action == "stop":
+        handle.control.stop()
+    elif action in ("steer", "preempt"):
+        text = str(payload.get("text") or "").strip()
+        if not text:
+            error = "text is required"
+        elif not handle.control.steer(text[:_MAX_TEXT], preempt=action == "preempt"):
+            error = "the steer queue is full"
+    elif action == "wrap":
+        # the graceful end (收尾): the run finishes its round, then walks
+        # into the writer with the material gathered -- the same halt the
+        # detach grace uses
+        handle.wrap()
+    else:
+        error = "action must be stop / steer / preempt / wrap"
+    if error:
+        return flask.jsonify({"ok": False, "error": error}), 422
     return flask.jsonify({"ok": True})
 
 

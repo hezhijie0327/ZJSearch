@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { MessageCircleQuestion } from "lucide-react";
+import { MessageCircleQuestion, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
@@ -12,6 +12,7 @@ import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.t
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
+import { useAiSteer } from "@/features/results/aiSearch/useAiSteer.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -133,6 +134,10 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   };
 
   const lastMode = aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode;
+  // the composer's guide lane (same dual-mode contract as the results
+  // page): while the run streams, the input steers it
+  const steering = aiSearch.phase === "streaming";
+  const steer = useAiSteer(aiSearch);
   const hasThread = aiSearch.runs.length > 0;
   // the not-found empty state only shows AFTER the resume attempt resolved
   const showMissing = !resuming && !hasThread;
@@ -200,6 +205,9 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                 onSubmitClarify={(text) => {
                   aiSearch.submitClarify(text, aiLang, researchMode);
                 }}
+                onWrap={() => {
+                  aiSearch.wrap();
+                }}
                 run={run}
                 sourceMeta={
                   run.sources.map((source) => ({
@@ -217,24 +225,75 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
               // out short content underneath)
               <div className="sticky bottom-6 z-10 lg:me-[22rem] xl:me-[26rem]">
                 <form
-                  aria-label={t("ai_search_followup")}
-                  className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent"
+                  aria-label={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
+                  className={`rounded-2xl border bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent ${
+                    steering ? "border-accent/60" : "border-line"
+                  }`}
                   onSubmit={(event) => {
                     event.preventDefault();
+                    if (steering) {
+                      const value = followupQuery.trim();
+                      if (!value) {
+                        return;
+                      }
+                      setFollowupQuery("");
+                      steer.send(value);
+                      return;
+                    }
                     submitFollowup();
                   }}
                 >
                   <input
-                    aria-label={t("ai_search_followup")}
+                    aria-label={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                     autoComplete="off"
                     className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
                     dir="auto"
                     onChange={(event) => {
                       setFollowupQuery(event.target.value);
                     }}
-                    placeholder={t("ai_search_followup")}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && event.shiftKey && steering) {
+                        event.preventDefault();
+                        const value = followupQuery.trim();
+                        if (!value) {
+                          return;
+                        }
+                        setFollowupQuery("");
+                        steer.send(value, true);
+                      }
+                    }}
+                    placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                     value={followupQuery}
                   />
+                  {steer.chips.length ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {steer.chips.map((chip) => (
+                        <span
+                          className={`inline-flex max-w-[18rem] items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
+                            chip.state === "failed"
+                              ? "border-danger/50 text-danger"
+                              : "border-line bg-surface-2/50 text-ink-2"
+                          }`}
+                          key={chip.text}
+                        >
+                          <span className="truncate" dir="auto">
+                            {chip.text}
+                          </span>
+                          {chip.state === "failed" ? <span>{t("ai_steer_failed")}</span> : null}
+                          <button
+                            aria-label={t("remove")}
+                            className="text-ink-3 transition-colors hover:text-danger"
+                            onClick={() => {
+                              steer.retract(chip.text);
+                            }}
+                            type="button"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   {followupAttachments.length ? (
                     <div className="mt-3">
                       <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />
@@ -255,9 +314,28 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                         items={followupAttachments}
                         onChange={setFollowupAttachments}
                       />
+                      {steering ? (
+                        <button
+                          aria-label={t("ai_steer_send")}
+                          className="grid size-9 place-items-center rounded-full text-accent transition-colors hover:bg-accent-soft disabled:pointer-events-none disabled:opacity-40"
+                          disabled={!followupQuery.trim()}
+                          onClick={() => {
+                            const value = followupQuery.trim();
+                            if (!value) {
+                              return;
+                            }
+                            setFollowupQuery("");
+                            steer.send(value, true);
+                          }}
+                          title={t("ai_steer_send")}
+                          type="button"
+                        >
+                          <Zap aria-hidden="true" className="size-4" />
+                        </button>
+                      ) : null}
                       <SubmitCircle
-                        disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
-                        label={t("ai_search_followup")}
+                        disabled={!followupQuery.trim() || (steering ? false : aiSearch.phase !== "done")}
+                        label={steering ? t("ai_steer_send") : t("ai_search_followup")}
                         send
                       />
                     </div>

@@ -584,6 +584,8 @@ features/results/aiSearch/
 
 ## 实施状态(2026-10-07 重构落地)
 
+**v2.1 R2(控制与引导)已实施(2026-10-08)**:`steer` wire 事件(闭集)+ ControlBox 全量(steer FIFO 队列 cap3 / preempt 一次性槽 / wrap 标志)+ loop 边界单条 drain(steer 优先于 continuation,`<user_steering>` 注入)+ preempt 中断继续 + 写相可见 discarded + prompts 的引导教义块 + control 端点四动作 + 客户端双模式 composer(useAiSteer pending chips / ⚡ 抢占 / 引述行 / 收尾按钮)+ 调试台引导场景。355 测试全绿;live 验证(真实配置):引导在下一轮生效且时间线可见、抢占中断后 run 按引导继续、队列第 4 条 422、wrap settle `done/连接中断`。
+
 **v2.1 R1(run host)已实施(2026-10-08)**:`runs/host.py`(seq 缓冲/订阅/detach 宽限/终端 TTL/ControlBox-min)+ 驱动线(`_drive`:settle 合并在生成点、晚到工作入驱动器)+ `POST /zjsearch/ai/run/attach`(X-Zjs-Run-Id + after_seq 重放同一 run)+ `POST /zjsearch/ai/run/control`(stop 指令;客户端 stop 先发指令再断流)+ loop 的 `interrupted` 结局与 wrap/stop 边界指令 + 客户端 seq 去重/attach 退避重试链。351 测试全绿;live 验证(真实配置):断连重连续播同一 run(seq 无缝)、stop 落边界后 settle `error/研究已按用户要求停止`、detach 超宽限优雅收尾 settle `done/连接中断`。
 
 本方案已实施完毕,验证状态:

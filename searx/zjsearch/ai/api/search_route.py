@@ -466,6 +466,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             page_tool=pages_on,
             task_tool=register_tasks,
             browser_tool=browser_on,
+            steerable=handle is not None,
             user_memories=user_memories,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
@@ -503,8 +504,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         ),
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
-        control=handle.directives,
-        stop_check=handle.control.stopped,
+        control=handle,
     )
     # the run host's DRIVER thread pulls the loop into the handle; the
     # settle's usage merges at generation (the executor's usage dicts are

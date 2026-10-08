@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
@@ -26,6 +26,7 @@ import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.t
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
+import { useAiSteer } from "@/features/results/aiSearch/useAiSteer.ts";
 import { Answers } from "@/features/results/answers/Answers.tsx";
 import { CalculatorAnswer } from "@/features/results/answers/Calculator.tsx";
 import { CacheUrlProvider } from "@/features/results/CacheUrlProvider.tsx";
@@ -183,6 +184,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   hrefRef.current = href;
   const [followupQuery, setFollowupQuery] = useState("");
   const [followupAttachments, setFollowupAttachments] = useState<AiSearchAttachment[]>([]);
+  // the composer's guide lane: while the run streams the SAME input box
+  // steers it (Enter = next boundary, Shift+Enter/⚡ = preempt)
+  const steering = aiSearch.phase === "streaming";
+  const steer = useAiSteer(aiSearch);
   // the hero's depth pick travels as the `mode` URL param (validated --
   // anything unknown falls back to balanced)
   const [researchMode, setResearchMode] = useState<AiSearchMode>(() =>
@@ -914,6 +919,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onRelated={onRunRelated}
                       onStop={onRunStop}
                       onSubmitClarify={onRunClarify}
+                      onWrap={() => {
+                        aiSearch.wrap();
+                      }}
                       run={run}
                       sourceMeta={runSourceMetas[index] ?? EMPTY_META}
                     />
@@ -940,12 +948,21 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                         </div>
                       ) : null}
                       <form
-                        aria-label={t("ai_search_followup")}
-                        className="rounded-2xl border border-line bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent"
+                        aria-label={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
+                        className={`rounded-2xl border bg-surface px-5 py-4 shadow-card transition-colors focus-within:border-accent ${
+                          steering ? "border-accent/60" : "border-line"
+                        }`}
                         onSubmit={(event) => {
                           event.preventDefault();
                           const value = followupQuery.trim();
                           if (!value) {
+                            return;
+                          }
+                          if (steering) {
+                            // the run host's guide lane: the message rides
+                            // the CONTROL endpoint, the chip tracks its fate
+                            setFollowupQuery("");
+                            steer.send(value);
                             return;
                           }
                           setFollowupQuery("");
@@ -960,16 +977,59 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                         }}
                       >
                         <input
-                          aria-label={t("ai_search_followup")}
+                          aria-label={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                           autoComplete="off"
                           className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
                           dir="auto"
                           onChange={(event) => {
                             setFollowupQuery(event.target.value);
                           }}
-                          placeholder={t("ai_search_followup")}
+                          onKeyDown={(event) => {
+                            // Shift+Enter = 立即打断并引导 (the preempt lane:
+                            // the in-flight turn cancels, the run continues
+                            // on the steered course)
+                            if (event.key === "Enter" && event.shiftKey && steering) {
+                              event.preventDefault();
+                              const value = followupQuery.trim();
+                              if (!value) {
+                                return;
+                              }
+                              setFollowupQuery("");
+                              steer.send(value, true);
+                            }
+                          }}
+                          placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                           value={followupQuery}
                         />
+                        {steer.chips.length ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {steer.chips.map((chip) => (
+                              <span
+                                className={`inline-flex max-w-[18rem] items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
+                                  chip.state === "failed"
+                                    ? "border-danger/50 text-danger"
+                                    : "border-line bg-surface-2/50 text-ink-2"
+                                }`}
+                                key={chip.text}
+                              >
+                                <span className="truncate" dir="auto">
+                                  {chip.text}
+                                </span>
+                                {chip.state === "failed" ? <span>{t("ai_steer_failed")}</span> : null}
+                                <button
+                                  aria-label={t("remove")}
+                                  className="text-ink-3 transition-colors hover:text-danger"
+                                  onClick={() => {
+                                    steer.retract(chip.text);
+                                  }}
+                                  type="button"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         {followupAttachments.length ? (
                           <div className="mt-3">
                             <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />
@@ -990,9 +1050,28 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                               items={followupAttachments}
                               onChange={setFollowupAttachments}
                             />
+                            {steering ? (
+                              <button
+                                aria-label={t("ai_steer_send")}
+                                className="grid size-9 place-items-center rounded-full text-accent transition-colors hover:bg-accent-soft disabled:pointer-events-none disabled:opacity-40"
+                                disabled={!followupQuery.trim()}
+                                onClick={() => {
+                                  const value = followupQuery.trim();
+                                  if (!value) {
+                                    return;
+                                  }
+                                  setFollowupQuery("");
+                                  steer.send(value, true);
+                                }}
+                                title={t("ai_steer_send")}
+                                type="button"
+                              >
+                                <Zap aria-hidden="true" className="size-4" />
+                              </button>
+                            ) : null}
                             <SubmitCircle
-                              disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
-                              label={t("ai_search_followup")}
+                              disabled={!followupQuery.trim() || (steering ? false : aiSearch.phase !== "done")}
+                              label={steering ? t("ai_steer_send") : t("ai_search_followup")}
                               send
                             />
                           </div>

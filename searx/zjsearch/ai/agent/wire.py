@@ -46,6 +46,13 @@ bug and :py:func:`encode` refuses it):
 ``ask``                 the clarify gate / mid-research ask_user:
                         ``{intro, questions}`` -- the run settles
                         ``awaiting``.
+``steer``               a USER STEERING of the live run: ``{text,
+                        delivery: guide|preempt, status:
+                        drained|discarded}`` -- emitted when the message
+                        actually reaches the lead (drained: injected at
+                        the round boundary or via preempt) or visibly
+                        dies (discarded: the write phase had already
+                        opened).  The pending state lives client-side.
 ``gallery``             a validated inline image group
                         ``{items: [{u, n}]}``.
 ``browser``             the interactive browser session's MIRROR frame:
@@ -82,6 +89,7 @@ EVENTS: frozenset[str] = frozenset(
         "decisions",
         "answer",
         "ask",
+        "steer",
         "gallery",
         "outline",
         "artifact",

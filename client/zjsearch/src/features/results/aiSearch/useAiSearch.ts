@@ -95,6 +95,14 @@ export interface AiSearchState extends Core {
   /** restore a stored thread; false when the id is unknown */
   resume(threadId: string): Promise<boolean>;
   stop(): void;
+  /** steer the LIVE run: guide = inject at the next round boundary;
+      preempt = interrupt the in-flight turn and inject immediately.
+      Resolves false when the run host rejects it (unknown run, steer
+      queue full) -- the composer flips its pending chip to 未送达. */
+  steer(text: string, preempt?: boolean): Promise<boolean>;
+  /** 收尾: end the research gracefully and let the writer answer from
+      the material gathered */
+  wrap(): void;
   reset(): void;
 }
 
@@ -493,6 +501,41 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setCore((prev) => applyEvent(prev, { e: "client.stop" }, LIVE_FX));
   };
 
+  const steer = async (text: string, preempt = false): Promise<boolean> => {
+    const runKey = runKeyRef.current;
+    const value = text.trim();
+    if (!runKey || !capability || !value) {
+      return false;
+    }
+    try {
+      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
+        body: JSON.stringify({
+          tk: capability.tk,
+          run_key: runKey,
+          action: preempt ? "preempt" : "steer",
+          text: value,
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      return Boolean(out.ok);
+    } catch {
+      return false;
+    }
+  };
+
+  const wrap = () => {
+    const runKey = runKeyRef.current;
+    if (!runKey || !capability) {
+      return;
+    }
+    void fetchJson("/zjsearch/ai/run/control", {
+      body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "wrap" }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    }).catch(() => {});
+  };
+
   const reset = () => {
     abortRef.current?.abort();
     setCore(IDLE);
@@ -539,5 +582,5 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     return true;
   };
 
-  return { ...core, start, followup, submitClarify, resume, retry, continue: continueRun, stop, reset };
+  return { ...core, start, followup, submitClarify, resume, retry, continue: continueRun, stop, steer, wrap, reset };
 }

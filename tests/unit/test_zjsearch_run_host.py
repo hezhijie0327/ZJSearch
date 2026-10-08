@@ -120,6 +120,50 @@ class RunHandleTest(unittest.TestCase):
         self.assertIsNone(run_host.get(handle.key))
 
 
+class ControlBoxTest(unittest.TestCase):
+    """The R2 control plane: the steer lane, the preempt slot, the
+    interrupt priority and the handle's boundary directives."""
+
+    def test_steer_fifo_and_cap(self):
+        box = run_host.ControlBox()
+        for number in range(run_host.MAX_PENDING_STEERS):
+            self.assertTrue(box.steer(f"m{number}"))
+        self.assertFalse(box.steer("overflow"))
+        self.assertEqual(box.poll_steer(), "m0")
+        # a drain frees a slot
+        self.assertTrue(box.steer("m3"))
+
+    def test_interrupt_priority(self):
+        box = run_host.ControlBox()
+        box.steer("steered course", preempt=True)
+        # the preempt slot is a ONE-SHOT interrupt
+        self.assertEqual(box.interrupt(), ("preempt", "steered course"))
+        self.assertIsNone(box.interrupt())
+        box.steer("second course", preempt=True)
+        box.stop()
+        # STOP is sticky and outranks everything -- once set, the preempt
+        # slot can never surface again (the run is ending regardless)
+        self.assertEqual(box.interrupt(), ("stop", ""))
+        self.assertEqual(box.interrupt(), ("stop", ""))
+
+    def test_drain_steers(self):
+        box = run_host.ControlBox()
+        box.steer("a")
+        box.steer("b")
+        self.assertEqual(box.drain_steers(), ["a", "b"])
+        self.assertIsNone(box.poll_steer())
+
+    def test_handle_directives(self):
+        handle = run_host.RunHandle("kw")
+        handle.wrap()
+        handle.control.steer("focus domestic")
+        directives = handle.directives()
+        self.assertIn({"action": "wrap"}, directives)
+        self.assertIn({"action": "steer", "text": "focus domestic"}, directives)
+        # the steer drains ONCE
+        self.assertEqual(handle.directives(), [{"action": "wrap"}])
+
+
 class RegisterTest(unittest.TestCase):
     """The registry's mint-and-fetch pair."""
 
