@@ -6,14 +6,13 @@ import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts
 import { useT } from "@/lib/i18n.ts";
 
 /**
- * The AI composer's paperclip: pick (or paste) images AND markdown/text
- * files.  Images compress client-side (canvas downscale to the vision
- * sweet spot, JPEG) and travel as data URLs; documents are read as TEXT
- * and travel as their content (the researcher reads them directly -- no
- * server-side parsing).  Either way the local copy lands in the
- * knowledge base's attachment table at run start; the server stores
- * nothing.  Shaped for more file kinds later: add a branch in
- * `readFile` + extend the server's mime list.
+ * The AI composer's paperclip: pick (or paste) images AND documents.
+ * Images compress client-side (canvas downscale to the vision sweet
+ * spot, JPEG) and travel as data URLs; markdown/text documents are read
+ * as TEXT and travel as their content; PDF / Word / PPT / Excel ship as
+ * base64 bytes and the server converts them to markdown (markitdown).
+ * Either way the local copy lands in the knowledge base's attachment
+ * table at run start; the server stores nothing.
  */
 
 const MAX_ATTACHMENTS = 4;
@@ -21,9 +20,24 @@ const MAX_EDGE = 1568;
 const JPEG_QUALITY = 0.85;
 const MAX_FILE_CHARS = 200_000;
 const IS_MD = /\.(md|markdown|mdx|txt)$/i;
+/** The binary document kinds the server converts -- exactly the
+    markitdown service's file surface (core/convert.py). */
+const CONVERT_MIMES: Record<string, string> = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  xls: "application/vnd.ms-excel",
+};
 
 const isImage = (file: File) => file.type.startsWith("image/");
 const isDoc = (file: File) => IS_MD.test(file.name) || file.type === "text/markdown" || file.type === "text/plain";
+/** The binary document kinds the server converts -- the mime or "" when
+    the file is not one of them. */
+const convertMime = (file: File): string => {
+  const suffix = file.name.includes(".") ? (file.name.split(".").pop()?.toLowerCase() ?? "") : "";
+  return CONVERT_MIMES[suffix] ?? "";
+};
 
 /** Downscale + re-encode through a canvas: a 4000px phone photo becomes a
     ~200-400KB data URL the vision model can actually use. */
@@ -65,6 +79,19 @@ async function readDocument(file: File): Promise<AiSearchAttachment> {
   return { kind: "file", mime, name: file.name, bytes: file.size, data: text };
 }
 
+/** Binary documents (PDF / Word / PPT / Excel) ship as base64 bytes --
+    the server's markitdown service converts them to markdown. */
+async function readBinaryDoc(file: File, mime: string): Promise<AiSearchAttachment> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + CHUNK));
+  }
+  return { kind: "file", mime, name: file.name, bytes: file.size, data: btoa(binary) };
+}
+
 export function AttachmentPicker({
   items,
   onChange,
@@ -94,6 +121,11 @@ export function AttachmentPicker({
             next.push(await compressImage(file));
           } else if (isDoc(file)) {
             next.push(await readDocument(file));
+          } else {
+            const mime = convertMime(file);
+            if (mime) {
+              next.push(await readBinaryDoc(file, mime));
+            }
           }
         }
         if (next.length !== items.length) {
@@ -144,7 +176,7 @@ export function AttachmentPicker({
         >
           <Paperclip aria-hidden="true" className="size-4" />
           <input
-            accept="image/*,.md,.markdown,.mdx,.txt"
+            accept="image/*,.md,.markdown,.mdx,.txt,.pdf,.docx,.pptx,.xlsx,.xls"
             aria-label={t("attach_files")}
             className="hidden"
             disabled={disabled || busy}

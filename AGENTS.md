@@ -137,7 +137,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   - **core/** — cross-cutting foundations with zero AI semantics: the
     settings-block readers (`config`), the HMAC token gate (`security`),
     the shared text guards (`text`), the ONE SSRF gate (`guard`) and the
-    shared NDJSON stream wrapper (`ndjson`).
+    shared NDJSON stream wrapper (`ndjson`) and the ONE document
+    converter (`convert` — markitdown behind a single
+    `to_markdown(data, extension)` call: the reader's HTML pass,
+    `web_reader`'s native PDF reads, and the uploaded attachments
+    PDF/Word/PPT/Excel all ride it; RAISE contract, the caller owns the
+    degradation).
   - **browser/** — the built-in render engine: ONE Camoufox
     (anti-detect Firefox) in a PERSISTENT context (the cookie store
     survives runs — the login stages build on it), behind the reader's
@@ -1214,8 +1219,17 @@ the Browserless provider code was REMOVED, and with it the whole
 `zjsearch.reader` provider surface — `base_url`/`api_key`/`query`/
 `params` are dead keys, only `enabled`/`max_chars` remain).  Reads
 dispatch onto the shared loop, one page per read under a `max_pages`
-semaphore, `load` + network-quiet + settle, then the lxml extraction
-(the pipeline is unchanged — same markdown, same links appendix).
+semaphore, `load` + network-quiet + settle, then the WHOLE rendered
+page goes to ONE markdown engine — the shared markitdown service
+(`core/convert.py`; `html-to-markdown` is GONE).  NO readability
+extraction, NO drop-tree: silent content loss is the one unacceptable
+failure in the reader, and page chrome (nav, footer, banners) is
+visible noise the model navigates past on its own.  Title and the
+capped links appendix ride a read-only bs4 parse.  `.pdf` URLs skip
+the browser entirely: a direct fetch (the attachments image network's
+shape, same `guard_url` gate) + markitdown's pdfminer pass — the
+browser's PDF viewer renders chrome, not content.  Conversion
+failures are `PageReadError`s (the model moves on).
 uBlock Origin (camoufox's default addon) is the adblock — default ON,
 `adblock: false` excludes it (the offline audit sets that; a first
 launch without network would otherwise try an addons.mozilla.org

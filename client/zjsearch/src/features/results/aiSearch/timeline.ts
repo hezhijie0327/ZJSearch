@@ -44,14 +44,15 @@ export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error"
     only in the event log / fold -- the bytes live in the browser's
     attachment table and are filled in by the resume path (`data`). */
 export interface AiSearchAttachment {
-  /** "image" = data URL bytes; "file" = the document's TEXT (md/txt) */
+  /** "image" = data URL bytes; "file" = the document (md/txt as TEXT,
+      pdf/docx/pptx/xlsx as base64 bytes -- the server converts) */
   kind: "image" | "file";
   mime: string;
   name?: string;
   bytes?: number;
-  /** image: the compressed data URL; file: the document's TEXT -- present
-      in the live run and after the attachment-table join, absent from the
-      folded event metadata */
+  /** image: the compressed data URL; file: the document's text or its
+      base64 bytes -- present in the live run and after the
+      attachment-table join, absent from the folded event metadata */
   data?: string;
 }
 

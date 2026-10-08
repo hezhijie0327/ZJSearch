@@ -22,6 +22,7 @@ from searx.extended_types import sxng_request
 from searx.network.client import get_loop
 from searx.network.network import Network
 from searx.utils import gen_useragent
+from searx.zjsearch.ai.core import convert as convert_service
 from searx.zjsearch.ai.core import guard as core_guard
 from searx.zjsearch.ai.llm import config as llm_config
 
@@ -193,13 +194,51 @@ _UPLOAD_MIMES = ("image/jpeg", "image/png", "image/webp")
 _MAX_UPLOAD_B64 = 4 * 1024 * 1024
 """Base64 length cap per image (~3 MB decoded) -- the client compresses to
 well under this; the cap only guards abuse."""
-_UPLOAD_FILE_MIMES = ("text/markdown", "text/plain")
-"""The first FILE kind: markdown documents (the browser reads the text and
-ships it as the attachment's `data` -- no server-side parsing needed).
-PDF/DOCX would add kinds with their own extraction paths."""
+_UPLOAD_TEXT_MIMES = ("text/markdown", "text/plain")
+"""The first FILE kind: markdown/plain documents (the browser reads the
+text and ships it as the attachment's `data` -- no server-side parsing)."""
+_UPLOAD_CONVERT_MIMES: dict[str, str] = {
+    "application/pdf": "pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-excel": "xls",
+}
+"""The binary FILE kinds the markitdown convert service reads: the
+browser ships the document's base64 bytes and the server converts them
+to markdown for the prompt block."""
+_UPLOAD_DOC_B64_MAX = 24_000_000
+"""The base64 ceiling of one convertible attachment (~18MB of bytes)."""
 _MAX_FILE_CHARS = 60_000
 """Per-file text cap the server forwards -- the researcher's prompt block
 caps each file again (30K) so two big files still fit the context."""
+
+
+def _doc_extension(mime: str, name: str) -> "str | None":
+    """The attachment's convert kind: ``text`` (verbatim forward), one of
+    the markitdown extensions, or ``None`` (dropped).  The name suffix
+    settles what a browser's vague mime reporting leaves open."""
+    if mime in _UPLOAD_TEXT_MIMES:
+        return "text"
+    kind = _UPLOAD_CONVERT_MIMES.get(mime)
+    if kind:
+        return kind
+    suffix = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if suffix in ("md", "markdown", "mdx", "txt"):
+        return "text"
+    return suffix if convert_service.supported(suffix) and suffix not in ("html", "htm") else None
+
+
+def _convert_b64(data: str, extension: str) -> str:
+    """One base64 attachment as markdown -- ``""`` on any failure (an
+    attachment is a bonus, never a gate; the conversion errors stay the
+    caller's silent drop)."""
+    try:
+        raw = base64.b64decode(data, validate=False)
+        return convert_service.to_markdown(raw, extension)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("zjsearch_ai: attachment conversion failed (%s): %r", extension, exc)
+        return ""
 
 
 def parse_uploads(raw):
@@ -224,8 +263,14 @@ def parse_uploads(raw):
         if item.get("kind") == "image" and mime in _UPLOAD_MIMES and data.startswith("data:" + mime + ";base64,"):
             if len(data) - len("data:" + mime + ";base64,") <= _MAX_UPLOAD_B64:
                 images.append({"type": "image_url", "image_url": {"url": data}})
-        elif item.get("kind") == "file" and mime in _UPLOAD_FILE_MIMES and data:
-            files.append({"name": name or "attachment.txt", "text": data[:_MAX_FILE_CHARS]})
+        elif item.get("kind") == "file" and data:
+            extension = _doc_extension(mime, name)
+            if extension == "text":
+                files.append({"name": name or "attachment.txt", "text": data[:_MAX_FILE_CHARS]})
+            elif extension and len(data) <= _UPLOAD_DOC_B64_MAX:
+                text = _convert_b64(data, extension)
+                if text:
+                    files.append({"name": name or f"attachment.{extension}", "text": text[:_MAX_FILE_CHARS]})
     return images, files
 
 
