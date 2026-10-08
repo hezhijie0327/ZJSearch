@@ -103,9 +103,9 @@ def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
 
 
-def _search(
+def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     degraded: bool = False,
-) -> flask.Response:  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
+) -> flask.Response:
     """AI Search: the researcher/writer split on the shared agent loop."""
     cfg = llm_config.llm_cfg()
     # every gate completion's token account lands here -- the settle's
@@ -183,40 +183,89 @@ def _search(
     # research); everything else passes one small completion that skips
     # research only for greetings, chat and writing tasks
     research_needed = bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
-    # the clarify PRE-GATE (fail-open): one decision noul decides whether
-    # the query even reads ambiguous/high-stakes -- a clear question skips
-    # the (expensive) clarify completion entirely; the gate itself stays
-    # as the second opinion for everything ambiguous enough to reach it
+    # the clarify PRE-GATE (fail-open): two decision nouls decide whether
+    # the query even reaches the (expensive) clarify completion -- AMBIGUOUS
+    # (the answer's key depends on unstated intent) or HIGH-STAKES (a
+    # forecasting/investment/purchase/health/legal direction).  They are
+    # separate questions ON PURPOSE: "which index fund should I buy" reads
+    # perfectly clear and still must not run on a guess -- one bundled
+    # noul let clear-but-risky queries through.  The gate itself stays as
+    # the second opinion for everything ambiguous enough to reach it; the
+    # pre-screen's verdict + spend join the 决策结果 card either way.
     clarify_worth_asking = True
+    pre_usage: dict[str, int] = {"calls": 0, "tokens": 0}
+    pre_entry: dict[str, t.Any] | None = None
     if research_needed and clarify_state == "ask" and not history:
         pre = decision_features("clarify_gate")
         if pre.get("enabled") and decision.enabled() and decision.configured():
             try:
+                started = time.monotonic()
                 pre_out = decision.judge(
                     q,
                     {
                         "ambiguous": {
                             "type": "noul",
                             "instructions": (
-                                "Is this question genuinely ambiguous or high-stakes (the answer's key"
-                                " depends on unstated user intent/scope/criteria, and guessing wrong"
-                                " wastes the whole research)?"
+                                "Is this question genuinely ambiguous (the answer's key depends on"
+                                " unstated user intent/scope/criteria, and guessing wrong wastes the"
+                                " whole research)?"
                             ),
-                        }
+                        },
+                        "high_stakes": {
+                            "type": "noul",
+                            "instructions": (
+                                "Is this a high-stakes question (forecast, investment, purchase,"
+                                " health, legal) whose assumptions change the answer?"
+                            ),
+                        },
                     },
                     timeout=5.0,
                 )
                 answers = pre_out.get("answers") if isinstance(pre_out, dict) else None
                 ambiguous = answers.get("ambiguous") if isinstance(answers, dict) else None
-                if isinstance(ambiguous, dict):
-                    score = float(ambiguous.get("noul") or 0.0)
-                    clarify_worth_asking = score >= float(pre.get("ambiguous_min", 0.55))
+                stakes = answers.get("high_stakes") if isinstance(answers, dict) else None
+                if isinstance(ambiguous, dict) or isinstance(stakes, dict):
+                    ambiguity = float(ambiguous.get("noul") or 0.0) if isinstance(ambiguous, dict) else 0.0
+                    stakes_score = float(stakes.get("noul") or 0.0) if isinstance(stakes, dict) else 0.0
+                    worth = ambiguity >= float(pre.get("ambiguous_min", 0.55))
+                    clarify_worth_asking = worth or stakes_score >= float(pre.get("high_stakes_min", 0.60))
+                raw_usage = pre_out.get("usage") if isinstance(pre_out, dict) else None
+                pre_gate_usage = raw_usage if isinstance(raw_usage, dict) else {}
+                if pre_gate_usage.get("input_tokens"):
+                    pre_usage["calls"] += 1
+                    pre_usage["tokens"] += int(pre_gate_usage.get("input_tokens") or 0)
+                if isinstance(answers, dict) and answers:
+                    pre_entry = {
+                        "purpose": "clarify_gate",
+                        "question": (
+                            "Per question: ambiguous (intent-dependent) / high_stakes"
+                            " (forecast/investment/health/legal) -- noul 0-1, either above its"
+                            " threshold opens the clarify round-trip"
+                        ),
+                        "target": q[:200],
+                        "answers": answers,
+                        "record_questions": [
+                            {"name": "ambiguous", "instructions": "The query reads intent-ambiguous"},
+                            {"name": "high_stakes", "instructions": "The query is a high-stakes direction"},
+                        ],
+                        "worth_asking": clarify_worth_asking,
+                        "ms": int((time.monotonic() - started) * 1000),
+                    }
             except Exception:  # pylint: disable=broad-except
                 clarify_worth_asking = True
     if research_needed and clarify_worth_asking and clarify_state == "ask" and not history:
         gate = clarify_gate(cfg, q, lang, gate_usage, attachments_note=gate_note)
         if gate:
-            stream = _Ndjson(_clarify_events(gate), cfg, q, lang, gate_usage)
+            stream = _Ndjson(
+                _clarify_events(gate),
+                cfg,
+                q,
+                lang,
+                gate_usage,
+                decision_usage=pre_usage,
+                judgments=[pre_entry] if pre_entry else None,
+                preamble=[{"e": "decisions", "items": [pre_entry]}] if pre_entry else None,
+            )
             return _respond(stream)
     # the page reader rides only when the reader (zjsearch.reader) block is
     # fully configured: an unconfigured reader simply leaves the tool
@@ -327,6 +376,13 @@ def _search(
     state.question_held = research_q
     if depth_probe_entry:
         state.judgments.append(depth_probe_entry)
+    # the clarify pre-screen's spend + verdict join the run's account (the
+    # awaiting path passes the same two straight to its own _Ndjson)
+    if pre_usage.get("calls"):
+        state.decision_usage["calls"] += pre_usage["calls"]
+        state.decision_usage["tokens"] += pre_usage["tokens"]
+    if pre_entry:
+        state.judgments.append(pre_entry)
 
     past_ref: list[dict[str, t.Any]] = []
 
@@ -456,6 +512,7 @@ def _search(
                 if depth_probe_entry
                 else None
             ),
+            known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
         )
     )
     if response.status_code == 502 and image_parts and not degraded:
@@ -502,6 +559,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         decision_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
         preamble: list[dict[str, t.Any]] | None = None,
+        known_memories_fn: t.Callable[[], list[str]] | None = None,
     ):
         self.events = events
         self.cfg = cfg
@@ -517,6 +575,9 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
         self.judgments = judgments if judgments is not None else []
+        # the near-dup gate's comparison set for the memory extraction,
+        # resolved LAZILY (the run's own saves land while the loop streams)
+        self.known_memories_fn = known_memories_fn
         # events that precede the loop's own stream (the depth probe runs
         # BEFORE the executor exists) -- flushed first when iterating
         self.preamble = [wire.encode(e) for e in (preamble or [])]
@@ -647,7 +708,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             if found:
                 yield wire.encode({"e": "related", "items": found})
         try:
-            facts, tags = extract_insights(self.cfg, self.question, answer, self.gate_usage)
+            known = self.known_memories_fn() if self.known_memories_fn else None
+            facts, tags = extract_insights(self.cfg, self.question, answer, self.gate_usage, known=known)
             for fact in facts:
                 yield wire.encode({"e": "memory", "content": fact})
             if tags:

@@ -737,13 +737,17 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 )
                 continue
             if tool_name == USER_MEMORY_TOOL:
-                feed, event = user_memory_cap.evaluate_call(call, self.user_memories)
+                # the near-dup gate's comparison set: the pre-sent snapshot
+                # PLUS the saves this run already accepted
+                known_memories = [str(m.get("content") or "") for m in self.user_memories] + self.saved_memories
+                feed, event = user_memory_cap.evaluate_call(call, self.user_memories, known=known_memories)
                 feeds[wire_id - 1] = feed
                 ms = int((time.monotonic() - started) * 1000)
                 if event:
                     # a save: the row event settles the timeline AND the
                     # late memory event persists the fact client-side
                     save_event = event
+                    self.saved_memories.append(str(save_event.get("content") or ""))
                     yield (
                         "call",
                         {

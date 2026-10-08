@@ -115,12 +115,21 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
         "ladder_balanced": [4, 8, 16, 24, 32],
     },
     "evidence_check": {"enabled": True, "head": 8, "pass_min": 0.45},
+    "memory_dedup": {
+        "enabled": True,
+        # the cosine above which a new fact "reads as" a stored one -- the
+        # save gate AND the extractor's filter share the one floor
+        "cosine": 0.92,
+    },
     "clarify_gate": {
         "enabled": True,
-        # the noul floor: BELOW it the query is genuinely
-        # ambiguous/high-stakes and the (expensive) clarify gate may ask;
-        # above it the query reads clear -- skip the round-trip
+        # the noul floors: BELOW either the query is genuinely ambiguous OR
+        # high-stakes and the (expensive) clarify gate may ask; above both
+        # the query reads clear AND safe -- skip the round-trip.  Two
+        # questions on purpose: "which index fund should I buy" reads clear
+        # and still must not run on a guess.
         "ambiguous_min": 0.55,
+        "high_stakes_min": 0.60,
     },
 }
 

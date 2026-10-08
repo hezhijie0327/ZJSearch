@@ -66,6 +66,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the browser's user-memory snapshot (pre-sent with the run): the
         # user_memory tool searches it; saves flow back as wire events
         self.user_memories = user_memories or []
+        # the saves THIS run accepted (the near-dup gate's growing side) --
+        # a second save of the same fact within one run reads as duplicate
+        # just like a save of a pre-existing stored fact
+        self.saved_memories: list[str] = []
         # the past-research index (reader pages WITH text heads + corpus
         # sources identity-only): the tool's matches get numbered as real
         # history sources -- full-text matches return their content head,
