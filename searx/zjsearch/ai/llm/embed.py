@@ -20,7 +20,9 @@ import asyncio
 import importlib.util
 import logging
 import math
+import threading
 import typing as t
+from collections import OrderedDict
 
 from searx.network.client import get_loop
 
@@ -44,6 +46,43 @@ family, mirroring the chat transport's family registry."""
 
 SDK_PACKAGES = {"openai": "openai", "gemini": "google.genai", "dashscope": "dashscope"}
 """The import name of the SDK package each embedding sdk needs."""
+
+_CACHE_MAX = 256
+"""Cached (model, text) -> vector entries -- the ranking funnel re-embeds
+the same snippet heads round after round (diversity pruning, the corpus
+rescue, the conflict scan's established facts, the recall reranks); a
+small LRU turns those repeats into dict lookups."""
+
+_CACHE_TEXT_CHARS = 1000
+"""Only texts up to this length are cached -- the feed/rank heads are
+300-600 chars (everything the funnel embeds); full documents are not
+worth the memory."""
+
+_cache: "OrderedDict[tuple[str, str], list[float]]" = OrderedDict()
+_cache_lock = threading.Lock()
+
+
+def _cache_get(model: str, text: str) -> list[float] | None:
+    """One cached vector (and an LRU touch), or ``None`` -- oversized
+    texts never hit."""
+    if len(text) > _CACHE_TEXT_CHARS:
+        return None
+    with _cache_lock:
+        vector = _cache.get((model, text))
+        if vector is not None:
+            _cache.move_to_end((model, text))
+        return vector
+
+
+def _cache_put(model: str, text: str, vector: list[float]) -> None:
+    """Store one vector (oversized texts skipped), evicting the LRU tail."""
+    if len(text) > _CACHE_TEXT_CHARS:
+        return
+    with _cache_lock:
+        _cache[(model, text)] = vector
+        _cache.move_to_end((model, text))
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
 
 
 def cfg() -> dict[str, t.Any]:
@@ -163,12 +202,36 @@ def run_batch(
     transport only.  The cached SDK clients are loop-bound, so the batch
     rides the SAME shared network loop the chat transport built them on
     (asyncio.run per request would strand them on a dead loop from call
-    two on)."""
-    try:
-        vectors, usage = asyncio.run_coroutine_threadsafe(
-            _embed([str(text)[:MAX_TEXT_CHARS] for text in texts]), get_loop()
-        ).result(timeout)
-        return vectors, str(cfg().get("model")), usage
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.warning("zjsearch_embedding: upstream failed: %s", exc)
+    two on).
+    Cache-aside: texts already in the LRU (:py:data:`_CACHE_MAX`, keyed by
+    model + text) never reach the upstream -- only the misses ride one
+    batch call, and the result is reassembled in input order.  A
+    fully-cached batch returns ``usage: None`` (no upstream spent
+    anything)."""
+    prepared = [str(text)[:MAX_TEXT_CHARS] for text in texts]
+    model = str(cfg().get("model") or "")
+    vectors: list[list[float] | None] = [_cache_get(model, text) for text in prepared]
+    missing = [i for i, vector in enumerate(vectors) if vector is None]
+    usage: dict[str, t.Any] | None = None
+    if missing:
+        try:
+            fresh, usage = asyncio.run_coroutine_threadsafe(
+                _embed([prepared[i] for i in missing]), get_loop()
+            ).result(timeout)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch_embedding: upstream failed: %s", exc)
+            return None
+        if not isinstance(fresh, list) or len(fresh) != len(missing):
+            logger.warning(
+                "zjsearch_embedding: upstream returned %s vectors for %d texts",
+                len(fresh) if isinstance(fresh, list) else type(fresh).__name__,
+                len(missing),
+            )
+            return None
+        for slot, index in enumerate(missing):
+            vectors[index] = fresh[slot]
+            _cache_put(model, prepared[index], fresh[slot])
+    if any(vector is None for vector in vectors):
+        logger.warning("zjsearch_embedding: upstream returned a null vector -- batch dropped")
         return None
+    return [vector for vector in vectors if vector is not None], model, usage

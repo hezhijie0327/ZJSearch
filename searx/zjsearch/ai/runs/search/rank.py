@@ -95,29 +95,31 @@ def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
 # fails open.
 
 
-def diverse_order(docs: list[str], threshold: float) -> list[int] | None:
+def diverse_order(docs: list[str], threshold: float) -> tuple[list[int] | None, list[list[float]]]:
     """The embedding diversity stage: near-duplicate results (syndicated
     copies, reworded aggregators) cluster away -- a document survives only
     when its best cosine against the ALREADY-KEPT heads stays under
-    ``threshold``.  Returns the kept indices in incoming (rerank) order,
-    or ``None`` on any skip/failure (unconfigured embedding, empty
-    vectors -- the unpruned order stands)."""
+    ``threshold``.  RETURNS ``(kept, vectors)``: the kept indices in
+    incoming (rerank) order AND the per-doc vectors aligned to ``docs`` --
+    the same embeds the cross-search dup gate reuses at zero cost.
+    ``(None, [])`` on any skip/failure (unconfigured embedding, empty
+    vectors -- the unpruned order stands, the dup gate stays inert)."""
     if len(docs) < 2:
-        return None
+        return None, []
     try:
         batch = embed_service.run_batch(docs, timeout=8.0)
         if not batch:
-            return None
+            return None, []
         vectors = batch[0]
         if len(vectors) != len(docs) or not vectors[0]:
-            return None
+            return None, []
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_rank: diversity stage failed: %s", exc)
-        return None
+        return None, []
     kept: list[int] = []
     reps: list[list[float]] = []
     for index, vector in enumerate(vectors):
         if all(embed_service.cosine(vector, rep) < threshold for rep in reps):
             kept.append(index)
             reps.append(vector)
-    return kept
+    return kept, vectors

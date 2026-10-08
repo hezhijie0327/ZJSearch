@@ -14,9 +14,15 @@ _GALLERY_POOL_MAX = 40
 ``zjs-images`` fence): image-bearing results enter the pool as they are
 fed, first come first kept."""
 
+_FED_VECTORS_MAX = 64
+"""Stored embeddings of the sources ALREADY FED -- the cross-search dup
+gate compares each new candidate against these (the oldest fall off; a
+run's feed window never reaches this many)."""
+
 
 class SourcesRegistry:
-    """[n] numbering + query/page dedup + the gallery whitelist."""
+    """[n] numbering + query/page dedup + the gallery whitelist + the fed
+    sources' embedding memory (the cross-search dup gate)."""
 
     def __init__(self, sources_base: int = 0) -> None:
         # follow-up runs continue the global [n] numbering after the base
@@ -39,6 +45,10 @@ class SourcesRegistry:
         # image urls fed to the model (img=... lines) -> their global [n]:
         # the validated whitelist of the writer's ``zjs-images`` fence
         self.gallery_pool: dict[str, int] = {}
+        # (global [n], embedding) of every source whose line entered the
+        # feed -- the cross-search semantic dup gate's comparison set
+        # (reused diverse_order vectors; zero extra embed calls)
+        self.fed_vectors: list[tuple[int, list[float]]] = []
 
     def mint(self) -> int:
         """The next global [n]."""
@@ -63,6 +73,14 @@ class SourcesRegistry:
     def note_meta(self, norm_url: str, title: str, snippet: str) -> None:
         if norm_url:
             self.url_meta.setdefault(norm_url, {"title": title[:300], "snippet": snippet[:400]})
+
+    def note_vector(self, n: int, vector: list[float]) -> None:  # pylint: disable=invalid-name
+        """A fed source's embedding joins the dup gate's comparison set
+        (LRU-capped -- the oldest fall off, the feed window never gets
+        that long)."""
+        self.fed_vectors.append((n, vector))
+        if len(self.fed_vectors) > _FED_VECTORS_MAX:
+            del self.fed_vectors[: len(self.fed_vectors) - _FED_VECTORS_MAX]
 
     def note_query(self, dedup_key: str, query: str) -> None:
         self.ran[dedup_key] = [query, 0]

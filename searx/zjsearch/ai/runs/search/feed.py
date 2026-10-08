@@ -17,6 +17,7 @@ from html import escape
 import flask
 
 from searx.webutils import highlight_content
+from searx.zjsearch.ai.llm.embed import cosine as embed_cosine
 from searx.zjsearch.ai.tools import web_reader as reader
 from searx.zjsearch.ai.runs.search.registry import SourcesRegistry
 
@@ -76,17 +77,40 @@ def serialize_results(raw_results: list[t.Any], query: str) -> list[dict[str, t.
         return []
 
 
-def build_search_feed(
+def _dup_match(reg: SourcesRegistry, dup_gate: dict[str, t.Any] | None, pos: int) -> int | None:
+    """The semantic dup gate's verdict for feed position ``pos``: the fed
+    [n] whose embedding clears the gate's threshold against the
+    position's vector, or ``None`` -- no vector at this position means
+    unchecked (fail-open), like every stage of the funnel."""
+    vector = ((dup_gate or {}).get("vectors") or {}).get(pos)
+    if vector is None:
+        return None
+    threshold = float((dup_gate or {}).get("threshold") or 0.0)
+    for fed_n, fed_vector in reg.fed_vectors:
+        if embed_cosine(vector, fed_vector) >= threshold:
+            return fed_n
+    return None
+
+
+def build_search_feed(  # pylint: disable=too-many-locals
     reg: SourcesRegistry,
     query: str,
     category: str,
     items: list[dict[str, t.Any]],
+    dup_gate: dict[str, t.Any] | None = None,
 ) -> tuple[str, list[dict[str, t.Any]]]:
     """One search's serialized entries -> ``(feed block, source entries)``.
     The cross-search dedup points at a url's EXISTING [n] instead of
     minting a duplicate (the sources grid shows the page once); an
     img-bearing upgrade entry reaches the client when a parallel page
-    read numbered the url first."""
+    read numbered the url first.
+    ``dup_gate`` (optional) is the SEMANTIC layer over the exact-url dedup:
+    ``{"vectors": {feed position -> the head's embedding}, "threshold":
+    cosine, "dropped": list the matched [n]s land in}`` -- a new url whose
+    embedding clears the threshold against any ALREADY-FED source is the
+    same story from another outlet: no line, no mint, and the existing
+    [n] rides the row's ``dupes`` so the model (and the client) still see
+    where the story lives.  Fail-open: a missing vector means unchecked."""
     entries: list[dict[str, t.Any]] = []
     feed_lines = [f'Search "{query}" (category: {category}) returned {len(items)} results:']
     for pos, item in enumerate(items[: FEED_DEEP + FEED_SHALLOW]):
@@ -125,9 +149,22 @@ def build_search_feed(
                     }
                 )
             continue
+        # the SEMANTIC dup gate (fail-open): a fresh url whose embedding
+        # clears the threshold against an already-fed source is the same
+        # story syndicated elsewhere -- no line, no [n], the existing
+        # number rides the row's ``dupes``
+        dup_match = _dup_match(reg, dup_gate, pos)
+        if dup_match is not None:
+            dropped = (dup_gate or {}).setdefault("dropped", [])
+            if dup_match not in dropped and len(dropped) < 12:
+                dropped.append(dup_match)
+            continue
         n = reg.mint()
         reg.note_url(norm, n)
         reg.note_meta(norm, title, str(item.get("content_text") or ""))
+        dup_vector = (dup_gate or {}).get("vectors", {}).get(pos)
+        if dup_vector is not None:
+            reg.note_vector(n, dup_vector)
         # the gallery whitelist mirrors the FEED: only deep lines carry the
         # img= token -- an image the model was never shown must not spend
         # the writer's validated pool

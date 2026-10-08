@@ -99,20 +99,24 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 break
         return dupes
 
-    def _ranked(self, query: str, raw: list[t.Any]) -> list[t.Any]:
+    def _ranked(self, query: str, raw: list[t.Any]) -> tuple[list[t.Any], dict[int, list[float]]]:
         """One search's results through the THREE-stage cascade: engine
         order -> BM25 text relevance -> the rerank model re-scoring the
         head -> embedding diversity pruning the near-duplicate
         syndications.  Every stage fails open into the previous order
         (rank.py); the rerank model's token usage joins the run's account
-        (the settle carries it as ``usage.rerank``).  (The per-candidate
+        (the settle carries it as ``usage.rerank``).  RETURNS
+        ``(ranked_results, head_vectors)``: the diversity stage's embeds
+        keyed by RETURNED-list position -- the cross-search dup gate's
+        comparison material at zero extra cost (``{}`` when the stage
+        skipped: embed unconfigured, BM25 no signal).  (The per-candidate
         decision gate that once ordered by answer evidence was removed
         with the sources_gate feature -- ranking is mechanical; the
         decision model's judgments live where the model invokes them.)"""
         try:
             order = bm25_order(query, raw)
             if order is None:
-                return raw
+                return raw, {}
             head = order[:RERANK_HEAD]
             if len(head) >= 2:
                 sub_order, tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head])
@@ -123,18 +127,21 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                     order = [head[i] for i in sub_order] + order[RERANK_HEAD:]
             # ── the funnel's last stage: embedding diversity ──
             ranked_head = order[:RERANK_HEAD]
-            kept = diverse_order(
+            kept, vectors = diverse_order(
                 [rerank_doc(raw[i]) for i in ranked_head],
                 float(decision_features("diversity").get("cosine", 0.92)),
             )
+            head_vectors: dict[int, list[float]] = {}
             if kept is not None:
                 order = [ranked_head[i] for i in kept] + order[RERANK_HEAD:]
-            return [raw[i] for i in order]
+                for pos, index in enumerate(kept):
+                    head_vectors[pos] = vectors[index]
+            return [raw[i] for i in order], head_vectors
         except Exception:  # pylint: disable=broad-except
             # one odd result shape must never take the round's remaining
             # settlements down with it -- the engine order stands
             logger.exception("zjsearch_ai_search: ranking cascade failed -- keeping the engine order")
-            return raw
+            return raw, {}
 
     def _finish(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
         self,
@@ -167,9 +174,19 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
         # or not -- is honestly remembered; its outcome is in the feed)
         self.reg.note_query(dedup_key, query)
         try:
-            raw = self._ranked(query, raw)
+            raw, head_vectors = self._ranked(query, raw)
+            # the cross-search semantic dup gate reuses the diversity
+            # stage's embeds: a candidate whose vector clears the threshold
+            # against an already-fed source never mints a [n]
+            dup_gate: dict[str, t.Any] | None = None
+            if head_vectors:
+                dup_gate = {
+                    "vectors": head_vectors,
+                    "threshold": float(decision_features("diversity").get("cosine", 0.92)),
+                    "dropped": [],
+                }
             items = serialize_results(raw, query)
-            feed_block, entries = build_search_feed(self.reg, query, category, items)
+            feed_block, entries = build_search_feed(self.reg, query, category, items, dup_gate=dup_gate)
             # the PLUGINS' instant answers ride the same feed block: the
             # stock/calculator/time answerers' output is exactly the kind
             # of direct fact the researcher should quote -- without this
@@ -229,6 +246,10 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                     "snippet": str(entry.get("content") or "")[:500],
                 }
         dupes = self._known_dupes(items, entries)
+        if dup_gate and dup_gate["dropped"]:
+            # the semantic dup gate's matched [n]s join the exact-url ones:
+            # the row expands to where the duplicated stories already live
+            dupes = list(dict.fromkeys(list(dupes) + dup_gate["dropped"]))[:12]
         yield (
             "call",
             {
