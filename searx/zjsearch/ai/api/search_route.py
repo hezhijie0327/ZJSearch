@@ -51,7 +51,7 @@ from searx.zjsearch.ai.runs.search.gates import (
     sanitize_questions,
     standalone_question,
 )
-from searx.zjsearch.ai.runs.profile import budget, enabled, SEARCH_MODES
+from searx.zjsearch.ai.runs.profile import budget, enabled, subagents_enabled, SEARCH_MODES
 from searx.zjsearch.ai.prompts.researcher import initial_messages
 from searx.zjsearch.ai.runs.search.writer import writer_messages
 from searx.zjsearch.ai.tools import (
@@ -64,6 +64,7 @@ from searx.zjsearch.ai.tools import (
     learnings_spec,
     page_spec,
     past_research_spec,
+    research_subtask_spec,
     system_one_spec,
     task_write_spec,
     tool_spec,
@@ -181,6 +182,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     report_requested = bool(payload.get("report")) and mode in ("balanced", "deep")
     max_rounds = budget("max_rounds", mode, 2)
     depth_probe_entry: dict[str, t.Any] | None = None
+    # the delegation gate's rung: 0 unless the depth probe graded the
+    # question -- subagents are the HEAVY question's tool (rung >= 3) and
+    # never fire without the effort grader
+    depth_rung = 0
     # the pre-flight gate (Vane's skipSearch, narrowed to our contract): a
     # question carrying a URL always researches (the page read IS the
     # research); everything else passes one small completion that skips
@@ -349,6 +354,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 if isinstance(depth, dict) and depth.get("score") is not None:
                     rung = max(0, min(int(round(float(depth["score"]))), len(ladder) - 1))
                     max_rounds = ladder[rung]
+                    depth_rung = rung
                     depth_probe_entry = {
                         "purpose": "depth_probe",
                         "question": "How deep and broad does the research need to be (score 0-4)?",
@@ -467,6 +473,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             task_tool=register_tasks,
             browser_tool=browser_on,
             steerable=handle is not None,
+            subagent_tool=subagents_enabled() and mode == "deep" and depth_rung >= 3,
             user_memories=user_memories,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
@@ -483,6 +490,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])
         + ([extract_spec()] if outline is not None else [])
+        + (
+            [research_subtask_spec()]
+            if subagents_enabled() and mode == "deep" and depth_rung >= 3
+            else []
+        )
         + [view_image_spec()]
         + mcp_tools,
         executor=state.execute,
@@ -521,7 +533,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     )
     driver = threading.Thread(
         target=_drive,
-        args=(handle, events, tail, [depth_probe_entry] if depth_probe_entry else None),
+        args=(
+            handle,
+            events,
+            tail,
+            [{"e": "decisions", "items": [depth_probe_entry]}] if depth_probe_entry else None,
+        ),
         daemon=True,
         name="zjsearch-run-driver",
     )
@@ -832,6 +849,8 @@ def _drive(  # pylint: disable=too-many-branches
         handle.publish(wire.settle("error", halt="the run ended without a settle event"))
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_ai_search: the run driver failed: %s: %s", type(exc).__name__, str(exc)[:300])
+        logger.warning("zjsearch_ai_search: driver traceback", exc_info=True)
+        logger.warning("zjsearch_ai_search: last event repr: %s", repr(locals().get("event"))[:400])
         try:
             handle.publish(wire.settle("error", halt=f"the run driver failed: {exc}"))
         except Exception:  # pylint: disable=broad-except

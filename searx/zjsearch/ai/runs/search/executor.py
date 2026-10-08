@@ -19,3 +19,24 @@ class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
     """The ``web_search`` executor: real instance searches in a worker
     pool.  Yields the feature events for the wire protocol and ends with
     the agent framework's ``("tool_results", ...)`` alignment."""
+
+    @classmethod
+    def child(cls, parent: "Searches", max_rounds: int) -> "Searches":
+        """A SUBAGENT's executor (v2.1 R3): the parent's source registry
+        is SHARED (contiguous [n] + mechanical dedup across workers) and
+        the request-bound search wrapper is inherited (the driver thread
+        has no request context of its own); everything else -- feed,
+        ledger, coverage, corpus -- is the child's PRIVATE world, and the
+        round budget is the delegation's small cap."""
+        child = cls(
+            parent.prefs,
+            parent.user_plugins,
+            sources_base=0,
+            search_language=parent.search_language,
+            max_rounds=max_rounds,
+            lang=parent.lang,
+            cfg=parent.cfg,
+        )
+        child.reg = parent.reg
+        child._ctx_search = parent._ctx_search  # pylint: disable=protected-access
+        return child

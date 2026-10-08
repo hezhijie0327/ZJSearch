@@ -67,6 +67,13 @@ def history_search_mode() -> str:
     return value if value in HISTORY_MODES else DEFAULT_HISTORY_MODE
 
 
+def subagents_enabled() -> bool:
+    """The SUBAGENT delegation flag (``zjsearch.feature.ai_search.subagents``):
+    off by default -- the nested researcher is the heavy question's tool
+    (deep mode + depth rung >= 3 gate it in the route)."""
+    return bool(_cfg().get("subagents"))
+
+
 def capability() -> dict[str, str] | None:
     """The page-data ``ai_search`` payload (the shared token + model label
     + the configured default history-search mode); ``None`` when AI search

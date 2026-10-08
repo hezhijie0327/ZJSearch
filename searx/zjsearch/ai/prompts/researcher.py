@@ -126,6 +126,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     task_tool: bool = False,
     browser_tool: bool = False,
     steerable: bool = False,
+    subagent_tool: bool = False,
     user_memories: list[dict[str, str]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
@@ -356,6 +357,23 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if task_block:
         lines.append(task_block)
     lines.append(learnings_block)
+
+    if subagent_tool:
+        lines.append(
+            "<subagent_delegation>\nYou may delegate INDEPENDENT research"
+            " facets to subagents via research_subtask -- each call spawns a"
+            " nested researcher with its own context window that searches,"
+            " reads pages, and reports a compressed digest back.  Delegate"
+            " when the question has 2-4 independent facets worth parallel"
+            " depth; do NOT delegate a quick lookup you can search"
+            " yourself.  Brief each subagent with the four fields (objective"
+            " / output_format / tool_guidance / boundaries): vague briefs"
+            " produce duplicated work.  Batch the independent subtasks in"
+            " ONE round so they run in parallel; their digests arrive as"
+            " tool results -- aggregate them, never re-research what a"
+            " digest already settled.  Do not delegate more than 3-4"
+            " subtasks per round.\n</subagent_delegation>"
+        )
 
     if steerable:
         lines.append(

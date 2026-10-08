@@ -83,6 +83,12 @@ class Corpus:
     def __len__(self) -> int:
         return len(self._chunks)
 
+    def absorb(self, other: "Corpus") -> None:
+        """A settled SUBAGENT's chunks join the parent's corpus -- the
+        chunk refs are global [n]s (the shared registry minted them), so
+        the merged index stays consistent."""
+        self._chunks.extend(other._chunks)  # pylint: disable=protected-access
+
     def pack(self, query: str, *, k: int = 14, budget: int = PACK_BUDGET_DEFAULT) -> list[str]:
         """The section's key material: the top-k chunks as numbered feed
         lines (``[n] title — text``), most-relevant first, within the

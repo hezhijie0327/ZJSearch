@@ -22,6 +22,11 @@ from searx.zjsearch.ai.tools.extract import EXTRACT_TOOL, extract_spec, parse_ex
 from searx.zjsearch.ai.tools.judge import DECISION_TOOL, decision_row, parse_system_one_call, system_one_spec
 from searx.zjsearch.ai.tools.learnings import LEARNINGS_TOOL, learnings_spec, parse_learnings_call
 from searx.zjsearch.ai.tools.memory import USER_MEMORY_TOOL, user_memory_spec
+from searx.zjsearch.ai.tools.research_subtask import (
+    RESEARCH_SUBTASK_TOOL,
+    parse_research_subtask_call,
+    research_subtask_spec,
+)
 from searx.zjsearch.ai.tools.past_research import (
     PAST_RESEARCH_TOOL,
     parse_query,
@@ -36,6 +41,7 @@ from searx.zjsearch.ai.tools.web_search import SEARCH_CATEGORIES, TOOL_NAME, par
 
 __all__ = [
     "ASK_TOOL",
+    "RESEARCH_SUBTASK_TOOL",
     "CALCULATOR_TOOL",
     "DECISION_TOOL",
     "EXTRACT_TOOL",
@@ -55,6 +61,7 @@ __all__ = [
     "extract_spec",
     "learnings_spec",
     "page_spec",
+    "research_subtask_spec",
     "parse_call",
     "parse_calculator_call",
     "parse_extract_call",
@@ -62,6 +69,7 @@ __all__ = [
     "parse_page_call",
     "parse_query",
     "parse_system_one_call",
+    "parse_research_subtask_call",
     "parse_task_call",
     "parse_view_image_call",
     "parse_web_browser_call",

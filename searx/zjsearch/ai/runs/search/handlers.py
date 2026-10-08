@@ -11,6 +11,8 @@ INLINE; the network jobs (``web_search`` / ``web_reader``) defer to
 
 import concurrent.futures
 import logging
+import queue
+import threading
 import time
 import typing as t
 from urllib.parse import urlsplit
@@ -23,9 +25,14 @@ from searx.zjsearch.ai.tools import web_reader as reader
 from searx.zjsearch.ai.tools import calculator
 from searx.zjsearch.ai.tools import past_research as past_research_cap
 from searx.zjsearch.ai.tools import memory as user_memory_cap
+from searx.zjsearch.ai.tools import research_subtask as subtask_tool
 from searx.zjsearch.ai.llm import decision
 from searx.zjsearch.ai.runs.search import audit
-from searx.zjsearch.ai.runs.search.progress import BUDGET_LAST_ROUND_NOTE, FEED_CONVERGE_NOTE
+from searx.zjsearch.ai.runs.search.progress import (
+    BUDGET_LAST_ROUND_NOTE,
+    FEED_CONVERGE_NOTE,
+    round_progress,
+)
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
@@ -310,6 +317,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         self.round_learned = False
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
         page_jobs: list[tuple[int, str]] = []
+        sub_jobs: list[tuple[int, dict[str, str]]] = []
         gathered = False
         for wire_id, call in enumerate(calls, 1):
             started = time.monotonic()
@@ -830,6 +838,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     # the real title runs at settlement)
                     self.coverage.track(page_url, [page_url])
                 continue
+            if str(call.get("name") or "") == subtask_tool.RESEARCH_SUBTASK_TOOL:
+                # the DELEGATION: one subagent per call, executed as the
+                # round's own parallel batch (before the pool jobs -- a
+                # delegation round usually carries only these)
+                sub_jobs.append((wire_id, subtask_tool.parse_research_subtask_call(call)))
+                gathered = True
+                continue
             feed, event, job = self._search_plan(call, wire_id)
             if feed:
                 feeds[wire_id - 1] = feed
@@ -840,6 +855,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 gathered = True
                 self.coverage.track(job[1])
         self.round_gathered = gathered
+        if sub_jobs:
+            yield from self._run_subagents(rnd, sub_jobs, feeds)
         # the pool is deliberately NOT in a with-block: when the consumer
         # disappears (client disconnect / stop) the generator closes right
         # here -- a with-exit would wait for the still-running work and
@@ -900,6 +917,233 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         round_judgments = self.judgments[judgment_mark:]
         if round_judgments:
             yield ("decisions", {"round": rnd, "items": [dict(entry) for entry in round_judgments]})
+
+    SUB_ENTRY_BASE = 10_000
+    """The subagents' entry-id space (the lead's counter never reaches
+    it): the client groups a sub's think/call events under the `open
+    kind:"sub"` row by id."""
+
+    SUB_MAX_PARALLEL = 4
+    """Concurrent subagents per delegation batch (the design's cap)."""
+
+    def _run_subagents(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
+        self,
+        rnd: int,
+        sub_jobs: list[tuple[int, dict[str, str]]],
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """One delegation batch: every ``research_subtask`` call spawns a
+        nested research loop on its OWN thread (own context window, own
+        small round budget, the SHARED source registry so overlapping
+        searches settle as duplicates mechanically).  Their wire events
+        interleave into the parent stream with remapped entry ids (kind
+        "sub"); the child's open/timeline events for OTHER surfaces
+        (phase/tasks/decisions/...) are dropped -- those are the LEAD's
+        surfaces.  After each child settles: its active facts join the
+        parent's ledger, its feed lines join the parent's writer feed and
+        corpus, its entries join the evidence pool, and the compressed
+        digest becomes that call's tool result."""
+        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.tools import calculator_spec, page_spec, tool_spec  # pylint: disable=import-outside-toplevel
+
+        cfg = self.cfg
+        pages_on = reader.configured()
+        child_tools = (
+            [tool_spec(False, False), calculator_spec()] + ([page_spec()] if pages_on else [])
+        )
+        lang = self.lang or "en"
+        today = time.strftime("%Y-%m-%d")
+        children: dict[int, t.Any] = {}
+        threads: list[threading.Thread] = []
+        queues: dict[int, "queue.Queue[tuple[int, t.Any] | tuple[int, None]]"] = {}
+
+        def drive(job_idx: int, events: t.Any) -> None:
+            q = queues[job_idx]
+            seq = 0
+            try:
+                for event in events:
+                    seq += 1
+                    q.put((seq, event))
+            finally:
+                q.put((0, None))
+
+        for job_idx, (wire_id, parsed) in enumerate(sub_jobs):
+            if job_idx >= self.SUB_MAX_PARALLEL:
+                # over the batch cap: an honest refusal teaches the model
+                # to merge subtasks instead of fanning out unbounded
+                feeds[wire_id - 1] = (
+                    "error: the delegation batch is full"
+                    f" (max {self.SUB_MAX_PARALLEL} subagents per round) --"
+                    " merge overlapping subtasks and re-delegate."
+                )
+                continue
+            child = type(self).child(self, max_rounds=subtask_tool.SUB_ROUNDS)
+            child.question_held = parsed["objective"]
+            children[job_idx] = child
+            q: "queue.Queue[tuple[int, t.Any] | tuple[int, None]]" = queue.Queue()
+            queues[job_idx] = q
+            events = engine.run(
+                cfg,
+                subtask_tool.subagent_messages(parsed, lang, today),
+                tools=child_tools,
+                executor=child.execute,
+                max_rounds=subtask_tool.SUB_ROUNDS,
+                round_progress=self._sub_round_progress(child),
+            )
+            threads.append(
+                threading.Thread(target=drive, args=(job_idx, events), daemon=True, name=f"zjs-sub-{job_idx}")
+            )
+            threads[-1].start()
+            # the call row settles immediately (the delegation was
+            # accepted); the SUB ROW opens for the live child timeline
+            yield (
+                "call",
+                {
+                    "id": wire_id,
+                    "status": "ok",
+                    "label": parsed["title"],
+                    "ms": 0,
+                    "feed": parsed["objective"][:800],
+                },
+            )
+            yield (
+                "open",
+                {
+                    "id": self.SUB_ENTRY_BASE + job_idx * 64,
+                    "kind": "sub",
+                    "round": 1,
+                    "title": parsed["title"],
+                    "objective": parsed["objective"][:600],
+                },
+            )
+
+        # INTERLEAVE: one event per active queue in round-robin (each
+        # child's own order preserved; cross-child order is stream order)
+        active = {idx: (0, q) for idx, q in queues.items()}
+        closed: set[int] = set()
+        while len(closed) < len(queues):
+            progressed = False
+            for job_idx, (_seq, q) in list(active.items()):
+                if job_idx in closed:
+                    continue
+                try:
+                    got = q.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                progressed = True
+                event_seq, event = got
+                if event is None:
+                    closed.add(job_idx)
+                    continue
+                gid = self.SUB_ENTRY_BASE + job_idx * 64
+                kind = str(event.get("e") or "")
+                if kind == "open":
+                    # the child's per-round open: remapped into the sub row
+                    yield (
+                        "open",
+                        {
+                            "id": gid,
+                            "kind": "sub",
+                            "round": int(event.get("round") or 1),
+                            "title": "",
+                        },
+                    )
+                elif kind in ("think", "say", "calls", "call", "close"):
+                    out = dict(event)
+                    out["id"] = gid
+                    yield (kind, out)
+                elif kind == "sources":
+                    # [n] numbers are ALREADY parent-consistent (the
+                    # shared registry minted them)
+                    yield ("sources", {"items": event.get("items") or []})
+                # everything else (phase/tasks/learnings/decisions/settle)
+                # is the LEAD's surface -- dropped
+                active[job_idx] = (event_seq, q)
+            if not progressed and len(closed) < len(queues):
+                time.sleep(0.05)
+
+        # settle: promote each child's material into the parent's world
+        # and write the compressed digest as the call's tool result
+        for job_idx, (wire_id, parsed) in enumerate(sub_jobs):
+            if feeds[wire_id - 1]:
+                continue  # the batch-cap refusal already settled this call
+            child = children.get(job_idx)
+            digest = self._sub_digest(parsed, child)
+            feeds[wire_id - 1] = digest
+            if child is not None:
+                self._promote_child(rnd, child)
+            # the digest is the ROW's receipt too: a second settlement on
+            # the same wire id updates the row (the expansion renders it)
+            yield (
+                "call",
+                {
+                    "id": wire_id,
+                    "status": "ok",
+                    "ms": 0,
+                    "label": parsed["title"],
+                    "chars": len(digest),
+                    "feed": digest[:800],
+                    "result": digest,
+                },
+            )
+        if any(feeds[wire_id - 1] and "子任务" in (feeds[wire_id - 1] or "") for wire_id, _ in sub_jobs):
+            # the promoted facts/gaps join the ledger: the AUTHORITATIVE
+            # snapshot flies so the findings card renders them live (the
+            # same event the learnings tool emits)
+            yield ("learnings", {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)})
+
+    def _sub_round_progress(self, child: t.Any) -> t.Callable[[int], str | None]:
+        """The subagent's stall detector closure, bound to the CHILD's
+        state (its own counters; two unproductive rounds end it -- the
+        budget is the delegation's spend cap)."""
+        return round_progress(child, subtask_tool.SUB_STALL_ROUNDS, 0)
+
+    def _promote_child(self, rnd: int, child: t.Any) -> None:
+        """A settled subagent's material joins the parent's world: active
+        facts + open gaps into the belief ledger, the [n] feed lines into
+        the writer's feed, the entries into the evidence pool, the chunks
+        into the corpus.  The sources themselves were already minted into
+        the SHARED registry as the child searched."""
+        ops: dict[str, t.Any] = {"facts": [], "open_gaps": []}
+        for fact in child.facts:
+            if fact.get("status") == "active":
+                ops["facts"].append({"text": fact.get("text"), "refs": fact.get("refs") or []})
+        for gap in child.gaps:
+            if gap.get("status") == "open":
+                ops["open_gaps"].append({"q": gap.get("q"), "why": gap.get("why")})
+        if ops["facts"] or ops["open_gaps"]:
+            self.apply_learnings(ops, rnd)
+        if child.feed:
+            block = "【子任务材料】\n" + "\n".join(str(line) for line in child.feed)
+            self.feed.append(block[:6000])
+            self.feed_chars += min(len(block), 6000)
+        self.entries.update(child.entries)
+        self.head_sources.update(child.head_sources)
+        self.corpus.absorb(child.corpus)
+
+    def _sub_digest(self, parsed: dict[str, str], child: t.Any) -> str:
+        """The compressed report-back: established facts (each [n]-cited),
+        the open gaps, the source line count -- the lead aggregates many
+        digests, so this stays under ~2k characters."""
+        lines: list[str] = [f"【子任务】{parsed['title']}"]
+        if child is None:
+            lines.append("the subagent did not report")
+            return "\n".join(lines)[:2000]
+        active = [fact for fact in child.facts if fact.get("status") != "retracted"]
+        if active:
+            lines.append("已确认:")
+            for fact in active[:8]:
+                refs = ",".join(str(n) for n in (fact.get("refs") or [])[:4])
+                mark = f" [{refs}]" if refs else ""
+                lines.append(f"- {str(fact.get('text') or '')[:200]}{mark}")
+        if child.gaps:
+            open_gaps = [gap for gap in child.gaps if gap.get("status") != "closed"][:4]
+            if open_gaps:
+                lines.append("未决:")
+                for gap in open_gaps:
+                    lines.append(f"- {str(gap.get('text') or '')[:160]}")
+        lines.append(f"来源 {len(child.entries)} 条已入册")
+        return "\n".join(lines)[:2000]
 
     def _search_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, tuple | None]:
         """One ``web_search`` call's pre-pool plan: (feed, settle event,

@@ -79,7 +79,8 @@ export interface AiSearchCall {
     | "ask_user"
     | "extract_table"
     | "view_image"
-    | "web_browser";
+    | "web_browser"
+    | "research_subtask";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
   name?: string;
@@ -153,6 +154,17 @@ export type AiSearchStep =
       /** discarded = the write phase had already closed the guide lane
           (the composer's pending chip flips to 未送达) */
       status: "drained" | "discarded";
+    }
+  | {
+      kind: "sub";
+      /** the subagent's OWN entry-id space (base 10000, disjoint from
+          the lead's counter) -- think/call events route into `inner`
+          by it */
+      entry: number;
+      title: string;
+      objective: string;
+      status: "active" | "done";
+      inner: AiSearchStep[];
     }
   | { kind: "calls"; entry?: number; round: number; calls: AiSearchCall[] };
 
@@ -480,6 +492,16 @@ export function applyEvent(
   const entryId = Number(event.id) || 0;
   const stepIndexFor = (kind2: "think" | "intent" | "calls"): number =>
     run.steps.findIndex((step) => step.kind === kind2 && (step as { entry?: number }).entry === entryId);
+  // a SUBAGENT's entry (base 10000): its think/say/call events route into
+  // the sub row's inner timeline instead of the lead's flat steps
+  const subIndexOf = run.steps.findIndex((step) => step.kind === "sub" && step.entry === entryId);
+  const inSub = run.steps[subIndexOf];
+  const patchSub = (patch: (sub: Extract<AiSearchStep, { kind: "sub" }>) => Extract<AiSearchStep, { kind: "sub" }>) => {
+    const steps = [...run.steps];
+    steps[subIndexOf] = patch(steps[subIndexOf] as Extract<AiSearchStep, { kind: "sub" }>);
+    runs[lastIdx] = { ...run, steps };
+    return { ...core, runs };
+  };
 
   switch (kind) {
     case "client.clarify": {
@@ -545,6 +567,30 @@ export function applyEvent(
       return { ...core, runs };
     }
     case "open": {
+      if (String(event.kind) === "sub") {
+        // a delegation's sub row opens: the live mini-timeline container.
+        // The child RE-OPENS per round (same id) -- an existing row just
+        // goes back to active, never duplicates
+        const existing = run.steps.findIndex((step) => step.kind === "sub" && step.entry === entryId);
+        if (existing >= 0) {
+          return patchSub((sub) => ({ ...sub, status: "active" }));
+        }
+        runs[lastIdx] = {
+          ...run,
+          steps: [
+            ...run.steps,
+            {
+              kind: "sub",
+              entry: entryId,
+              title: String(event.title ?? ""),
+              objective: String(event.objective ?? ""),
+              status: "active",
+              inner: [],
+            },
+          ],
+        };
+        return { ...core, runs };
+      }
       if (String(event.kind) === "write") {
         // the writer phase opened: the 撰写 line covers its silence
         runs[lastIdx] = { ...run, wrappingUp: true };
@@ -553,6 +599,13 @@ export function applyEvent(
       return core;
     }
     case "think": {
+      // a research/write entry's reasoning: its own think segment
+      if (inSub) {
+        return patchSub((sub) => ({
+          ...sub,
+          inner: [...sub.inner, { kind: "think", text: String(event.t ?? "") }],
+        }));
+      }
       // a research/write entry's reasoning: its own think segment
       const steps = [...run.steps];
       const idx = stepIndexFor("think");
@@ -568,9 +621,15 @@ export function applyEvent(
     }
     case "say": {
       // a research entry's narration: its intent line
+      const text = String(event.t ?? "");
+      if (inSub) {
+        return patchSub((sub) => ({
+          ...sub,
+          inner: [...sub.inner, { kind: "intent", text }],
+        }));
+      }
       const steps = [...run.steps];
       const idx = stepIndexFor("intent");
-      const text = String(event.t ?? "");
       if (idx >= 0) {
         const step = steps[idx] as Extract<AiSearchStep, { kind: "intent" }>;
         steps[idx] = { ...step, text: step.text + text };
@@ -595,6 +654,20 @@ export function applyEvent(
     }
     case "calls": {
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
+      if (inSub) {
+        return patchSub((sub) => ({
+          ...sub,
+          inner: [
+            ...sub.inner,
+            {
+              kind: "calls",
+              entry: entryId,
+              round: sub.inner.filter((step) => step.kind === "calls").length + 1,
+              calls: items.map((item) => normalizeCall(item)),
+            },
+          ],
+        }));
+      }
       const round = run.steps.filter((step) => step.kind === "calls").length + 1;
       runs[lastIdx] = {
         ...run,
@@ -613,6 +686,29 @@ export function applyEvent(
     case "call": {
       // ONE call settled (the entry id + in-round position address the row)
       const callId = Number(event.call) || 0;
+      if (inSub) {
+        return patchSub((sub) => ({
+          ...sub,
+          inner: sub.inner.map((step) => {
+            if (step.kind !== "calls" || step.entry !== entryId) {
+              return step;
+            }
+            const settleOne = (call: AiSearchCall): AiSearchCall =>
+              call.id === callId
+                ? {
+                    ...call,
+                    status: (event.status as AiSearchCall["status"]) ?? "error",
+                    ...(event.n !== undefined ? { n: Number(event.n) || 0 } : {}),
+                    ...(event.ms !== undefined ? { ms: Number(event.ms) || 0 } : {}),
+                    ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
+                    ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
+                    ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
+                  }
+                : call;
+            return { ...step, calls: step.calls.map(settleOne) };
+          }),
+        }));
+      }
       const steps = run.steps.map((step) => {
         if (step.kind !== "calls" || step.entry !== entryId) {
           return step;
@@ -688,6 +784,11 @@ export function applyEvent(
       return { ...core, runs };
     }
     case "close":
+      if (inSub) {
+        // the subagent settled: its row flips to done (the digest arrived
+        // as the delegation call's tool result)
+        return patchSub((sub) => ({ ...sub, status: "done" }));
+      }
       return core;
     case "tasks": {
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
@@ -983,6 +1084,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "extract_table",
   "view_image",
   "web_browser",
+  "research_subtask",
 ]);
 
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {

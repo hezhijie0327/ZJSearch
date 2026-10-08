@@ -438,6 +438,74 @@ function ThinkSegment({
   );
 }
 
+/** The SUBAGENT row: folded to ONE line (title + live meta), the
+    mini-timeline (the delegation header + the child's own think/call
+    stream) opens on click -- the web_reader fold doctrine, one level
+    deeper.  The expanded pane sits on the machine-voice ground; the
+    digest arrives as the delegation call's own tool result beside it. */
+function SubSegment({
+  index,
+  run,
+  step,
+  streaming,
+}: {
+  index: number;
+  run: AiSearchRun;
+  step: Extract<AiSearchStep, { kind: "sub" }>;
+  streaming: boolean;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const live = streaming && step.status === "active";
+  const okCalls = step.inner.reduce(
+    (acc, inner) => acc + (inner.kind === "calls" ? inner.calls.filter((call) => call.status === "ok").length : 0),
+    0,
+  );
+  return (
+    <div className={index > 0 ? "mt-2" : ""}>
+      <button
+        aria-expanded={open}
+        className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-start transition-colors hover:bg-surface-2/50"
+        onClick={() => {
+          setOpen(!open);
+        }}
+        type="button"
+      >
+        {live ? (
+          <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-accent" />
+        ) : (
+          <span className="grid size-3.5 shrink-0 place-items-center">
+            <Check aria-hidden="true" className="size-3 text-ok" />
+          </span>
+        )}
+        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-ink-2" dir="auto">
+          {step.title || step.objective.slice(0, 48)}
+        </span>
+        <span className="shrink-0 text-xs tabular-nums text-ink-3">
+          {live ? t("ai_sub_running") : t("ai_sub_done", { n: String(okCalls) })}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`size-3.5 shrink-0 text-ink-3 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      <Collapse className={open ? "mt-1" : ""} open={open}>
+        <div className="ms-4 rounded-lg border border-line/70 bg-surface-2/30 p-2">
+          {step.objective ? (
+            <p className="px-1 pb-1 text-xs leading-relaxed text-ink-3" dir="auto">
+              <span className="font-medium text-ink-2">{t("ai_sub_brief")}:</span> {step.objective}
+            </p>
+          ) : null}
+          {step.inner.map((inner, innerIdx) => (
+            <StepSegment index={innerIdx} key={`${inner.kind}-${innerIdx}`} run={run} step={inner} streaming={live} />
+          ))}
+          {!step.inner.length ? <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p> : null}
+        </div>
+      </Collapse>
+    </div>
+  );
+}
+
 function StepSegment({
   index,
   run,
@@ -508,6 +576,9 @@ function StepSegment({
         </p>
       </div>
     );
+  }
+  if (step.kind === "sub") {
+    return <SubSegment index={index} run={run} step={step} streaming={streaming} />;
   }
   if (step.kind === "intent") {
     return (

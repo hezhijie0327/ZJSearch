@@ -55,6 +55,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         max_rounds: int = 0,
         lang: str = "",
         cfg: dict[str, t.Any] | None = None,
+        registry: SourcesRegistry | None = None,
     ):
         self.prefs = prefs
         self.user_plugins = user_plugins
@@ -76,8 +77,11 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # source-only matches point back at web_reader for a live re-read
         self.past_research_entries = past_research_entries or []
         # the run's source registries (the [n] numbering, the two dedup
-        # sets, the gallery whitelist) -- one object, see registry.py
-        self.reg = SourcesRegistry(sources_base)
+        # sets, the gallery whitelist) -- one object, see registry.py;
+        # parallel SUBAGENTS share the PARENT's registry (injected), so
+        # the global [n] numbering stays contiguous and the dedup sets
+        # are the mechanical anti-duplication across workers
+        self.reg = registry if registry is not None else SourcesRegistry(sources_base)
         # the task card's coverage tracker (coverage.py)
         self.coverage = Coverage()
         # the accumulated source feed for the WRITER: one block per search

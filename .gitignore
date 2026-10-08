@@ -59,3 +59,6 @@ gui-test-screenshots/
 
 # zjsearch: local-only settings with real keys -- never enter git
 client/zjsearch/*.local.yml
+
+# local e2e scripts (transient)
+*.local.sh

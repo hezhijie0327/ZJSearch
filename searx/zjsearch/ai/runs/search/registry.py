@@ -9,10 +9,13 @@ engines again, and the writer's ``zjs-images`` fence can only cite urls
 the model actually saw.
 """
 
+import threading
+
 _GALLERY_POOL_MAX = 40
 """Image URLs the writer may embed (the validated whitelist of the
 ``zjs-images`` fence): image-bearing results enter the pool as they are
 fed, first come first kept."""
+
 
 _FED_VECTORS_MAX = 64
 """Stored embeddings of the sources ALREADY FED -- the cross-search dup
@@ -22,9 +25,14 @@ run's feed window never reaches this many)."""
 
 class SourcesRegistry:
     """[n] numbering + query/page dedup + the gallery whitelist + the fed
-    sources' embedding memory (the cross-search dup gate)."""
+    sources' embedding memory (the cross-search dup gate).
+
+    Thread-safe BY LOCK: parallel subagents (v2.1 R3) share ONE registry
+    -- every mutation takes the lock, so the [n] numbering stays
+    contiguous and the dedup sets stay consistent across workers."""
 
     def __init__(self, sources_base: int = 0) -> None:
+        self._lock = threading.Lock()
         # follow-up runs continue the global [n] numbering after the base
         self.next_n = sources_base + 1
         # every query this run already executed, normalized -> [query, n
@@ -52,38 +60,50 @@ class SourcesRegistry:
 
     def mint(self) -> int:
         """The next global [n]."""
-        n = self.next_n
-        self.next_n += 1
-        return n
+        with self._lock:
+            n = self.next_n
+            self.next_n += 1
+            return n
 
     def known(self, norm_url: str) -> int | None:
         """The [n] a normalized url already holds, or ``None``."""
-        return self.url_n.get(norm_url) if norm_url else None
+        if not norm_url:
+            return None
+        with self._lock:
+            return self.url_n.get(norm_url)
 
     def note_url(self, norm_url: str, n: int) -> None:  # pylint: disable=invalid-name
         if norm_url:
-            self.url_n[norm_url] = n
+            with self._lock:
+                self.url_n[norm_url] = n
 
     def note_gallery(self, img: str, n: int) -> None:  # pylint: disable=invalid-name
         """An image url joins the whitelist under its [n] (first come
         first kept -- the pool is capped)."""
-        if img and len(self.gallery_pool) < _GALLERY_POOL_MAX:
-            self.gallery_pool.setdefault(img, n)
+        if not img:
+            return
+        with self._lock:
+            if len(self.gallery_pool) < _GALLERY_POOL_MAX:
+                self.gallery_pool.setdefault(img, n)
 
     def note_meta(self, norm_url: str, title: str, snippet: str) -> None:
         if norm_url:
-            self.url_meta.setdefault(norm_url, {"title": title[:300], "snippet": snippet[:400]})
+            with self._lock:
+                self.url_meta.setdefault(norm_url, {"title": title[:300], "snippet": snippet[:400]})
 
     def note_vector(self, n: int, vector: list[float]) -> None:  # pylint: disable=invalid-name
         """A fed source's embedding joins the dup gate's comparison set
         (LRU-capped -- the oldest fall off, the feed window never gets
         that long)."""
-        self.fed_vectors.append((n, vector))
-        if len(self.fed_vectors) > _FED_VECTORS_MAX:
-            del self.fed_vectors[: len(self.fed_vectors) - _FED_VECTORS_MAX]
+        with self._lock:
+            self.fed_vectors.append((n, vector))
+            if len(self.fed_vectors) > _FED_VECTORS_MAX:
+                del self.fed_vectors[: len(self.fed_vectors) - _FED_VECTORS_MAX]
 
     def note_query(self, dedup_key: str, query: str) -> None:
-        self.ran[dedup_key] = [query, 0]
+        with self._lock:
+            self.ran[dedup_key] = [query, 0]
 
     def note_read(self, url: str) -> None:
-        self.read_urls.add(url)
+        with self._lock:
+            self.read_urls.add(url)
