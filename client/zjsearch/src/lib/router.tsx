@@ -12,6 +12,7 @@ import { configureEmbeddings } from "@/lib/embed.ts";
 import { translateFor } from "@/lib/i18n.ts";
 import { configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractBootPageData, extractPageData, parseEmbeddedPageData } from "@/lib/pageData.ts";
+import { configureRerank } from "@/lib/rerank.ts";
 import { buildSearchUrl, type SearchParams, searchParamEntries, urlThemeOverride } from "@/lib/searchParams.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 
@@ -284,6 +285,7 @@ export function RouterProvider({
       // capability rides the page-data globals, and the STREAMED takeover's
       // boot payload carries none (the real one lands late)
       configureEmbeddings(parsed.globals?.embedding ? { token: parsed.globals.embedding.tk } : null);
+      configureRerank(parsed.globals?.rerank ? { token: parsed.globals.rerank.tk } : null);
       const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai;
       configureKnowledge({ aiToken: aiCapLanding?.tk, embedModel: parsed.globals?.embedding?.model });
       configureBrowserInput(aiCapLanding?.tk);

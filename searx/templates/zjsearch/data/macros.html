@@ -68,6 +68,9 @@ pipeline features without any Python changes. -#}
   {%- if zjs_ai.decision %}
   ,"decision": {"tk": {{ zjs_ai.decision.tk|tojson }}, "model": {{ zjs_ai.decision.model|tojson }} }
   {%- endif %}
+  {%- if zjs_ai.rerank %}
+  ,"rerank": {"tk": {{ zjs_ai.rerank.tk|tojson }}, "model": {{ zjs_ai.rerank.model|tojson }} }
+  {%- endif %}
   {%- if ai_mode %}
   ,"ai_mode": true
   {%- endif %}

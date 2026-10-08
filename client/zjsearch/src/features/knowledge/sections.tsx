@@ -45,6 +45,7 @@ import type { ThreadSummary } from "@/lib/kb/recall.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";
 import { printDocument } from "@/lib/print.ts";
+import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
 
 export function formatBytesLocal(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -874,11 +875,17 @@ export function KindItemRows({
 export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; onReset: () => void }) {
   const t = useT();
   const [embedUsage, setEmbedUsage] = useState<EmbedUsageTotals | undefined>(undefined);
+  const [rerankUsage, setRerankUsage] = useState<RerankUsageTotals | undefined>(undefined);
   useEffect(() => {
     let live = true;
     void readEmbedUsage().then((totals) => {
       if (live) {
         setEmbedUsage(totals);
+      }
+    });
+    void readRerankUsage().then((totals) => {
+      if (live) {
+        setRerankUsage(totals);
       }
     });
     return () => {
@@ -947,11 +954,13 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                   </dl>
                 </>
               ) : null}
-              {embed || stats?.usage?.rerank || stats?.usage?.decision ? (
+              {embed || stats?.usage?.rerank || rerankUsage?.calls || stats?.usage?.decision ? (
                 // 嵌入 / 重排 / 决策: the LLM group's language -- one group
                 // title per model, ONE 输入 tile inside (the score
                 // endpoints are input-only); the three groups share ONE
-                // row (they stack below sm).
+                // row (they stack below sm).  The rerank tile sums BOTH
+                // pools: the runs' cascade spend (run meta) AND the
+                // browser recall's own calls (the usage:rerank row).
                 <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-x-6 gap-y-4">
                   {embed ? (
                     <div>
@@ -970,23 +979,28 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                       </div>
                     </div>
                   ) : null}
-                  {stats?.usage?.rerank ? (
-                    <div>
-                      <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
-                      <div className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5">
-                        <dt className="flex items-center gap-1 text-xs text-ink-3">
-                          <ArrowUp aria-hidden="true" className="size-3" />
-                          {t("knowledge_usage_input")}
-                        </dt>
-                        <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
-                          {stats.usage.rerank.tokens.toLocaleString()}
-                          <span className="ms-1 text-[11px] font-sans font-normal text-ink-3">
-                            {t("knowledge_usage_tokens")}
-                          </span>
-                        </dd>
-                      </div>
-                    </div>
-                  ) : null}
+                  {stats?.usage?.rerank || rerankUsage?.calls
+                    ? (() => {
+                        const rerankInput = (stats?.usage?.rerank?.tokens ?? 0) + (rerankUsage?.input ?? 0);
+                        return (
+                          <div>
+                            <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_rerank")}</p>
+                            <div className="mt-2 rounded-xl border border-line bg-surface px-3 py-2.5">
+                              <dt className="flex items-center gap-1 text-xs text-ink-3">
+                                <ArrowUp aria-hidden="true" className="size-3" />
+                                {t("knowledge_usage_input")}
+                              </dt>
+                              <dd className="mt-0.5 font-mono text-sm font-medium text-ink">
+                                {rerankInput.toLocaleString()}
+                                <span className="ms-1 text-[11px] font-sans font-normal text-ink-3">
+                                  {t("knowledge_usage_tokens")}
+                                </span>
+                              </dd>
+                            </div>
+                          </div>
+                        );
+                      })()
+                    : null}
                   {stats?.usage?.decision ? (
                     <div>
                       <p className="text-xs font-medium text-ink-3">{t("knowledge_usage_decision")}</p>

@@ -8,6 +8,7 @@ import { configureBrowserInput } from "@/lib/browserInput.ts";
 import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { initPwaInstall } from "@/lib/pwa.ts";
+import { configureRerank } from "@/lib/rerank.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
 import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
 import "./styles/global.css";
@@ -64,6 +65,9 @@ async function bootstrap(): Promise<void> {
   if (embeddingCap?.dimensions) {
     configureEmbeddingDimensions(embeddingCap.dimensions);
   }
+  // the recall's rerank capability (absent = the recall keeps its fused order)
+  const rerankCap = initialData?.globals.rerank;
+  configureRerank(rerankCap ? { token: rerankCap.tk } : null);
   // the knowledge store's AI routes (tag normalization) + the embed-model
   // name recorded on every embedded row
   const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;

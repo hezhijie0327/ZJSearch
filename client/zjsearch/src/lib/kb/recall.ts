@@ -10,6 +10,7 @@
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
 import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
+import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
 const SEARCHABLE_KINDS = ["answer", "source", "document", "memory", "call", "task", "clarify", "run"];
 
@@ -225,10 +226,44 @@ export async function searchKnowledge(
     .filter((item) => (opts.since ? item.updated >= opts.since : true));
 }
 
+/** The model funnel's middle tier, browser-side: ONE cross-encoder pass
+    over the fused head re-orders it by query-conditioned relevance -- the
+    signal the BM25+vector RRF only approximates.  Fail-open everywhere:
+    fewer than 4 candidates, rerank unconfigured, or any upstream failure
+    keeps the fused order (the rows carry the full body, so the document
+    text is the recall's own shape -- title + body head). */
+async function rerankStage(
+  query: string,
+  rows: Array<{ item: KnowledgeItem; score: number }>,
+  head = 16,
+): Promise<Array<{ item: KnowledgeItem; score: number }>> {
+  if (rows.length < 4 || !rerankConfigured()) {
+    return rows;
+  }
+  const headRows = rows.slice(0, head);
+  try {
+    const order = await rerankDocs(
+      query,
+      headRows.map((row) => `${row.item.title} — ${row.item.body.slice(0, 400)}`),
+    );
+    if (!order || order.length !== headRows.length) {
+      return rows;
+    }
+    const reranked = order.map((index) => headRows[index]).filter((row) => row !== undefined);
+    if (reranked.length !== headRows.length) {
+      return rows;
+    }
+    return [...reranked, ...rows.slice(head)];
+  } catch {
+    return rows;
+  }
+}
+
 /** The RESEARCH recall: the writer-phase corpus (sources + past answers).
     THE RED LINE: these rows reach the writer phase or the UI only --
     never the researcher's feed (ready-made material kills the search
-    incentive).  Fuses the hybrid dimension with the tag-graph dimension. */
+    incentive).  Fuses the hybrid dimension with the tag-graph dimension,
+    then the rerank tier re-scores the fused head. */
 export async function recallCorpus(query: string, limit = 6): Promise<KnowledgeItem[]> {
   const [hybrid, graph] = await Promise.all([
     hybridRecall(query, ["source", "answer"], limit, true),
@@ -247,17 +282,19 @@ export async function recallCorpus(query: string, limit = 6): Promise<KnowledgeI
     1.0,
   );
   bump(graph, 0.6);
-  return [...scores.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((entry) => entry.item);
+  let ranked = [...scores.values()].sort((a, b) => b.score - a.score);
+  ranked = await rerankStage(query, ranked);
+  return ranked.slice(0, limit).map((entry) => entry.item);
 }
 
 /** The past_research index: archived full texts ranked by the query
-    (the tool's feed then points at web_reader for a live re-read). */
+    (the tool's feed then points at web_reader for a live re-read).
+    ``opts.rerank: false`` skips the rerank tier -- the classic page's
+    eager prewarm path spends nothing beyond the fusion. */
 export async function recallPages(
   query: string,
   limit = 4,
+  opts: { rerank?: boolean } = {},
 ): Promise<Array<{ url: string; title: string; chars: number; text: string }>> {
   const [hybrid, graph] = await Promise.all([
     hybridRecall(query, ["document"], limit, true),
@@ -276,15 +313,16 @@ export async function recallPages(
     1.0,
   );
   bump(graph, 0.6);
-  return [...scores.values()]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((entry) => ({
-      url: entry.item.url ?? "",
-      title: entry.item.title,
-      chars: entry.item.body.length,
-      text: entry.item.body.slice(0, 1500),
-    }));
+  let ranked = [...scores.values()].sort((a, b) => b.score - a.score);
+  if (opts.rerank !== false) {
+    ranked = await rerankStage(query, ranked);
+  }
+  return ranked.slice(0, limit).map((entry) => ({
+    url: entry.item.url ?? "",
+    title: entry.item.title,
+    chars: entry.item.body.length,
+    text: entry.item.body.slice(0, 1500),
+  }));
 }
 
 // -------------------------------------------------------------- graph view

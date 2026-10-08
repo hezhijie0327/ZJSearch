@@ -44,12 +44,17 @@ def _capabilities() -> dict[str, dict[str, str] | None]:
     upstream render fallback, the streamed mirror -- carries them): ``ai``
     is the AI Overview entry point, ``ai_search`` the AI Search one,
     ``embedding`` the history-search one, ``decision`` the browser's
-    judgment proxy.  Each is ``None`` when its feature flag is off or the
-    transport is unconfigured; the macro omits the key then and the client
-    hides the feature's entry point."""
+    judgment proxy, ``rerank`` the recall's cross-encoder proxy.  Each is
+    ``None`` when its feature flag is off or the transport is
+    unconfigured; the macro omits the key then and the client hides the
+    feature's entry point."""
 
     from searx.zjsearch.ai import runs  # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.api import decision_route, embed_route  # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.api import (  # pylint: disable=import-outside-toplevel
+        decision_route,
+        embed_route,
+        rerank_route,
+    )
     from searx.zjsearch.ai.runs import overview  # pylint: disable=import-outside-toplevel
 
     return {
@@ -57,6 +62,7 @@ def _capabilities() -> dict[str, dict[str, str] | None]:
         "ai_search": runs.capability(),
         "embedding": embed_route.capability(),
         "decision": decision_route.capability(),
+        "rerank": rerank_route.capability(),
     }
 
 

@@ -594,7 +594,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       if (cancelled) {
         return;
       }
-      recallPages(data.q, 2)
+      // rerank stays OFF on this eager path: the classic page's hover
+      // prewarm spends nothing beyond the fusion -- the rerank tier is
+      // the run-time recall's (useAiSearch's default-on calls)
+      recallPages(data.q, 2, { rerank: false })
         .then((hits) => {
           if (!cancelled) {
             setAiRecall(hits);
