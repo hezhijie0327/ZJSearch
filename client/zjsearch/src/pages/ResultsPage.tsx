@@ -22,6 +22,7 @@ import {
 } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
+import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -181,6 +182,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const hrefRef = useRef(href);
   hrefRef.current = href;
   const [followupQuery, setFollowupQuery] = useState("");
+  const [followupAttachments, setFollowupAttachments] = useState<AiSearchAttachment[]>([]);
   // the hero's depth pick travels as the `mode` URL param (validated --
   // anything unknown falls back to balanced)
   const [researchMode, setResearchMode] = useState<AiSearchMode>(() =>
@@ -947,7 +949,14 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             return;
                           }
                           setFollowupQuery("");
-                          aiSearch.followup(value, aiLang, researchMode, filterValues.search_language);
+                          aiSearch.followup(
+                            value,
+                            aiLang,
+                            researchMode,
+                            filterValues.search_language,
+                            followupAttachments,
+                          );
+                          setFollowupAttachments([]);
                         }}
                       >
                         <input
@@ -961,6 +970,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           placeholder={t("ai_search_followup")}
                           value={followupQuery}
                         />
+                        {followupAttachments.length ? (
+                          <div className="mt-3">
+                            <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />
+                          </div>
+                        ) : null}
                         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                           <Dropdown
                             ariaLabel={t("research_mode")}
@@ -971,6 +985,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             value={aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode}
                           />
                           <div className="flex items-center gap-2">
+                            <AttachmentPicker
+                              disabled={aiSearch.phase !== "done"}
+                              items={followupAttachments}
+                              onChange={setFollowupAttachments}
+                            />
                             <SubmitCircle
                               disabled={!followupQuery.trim() || aiSearch.phase !== "done"}
                               label={t("ai_search_followup")}
