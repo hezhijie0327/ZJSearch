@@ -52,6 +52,20 @@ IDLE_TIMEOUT = 125.0
 _RESEARCH = "research"
 _WRITE = "write"
 
+_STOP_HALT = "研究已按用户要求停止"
+"""The user stop's settle halt: the run does NOT walk into the writer --
+stopping means stopping (the client's own stop path folds the same
+verdict locally, this one is for a second tab / a replay)."""
+
+_WRAP_HALT = "连接中断,已就已收集材料收尾"
+"""The detach grace's wrap halt: the run walks into the writer with the
+material gathered so far -- every run ends with a REAL terminal state."""
+
+_CONTROL_SLICE = 1.0
+"""The stop-observable event wait slice (seconds): a stop is seen
+within about a second mid-turn, and the per-event idle budgets keep
+their exact semantics via the waited accumulator."""
+
 
 class _Tally:
     """The run's consolidated transport meta: the LAST turn's finish reason
@@ -138,11 +152,13 @@ class _Run:
         first_event_timeout: float,
         idle_timeout: float,
         tools: list[dict[str, t.Any]] | None = None,
+        stop_check: t.Callable[[], bool] | None = None,
     ) -> None:
         self.cfg = cfg
         self.first_event_timeout = first_event_timeout
         self.idle_timeout = idle_timeout
         self.tools = tools
+        self.stop_check = stop_check
         self.tally = _Tally()
         self.entries = 0
         # the write turn's gallery counter (the {{zjs-gallery:i}} indexes)
@@ -157,23 +173,40 @@ class _Run:
     ) -> t.Iterator[t.Any]:
         """One LLM turn: stream it, relay think/say deltas onto ``entry``,
         absorb the finish meta.  Yields wire events and RETURNS ``(text,
-        reasoning, calls, meta, died)`` -- ``died`` covers transport errors
-        and timeouts (the caller decides fatal vs recoverable)."""
+        reasoning, calls, meta, outcome)`` -- the outcome is ``"ok"``,
+        ``"died"`` (transport errors and idle timeouts -- the caller
+        decides fatal vs recoverable) or ``"interrupted"`` (the run's
+        stop flag fired mid-turn: NOT an error, the caller ends the
+        research phase on purpose)."""
         stream = LlmStream(self.cfg, messages, relay_reasoning=True, tools=self.tools if with_tools else None)
         turn_text = ""
         turn_reasoning = ""
         calls: list[dict[str, t.Any]] = []
         meta: dict[str, t.Any] = {}
         kind, payload = "end", None
+        outcome = "ok"
         first = True
         try:
             while True:
-                # the transport health budget is enforced PER EVENT: a
-                # reasoning-looping model streams events forever, and only
-                # the timeouts stop it
-                wait = _event_wait(first, self.first_event_timeout, self.idle_timeout)
-                kind, payload = stream.next_event(wait)
+                budget = self.first_event_timeout if first else self.idle_timeout
+                waited = 0.0
+                while True:
+                    kind, payload = stream.wait_event(min(budget - waited, _CONTROL_SLICE))
+                    if kind != "timeout":
+                        break
+                    waited += _CONTROL_SLICE
+                    if self.stop_check is not None and self.stop_check():
+                        stream.cancel()
+                        outcome = "interrupted"
+                        kind, payload = "end", None
+                        break
+                    if waited >= budget:
+                        kind, payload = "error", "LLM stream idle timeout"
+                        break
                 first = False
+                if outcome == "interrupted":
+                    logger.warning("zjsearch loop: turn interrupted by the run's stop flag")
+                    break
                 if kind == "think":
                     turn_reasoning += str(payload or "")
                     yield {"e": "think", "id": entry, "t": str(payload or "")}
@@ -191,11 +224,11 @@ class _Run:
             # generator right here -- cancel the pump towards the loop
             stream.cancel()
         # the turn closes on "finish" (clean) / "end" (clean, no meta) /
-        # "error" (transport failure or idle timeout -- next_event maps it)
-        died = kind == "error"
-        if died:
+        # "error" (transport failure or idle timeout -- the outcome maps it)
+        if kind == "error":
             logger.warning("zjsearch loop: turn stream failed: %s", payload)
-        return (turn_text, turn_reasoning, calls, meta, died)
+            outcome = "died"
+        return (turn_text, turn_reasoning, calls, meta, outcome)
 
 
 def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-statements, too-many-arguments
@@ -218,6 +251,8 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     gallery_validator: t.Callable[[str], list[dict[str, t.Any]]] | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
+    control: t.Callable[[], list[dict[str, t.Any]]] | None = None,
+    stop_check: t.Callable[[], bool] | None = None,
 ) -> t.Iterator[dict[str, t.Any]]:
     """Drive one run, yielding wire events.  See the module docstring for
     the phase machine; the parameters:
@@ -244,13 +279,42 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       the shared loop), ``writer_sources() -> entries``: the WRITE phase.
     - ``gallery_validator(body) -> items``: the ``zjs-images`` fence
       whitelist (invented urls are dropped server-side).
+    - ``control() -> directives``: the RUN HOST's boundary poll (polled
+      at the round boundary and on the zero-calls path) -- ``stop`` ends
+      the research without the writer, ``wrap`` halts INTO the writer
+      with the material gathered (the detach grace's graceful ending).
+    - ``stop_check() -> bool``: the mid-turn stop flag -- the event wait
+      is sliced so a stop cancels the in-flight stream within ~1s (an
+      interrupted turn is a deliberate end, never an error).
     """
-    run_state = _Run(cfg, first_event_timeout, idle_timeout, tools)
+    run_state = _Run(cfg, first_event_timeout, idle_timeout, tools, stop_check=stop_check)
     researching = bool(tools and executor is not None)
     rounds = 0
     halt_message: str | None = None
     carried_error: str | None = None
     refusals = 0
+    stop_requested = False
+
+    def poll_control() -> None:
+        """Fold the host's boundary directives into the loop's state."""
+        nonlocal stop_requested, halt_message, carried_error
+        if control is None:
+            return
+        try:
+            directives = control()
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch loop: control poll failed: %r", exc)
+            return
+        for directive in directives:
+            action = str(directive.get("action") or "")
+            if action == "stop":
+                stop_requested = True
+            elif action == "wrap":
+                # the wrap halt rides BOTH surfaces: the writer's prompt
+                # (the honest truncation note) and the settle's halt (the
+                # record shows WHY a done run ended mid-research)
+                halt_message = halt_message or _WRAP_HALT
+                carried_error = carried_error or _WRAP_HALT
 
     if researching:
         # the coarse phase spine (the closed set's one coarse event): the
@@ -263,8 +327,14 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         while rounds < max_rounds and halt_message is None:
             entry = run_state.next_entry()
             yield {"e": "open", "id": entry, "kind": _RESEARCH, "round": rounds + 1}
-            turn_text, turn_reasoning, calls, meta, died = yield from run_state.stream_turn(entry, messages, True)
-            if died:
+            turn_text, turn_reasoning, calls, meta, outcome = yield from run_state.stream_turn(entry, messages, True)
+            if outcome == "interrupted":
+                # the stop flag fired mid-turn: a deliberate end, never an
+                # error -- the research phase closes without the writer
+                yield {"e": "close", "id": entry}
+                stop_requested = True
+                break
+            if outcome == "died":
                 # a research turn died mid-stream: the transport blip must
                 # not throw away the whole run -- the writer still answers
                 # from the sources gathered so far
@@ -287,6 +357,10 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     yield wire.settle("error", halt="the model asked an unusable question")
                 return
             if not calls:
+                poll_control()
+                if stop_requested:
+                    yield {"e": "close", "id": entry}
+                    break
                 # the model stopped researching: the phase is over --
                 # UNLESS the ledger-closure contract says otherwise (the
                 # run ends when the LEDGER closes, not when the model got
@@ -352,6 +426,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("zjsearch loop: round progress check failed: %r", exc)
                     halt_message = None
+            poll_control()
+            if stop_requested:
+                break
+
+        if stop_requested:
+            # a stop SKIPS the write phase on purpose: stopping means
+            # stopping -- the settle is an honest error whose halt names
+            # the cause (the aborting client folds its own stopped state;
+            # this settle is what a second tab / a replay sees)
+            yield wire.settle("error", halt=_STOP_HALT, **run_state.tally.settle_kwargs())
+            return
 
         if synthesizer is not None or writer is not None:
             # the PRE-WRITE verification pass (核验): runs under its own

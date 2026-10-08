@@ -18,6 +18,7 @@ def install(app: flask.Flask) -> None:
         knowledge_page,
         overview_route,
         rerank_route,
+        run_host_route,
         search_route,
         tag_route,
         thread_page,
@@ -31,3 +32,4 @@ def install(app: flask.Flask) -> None:
     embed_route.install(app)
     rerank_route.install(app)
     decision_route.install(app)
+    run_host_route.install(app)

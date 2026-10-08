@@ -12,8 +12,10 @@ settles as an error BEFORE any content event becomes the plain-text 502
 (prime before streaming, so the status code is honest).
 """
 
+import json
 import logging
 import re
+import threading
 import time
 import typing as t
 
@@ -40,6 +42,7 @@ from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.runs.report import synth as report_synth
 from searx.zjsearch.ai.runs import attachments as uploads
+from searx.zjsearch.ai.runs import host as run_host
 from searx.zjsearch.ai.runs.search.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runs.search.gates import (
     clarify_gate,
@@ -439,6 +442,15 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 items.append({"u": str(url), "n": n})
         return items
 
+    # THE RUN HOST: the handle exists BEFORE the loop generator (the
+    # loop's control hooks close over it) -- the loop then executes on a
+    # driver thread, events publish into the handle and this response
+    # degrades into the first SUBSCRIBER -- a dropped connection detaches
+    # instead of killing the run (reattach with X-Zjs-Run-Id + after_seq:
+    # the same run), and a detached run wraps gracefully once its grace
+    # window lapses
+    handle = run_host.register(budget("detach_grace", mode, run_host.GRACE_DEFAULT))
+
     events = engine.run(
         cfg,
         initial_messages(
@@ -491,34 +503,37 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         ),
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
+        control=handle.directives,
+        stop_check=handle.control.stopped,
     )
-    response = _respond(
-        _Ndjson(
-            events,
-            cfg,
-            research_q,
-            lang,
-            gate_usage,
-            state.rerank_usage,
-            state.decision_usage,
-            state.judgments,
-            (
-                [
-                    {
-                        "e": "decisions",
-                        "items": [depth_probe_entry],
-                    }
-                ]
-                if depth_probe_entry
-                else None
-            ),
-            known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
-        )
+    # the run host's DRIVER thread pulls the loop into the handle; the
+    # settle's usage merges at generation (the executor's usage dicts are
+    # final), the late work trails it -- a detached client costs neither
+    tail = _SettleTail(
+        cfg,
+        research_q,
+        lang,
+        gate_usage,
+        rerank_usage=state.rerank_usage,
+        decision_usage=state.decision_usage,
+        judgments=state.judgments,
+        known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
     )
+    driver = threading.Thread(
+        target=_drive,
+        args=(handle, events, tail, [depth_probe_entry] if depth_probe_entry else None),
+        daemon=True,
+        name="zjsearch-run-driver",
+    )
+    driver.start()
+    response = _hosted_response(handle)
     if response.status_code == 502 and image_parts and not degraded:
         # the transport rejected the multimodal turn (a text-only model, a
         # vision-less gateway): the WHOLE run retries as text-only -- the
-        # question itself never needed the images to be answerable
+        # question itself never needed the images to be answerable.  The
+        # orphaned run gets the stop instruction (its current turn runs
+        # out, then the research closes without a writer).
+        handle.control.stop()
         logger.warning("zjsearch_ai_search: multimodal request rejected -- retrying text-only")
         return _search(degraded=True)
     return response
@@ -542,15 +557,19 @@ def _clarify_events(gate: dict[str, t.Any]) -> t.Iterator[dict[str, t.Any]]:
     yield wire.settle("awaiting", halt="awaiting the user's direction")
 
 
-class _Ndjson:  # pylint: disable=too-few-public-methods
-    """The loop's timeline ops as NDJSON lines, with the LATE work after
-    the settle: the related-questions fallback completion (when the
-    writer skipped the in-stream fence) and the memory extraction -- both
-    suppressed on an ``awaiting`` run."""
+class _SettleTail:
+    """The settle's usage merge (the gates/rerank/decision buckets plus
+    the judgments) and the LATE post-settle work (the related fallback
+    completion and the memory extraction, both suppressed on an
+    ``awaiting`` run).  One definition, two consumers: the request-thread
+    ``_Ndjson`` (the short clarify / no-research streams) and the run
+    host's DRIVER thread (research runs -- the merge must happen at the
+    settle's GENERATION point there, because the executor's usage dicts
+    are only final once the loop is done, and a detached client must not
+    cost the late work)."""
 
     def __init__(  # pylint: disable=too-many-arguments
         self,
-        events: t.Iterator[dict[str, t.Any]],
         cfg: dict[str, t.Any],
         question: str,
         lang: str,
@@ -558,10 +577,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         rerank_usage: dict[str, int] | None = None,
         decision_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
-        preamble: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
     ):
-        self.events = events
         self.cfg = cfg
         self.question = question
         self.lang = lang
@@ -578,14 +595,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         # the near-dup gate's comparison set for the memory extraction,
         # resolved LAZILY (the run's own saves land while the loop streams)
         self.known_memories_fn = known_memories_fn
-        # events that precede the loop's own stream (the depth probe runs
-        # BEFORE the executor exists) -- flushed first when iterating
-        self.preamble = [wire.encode(e) for e in (preamble or [])]
-        self.buffer: list[str] = []
-        self.rest: t.Iterator[str] | None = None
-        self.primed = False
 
-    def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
+    def merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
         """The settle with the GATES' token account folded into its usage:
         ``usage.gates = {input, output, calls}`` -- the client's meta row
         renders the whole flow, gates included.  The RERANK bucket forces
@@ -606,11 +617,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                     "cache_write": 0,
                 }
             )
-            usage["gates"] = {
-                "input": sum(int(g.get("input") or 0) for g in self.gate_usage),
-                "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
-                "calls": len(self.gate_usage),
-            }
+            usage["gates"] = self.gates_sum()
             rerank = self.rerank_usage
             if rerank and rerank.get("calls"):
                 # the ranking cascade's endpoint spend, its own bucket (the
@@ -629,6 +636,91 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         if self.judgments:
             event = {**event, "judgments": self.judgments}
         return event
+
+    def late_events(  # pylint: disable=too-many-branches
+        self, answer: str, awaiting: bool, related_seen: bool
+    ) -> t.Iterator[dict[str, t.Any]]:
+        """The LATE events after the settle: the related fallback and the
+        memory extraction (both suppressed on an awaiting run), then the
+        trailing usage event with the absolute gates sum."""
+        if awaiting or not answer:
+            return
+        if not related_seen:
+            # the post-settle fallback: the small completion generates the
+            # follow-up suggestions the writer's fence skipped (it can
+            # think for the better part of a minute -- that is why the
+            # fence is the fast path and this trails the settle)
+            try:
+                found = related_questions(self.cfg, self.question, answer, self.lang, self.gate_usage)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("zjsearch_ai_search: related fallback failed: %r", exc)
+                found = []
+            if found:
+                yield {"e": "related", "items": found}
+        try:
+            known = self.known_memories_fn() if self.known_memories_fn else None
+            facts, tags = extract_insights(self.cfg, self.question, answer, self.gate_usage, known=known)
+            for fact in facts:
+                yield {"e": "memory", "content": fact}
+            if tags:
+                # the tag graph's semantic layer: the client parks these on
+                # the run, its settle writes them into the projections
+                yield {"e": "tags", "items": tags}
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch_ai_search: memory extraction failed: %r", exc)
+        if self.gate_usage:
+            # the trailing completions' spend: the absolute gates sum
+            # replaces the settle's bucket (idempotent -- the client sets
+            # it), so the WHOLE flow stays accounted
+            yield {"e": "usage", "gates": self.gates_sum()}
+
+    def gates_sum(self) -> dict[str, t.Any]:
+        return {
+            "input": sum(int(g.get("input") or 0) for g in self.gate_usage),
+            "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
+            "calls": len(self.gate_usage),
+        }
+
+
+class _Ndjson:  # pylint: disable=too-few-public-methods
+    """The loop's timeline ops as NDJSON lines, with the LATE work after
+    the settle -- the request-thread shape for the SHORT streams (the
+    clarify gate, the no-research single write).  Research runs go
+    through the run host's driver instead (see :py:func:`_drive`)."""
+
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        events: t.Iterator[dict[str, t.Any]],
+        cfg: dict[str, t.Any],
+        question: str,
+        lang: str,
+        gate_usage: list[dict[str, t.Any]],
+        rerank_usage: dict[str, int] | None = None,
+        decision_usage: dict[str, int] | None = None,
+        judgments: list[dict[str, t.Any]] | None = None,
+        preamble: list[dict[str, t.Any]] | None = None,
+        known_memories_fn: t.Callable[[], list[str]] | None = None,
+    ):
+        self.events = events
+        self.tail = _SettleTail(
+            cfg,
+            question,
+            lang,
+            gate_usage,
+            rerank_usage=rerank_usage,
+            decision_usage=decision_usage,
+            judgments=judgments,
+            known_memories_fn=known_memories_fn,
+        )
+        # events that precede the loop's own stream (the depth probe runs
+        # BEFORE the executor exists) -- flushed first when iterating
+        self.preamble = [wire.encode(e) for e in (preamble or [])]
+        self.buffer: list[str] = []
+        self.rest: t.Iterator[str] | None = None
+        self.primed = False
+
+    def _merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
+        return self.tail.merged_settle(event)
 
     def prime(self) -> None:
         """Pull events until the upstream proves alive (or dies): the
@@ -691,45 +783,9 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         yield from self._late("".join(answer_parts).strip(), awaiting, related_seen)
 
     def _late(self, answer: str, awaiting: bool, related_seen: bool) -> t.Iterator[str]:
-        """The LATE events after the settle: the related fallback and the
-        memory extraction (both suppressed on an awaiting run)."""
-        if awaiting or not answer:
-            return
-        if not related_seen:
-            # the post-settle fallback: the small completion generates the
-            # follow-up suggestions the writer's fence skipped (it can
-            # think for the better part of a minute -- that is why the
-            # fence is the fast path and this trails the settle)
-            try:
-                found = related_questions(self.cfg, self.question, answer, self.lang, self.gate_usage)
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("zjsearch_ai_search: related fallback failed: %r", exc)
-                found = []
-            if found:
-                yield wire.encode({"e": "related", "items": found})
-        try:
-            known = self.known_memories_fn() if self.known_memories_fn else None
-            facts, tags = extract_insights(self.cfg, self.question, answer, self.gate_usage, known=known)
-            for fact in facts:
-                yield wire.encode({"e": "memory", "content": fact})
-            if tags:
-                # the tag graph's semantic layer: the client parks these on
-                # the run, its settle writes them into the projections
-                yield wire.encode({"e": "tags", "items": tags})
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("zjsearch_ai_search: memory extraction failed: %r", exc)
-        if self.gate_usage:
-            # the trailing completions' spend: the absolute gates sum
-            # replaces the settle's bucket (idempotent -- the client sets
-            # it), so the WHOLE flow stays accounted
-            yield wire.encode({"e": "usage", "gates": self._gates_sum()})
-
-    def _gates_sum(self) -> dict[str, t.Any]:
-        return {
-            "input": sum(int(g.get("input") or 0) for g in self.gate_usage),
-            "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
-            "calls": len(self.gate_usage),
-        }
+        """The LATE events after the settle."""
+        for event in self.tail.late_events(answer, awaiting, related_seen):
+            yield wire.encode(event)
 
     def __iter__(self) -> t.Iterator[str]:
         yield from self.preamble
@@ -738,6 +794,120 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         yield from self.buffer
         if self.rest is not None:
             yield from self.rest
+
+
+def _drive(  # pylint: disable=too-many-branches
+    handle: run_host.RunHandle,
+    events: t.Iterator[dict[str, t.Any]],
+    tail: _SettleTail,
+    preamble: list[dict[str, t.Any]] | None,
+) -> None:
+    """The run host's DRIVER thread: pull the loop's wire events into the
+    run handle.  The settle's usage merges AT GENERATION (the executor's
+    live usage dicts are final by then) and the LATE work runs right
+    after -- a detached client costs neither.  The driver owns the
+    handle's lifecycle: its finally marks the handle finished so every
+    subscriber drains and exits, and a driver that dies without a settle
+    publishes a synthetic one (no subscriber hangs)."""
+    answer_parts: list[str] = []
+    awaiting = False
+    related_seen = False
+    try:
+        for event in preamble or []:
+            handle.publish(event)
+        for event in events:
+            kind = event.get("e")
+            if kind in ("answer", "section"):
+                answer_parts.append(str(event.get("t") or ""))
+            elif kind == "ask":
+                awaiting = True
+            elif kind == "related":
+                related_seen = True
+            if kind == "settle":
+                handle.publish(tail.merged_settle(event))
+                for late in tail.late_events("".join(answer_parts).strip(), awaiting, related_seen):
+                    handle.publish(late)
+                return
+            handle.publish(event)
+        handle.publish(wire.settle("error", halt="the run ended without a settle event"))
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("zjsearch_ai_search: the run driver failed: %s: %s", type(exc).__name__, str(exc)[:300])
+        try:
+            handle.publish(wire.settle("error", halt=f"the run driver failed: {exc}"))
+        except Exception:  # pylint: disable=broad-except
+            pass
+    finally:
+        handle.finish()
+
+
+def _hosted_response(handle: run_host.RunHandle) -> flask.Response:
+    """The research run's response FROM the run handle: prime from the
+    subscription (a dead upstream still answers the plain-text 502),
+    then stream the same subscription to the end.  The run key rides the
+    ``X-Zjs-Run-Id`` response header -- the client's reattach handle for
+    a dropped connection (the SAME run, never a restart).
+
+    Priming consumes from ONE flattened queue -- the backlog first (the
+    events published before we attached), then the live pulls -- and
+    NEVER discards a pulled line: the pending list holds the batch tail
+    while the content check decides."""
+    sub = handle.subscribe(0)
+    primed: list[str] = []
+    pending: list[str] = list(sub.backlog)
+    verdict = ""
+    deadline = time.monotonic() + 300.0
+    while not verdict:
+        if pending:
+            line = pending.pop(0)
+        else:
+            lines = handle.pull(sub, 0.5)
+            if not lines:
+                if handle.finished:
+                    # the driver finished without any event at all -- a run
+                    # that died before its first token
+                    verdict = "upstream returned an empty stream"
+                    break
+                if time.monotonic() > deadline:
+                    verdict = "the run produced no content in time"
+                continue
+            pending = lines
+            continue
+        primed.append(line)
+        event = json.loads(line)
+        kind = str(event.get("e") or "")
+        if kind == "settle":
+            if str(event.get("status") or "") == "error":
+                verdict = str(event.get("halt") or "upstream returned an empty stream")
+            else:
+                # settled before any content event (an awaiting /
+                # error-free empty run): the tail still streams
+                verdict = "alive"
+            break
+        if kind in _CONTENT_EVENTS:
+            verdict = "alive"
+            break
+        if time.monotonic() > deadline:
+            verdict = "the run produced no content in time"
+    if verdict != "alive":
+        handle.unsubscribe(sub)
+        return http.upstream_error_response("error", verdict)
+
+    def rest() -> t.Iterator[str]:
+        try:
+            yield from primed
+            while True:
+                lines = handle.pull(sub)
+                if lines:
+                    yield from lines
+                    continue
+                if handle.finished:
+                    return
+        finally:
+            handle.unsubscribe(sub)
+
+    response = http.streaming_response(rest(), "application/x-ndjson")
+    response.headers["X-Zjs-Run-Id"] = handle.key
+    return response
 
 
 def install(app: flask.Flask) -> None:

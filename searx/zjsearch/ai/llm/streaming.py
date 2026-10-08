@@ -71,6 +71,18 @@ class LlmStream:
             self.cancel()
         return (kind, payload)
 
+    def wait_event(self, timeout: float) -> tuple[str, t.Any]:
+        """One BOUNDED wait with no semantics attached: ``("timeout",
+        None)`` when the slice elapsed quietly -- no idle accounting, no
+        auto-cancel (the caller accumulates the budget; that is what
+        makes sub-second slicing safe).  The research turn uses this to
+        observe the run's stop flag between slices without weakening
+        :py:meth:`next_event`'s idle-timeout contract."""
+        try:
+            return self.events.get(timeout=timeout)
+        except queue.Empty:
+            return ("timeout", None)
+
     def cancel(self) -> None:
         if not self.task.done():
             self.loop.call_soon_threadsafe(self.task.cancel)

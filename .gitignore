@@ -56,3 +56,6 @@ client/zjsearch/dev-settings.local.yml
 # lighthouse gate materialised no-JS page (transient)
 /searx/static/audit-nojs.html
 gui-test-screenshots/
+
+# zjsearch: local-only settings with real keys -- never enter git
+client/zjsearch/*.local.yml

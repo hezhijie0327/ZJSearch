@@ -14,7 +14,7 @@ import {
   LATE_KINDS,
   settle,
 } from "@/features/results/aiSearch/timeline.ts";
-import { fetchEventStream } from "@/lib/http.ts";
+import { fetchEventStream, fetchJson } from "@/lib/http.ts";
 import { loadThreadAttachments, saveAttachments } from "@/lib/kb/attachments.ts";
 import { appendRunEvents, loadThreadEvents } from "@/lib/kb/events.ts";
 import { archiveDocument, loadMemories, saveMemory, settleRun, startRun } from "@/lib/kb/projections.ts";
@@ -112,6 +112,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   // and beginRun (called right after) must POST the NEW id, not the stale
   // state's
   const threadIdRef = useRef("");
+  // the CURRENT run's server-side handle (the run host's X-Zjs-Run-Id
+  // response header): the reattach key for a dropped connection -- the
+  // same run continues from the server buffer, never a restart.  Reset
+  // per beginRun (the clarify / no-research streams carry no host).
+  const runKeyRef = useRef("");
   const entryIndexRef = useRef<Map<number, EntryIndex>>(new Map());
   // the current run's recalled-refs badge map (set at beginRun, read by
   // the sources fold)
@@ -151,6 +156,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!capability) {
       return;
     }
+    runKeyRef.current = "";
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
@@ -218,7 +224,27 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           ...withUrl.map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
         ],
       };
-      const apply = (event: Record<string, unknown>) => {
+      // the run host seqs every event: an ATTACH replay starts after the
+      // last SEEN seq, so the guard only fires on a genuine overlap (a
+      // live tail racing a reconnect).  The field is stripped before it
+      // reaches the evt log -- the fold cares about wire shapes only.
+      let lastSeq = 0;
+      let settled = false;
+      const apply = (raw: Record<string, unknown>) => {
+        const seq = typeof raw.seq === "number" ? raw.seq : 0;
+        if (seq) {
+          if (seq <= lastSeq) {
+            return;
+          }
+          lastSeq = seq;
+        }
+        const event: Record<string, unknown> = { ...raw };
+        if (seq) {
+          delete event.seq;
+        }
+        if (event.e === "settle") {
+          settled = true;
+        }
         // VOLATILE BYTES never persist: the browser mirror's frames and
         // the web_browser rows' settlement images (screenshots, frames)
         // keep their meta in the event log but never the jpeg bytes -- a
@@ -241,9 +267,36 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         });
       };
       try {
-        await fetchEventStream("/zjsearch/ai/search", body, apply, signal);
-        // a stream that ends WITHOUT a settle (server restart) settles
-        // locally -- no run hangs pending forever
+        await fetchEventStream("/zjsearch/ai/search", body, apply, signal, (response) => {
+          runKeyRef.current = response.headers.get("X-Zjs-Run-Id") ?? "";
+        });
+        // the run HOST keeps the run alive across a dropped connection:
+        // reattach from the server's buffer (after the last SEEN seq)
+        // before giving up -- the same run continues, never a restart
+        if (!signal.aborted && !settled && runKeyRef.current) {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+            if (signal.aborted) {
+              return;
+            }
+            try {
+              await fetchEventStream(
+                "/zjsearch/ai/run/attach",
+                { tk: capability.tk, run_key: runKeyRef.current, after_seq: lastSeq },
+                apply,
+                signal,
+              );
+              if (settled) {
+                return;
+              }
+            } catch {
+              // the attach itself failed (run swept, network still down):
+              // the backoff loop retries
+            }
+          }
+        }
+        // a stream that ends WITHOUT a settle (server restart, the attach
+        // attempts exhausted) settles locally -- no run hangs pending forever
         setCore((prev) =>
           prev.phase === "streaming"
             ? settle({ ...prev, runs: [...prev.runs] }, { error: "the AI stream ended without settling" }, false)
@@ -420,6 +473,18 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   };
 
   const stop = () => {
+    // the run host keeps runs alive past the connection: stopping is an
+    // INSTRUCTION now, not a broken pipe (fire-and-forget -- the local
+    // abort below stays the UI's own cutoff either way; the hosted run
+    // sees the flag at its next event slice / round boundary)
+    const runKey = runKeyRef.current;
+    if (runKey && capability) {
+      void fetchJson("/zjsearch/ai/run/control", {
+        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "stop" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }).catch(() => {});
+    }
     abortRef.current?.abort();
     const last = core.runs[core.runs.length - 1];
     if (last && threadIdRef.current) {

@@ -1298,6 +1298,34 @@ resumes the gaps instead of restarting.  The server stays stateless.
 A stale-run sweep (2h silent + "streaming", once per session at the
 first directory read) corrects rows whose tab died mid-research; the
 client live-fold accepts the wire's LATE events (related/memory/tags/
+
+THE RUN HOST (`runs/host.py`, v2.1 R1): a research run's life is
+DECOUPLED from its client connection — the loop executes on a driver
+thread and every wire event publishes into a per-run handle (seq-stamped
+buffer + subscribers); the HTTP response is just the FIRST SUBSCRIBER.
+A dropped connection is a DETACH, not a death: the run finishes its
+current round, holds at the round boundary, and `POST
+/zjsearch/ai/run/attach` (body: run_key from the `X-Zjs-Run-Id` response
+header + after_seq) replays the SAME run — the client's `useAiSearch`
+tracks the last seen `seq` (stripped before the evt log) and retries the
+attach with backoff before falling back to the local error settle.  A
+run detached longer than the grace window (`detach_grace`, default 90s)
+wraps gracefully at its next boundary — halt note to the writer AND the
+settle — so every run ends with a real terminal state (the 2h stale
+sweep stops firing for this class); a finished handle stays fetchable
+for a TTL (1h) then the sweep drops it.  Stopping is an INSTRUCTION:
+`POST /zjsearch/ai/run/control {action:"stop"}` (the client's stop
+button fires it before aborting) — the loop sees the flag mid-turn
+(1s-sliced event waits; an interrupted turn is an `interrupted` outcome,
+never `died`) or at the boundary, skips the writer, settles
+`error/halt=研究已按用户要求停止`.  The research run's settle usage
+merges AT GENERATION on the driver (`_SettleTail`, shared with the
+request-thread `_Ndjson` the clarify/no-research paths still use), and
+the late work (related fallback / memory extraction) runs there too —
+a detached client costs neither.  `flask.copy_current_request_context`
+is captured in `SearchesCore.__init__` (the driver thread has no request
+context).  Steer/preempt/wrap directives + per-subagent flags land on
+the same ControlBox in R2/R3.
 usage) AFTER the settle — memory saves persist live, tags park before
 settleRun; everything else post-settle stays dropped.
 

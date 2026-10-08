@@ -15,9 +15,6 @@ import time
 import typing as t
 from urllib.parse import urlsplit
 
-import flask
-
-
 from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
@@ -374,10 +371,12 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
         for wire_id, query, category, time_range, include, exclude, dedup_key in search_jobs:
-            # the worker needs a request context of its own: SearchWithPlugins
-            # stores the request proxy and search() copies the context again
-            # for each of its engine threads (mirrors the webapp view thread)
-            worker = flask.copy_current_request_context(self._search_one)
+            # the request-bound wrapper was captured at construction (on
+            # the request thread -- the run host's driver thread has no
+            # request context of its own): SearchWithPlugins stores the
+            # request proxy and search() copies the context again for
+            # each of its engine threads (mirrors the webapp view thread)
+            worker = self._ctx_search
             # the call's wall clock starts AT SUBMIT (queue wait included):
             # the settlement's ``ms`` is the wire's debug timing
             futures[pool.submit(worker, query, category, time_range, include, exclude)] = (

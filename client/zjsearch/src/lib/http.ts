@@ -79,12 +79,15 @@ export async function fetchStream(
     search endpoint).  Same error contract as fetchStream (HTTP status +
     truncated body excerpt); each complete line is parsed and handed to
     onEvent as soon as it arrives, a trailing line without a newline
-    included. */
+    included.  `onResponse` (optional) sees the Response as soon as the
+    headers land -- the run host's X-Zjs-Run-Id reattach handle is read
+    there, before any event streams. */
 export async function fetchEventStream(
   url: string,
   body: unknown,
   onEvent: (event: Record<string, unknown>) => void,
   signal?: AbortSignal,
+  onResponse?: (response: Response) => void,
 ): Promise<void> {
   const response = await fetch(url, {
     body: JSON.stringify(body),
@@ -92,6 +95,7 @@ export async function fetchEventStream(
     method: "POST",
     signal,
   });
+  onResponse?.(response);
   if (!response.ok || !response.body) {
     const detail = await response
       .text()

@@ -156,6 +156,18 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # view_image 的注入队列:抓到的图作为下一轮的 user 消息回灌对话
         # (工具结果本身是文本通道,图走 user turn 是全供应商通用的形态)
         self.image_injections: list[dict[str, t.Any]] = []
+        # the request-bound search worker, captured NOW on the request
+        # thread: the run executes on the run host's driver thread, and
+        # SearchWithPlugins needs a request context of its own per worker
+        # (it stores the request proxy and re-copies the context per
+        # engine thread).  No request context (unit tests) degrades to
+        # the plain method.
+        try:
+            import flask  # pylint: disable=import-outside-toplevel
+
+            self._ctx_search = flask.copy_current_request_context(self._search_one)
+        except (ImportError, RuntimeError):
+            self._ctx_search = self._search_one
 
     def drain_image_injections(self) -> list[dict[str, t.Any]]:
         """view_image's fetched pictures, drained into the next model turn
