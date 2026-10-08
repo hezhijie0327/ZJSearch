@@ -1123,10 +1123,130 @@ const STEER_STAGE: DebugScenario = {
   ],
 };
 
+/** The SUBAGENT surface: the delegation row, the folded sub row with
+    its own think/call stream (round re-opens must NOT duplicate the row),
+    the digest receipt riding the delegation row's second settlement, and
+    a SUBAGENT browser frame (agent-tagged -- the rail card's tab strip). */
+const SUB_STAGE: DebugScenario = {
+  id: "sub",
+  label: "子代理(委派行 · 折叠子时间线 · 浏览器多标签)",
+  q: "调研全球动力电池产业:头部厂商产能;固态电池路线;钠离子进展",
+  mode: "deep",
+  events: [
+    { ...base },
+    { e: "phase", name: "research" },
+    {
+      e: "browser",
+      url: "https://www.bing.com/search?q=ev+battery+industry",
+      title: "ev battery industry - 搜索",
+      img: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA4KCw0LCQ4NDA0QDw4RFiQXFhQUFiwgIRokNC43NjMuMjI6QVNGOj1OPjIySGJJTlZYXV5dOEVmbWVabFNbXVn/2wBDAQ8QEBYTFioXFypZOzI7WVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVn/wAARCABaAKADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCKiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/9k=",
+      w: 1280,
+      h: 800,
+      agent: "lead",
+    },
+    {
+      e: "calls",
+      id: 1,
+      items: [
+        {
+          id: 1,
+          tool: "research_subtask",
+          q: "头部厂商产能与市占率",
+          status: "pending",
+          args: { title: "头部厂商产能与市占率", objective: "建立 2024-2025 头部电池厂商的产能与市占率矩阵" },
+        },
+      ],
+    },
+    {
+      e: "call",
+      id: 1,
+      call: 1,
+      status: "ok",
+      ms: 120,
+      label: "头部厂商产能与市占率",
+      feed: "建立 2024-2025 头部电池厂商的产能与市占率矩阵",
+    },
+    {
+      e: "open",
+      id: 10000,
+      kind: "sub",
+      round: 1,
+      title: "头部厂商产能与市占率",
+      objective: "建立 2024-2025 头部电池厂商的产能与市占率矩阵(宁德时代/LG/比亚迪为最小集合)",
+    },
+    { e: "think", id: 10000, t: "子代理:先宽后窄,先全球格局再单厂产能。" },
+    {
+      e: "calls",
+      id: 10000,
+      items: [
+        { id: 1, tool: "web_search", q: "global EV battery market share 2025", status: "ok", n: 6, ms: 1640, args: {} },
+      ],
+    },
+    { e: "sources", items: [SOURCES[0], SOURCES[1]] },
+    { e: "call", id: 10000, call: 1, status: "ok", n: 6, ms: 1640, feed: "plan: 5 deep + 1 shallow [1][2]" },
+    // the child's browser session: an AGENT-TAGGED mirror frame (the tab strip)
+    {
+      e: "browser",
+      url: "https://www.bing.com/search?q=battery+capacity+2025",
+      title: "battery capacity 2025 - 搜索",
+      img: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA4KCw0LCQ4NDA0QDw4RFiQXFhQUFiwgIRokNC43NjMuMjI6QVNGOj1OPjIySGJJTlZYXV5dOEVmbWVabFNbXVn/2wBDAQ8QEBYTFioXFypZOzI7WVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVn/wAARCABaAKADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCKiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAP/9k=",
+      w: 1280,
+      h: 800,
+      agent: "sub-10000",
+    },
+    { e: "close", id: 10000 },
+    // the child's round re-open: MUST NOT duplicate the sub row
+    { e: "open", id: 10000, kind: "sub", round: 2, title: "" },
+    { e: "close", id: 10000 },
+    // the digest rides the delegation row's second settlement
+    {
+      e: "call",
+      id: 1,
+      call: 1,
+      status: "ok",
+      ms: 0,
+      label: "头部厂商产能与市占率",
+      chars: 320,
+      feed: "【子任务】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
+      result:
+        "【子任务】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
+    },
+    { e: "learnings", round: 2, items: [], gaps: [] },
+    { e: "close", id: 1 },
+    { e: "open", id: 2, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "answer",
+      t: "三个子面已并行调研完毕(头部格局/固态路线/钠离子进展),综合结论以子代理回传的矩阵为骨架逐节展开——产能口径、时间表与商业化阶段各自成段,引用来自各子任务的 [n] 来源。",
+    },
+    { e: "close", id: 2 },
+    { e: "related", items: ["固态电池量产时间表最新?", "钠离子电池装车车型有哪些?"] },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 15200,
+        output: 520,
+        thoughts: 800,
+        cached: 8100,
+        cache_write: 0,
+        research: { input: 11200, output: 300 },
+        write: { input: 4000, output: 220 },
+        gates: { input: 210, output: 16, calls: 2 },
+        rerank: { calls: 1, tokens: 640 },
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+  ],
+};
+
 export const DEBUG_SCENARIOS: DebugScenario[] = [
   BROWSER_STAGE,
   FULL_STAGE,
   STEER_STAGE,
+  SUB_STAGE,
   DONE_STAGE,
   AWAITING_STAGE,
   FAILED_STAGE,

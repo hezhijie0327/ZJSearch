@@ -1246,7 +1246,11 @@ function AiSearchRunSectionImpl({
                 follow-up box.  The rail owns THE scroll; every section is
                 an ordinary block (cap-4 each), and the pb-44 keeps the
                 last card reachable above the follow-up box. */}
-            {run.browser ? <BrowserMirrorSection view={run.browser} /> : null}
+            {(() => {
+              const mirror: AiSearchRun["browser"] =
+                run.browser ?? Object.values(run.browserSessions ?? {}).find((item) => item.img) ?? null;
+              return mirror ? <BrowserMirrorSection sessions={run.browserSessions} view={mirror} /> : null;
+            })()}
             {run.attachments?.length ? (
               <section aria-label={t("ai_attach_section")} className="mb-5">
                 <RailHeader count={run.attachments.length} icon={Paperclip} title={t("ai_attach_section")} />

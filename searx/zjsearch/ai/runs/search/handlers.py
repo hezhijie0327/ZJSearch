@@ -18,6 +18,7 @@ import typing as t
 from urllib.parse import urlsplit
 
 
+from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.runs import attachments as uploads_fetch
 from searx.zjsearch.ai.tools import mcp
 from searx.zjsearch.ai.tools import web_browser as web_browser_tool
@@ -25,6 +26,7 @@ from searx.zjsearch.ai.tools import web_reader as reader
 from searx.zjsearch.ai.tools import calculator
 from searx.zjsearch.ai.tools import past_research as past_research_cap
 from searx.zjsearch.ai.tools import memory as user_memory_cap
+from searx.zjsearch.ai.browser import session as browser_session
 from searx.zjsearch.ai.tools import research_subtask as subtask_tool
 from searx.zjsearch.ai.llm import decision
 from searx.zjsearch.ai.runs.search import audit
@@ -148,9 +150,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         the document); the composite feed (header + outline + text) stays
         the model's receipt.  Yields the wire events; returns whether the
         window gathered material."""
-        for frame in web_browser_tool.wait_user_frames(int(args.get("seconds") or 180)):
+        for frame in web_browser_tool.wait_user_frames(int(args.get("seconds") or 180), self.browser_session_id):
             yield ("browser", frame)
-        outcome = web_browser_tool.wait_user_snapshot(reader.max_chars())
+        outcome = web_browser_tool.wait_user_snapshot(reader.max_chars(), self.browser_session_id)
         feed = str(outcome["feed"])
         page = {"url": str(outcome["url"]), "title": str(outcome["title"])}
         text = str(outcome.get("text") or "")
@@ -165,7 +167,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             # outline header is feed material, not recall content
             extra["text"] = text
             extra["chars"] = len(text)
-        frame = web_browser_tool.final_frame()
+        frame = web_browser_tool.final_frame(self.browser_session_id)
         if frame:
             yield ("browser", frame)
             extra["img"] = f"data:image/jpeg;base64,{frame['img']}"
@@ -247,11 +249,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         try:
             if action == "wait_user":
                 return (yield from self._browser_wait(args, rnd, wire_id, settle))
-            result = web_browser_tool.run_action(args)
+            result = web_browser_tool.run_action(args, self.browser_session_id)
         except Exception as exc:  # pylint: disable=broad-except
             yield settle("error", f"error: {type(exc).__name__}: {str(exc)[:200]}")
             return False
         for frame in result.frames:
+            if self.browser_session_id != "lead":
+                frame = {**frame, "agent": self.browser_session_id}
             yield ("browser", frame)
         if result.image:
             self.image_injections.append(
@@ -948,8 +952,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
 
         cfg = self.cfg
         pages_on = reader.configured()
+        browser_on = browser_config.ready()
         child_tools = (
-            [tool_spec(False, False), calculator_spec()] + ([page_spec()] if pages_on else [])
+            [tool_spec(False, browser_on), calculator_spec()]
+            + ([page_spec()] if pages_on else [])
+            + ([web_browser_tool.web_browser_spec()] if browser_on else [])
         )
         lang = self.lang or "en"
         today = time.strftime("%Y-%m-%d")
@@ -957,7 +964,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         threads: list[threading.Thread] = []
         queues: dict[int, "queue.Queue[tuple[int, t.Any] | tuple[int, None]]"] = {}
 
-        def drive(job_idx: int, events: t.Any) -> None:
+        def drive(job_idx: int, child: t.Any, events: t.Any) -> None:
             q = queues[job_idx]
             seq = 0
             try:
@@ -965,6 +972,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     seq += 1
                     q.put((seq, event))
             finally:
+                # the subagent's browser session dies with its loop (the
+                # lead's lane persists -- the login stages build on it)
+                if child.browser_session_id != "lead":
+                    try:
+                        browser_session.close(child.browser_session_id)
+                    except Exception:  # pylint: disable=broad-except
+                        pass
                 q.put((0, None))
 
         for job_idx, (wire_id, parsed) in enumerate(sub_jobs):
@@ -977,7 +991,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     " merge overlapping subtasks and re-delegate."
                 )
                 continue
-            child = type(self).child(self, max_rounds=subtask_tool.SUB_ROUNDS)
+            child = type(self).child(
+                self,
+                max_rounds=subtask_tool.SUB_ROUNDS,
+                session_id=f"sub-{id(self):x}-{job_idx}",
+            )
             child.question_held = parsed["objective"]
             children[job_idx] = child
             q: "queue.Queue[tuple[int, t.Any] | tuple[int, None]]" = queue.Queue()
@@ -991,7 +1009,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 round_progress=self._sub_round_progress(child),
             )
             threads.append(
-                threading.Thread(target=drive, args=(job_idx, events), daemon=True, name=f"zjs-sub-{job_idx}")
+                threading.Thread(
+                    target=drive, args=(job_idx, child, events), daemon=True, name=f"zjs-sub-{job_idx}"
+                )
             )
             threads[-1].start()
             # the call row settles immediately (the delegation was
@@ -1048,7 +1068,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                             "title": "",
                         },
                     )
-                elif kind in ("think", "say", "calls", "call", "close"):
+                elif kind in ("think", "say", "calls", "call", "close", "browser"):
                     out = dict(event)
                     out["id"] = gid
                     yield (kind, out)

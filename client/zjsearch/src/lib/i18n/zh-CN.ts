@@ -346,6 +346,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_debug_stage: "AI 调试台",
   attach_files: "添加图片或文件",
   ai_attach_section: "附件",
+  ai_browser_tab_lead: "主会话",
+  ai_browser_tab_bg: "后台",
   ai_browser_live: "浏览器",
   ai_browser_wait: "{s} 秒",
   ai_browser_wait_hint: "本操作窗口的剩余时间",

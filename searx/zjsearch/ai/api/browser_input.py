@@ -25,13 +25,20 @@ short field fills, not essays."""
 def _browser_input_view() -> flask.Response:
     payload = http.token_payload(gate=browser_config.ready())
     kind = str(payload.get("type") or "")
+    # the takeover is the LEAD session's surface (v2.1 R3B): a subagent
+    # session's tab is a read-only mirror -- the human's hands drive the
+    # lane the run blocks on
+    session_id = str(payload.get("session") or "lead")
+    if session_id != "lead":
+        return flask.jsonify({"error": "the takeover drives the lead session only"}), 422
     if kind == "done":
-        session.finish_wait()
+        session.finish_wait(session_id)
         return flask.jsonify({"ok": True})
     if kind not in ("click", "wheel", "type", "key"):
         return flask.jsonify({"error": "type must be click / wheel / type / key"}), 422
     try:
         session.session_input(
+            session_id,
             kind,
             x=int(payload.get("x") or 0),
             y=int(payload.get("y") or 0),

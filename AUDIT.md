@@ -138,6 +138,9 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | AI Overview deep link | `?q=zjaudit+general&ai_overview=1` (mock or live) | card auto-opens WITHOUT interaction — the Lighthouse gate's overview page |
 | AI Search takeover | `?q=searxng&ai=1` (live model) / `?q=zjaudit+general&ai=1` (audit mock) | research timeline (think → intent → parallel call rows incl. a web_crawler read: the row's char count, the reading pane, the read-in-full badge), cited synthesis with the inline gallery strip, related, own source rail; follow-ups continue the [n] numbering.  The research box STAYS OPEN through the run's whole life; the follow-up box unlocks on `settle` (never on the trailing related/memory); quality/goal add the task card (0/N → N/N, per-subtask sources).  With a non-empty browser corpus the researcher gains a `past_research` RAG round (full-text heads + source identities as history [n] rows); the audit mock falls back to a plain search when the tool is not registered — the audited timeline must show NO error row either way: every row settles (the reader row with its char count, the TWO task_write rows 0/2 → 2/2) and the web_reader settlement must not kill the stream (a wire-v2 closed-set violation once crashed every successful page read — §7.8) |
 | AI browser session | the debug stage (`?aidebug` on a thread url) → the 浏览器登录协作 scenario: ALL rows settle (4 research entries + the write entry — interrupted tails mean a stale chunk, restart the instance); open renders the location line + the interactive-element outline (e1/e2/e3 chips); wait_user AUTO-OPENS the takeover (scrub into the wait frames) and the window-end frame retires the countdown; below lg a fixed bottom bar opens the same takeover; the screenshot row renders its shot (click → the zoom lightbox); replaying a stored thread NEVER shows the live card nor auto-opens (resume nulls `browser`).  Live: a `web_browser open` run mints a [n] source the writer cites (the rail's card carries the dashed cited frame); the settlement's `img` never reaches the evt log |
+| AI 引导/干预 (v2.1 R2) | the debug stage → the 引导 scenario (drained/preempt/discarded three states), then LIVE: a streaming run's composer is the AMBER steer box (placeholder 讲明回车/Shift+Enter 语义); Enter queues a steer (pending chip → the next boundary injects it: a user 引述行 renders in the timeline AND the model's next round reacts); Shift+Enter / ⚡ preempts (the in-flight turn cancels, the run CONTINUES steered); a steer typed after the write phase opened flips the chip to 未送达 (never silent); 收尾 settles done/连接中断; a settled run's composer is the follow-up box as before |
+| AI 子代理 (v2.1 R3A) | the debug stage → the 子代理 scenario (the delegation row, the folded sub row, the re-open that must NOT duplicate it); LIVE: `subagents: true` + deep + depth rung ≥3 — the model delegates, each sub row folds to one line (title + 正在查…/N 次查询·完成) and opens the mini-timeline (派工 header + the child's own think/call stream); the digest arrives as the delegation row's receipt (row expansion renders it); promoted facts land in the findings card; the batch cap's 5th delegation refuses with the merge-nudge |
+| AI 浏览器多会话 (v2.1 R3B) | a delegating run whose subagents drive web_browser: the rail card grows the TAB STRIP (主会话 first + one tab per sub session, active = accent); the ACTIVE tab streams, background tabs freeze on their last frame with the 后台 badge; the takeover (zoom) is the LEAD tab's surface only (its wait_user auto-opens; the input endpoint 422s non-lead sessions); a finished subagent's tab disappears (the session closes with its loop); a single-session run renders EXACTLY the pre-R3B card (no strip) — replay old threads likewise |
 | AI clarify / ask_user | an ambiguous query in quality/goal (live), or the mock's clarify fixture | the clarify modal with the 2-question form (提交 / 跳过); answering seeds a clarify step at the timeline head; a mid-research ask_user renders as a call row + the same modal |
 | AI memory | any researched run (live model) | stored facts ride the run's `<user_memory>` block; a `user_memory` save renders a memory row AFTER settle; the extractor's saves appear in the drawer's 记忆 tab |
 | Knowledge base (知识库) | header LibraryBig icon (`KnowledgeDrawer`) | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them + the ×N cross-session badge (N = past runs that referenced the url, from the PRE-run recall); EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab; the keyword/semantic/hybrid modes come from the deployment (`history_search`) |
@@ -589,6 +592,47 @@ Known-red (pre-existing, untouched files): pylint R09xx findings in
 `ai/runs/report/synth.py` (the branch accumulated them as pylint 4.x
 tightened; my areas hold 10.00) — a future cleanup round owns them.
 The AI thread page's Lighthouse red (§7.1) stands.
+
+## 7.4 Round record — 2026-10 (the v2.1 round: run host × control plane × subagents)
+
+The multi-agent wave (NEXTGEN-DESIGN §8) landed in four commits: R1 run
+host (343ddda — the run/reader decoupling: driver thread, seq-stamped
+buffer, attach, detach-grace wrap, stop-as-instruction), R2 control plane
+(911d6e1 — the steer wire event, the ControlBox lanes, the dual-mode
+composer), R3A subagents (bb86b6a — research_subtask, keyed child
+executors over the SHARED registry, kind:"sub" relay + the client's
+mini-timeline), R3B multi-session browser (keyed session registry, the
+rail card's tab strip, lead-only takeover). Verification ran against the
+REAL deployment config from WSL (`~/searxng-py314`); the E2E scripts are
+`client/zjsearch/e2e-r3.local.sh` (gitignored) and the local settings
+override `client/zjsearch/real-settings.local.yml` (gitignored — real
+keys never enter git).
+
+Lessons that must survive this round:
+
+1. **The prime path must be lossless**: a streamed response consumed from
+   a subscription loses lines to ANY mid-batch break — the flatten-to-
+   pending-list loop (backlog first, one line per step) is the only safe
+   shape.  The regression: attach after_seq continuity (first replayed
+   seq == last seen + 1) on a run with thousands of events.
+2. **Multi-thread publishing moves the merge**: the settle's usage
+   buckets are executor LIVE dicts — the merge must happen at the
+   settle's GENERATION on the driver, never at stream time.
+3. **Interrupt semantics are three-valued**: died (transport) ≠
+   interrupted (user) ≠ ok — the interrupted turn cancels the pump and
+   the run either ends (stop) or CONTINUES on the steered course
+   (preempt); never fold them back into `died`.
+4. **Sub-surface events are the LEAD's to drop**: a child loop's
+   phase/tasks/decisions never relay; its browser frames DO (agent-
+   tagged); its per-round re-open must not duplicate the client's sub row
+   (the reducer keys sub steps by entry id).
+5. **The steer lane outranks continuation at the boundary** and closes at
+   the write phase — leftovers die VISIBLE (discarded), never silent.
+6. **Windows-hosted dev**: the WSL venv is the nose2/pylint authority
+   (upstream's `pwd` import breaks the webapp chain on Windows); the LAN
+   proxy in dev-settings is unreachable from WSL — the local override
+   drops it (engines partially degrade; that is fine for the wire-level
+   E2E, and the depth probe's decision endpoint needs the direct route).
 
 ## 8. Known environment traps
 

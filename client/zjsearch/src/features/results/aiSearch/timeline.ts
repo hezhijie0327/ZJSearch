@@ -317,8 +317,16 @@ export interface AiSearchRun {
   artifacts?: Record<number, AiSearchArtifact>;
   /** the interactive session's live mirror (the web_browser call's
       viewport frames -- img stripped before persisting; null = no
-      session or the run replays) */
+      session or the run replays).  THE LEAD session's frame. */
   browser: { url: string; title: string; img: string; w: number; h: number; waitLeft?: number } | null;
+  /** ALL live browser sessions keyed by session id (v2.1 R3B: the lead
+      plus one per delegating subagent -- the rail card's tab strip).
+      The lead also rides ``browser`` (the takeover's auto-open watch
+      and the old render path). */
+  browserSessions?: Record<
+    string,
+    { url: string; title: string; img: string; w: number; h: number; waitLeft?: number }
+  >;
 }
 
 /** The REPORT mode's outline snapshot (the wire's ``outline`` event): the
@@ -769,17 +777,22 @@ export function applyEvent(
     }
     case "browser": {
       // the interactive session's mirror frame: replaces wholesale (img
-      // stripped before persisting -- the event log keeps meta only)
+      // stripped before persisting -- the event log keeps meta only).
+      // R3B: the frames carry their session id (agent) -- the lead's
+      // frame also rides run.browser (the takeover's auto-open watch)
+      const sid = String(event.agent || "lead");
+      const view = {
+        url: String(event.url ?? ""),
+        title: String(event.title ?? ""),
+        img: String(event.img ?? ""),
+        w: Number(event.w) || 1280,
+        h: Number(event.h) || 800,
+        ...(event.wait_left !== undefined ? { waitLeft: Number(event.wait_left) || 0 } : {}),
+      };
       runs[lastIdx] = {
         ...run,
-        browser: {
-          url: String(event.url ?? ""),
-          title: String(event.title ?? ""),
-          img: String(event.img ?? ""),
-          w: Number(event.w) || 1280,
-          h: Number(event.h) || 800,
-          ...(event.wait_left !== undefined ? { waitLeft: Number(event.wait_left) || 0 } : {}),
-        },
+        ...(sid === "lead" ? { browser: view } : {}),
+        browserSessions: { ...(run.browserSessions ?? {}), [sid]: view },
       };
       return { ...core, runs };
     }

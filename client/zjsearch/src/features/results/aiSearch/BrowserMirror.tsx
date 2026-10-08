@@ -246,9 +246,15 @@ export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: 
     A wait_user window auto-opens the takeover ONCE per window (the run
     blocks on the user); minimizing keeps it closed until the next
     window.  Also renders the MOBILE wait bar (fixed bottom pill, below
-    lg) so the same window stays reachable from anywhere on the page. */
-export function BrowserMirrorSection({ view }: { view: MirrorView }) {
+    lg) so the same window stays reachable from anywhere on the page.
+    R3B: with PARALLEL SESSIONS (the lead + delegating subagents) the
+    card grows a tab strip -- the ACTIVE tab streams, the background
+    tabs freeze on their last frame with the 后台 badge (bandwidth
+    economy); the takeover stays the LEAD tab's surface (its wait_user
+    is what blocks on the human). */
+export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; sessions?: Record<string, MirrorView> }) {
   const t = useT();
+  const [tab, setTab] = useState("lead");
   const [full, setFull] = useState(false);
   const windowOpen = useRef(false);
   useEffect(() => {
@@ -261,7 +267,11 @@ export function BrowserMirrorSection({ view }: { view: MirrorView }) {
       setFull(true);
     }
   }, [view.waitLeft]);
-  const waiting = view.waitLeft !== undefined;
+  const entries = Object.entries(sessions ?? {}).filter(([, item]) => item.img);
+  const multi = entries.length > 1;
+  const activeView = (multi ? sessions?.[tab] : undefined) ?? view;
+  const leadActive = tab === "lead" || !multi;
+  const waiting = leadActive && view.waitLeft !== undefined;
   return (
     <section aria-label={t("ai_browser_live")} className="mb-5">
       <div className="flex items-center gap-2 px-1">
@@ -274,25 +284,60 @@ export function BrowserMirrorSection({ view }: { view: MirrorView }) {
         ) : null}
       </div>
       <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
+        {multi ? (
+          <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-surface px-1.5 py-1">
+            {entries.map(([sid, item]) => {
+              const active = sid === tab;
+              const isLead = sid === "lead";
+              return (
+                <button
+                  aria-label={item.title || sid}
+                  className={`flex min-w-0 max-w-40 shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                    active
+                      ? "border-accent-strong/50 bg-accent-soft font-medium text-accent"
+                      : "border-line text-ink-3 hover:text-ink-2"
+                  }`}
+                  key={sid}
+                  onClick={() => {
+                    setTab(sid);
+                  }}
+                  type="button"
+                >
+                  <span className="truncate">{isLead ? t("ai_browser_tab_lead") : hostOf(item.url)}</span>
+                  {!active ? <span className="shrink-0 text-[11px] opacity-70">{t("ai_browser_tab_bg")}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="flex min-w-0 items-center gap-1.5 border-b border-line bg-surface px-2.5 py-1.5">
-          <span className="min-w-0 flex-1 truncate text-xs text-ink-2" title={view.url}>
-            {view.title || view.url}
+          <span className="min-w-0 flex-1 truncate text-xs text-ink-2" title={activeView.url}>
+            {activeView.title || activeView.url}
           </span>
-          <span className="hidden shrink-0 font-mono text-[11px] text-ink-3 sm:inline">{hostOf(view.url)}</span>
+          <span className="hidden shrink-0 font-mono text-[11px] text-ink-3 sm:inline">{hostOf(activeView.url)}</span>
         </div>
-        <button
-          aria-label={t("ai_browser_full")}
-          className="block w-full cursor-zoom-in"
-          onClick={() => setFull(true)}
-          type="button"
-        >
+        {leadActive ? (
+          <button
+            aria-label={t("ai_browser_full")}
+            className="block w-full cursor-zoom-in"
+            onClick={() => setFull(true)}
+            type="button"
+          >
+            <img
+              alt={activeView.title || activeView.url}
+              className="w-full object-contain object-top"
+              src={`data:image/jpeg;base64,${activeView.img}`}
+              style={{ aspectRatio: `${activeView.w || VIEWPORT_W} / ${activeView.h || VIEWPORT_H}` }}
+            />
+          </button>
+        ) : (
           <img
-            alt={view.title || view.url}
-            className="w-full object-contain object-top"
-            src={`data:image/jpeg;base64,${view.img}`}
-            style={{ aspectRatio: `${view.w || VIEWPORT_W} / ${view.h || VIEWPORT_H}` }}
+            alt={activeView.title || activeView.url}
+            className="w-full object-contain object-top opacity-90"
+            src={`data:image/jpeg;base64,${activeView.img}`}
+            style={{ aspectRatio: `${activeView.w || VIEWPORT_W} / ${activeView.h || VIEWPORT_H}` }}
           />
-        </button>
+        )}
       </div>
       <p className="mt-2 px-1 text-xs leading-relaxed text-ink-3">{t("ai_browser_hint")}</p>
       {waiting
@@ -316,7 +361,7 @@ export function BrowserMirrorSection({ view }: { view: MirrorView }) {
             document.body,
           )
         : null}
-      {full ? <BrowserLightbox onClose={() => setFull(false)} view={view} /> : null}
+      {full && leadActive ? <BrowserLightbox onClose={() => setFull(false)} view={activeView} /> : null}
     </section>
   );
 }

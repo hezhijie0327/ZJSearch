@@ -160,6 +160,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # view_image 的注入队列:抓到的图作为下一轮的 user 消息回灌对话
         # (工具结果本身是文本通道,图走 user turn 是全供应商通用的形态)
         self.image_injections: list[dict[str, t.Any]] = []
+        # the browser SESSION this run drives: the lead's lane ("lead")
+        # or a subagent's own keyed page (v2.1 R3B -- separate tabs in
+        # the mirror, one persistent context)
+        self.browser_session_id: str = "lead"
         # the request-bound search worker, captured NOW on the request
         # thread: the run executes on the run host's driver thread, and
         # SearchWithPlugins needs a request context of its own per worker
@@ -169,7 +173,9 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         try:
             import flask  # pylint: disable=import-outside-toplevel
 
-            self._ctx_search = flask.copy_current_request_context(self._search_one)
+            # (the mixin method resolves on the composed Searches -- the
+            # pragma is for the bare-core analysis)
+            self._ctx_search = flask.copy_current_request_context(self._search_one)  # pylint: disable=no-member
         except (ImportError, RuntimeError):
             self._ctx_search = self._search_one
 

@@ -21,13 +21,14 @@ class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
     the agent framework's ``("tool_results", ...)`` alignment."""
 
     @classmethod
-    def child(cls, parent: "Searches", max_rounds: int) -> "Searches":
+    def child(cls, parent: "Searches", max_rounds: int, session_id: str | None = None) -> "Searches":
         """A SUBAGENT's executor (v2.1 R3): the parent's source registry
         is SHARED (contiguous [n] + mechanical dedup across workers) and
         the request-bound search wrapper is inherited (the driver thread
         has no request context of its own); everything else -- feed,
         ledger, coverage, corpus -- is the child's PRIVATE world, and the
-        round budget is the delegation's small cap."""
+        round budget is the delegation's small cap.  ``session_id`` gives
+        the child its OWN browser session (R3B's keyed tab)."""
         child = cls(
             parent.prefs,
             parent.user_plugins,
@@ -39,4 +40,6 @@ class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
         )
         child.reg = parent.reg
         child._ctx_search = parent._ctx_search  # pylint: disable=protected-access
+        if session_id:
+            child.browser_session_id = session_id
         return child

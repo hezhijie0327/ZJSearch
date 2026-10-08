@@ -1,14 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The interactive session: ONE page a tool drive can operate.
+"""The interactive sessions: keyed pages a tool drive can operate.
 
 The ``web_browser`` tool's actions land here as synchronous bridges onto
-the shared loop (the mcp/read pattern): a single session page inside the
-persistent context, snapshot refs resolved via injected ``data-zjs-ref``
-attributes, and raw input primitives for the Lightbox takeover
-(viewport-space clicks/wheel/keys forwarded from the user's browser).
-The session lock serializes discrete actions across the reader's worker
-threads; ``wait_user`` polls WITHOUT holding it so the user's Lightbox
-input interleaves between polls.
+the shared loop (the mcp/read pattern): each session is ONE page inside
+the persistent context, snapshot refs resolved via injected
+``data-zjs-ref`` attributes, and raw input primitives for the Lightbox
+takeover (viewport-space clicks/wheel/keys forwarded from the user's
+browser).  Each session's lock serializes discrete actions across the
+reader's worker threads; ``wait_user`` polls WITHOUT holding it so the
+user's Lightbox input interleaves between polls.
+
+Session identity (v2.1 R3B): ``lead`` is THE model-driven lane the
+takeover serves (its wait_user blocks on the human); parallel SUBAGENTS
+drive their own sessions under ``sub-*`` ids -- same persistent context
+(one cookie store, one SSRF request gate), separate pages, closed when
+their loop ends.  Every function takes the id first (default ``lead``:
+the pre-R3B call shapes keep working).
 
 Ref lifecycle: navigation invalidates injected refs -- the spec tells
 the model to re-snapshot after one.
@@ -39,11 +46,15 @@ cheap one."""
 
 _ACTION_TIMEOUT_MS = 15_000
 
-_LOCK = threading.Lock()
-_page: "Page | None" = None
-_wait_done = threading.Event()
-"""Set by the Lightbox's finish button: the pending wait_user window
-returns at the next poll (<=2s) instead of running its full length."""
+LEAD = "lead"
+"""The lead researcher's session: THE takeover surface (its wait_user
+windows block on the human; subagent sessions never wait)."""
+
+_MAX_SESSIONS = 6
+"""Live sessions per instance (lead + the delegation batch's worth): a
+runaway delegation cannot open unbounded browser tabs."""
+
+
 
 _SNAPSHOT_JS = """
 () => {
@@ -68,7 +79,7 @@ _SNAPSHOT_JS = """
     out.push(ref + '\\t' + role + '\\t' + name);
     if (out.length >= %d) break;
   }
-  return out.join('\\n');
+  return out.join('\n');
 }
 """ % SNAPSHOT_MAX_ELEMENTS
 
@@ -114,6 +125,60 @@ class SessionError(Exception):
     """A session action failed -- the message travels to the model."""
 
 
+class _Session:  # pylint: disable=too-few-public-methods
+    """One keyed session: its page, its lock, its wait_user flag."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.page: "Page | None" = None
+        self.wait_done = threading.Event()
+
+
+_SESSIONS: dict[str, _Session] = {}
+_SESSIONS_LOCK = threading.Lock()
+
+
+def session_ids() -> list[str]:
+    """The live session ids (the client's tab strip follows these)."""
+    with _SESSIONS_LOCK:
+        return list(_SESSIONS)
+
+
+def get(session_id: str) -> _Session:
+    """The keyed session, created on first touch (capped -- the cap's
+    overflow answers the LEAD session, which is always admitted)."""
+    sid = session_id or LEAD
+    with _SESSIONS_LOCK:
+        sess = _SESSIONS.get(sid)
+        if sess is None:
+            if len(_SESSIONS) >= _MAX_SESSIONS and sid != LEAD:
+                raise SessionError(f"the session table is full (max {_MAX_SESSIONS})")
+            sess = _Session()
+            _SESSIONS[sid] = sess
+        return sess
+
+
+def close(session_id: str) -> None:
+    """Close and forget one session (a finished subagent's tab)."""
+    sid = session_id or LEAD
+    with _SESSIONS_LOCK:
+        sess = _SESSIONS.pop(sid, None)
+    if sess is None:
+        return
+    with sess.lock:
+        page = sess.page
+        sess.page = None
+        if page is not None:
+            gate.visual_pages.pop(id(page), None)
+        sess.wait_done.set()
+
+        async def run() -> None:
+            if page is not None and not page.is_closed():
+                await page.close()
+
+        _run(run())
+
+
 def _brief(exc: BaseException) -> str:
     return " ".join(str(exc).split())[:200] or type(exc).__name__
 
@@ -140,36 +205,35 @@ def _run(coro: t.Any, timeout: float = 45.0) -> t.Any:
         raise SessionError(f"browser session failed: {type(exc).__name__}: {_brief(exc)}") from exc
 
 
-async def _ensure_page() -> "Page":
-    global _page  # pylint: disable=global-statement
-    if _page is not None and not _page.is_closed():
-        return _page
+async def _ensure_page(sess: _Session) -> "Page":
+    if sess.page is not None and not sess.page.is_closed():
+        return sess.page
     context = await _context()
     page = await context.new_page()
     await page.set_viewport_size({"width": 1280, "height": 800})
     # the session page renders FOR THE USER: its stylesheets/fonts/images
     # pass the gate (the reader's pages stay text-only) -- strong refs
     # keyed by id(), the stale entry dropped on replace
-    if _page is not None:
-        gate.visual_pages.pop(id(_page), None)
+    if sess.page is not None:
+        gate.visual_pages.pop(id(sess.page), None)
     gate.visual_pages[id(page)] = page
-    _page = page
+    sess.page = page
     return page
 
 
-def finish_wait() -> None:
+def finish_wait(session_id: str = LEAD) -> None:
     """The Lightbox's finish signal: end the pending wait_user window at
     the next poll."""
-    _wait_done.set()
+    get(session_id).wait_done.set()
 
 
-def reset_wait() -> None:
+def reset_wait(session_id: str = LEAD) -> None:
     """Clear the finish signal (wait_user start)."""
-    _wait_done.clear()
+    get(session_id).wait_done.clear()
 
 
-def wait_done() -> bool:
-    return _wait_done.is_set()
+def wait_done(session_id: str = LEAD) -> bool:
+    return get(session_id).wait_done.is_set()
 
 
 def _resolve_selector(ref: str) -> str:
@@ -179,13 +243,14 @@ def _resolve_selector(ref: str) -> str:
     return f'[data-zjs-ref="{ref}"]'
 
 
-def open_url(url: str) -> dict[str, str]:
+def open_url(session_id: str, url: str) -> dict[str, str]:
     """Navigate the session page; returns ``{url, title, snapshot}`` -- the
     outline rides along so one call costs the model one round."""
-    with _LOCK:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, str]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             try:
                 await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
             except Exception as exc:  # pylint: disable=broad-except
@@ -201,12 +266,13 @@ def open_url(url: str) -> dict[str, str]:
         return _run(run())
 
 
-def snapshot() -> dict[str, str]:
+def snapshot(session_id: str = LEAD) -> dict[str, str]:
     """A fresh ref outline of the CURRENT page."""
-    with _LOCK:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, str]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             outline = await page.evaluate(_SNAPSHOT_JS)
             return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
 
@@ -254,11 +320,12 @@ async def _resolve_live(page: "Page", ref: str) -> str:
     return sel
 
 
-def click(ref: str) -> dict[str, t.Any]:
-    with _LOCK:
+def click(session_id: str, ref: str) -> dict[str, t.Any]:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, t.Any]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             before = str(page.url)
             sel = await _resolve_live(page, ref)
             await page.click(sel, timeout=_ACTION_TIMEOUT_MS)
@@ -267,11 +334,12 @@ def click(ref: str) -> dict[str, t.Any]:
         return _run(run())
 
 
-def type_text(ref: str, text: str, submit: bool) -> dict[str, t.Any]:
-    with _LOCK:
+def type_text(session_id: str, ref: str, text: str, submit: bool) -> dict[str, t.Any]:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, t.Any]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             before = str(page.url)
             sel = await _resolve_live(page, ref)
             await page.fill(sel, str(text), timeout=_ACTION_TIMEOUT_MS)
@@ -282,11 +350,12 @@ def type_text(ref: str, text: str, submit: bool) -> dict[str, t.Any]:
         return _run(run())
 
 
-def press_key(key: str) -> dict[str, t.Any]:
-    with _LOCK:
+def press_key(session_id: str, key: str) -> dict[str, t.Any]:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, t.Any]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             before = str(page.url)
             await page.keyboard.press(str(key))
             return await _post_action_state(page, before, 300)
@@ -294,11 +363,12 @@ def press_key(key: str) -> dict[str, t.Any]:
         return _run(run())
 
 
-def scroll(direction: str) -> dict[str, str]:
-    with _LOCK:
+def scroll(session_id: str, direction: str) -> dict[str, str]:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, str]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             await page.mouse.wheel(0, 600 if str(direction) == "down" else -600)
             await page.wait_for_timeout(400)
             return {"url": str(page.url), "title": await page.title()}
@@ -306,13 +376,14 @@ def scroll(direction: str) -> dict[str, str]:
         return _run(run())
 
 
-def screenshot_b64(quality: int = 70) -> dict[str, t.Any]:
+def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
     """A viewport screenshot as ``{img, w, h, url, title}`` -- the visual
     branch's payload (injected to the model) and the mirror frame shape."""
-    with _LOCK:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, t.Any]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             raw = await page.screenshot(type="jpeg", quality=int(quality))
             vp = page.viewport_size or {"width": 1280, "height": 800}
             return {
@@ -326,12 +397,12 @@ def screenshot_b64(quality: int = 70) -> dict[str, t.Any]:
         return _run(run())
 
 
-def frame() -> dict[str, t.Any]:
+def frame(session_id: str = LEAD) -> dict[str, t.Any]:
     """The mirror frame: the same capture at mirror quality."""
-    return screenshot_b64(quality=55)
+    return screenshot_b64(session_id, quality=55)
 
 
-def extract(max_chars: int | None) -> dict[str, str]:
+def extract(session_id: str, max_chars: int | None) -> dict[str, str]:
     """The CURRENT page condensed to reading material (title + markdown)
     -- the reader's extraction pipeline over the live DOM."""
     # pylint: disable=import-outside-toplevel
@@ -340,10 +411,11 @@ def extract(max_chars: int | None) -> dict[str, str]:
         extract_page,
     )
 
-    with _LOCK:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, str]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             return {"url": str(page.url), "title": await page.title(), "html": await page.content()}
 
         page_state = _run(run())
@@ -359,14 +431,14 @@ def _serp_relevant(raw: str, query: str) -> bool:
     must appear in the rows -- the engines occasionally serve a degraded
     first frame (trending filler to a fresh fingerprint), and feeding
     that to the model as "results" is worse than an honest retry."""
-    tokens = [t for t in re.split(r"[\s\-+,.;:]+", str(query or "").lower()) if len(t) > 2]
+    tokens = [tk for tk in re.split(r"[\s\-+,.;:]+", str(query or "").lower()) if len(tk) > 2]
     if not tokens:
         return True
     hay = raw.lower()
     return any(token in hay for token in tokens)
 
 
-def search_results(engine: str, query: str) -> dict[str, str]:
+def search_results(session_id: str, engine: str, query: str) -> dict[str, str]:
     """One LIVE search-engine query on the session page: navigate the
     engine's SERP and scrape the organic hits (title/url/snippet).  The
     compact result block is the payload -- a SERP needs no refs, so no
@@ -375,10 +447,11 @@ def search_results(engine: str, query: str) -> dict[str, str]:
     if template is None:
         raise SessionError(f"unknown engine {engine!r} -- bing / baidu / google / duckduckgo")
     url = template.format(q=quote_plus(str(query or "")[:400]))
-    with _LOCK:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> dict[str, str]:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             try:
                 await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
             except Exception as exc:  # pylint: disable=broad-except
@@ -396,26 +469,17 @@ def search_results(engine: str, query: str) -> dict[str, str]:
         return _run(run())
 
 
-def close_page() -> None:
-    """Close the session page -- the persistent context (and its cookies)
-    stays; the next action opens a fresh page."""
-    global _page  # pylint: disable=global-statement
-    with _LOCK:
-        page = _page
-        _page = None
-        if page is not None:
-            gate.visual_pages.pop(id(page), None)
-        _wait_done.set()
-
-        async def run() -> None:
-            if page is not None and not page.is_closed():
-                await page.close()
-
-        _run(run())
+def close_page(session_id: str = LEAD) -> None:
+    """Close the session page and FORGET the session (the persistent
+    context and its cookies stay; a new action on the same id opens a
+    fresh page).  The lead's lane persists across runs by usage; sub
+    sessions call this when their loop ends."""
+    close(session_id)
 
 
 def session_input(
     # pylint: disable=invalid-name
+    session_id: str,
     kind: str,
     x: int = 0,
     y: int = 0,
@@ -424,10 +488,11 @@ def session_input(
     key: str = "",
 ) -> None:
     """The Lightbox takeover's forwarded input, in viewport space."""
-    with _LOCK:
+    sess = get(session_id)
+    with sess.lock:
 
         async def run() -> None:
-            page = await _ensure_page()
+            page = await _ensure_page(sess)
             if kind == "click":
                 await page.mouse.click(int(x), int(y))
             elif kind == "wheel":
