@@ -1,6 +1,6 @@
 # ZJSearch 下一代(v2)设计:代码结构 × Agentic Harness
 
-状态:提案(draft v1,2026-10-07)。分支 `zjsearch`。
+状态:v2 主体已实施(2026-10-07,见文末「实施状态」);v2.1 提案(§8:多代理 × 人在环路 × Run Host,draft,2026-10-08)。分支 `zjsearch`。
 本文基于对当前代码的全量调研(所有结论带 file:line 证据),回答两个问题:
 
 1. **代码结构重排**——后端从零设计文件结构(重点是解散 `capabilities/` 的模糊地带、拆解 `executor.py`/`route.py` 两个巨石),前端统一设计语言并把工具行渲染参数化;
@@ -414,6 +414,159 @@ features/results/aiSearch/
 
 ---
 
+## 8. v2.1 提案:多代理 × 人在环路 × Run Host
+
+> 增补于 2026-10-08,基于:Anthropic《How we built our multi-agent research system》的外部参照、ZCode(引导/steering 与子代理中止)的机制调研、以及与现有 harness 的逐件对照。三个主题共享同一块地基——**活流注册表(run host)**:复杂问题的扩展(子代理)、执行中的人工干预(引导/打断/收尾)、断开后的恢复(reattach)都挂在它上面。
+
+### 8.0 结论(TL;DR)
+
+| 主题 | 一句话结论 |
+|---|---|
+| 多代理 | LeadResearcher 的骨架已在(task_write / ledger / coverage / registry / depth 探针),唯一真 delta 是"独立上下文的子代理";挂在 deep/report 档 + depth rung 门后,**不做默认路径** |
+| 干预 | 栈里第二条 client→server 活通道(`run/control`)+ 五个动作;引导只在轮边界注入,**永不静默打断在飞流** |
+| Run host | run 的命与客户端连接解耦:断开 = detach,重连 = reattach **同一个 run**;宽限超时优雅收尾;2h stale sweep 对这一类退役 |
+| 追问 vs 引导 | 同一 composer,投递语义 = f(run 状态) 的纯函数;运行中只有引导,追问等 settle |
+
+### 8.1 多代理:LeadResearcher + Subagents
+
+**外部参照**(Anthropic,2025-06):orchestrator-worker;子代理的价值 = 压缩(各自的上下文烧完只回传要点)+ 并行上下文容量 + 关注点分离;token 用量单因素解释 80% 的效果方差,多代理 ~15× 于对话的成本;失败模式全是委派问题(模糊指令 → 重复劳动、无节制派工)。可迁移的教训:教 orchestrator 委派(目标 / 产出格式 / 工具指引 / 边界四件套)、按复杂度配 effort、先宽后窄、并行工具调用。
+
+**现状对照**——LeadResearcher 的骨架已经全部在:
+
+| Anthropic 部件 | zjsearch 现状 |
+|---|---|
+| 规划 + save plan | `task_write` 任务卡(coverage referee 用真实来源校验,比"模型自标 done"硬) |
+| 子代理并行搜索、压缩回传 | **无——唯一真 delta** |
+| 迭代评估(think/evaluate) | continuation 契约 + stall 检测 + belief ledger |
+| CitationAgent 后置标注 | **不引回**:pre-write evidence check + 全局 [n] 是前置门(post-write 审计被删的同一理由:settle 后的裁决只能徽章不能修) |
+| Memory(防上下文截断) | researcher/writer 分离 + 知识库 recall 已覆盖 |
+| effort 分级 | depth 探针 + 三档阶梯 |
+| 并行工具调用 | gather 池(6 worker,FIRST_COMPLETED) |
+
+**两个前置回答**(重新引入子代理前必须回答——`spawn_subtask` 曾被移除,任务卡成为唯一分解面):
+
+1. 旧 spawn_subtask 嵌套是旧协议时代的产物;wire v2(entry-stamped 闭集 + dumb renderer)、共享 dedup registry、coverage referee 都是当时不存在的承载面。此次回归是新地基上的旧思想,不是翻案。
+2. 委派质量是模型能力的倍增器,而本栈处处按小模型设计 → 子代理**不做默认路径**:仅 deep/report 工具面注册、depth rung ≥ 阈值(缺省 3,可配)才开放;15× 的 token 经济由"高价值复杂问题"场景自行把关——这正是 Anthropic 给出的适用边界。
+
+**运行模型**:
+
+- lead loop 一字不动;新工具 `research_subtask`:执行器不为它进 worker 池,而是起**嵌套 agent loop**——自己的 LlmStream、自己的工具面(web_search / web_reader / calculator 子集)、自己的轮次预算(缺省 6 轮 + stall 2)、**无 ask_user / task_write / learnings**(规划与记账是 lead 专属;子代理永不弹窗,clarify 契约零改动);
+- **共享 `SourcesRegistry`**(传入子代理执行器):query/page dedup 让重复搜索 settle 成 `duplicate` 而不是再烧一轮引擎;[n] 全局编号在结算时批量铸造——这是对"模糊指令 → 重复劳动"的**机械解**,委派纪律之外的第二道保险;
+- 回传 = 压缩文本(≤2k 字符)+ 来源批次:findings 进台账、来源进 writer 语料与 evidence check,lead 下一轮在 feed 里看到「子任务②完成 + 摘要」;
+- 扇出 = 同一轮 futures 的并行、同步等待(不引入 Anthropic 自己标注为瓶颈的异步协调);
+- 预算缺省:每轮批 ≤4 个子代理、单 run ≤8 个;超限派工被拒并附引导语(教它合并子任务);
+- 用量:**不设新桶**(2026-10-08 定)——子代理是 research 相的工作,tokens 直接被 `_Tally` 现有的 research/总分摊吸收,footer 不加行;子代理的成本可见性 = 任务卡行 meta(`N 来源 · M 字回传`)。
+
+**Wire / 客户端增量**(全部加法,旧回放天然兼容):
+
+- `open` 增 `kind:"sub"` + `parent`(lead entry id)——闭集加的是 kind 值,不是新事件;
+- 子代理的 think / call 流骑自己的 entry id,与 web_reader 行同语言(折叠一行);
+- `call` 结算对 spawn 行复用 `{chars, text}` 载荷装回传摘要(web_reader 的档案模式);
+- `tasks` 快照 item 增可选 `{entry, sources, chars}`;无字段的旧行渲染照旧;
+- **验收 = 20 条 golden query** 人工对比 deep 单循环基线(token 换没换到覆盖面)——Anthropic 的小样本起评建议,与本仓库"live 验证写进 commit"的习惯一致。
+
+### 8.2 界面契约:子代理与干预
+
+立场:**子代理不新增任何一块面**,只升级时间线行 + 任务卡;两条既有教义(机器产物上 machine-voice 底、默认折叠一行点开才展开)全文适用。
+
+时间线:
+
+- lead 轮的 calls 批次里,每个子代理渲染**一行**(web_reader 行语言):子任务标题 + 尾随 meta(活动时 = 最近一个动作的截断文本,如 `正在查 · web_search "动力电池产能排名"`;settled = `· N 来源 ✓`;cancelled = 红色 error 态);批次头一枚 `×N 并行` chip 表达并行,**不画甘特图**;
+- 点开 = mini-timeline(`Collapse` + `CallContent` 滚动上限):它自己的 think 段 + call 行铺在 machine-voice 底上;回传摘要是末行,带可点 [n] chips——**citation-locate 链必须从展开面板内部走通**(setTimeout 链原样复用);
+- 展开面板头行 = 派工说明(目标 / 产出格式 / 边界)——委派可解释,决策透明教义的延伸;
+- 失败语言全复用:传输死亡 = 行上红色 error;从没 gathered 来源的子任务保持 missed(现有规则原样管住子代理);失败注记照旧回灌 lead feed(failure becomes information)。
+
+右栏(五段结构一字不动,全部行内升级):
+
+- **调研计划**任务卡行:现有三态(待办点 / 活跃 ping / 完成勾 / missed)之下加一条 meta 行——活跃 `⟳ 正在查 · N 来源 · 子代理②`,完成 `N 来源 · M 字回传`;行保持 plan 顺序、永不 cap(既有契约照抄);点行 = 展开回传摘要(与时间线面板同源,不渲染两份);
+- **研究发现**:直接吃子代理压缩 findings——它们本来就是 learnings 台账的条目,[n] chips 渲染路径现成;lead 的综合仍由 writer 做;
+- 运行 footer **不加**子代理行:tokens 并入 research/总量(§8.1),来源数在任务卡行可见。
+
+干预 UI(与 §8.3 配套):子代理行 hover / focus-within 显 28px 关闭 chip(角落 chip 语言)——**即点即停,不弹确认**("用户的停止键是真控制"教义;任务卡的 missed 态就是诚实记录);composer 运行中 = 引导模式(§8.4 路由表)。
+
+反模式(明确不做):新右栏 section「子代理」(违背 one-uniform-surface);多代理"圆桌对话"可视化 / 头像气泡(这是 orchestrator-worker,不是群聊);常开的三路 think 直播(web_reader 常开面板把时间线顶得到处跳的教训,不要第二个);甘特图 / 依赖图(批次 chip + 行状态足够)。
+
+### 8.3 干预体系:引导 / 打断 / 收尾
+
+**外部参照**(ZCode 引导/steering 的机制调研):两条泳道 + 一个抢占——guide(下一模型步边界注入**真实 user 消息**,绝不打断在飞流)/ queue(未来回合,空闲自动排水)/ startNow(抢占:abort 后原子启动);每边界只排空一条 FIFO;中断时未送达 guide 降级回队列且自动排水暂停;权限弹窗期间 guide 只等待。子代理侧:链式 AbortController(按键 → 回合 scope → 工具 → 每子代理 controller → 子运行时)+ 独立 guard 防卡死子代理挂住父工具;**部分工作存活**(子会话先持久化、可恢复);人只引导父代理,子代理由父模型转达(SendMessage → 子代理自己的 inline guide);单子代理可独立 stop / 后台化 / 只读查看。
+
+**控制通道**(栈里第二条 client→server 活通道,`api/browser_input.py` 自称第一条):
+
+- `POST /zjsearch/ai/run/control`(同一 HMAC token 门)+ **活流注册表** `{run_token → ControlBox}`(`runs/host.py`):search 流起时注册、settle 的 finally 注销;纯瞬态(进程死即没,知识库仍是唯一存储),与 browser session 单例同类;
+- ControlBox = 锁 + 指令队列 + 各子代理取消标志;loop / 子循环只依赖它的窄接口(取指令 / 查标志),由 route 注入(依赖方向不破:runs → agent 允许);
+- 在飞取消:挂了 ControlBox 的 `stream_turn` 把事件等待片切成 ~1s 轮询以观察标志;取消复用 `stream.cancel()` 泵原语(abandoned-consumer 路径已有)。
+
+**五个动作**:
+
+| 动作 | 触发 | 落点 | 在飞请求 |
+|---|---|---|---|
+| 引导 | 运行中 Enter | ControlBox 队列 → **轮边界**注入(该轮工具结果落定后、下一轮请求前) | 不断 |
+| 立即引导 | Shift+Enter / ⚡ | 取消在飞 turn(新 `interrupted` 态,区别于 `died`)→ steer 注入 → 循环继续 | 断 |
+| 停掉这个子代理 | 行内 × | 该子代理取消标志 → `status:"cancelled"` 结算;**已 gathered 来源保留**(shared registry 里已在——比 ZCode 的"子会话持久化"更早一步) | 断该子代理 |
+| 收尾 | 停止钮旁 | 置标志 → 轮边界直接结束 RESEARCH,pre-write + writer 照常跑 | 不断 |
+| 停止 | 现有 | run host 之下改为**显式控制指令** `{action:"stop"}` + 断流(见 §8.4,否则停止会被 detach 语义吞掉) | 全弃 |
+
+**注入点教义**(ZCode 纪律的翻译):
+
+- 永不静默打断在飞模型请求——引导只落轮边界;要现在打断,是显式的"立即引导";
+- 轮边界恰好是既有两个钩子的位置;优先级 **steer > continuation**——有引导待注入时它顶替 continuation note 占据下一个 user 消息位,账本催办等下一轮;
+- 每边界只排空一条,FIFO;注入带 `<user_steering>` 标记,prompts 层加注(引导覆盖当前计划,应调整 task_write / 后续派工);
+- **write 相打开后引导泳道关闭**(writer 无工具,引导无处生效)——composer 切收尾 / 停止;
+- settle / error 时未送达的引导**可见作废**(chip 翻「未送达」),不是悄悄消失;
+- `stream_turn` 返回区分 `died`(传输死亡 → writer 兜底,现状)与 `interrupted`(用户抢占 → 注入引导继续跑)——同一个 `stream.cancel()` 原语,两种结局。
+
+**Wire**:新闭集事件 `steer {text, delivery: guide|preempt, status: pending|drained|discarded, target?}`——时间线渲染为用户行(引述样式,同已确认方向卡的语言):"用户在此处引导了 run"是研究记录的一部分,回放完整忠实。停子代理骑现有 `call` 结算(cancelled)、收尾骑现有 `phase: write`、停止骑现有 settle——各零新增事件。
+
+**范围**:v1 = 控制通道 + 引导 / 立即引导 / 停子代理 / 收尾 + steer 事件 + composer 引导模式;v1.5 = **直达子代理引导**(`target` 路由——drain 链同一条,scope 换子循环):先验证"引导 lead → lead 调整派工"这条模型中介路径的质量,再决定要不要绕过它。ZCode 不给人直达子代理的引导,大概率正是为了让计划面始终只有一个人写。
+
+### 8.4 Run host:断开 ≠ 死亡
+
+**问题**:run 的命与客户端连接拴死——断开 → Flask 生成器关闭 → finally 泵取消 → run 服务端就地死亡;"恢复"今天只能是起新 run(findings 交接)。stale sweep(2h 静默 + streaming,会话首次读目录时扫一次)就是给这种无声死亡收尸的。
+
+**解构**——run 执行搬出请求生成器:
+
+- **run host**(`runs/host.py` 扩展):run 跑在后台执行上下文(web_browser 镜像帧已证明跨线程事件流可行),事件进每 run 缓冲(带服务端 `seq` 序号);请求生成器降级为**订阅者**——抽缓冲、转发 NDJSON;
+- **断开 = detach**:跑完当前轮(含在飞子代理)→ 轮边界挂起:不取消在飞、不开新一轮,成本有界;
+- **重连 = reattach 同一个 run**:`POST /zjsearch/ai/run/attach?after_seq=N` → 重放缓冲 + 接活尾巴。刷新页面、Wi-Fi 抖动、切后台回来——同一份数据、同一套任务卡 / 台账 / [n] 编号,**不是新 run、不需要 findings 交接**;
+- **宽限超时 = 优雅收尾**:detach 超宽限窗(缺省 90s,可配)无人认领 → 轮边界直接走 pre-write + writer-from-gathered,settle `done`,halt 注记「连接中断,已就已收集材料收尾」——**每个 run 都有真实结局,stale sweep 对这一类退役**;
+- **终态缓冲短 TTL**(缺省 1h):下次会话扫到 stale 行,先问服务器"这个 run 有没有真实终态"——有则取回尾巴、客户端走同一 `applyEvent` / `settleRun` reducer 回放落地(投影补写);无则落回今天的 findings 交接重启。**事件溯源客户端在这里白赚一票**:run 的权威就是事件日志,恢复 = 回放,零新渲染路径;
+- **不统一的部分**(故意留着):server↔LLM 的 `died` 原样(LLM 流没了,无可 reattach,writer 兜底是诚实路径);服务器重启 / 重新部署是硬死——注册表瞬态,CONTINUE(断点继续)永远是最后兜底;
+- **部署约束**:注册表 per-process——多 worker 部署需要 sticky 会话(browser takeover 早已引入同一约束,非新增);dev 单 worker 无感。
+
+**追问 vs 引导:composer 模式 = f(run 状态)**
+
+| run 状态 | composer 行为 | 语义 |
+|---|---|---|
+| 运行中 | **引导模式**(琥珀描边) | Enter = 下一轮边界注入;Shift+Enter / ⚡ = 立即打断并引导 |
+| detach 挂起中 | 引导模式 + 「继续」按钮 | reattach 同一个 run,引导照常排队 |
+| awaiting(clarify) | 现有应答路径 | 不动 |
+| settled | 追问模式(现状) | 开新 run |
+
+- 这是本次最大的 UI 变化:今天"settle 才解锁 composer"本质是客户端不知道 run 死活、只能保守;有了权威 run 状态,模式切换无歧义,挂起中的 run 打字就是引导,超时收尾后打字自动变成追问;
+- pending 引导 = composer 上方小 chip 条(文本头 + × 撤回),drained 后 chip 消失、时间线出现用户行;
+- **追问在运行中不可达,是有意的**:运行中的念头多数是范围修正(引导可表达,lead 更新 task_write / 派工);全新问题等 settle,换干净的新 run 边界。v2 若确有需求,"自动追问"(追问 POST 挂 settle 回调)与引导也不抢道——投递目标不同;
+- **输入优先级链**:立即引导(抢占)> 引导(下一轮边界)> 收尾 / 停止(终止)> 追问(新航程)——同一张嘴,不同时态。
+
+### 8.5 路线图(v2.1)
+
+| 里程碑 | 内容 | 验收 |
+|---|---|---|
+| **R1 Run host** | 后台执行上下文 + 事件缓冲 / seq + attach 端点 + detach 宽限 / 优雅收尾 + composer 状态路由 | 断网 30s 重连续播**同一 run**;宽限超时的 run 有真实终态;stale sweep 对新 run 零命中 |
+| **R2 控制与引导** | run/control 端点 + ControlBox + 五动作 + `steer` 事件 + 引导模式 composer + 子代理行 ×(先占位) | 引导在下一轮生效且时间线可见;抢占注入后 run 继续;未送达可见作废 |
+| **R3 子代理** | `research_subtask` 嵌套 loop + 共享 registry + `kind:"sub"` wire + 任务卡 live 行 + mini-timeline | 20 golden query 对比 deep 基线;重复派工被 registry 压成 duplicate |
+| **R4(v1.5)** | 直达子代理引导(target 路由) | 视 R3 模型中介路径的质量决定做不做 |
+
+顺序理由:R1 独立成立——今天的网络死、页面刷新、僵尸行清理就全部受益——且是 R2 / R3 的共同地基;子代理会成倍放大死 run 的损失(三个子代理跑一半全丢),地基先打硬。
+
+### 8.6 风险与未决
+
+1. **成本**:子代理 ~15×;抢占会重流部分 turn。缓解:档位 + rung 门、tokens 并入 research 相后总量的自然上涨可见(§8.1)。
+2. **小模型委派质量**:R3 的 20 query 验收是硬门槛——不过则缩回单循环,子代理不做(这个提案允许失败)。
+3. **run host × granian**:后台执行上下文与 worker 生命周期的耦合(reload / 多 worker 会杀后台 run 或路由不达)——R1 先在 dev 单 worker 验证,部署文档标注 sticky / 单 worker 约束(与 browser takeover 同一条)。
+4. **未决**:① attach 端点鉴权是否复用 search 的同一 token(倾向是);② 子代理 think 是否参与前端 think 折叠计数;③ v2「自动追问」与 post-settle 晚到事件(related / memory / tags)的窗口重叠;④ detach 宽限窗与 wait_user 窗口的相互作用(挂起中的 run 若正等用户接管浏览器,宽限应顺延还是照走)。
+
+---
+
 ## 附:本方案的直接 bug 修复清单(均已在代码中核实)
 
 | 位置 | 问题 | 修法 |
@@ -444,7 +597,7 @@ features/results/aiSearch/
 
 ## 附:架构图解(Mermaid)
 
-> 与代码同步维护:改结构先改图。四种视图——七包分层、一次请求的 wire 时序、RESEARCH 共用循环、三档模式与报告 SYNTHESIZE。
+> 与代码同步维护:改结构先改图。五种视图——七包分层、一次请求的 wire 时序、RESEARCH 共用循环、三档模式与报告 SYNTHESIZE、干预与恢复时序(§8 提案)。
 
 ### 1. 七包分层与依赖方向
 
@@ -564,4 +717,30 @@ flowchart TB
   DONE --> SUM["执行摘要(最后写,看全部节成品)"]
   SUM --> METHOD["方法论脚注(机器生成:轮次 / 来源 / 耗时 / 局限)"]
   METHOD --> SETTLE(["settle done"])
+```
+
+### 5. 干预与恢复时序(§8 提案:steer / detach / reattach)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 用户
+  participant C as 浏览器(composer)
+  participant H as runs/host(ControlBox + 事件缓冲)
+  participant L as agent loop(后台执行上下文)
+  U->>C: 运行中输入(Enter=引导 / Shift+Enter=抢占)
+  C->>H: POST /run/control {steer|preempt|stop_sub|wrap|stop}
+  H->>L: 指令入队 / 置取消标志
+  alt 引导(默认)
+    L->>L: 轮边界 drain:steer 以 user 消息注入<br/>(steer 事件 status:drained)
+  else 抢占
+    L->>L: 在飞 turn 取消(interrupted≠died)<br/>→ steer 注入 → 循环继续
+  end
+  L-->>C: NDJSON 事件(带 seq,订阅者转发)
+  Note over C,L: 连接断开 = detach:跑完当前轮 → 轮边界挂起
+  U->>H: 重连 POST /run/attach?after_seq=N
+  H-->>C: 重放缓冲 N 之后 + 接活尾巴(同一个 run)
+  alt 宽限窗(90s)内无人认领
+    L->>L: 优雅收尾:pre-write + writer-from-gathered<br/>→ settle done(halt:连接中断已收尾)
+  end
 ```
