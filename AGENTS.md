@@ -1295,8 +1295,8 @@ whose assumptions change the answer.  The clarify gate carries the same
 high-stakes posture in BOTH gated modes (quality keeps its narrower
 "only when direction depends on intent" rule on top).  The DECISION
 PRE-GATE guards the expensive clarify completion with TWO nouls in one
-forward pass — `ambiguous` (intent-dependent) and `high_stakes`
-(floors `features.clarify_gate.ambiguous_min` 0.55 / `high_stakes_min`
+forward pass — `ambiguous` and `high_stakes`
+(floors `features.clarify_gate.ambiguous_min` 0.65 / `high_stakes_min`
 0.60, either opens) — two questions ON PURPOSE: a clear-but-risky
 "which index fund should I buy" must not read as unambiguous; the
 pre-screen's verdict + spend join the 决策结果 card (named-verdict-map)

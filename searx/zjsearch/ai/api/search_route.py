@@ -227,7 +227,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 if isinstance(ambiguous, dict) or isinstance(stakes, dict):
                     ambiguity = float(ambiguous.get("noul") or 0.0) if isinstance(ambiguous, dict) else 0.0
                     stakes_score = float(stakes.get("noul") or 0.0) if isinstance(stakes, dict) else 0.0
-                    worth = ambiguity >= float(pre.get("ambiguous_min", 0.55))
+                    worth = ambiguity >= float(pre.get("ambiguous_min", 0.65))
                     clarify_worth_asking = worth or stakes_score >= float(pre.get("high_stakes_min", 0.60))
                 raw_usage = pre_out.get("usage") if isinstance(pre_out, dict) else None
                 pre_gate_usage = raw_usage if isinstance(raw_usage, dict) else {}

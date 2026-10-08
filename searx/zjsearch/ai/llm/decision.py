@@ -128,7 +128,7 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
         # the query reads clear AND safe -- skip the round-trip.  Two
         # questions on purpose: "which index fund should I buy" reads clear
         # and still must not run on a guess.
-        "ambiguous_min": 0.55,
+        "ambiguous_min": 0.65,
         "high_stakes_min": 0.60,
     },
 }
