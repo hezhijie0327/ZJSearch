@@ -8,6 +8,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { configureBrowserInput } from "@/lib/browserInput.ts";
+import { configureDecision } from "@/lib/decision.ts";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import { translateFor } from "@/lib/i18n.ts";
 import { configureKnowledge } from "@/lib/kb/shared.ts";
@@ -286,6 +287,7 @@ export function RouterProvider({
       // boot payload carries none (the real one lands late)
       configureEmbeddings(parsed.globals?.embedding ? { token: parsed.globals.embedding.tk } : null);
       configureRerank(parsed.globals?.rerank ? { token: parsed.globals.rerank.tk } : null);
+      configureDecision(parsed.globals?.decision ? { token: parsed.globals.decision.tk } : null);
       const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai;
       configureKnowledge({ aiToken: aiCapLanding?.tk, embedModel: parsed.globals?.embedding?.model });
       configureBrowserInput(aiCapLanding?.tk);

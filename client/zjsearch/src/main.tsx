@@ -5,6 +5,7 @@ import { App } from "@/app.tsx";
 import { configureEmbeddings } from "@/lib/embed.ts";
 import "@/lib/kb/debug.ts";
 import { configureBrowserInput } from "@/lib/browserInput.ts";
+import { configureDecision } from "@/lib/decision.ts";
 import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
 import { initPwaInstall } from "@/lib/pwa.ts";
@@ -68,6 +69,9 @@ async function bootstrap(): Promise<void> {
   // the recall's rerank capability (absent = the recall keeps its fused order)
   const rerankCap = initialData?.globals.rerank;
   configureRerank(rerankCap ? { token: rerankCap.tk } : null);
+  // the SystemOne judgment capability (absent = the browser's decisions lens is off)
+  const decisionCap = initialData?.globals.decision;
+  configureDecision(decisionCap ? { token: decisionCap.tk } : null);
   // the knowledge store's AI routes (tag normalization) + the embed-model
   // name recorded on every embedded row
   const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;

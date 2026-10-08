@@ -192,8 +192,21 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     contract (`usage`), the prompt-cache shaping (`caching`), the
     tiered structured-output gate (`jsongate`), the embedding SERVICE
     (`embed` — config + server-side call; the browser proxy is a thin
-    runtime route), the HMAC gate (`security`) and the shared route
-    prologue (`http`).  Adding a provider = one module under `sdk/`
+    runtime route; `run_batch` carries a thread-safe cache-aside LRU,
+    (model, text) → vector, 256 entries, texts ≤1000 chars — the funnel
+    re-embeds the same snippet heads round after round and the repeats
+    cost dict lookups, a fully-cached batch reporting `usage: None`),
+    the rerank SERVICE (`rerank` — the `zjsearch.rerank` wires: `openai`
+    default over the `/rerank` industry convention — Cohere/Jina/
+    bigmodel/SiliconFlow; `dashscope` native TextReRank, with the
+    compatible-api's `/reranks` reachable via `path: /reranks`; the
+    browser's recall proxy is `POST /zjsearch/ai/rerank`, HMAC-gated
+    like the embed one), the decision SERVICE (`decision` — SystemOne
+    named questions in one forward pass, `POST /zjsearch/ai/decision`
+    the browser proxy; the client's helper is `lib/decision.ts`,
+    helper-only by design until a consumer lands), the HMAC gate
+    (`security`) and the shared route prologue (`http`).  Adding a
+    provider = one module under `sdk/`
     with a `factory()` + one line in `resolve()`.
   - **agent/** — the provider-agnostic agent ENGINE. `loop.py` is
     the phase machine (RESEARCH tool turns → WRITE turn; ask_user is a
@@ -220,7 +233,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     model's judgments live where the model invokes them; every stage
     fails open, rerank rides searx's curl_cffi network layer with a
     `zjsearch-rerank` network escape hatch, and its prompt tokens
-    accumulate into the settle's `usage.rerank` bucket) and the
+    accumulate into the settle's `usage.rerank` bucket.  The cascade has
+    a CROSS-SEARCH MEMORY: diverse_order's embeds ride out of `_ranked`
+    keyed by returned position and `build_search_feed`'s dup_gate spends
+    them at the mint point — a fresh url whose vector clears
+    `features.diversity.cosine` (0.92) against any ALREADY-FED source
+    (`reg.fed_vectors`, LRU 64) is the same story syndicated elsewhere:
+    no line, no [n], the existing number joins the row's `dupes` — zero
+    extra embed calls per search, inert without embeddings) and the
     Searches facade) and the AI OVERVIEW (`runs/overview.py` — the
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
@@ -1273,7 +1293,14 @@ a scope/success criterion only the user can state, and ALWAYS on
 high-stakes deliverables (forecasts, investment/purchase/health/legal)
 whose assumptions change the answer.  The clarify gate carries the same
 high-stakes posture in BOTH gated modes (quality keeps its narrower
-"only when direction depends on intent" rule on top).  Guardrails stay:
+"only when direction depends on intent" rule on top).  The DECISION
+PRE-GATE guards the expensive clarify completion with TWO nouls in one
+forward pass — `ambiguous` (intent-dependent) and `high_stakes`
+(floors `features.clarify_gate.ambiguous_min` 0.55 / `high_stakes_min`
+0.60, either opens) — two questions ON PURPOSE: a clear-but-risky
+"which index fund should I buy" must not read as unambiguous; the
+pre-screen's verdict + spend join the 决策结果 card (named-verdict-map)
+so the ask/no-ask is explainable.  Guardrails stay:
 one ask per turn, max 3 questions, never for what a quick search
 settles.  SHAPE EQUALITY is a contract: the tool spec advertises exactly
 what `gates.sanitize_questions` passes (single/multi + 2-4 options; the
@@ -1337,9 +1364,16 @@ loses the event -- shipped bug).
   (past_research index) fuse TWO dimensions -- hybrid BM25+vector RRF
   (trigram rescue on zero signal) and the TAG GRAPH (query matched
   against the tag vocabulary, shared-tag rows ranked, one-hop
-  expansion).  THE RED LINE stands: recall reaches the writer phase or
-  the UI only, never the researcher's feed.  `answer` rows are corpus
-  too ("you researched this before").
+  expansion) -- then the RERANK TIER re-scores the fused head (16, ≥4
+  candidates) through `POST /zjsearch/ai/rerank`: the RRF narrows, the
+  cross-encoder orders, any skip/failure keeps the fused order; the
+  classic page's eager `recallPages(q, 2)` passes `{rerank: false}`
+  (the hover prewarm spends nothing beyond the fusion).  The recall
+  rerank's input tokens land in the knowledge table's `usage:rerank`
+  row; the model-stats card's 重排 tile sums BOTH pools (the runs'
+  cascade spend from run meta + this row).  THE RED LINE stands: recall
+  reaches the writer phase or the UI only, never the researcher's
+  feed.  `answer` rows are corpus too ("you researched this before").
 - TAGS, three layers: the mechanical derive (query tokens + hosts +
   mode + task titles) at settle; the post-run extractor
   (`extract_insights` in ai/tools/memory.py -- ONE completion
@@ -1465,6 +1499,15 @@ redundant, both fused into ONE post-run extractor:
   pass the client's late-event gate (like `related`).  json_gate note:
   models answer "return a list" prompts with a BARE array -- `_parsed`
   wraps it into the schema's single array property.
+- THE NEAR-DUP GATE (`features.memory_dedup`, cosine 0.92 shared):
+  both write paths check against the stored snapshot PLUS this run's
+  accepted saves (`state.saved_memories` -- a within-run repeat reads
+  as duplicate too).  A save that rephrases a stored fact settles a
+  `duplicate` row teaching the model to correct wording instead of
+  re-saving; the extractor's facts filter in ONE batch embed (the
+  small model rephrasing one fact three ways is the failure it stops).
+  Fail-open everywhere: embedding unconfigured means saves behave
+  exactly as before.
 
 ## Custom plugin behaviour (server side, keep with the theme)
 
