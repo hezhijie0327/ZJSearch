@@ -8,11 +8,10 @@ import typing as t
 import bm25s
 from flask_babel import gettext
 
-from . import Plugin, PluginInfo
+from . import Plugin, PluginCfg, PluginInfo
 
 if t.TYPE_CHECKING:
     from searx.extended_types import SXNG_Request  # pylint: disable=ungrouped-imports
-    from searx.plugins import PluginCfg  # pylint: disable=ungrouped-imports
     from searx.search import SearchWithPlugins
 
 logger = logging.getLogger("searx.plugins.bm25_reranker")

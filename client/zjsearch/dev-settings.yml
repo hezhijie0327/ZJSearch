@@ -344,11 +344,12 @@ zjsearch:
   #    travel via the ZJSEARCH_RERANK_KEY env.
   rerank:
     enabled: true
-    # sdk: openai (the OpenAI SDK's client.post("/reranks") -- dashscope
-    #   compatible-api / OpenAI-serving gateways; base_url = the compat
-    #   base) | cohere (default -- ANY Cohere-shaped POST {base_url}/rerank:
-    #   bigmodel / Jina / SiliconFlow) | dashscope (the native TextReRank
-    #   SDK; base_url = the workspace base with its /api/v1 when dedicated)
+    # sdk: openai (default -- the OpenAI SDK's generic client.post: the
+    #   DEFAULT_PATH is /rerank, the industry convention -- bigmodel /
+    #   Jina / SiliconFlow / Cohere; the dashscope compatible-api's
+    #   /reranks is the outlier, override with path: /reranks; base_url =
+    #   the gateway base) | dashscope (the native TextReRank SDK;
+    #   base_url = the workspace base with its /api/v1 when dedicated)
     sdk: dashscope
     base_url: "https://llm-5e15apfxtagh13cv.cn-beijing.maas.aliyuncs.com/api/v1"
     api_key: ""                    # or the ZJSEARCH_RERANK_KEY env (the

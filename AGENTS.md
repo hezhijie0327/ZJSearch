@@ -1593,17 +1593,18 @@ dedicated workspace (2026-10):
   calls as tool semantics) plus an explicit "a call written in text
   executes nothing" line; with it qwen-plus/3.8-flash call natively 3/3.
 
-RERANK (`zjsearch.rerank.sdk`): THREE wires -- ``dashscope`` (native
+RERANK (`zjsearch.rerank.sdk`): TWO wires -- ``dashscope`` (native
 TextReRank leg, living on the DashscopeSdk family surface like
-Generation / TextEmbedding), ``openai`` (the OpenAI SDK's generic
-``client.post("/reranks")`` -- the dashscope compatible-api shape,
-probed 200 on the dedicated workspace), and ``cohere`` (the default
-raw POST: any Cohere-shaped `{base_url}/rerank` gateway -- bigmodel /
-Jina / SiliconFlow; the cohere PYTHON SDK itself was evaluated and
-REJECTED: its fixed /v1|v2 path convention misses every gateway shape
-we serve).  The provider legs live in `infra/rerank.py` (the rerank
-SERVICE: config + wires); the cascade POLICY (BM25 fusion, head
-selection, splice) stays in `runs/search/rank.py`.
+Generation / TextEmbedding) and ``openai`` (the default: the OpenAI
+SDK's generic ``client.post(<path>)`` serving ANY HTTP-shape gateway --
+``DEFAULT_PATH`` is ``/rerank``, the industry convention (Cohere / Jina
+/ bigmodel / SiliconFlow); the dashscope compatible-api's ``/reranks``
+is the documented outlier, overridden with ``path: /reranks``; the
+cohere PYTHON SDK itself was evaluated and REJECTED: its fixed /v1|v2
+path convention misses every gateway shape we serve).  The provider
+legs live in `llm/rerank.py` (the rerank SERVICE: config + wires); the
+cascade POLICY (BM25 fusion, head selection, splice) stays in
+`runs/search/rank.py`.
 
 The SystemOne DECISION capability (`zjsearch.decision`,
 `llm/decision.py` + `api/decision_route.py`: ``POST

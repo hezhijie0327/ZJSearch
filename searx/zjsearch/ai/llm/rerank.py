@@ -7,9 +7,10 @@ model are independent deployments.  ``zjsearch.rerank.sdk`` picks the
 wire:
 
 - ``openai`` (default) -- the OpenAI SDK's generic ``client.post(<path>)``
-  serving every HTTP-shape gateway: the dashscope compatible-api
-  (``/reranks``), bigmodel (``/rerank``), Jina, real Cohere -- the path
-  rides the ``path`` key.
+  serving every HTTP-shape gateway: bigmodel, Jina, SiliconFlow, real
+  Cohere -- all the ``/rerank`` industry convention, which is the
+  DEFAULT path; the dashscope compatible-api's ``/reranks`` is the
+  documented outlier, overridden with the ``path`` key.
 - ``dashscope`` -- Alibaba's native TextReRank SDK (gte-rerank family),
   delegated to the family surface (``sdk.dashscope.DashscopeSdk.rerank``),
   with ``base_url`` riding verbatim (a dedicated MaaS workspace includes
@@ -38,9 +39,11 @@ logger = logging.getLogger(__name__)
 SDKS = ("openai", "dashscope")
 """The ``zjsearch.rerank.sdk`` values -- one wire per provider family."""
 
-DEFAULT_PATH = "/reranks"
-"""The openai leg's default request path -- the dashscope compatible-api
-convention; bigmodel and friends override it with ``path: /rerank``."""
+DEFAULT_PATH = "/rerank"
+"""The openai leg's default request path -- the industry convention
+(Cohere, Jina, bigmodel, SiliconFlow all serve it); the dashscope
+compatible-api's ``/reranks`` is the outlier, overridden with
+``path: /reranks``."""
 
 
 def cfg() -> dict[str, t.Any]:
