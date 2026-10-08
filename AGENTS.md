@@ -1225,11 +1225,14 @@ page goes to ONE markdown engine — the shared markitdown service
 extraction, NO drop-tree: silent content loss is the one unacceptable
 failure in the reader, and page chrome (nav, footer, banners) is
 visible noise the model navigates past on its own.  Title and the
-capped links appendix ride a read-only bs4 parse.  `.pdf` URLs skip
-the browser entirely: a direct fetch (the attachments image network's
-shape, same `guard_url` gate) + markitdown's pdfminer pass — the
-browser's PDF viewer renders chrome, not content.  Conversion
-failures are `PageReadError`s (the model moves on).
+capped links appendix ride a read-only bs4 parse.  DOCUMENT urls
+(`.pdf` / `.docx` / `.pptx` / `.xlsx` / `.xls` -- the
+`core/convert.py` document-extension set) skip the browser entirely: a
+direct fetch (the attachments image network's shape, same `guard_url`
+gate) + markitdown's converter for the kind — the browser renders
+PDFs as viewer chrome and Office files as download prompts, never
+content.  Conversion failures are `PageReadError`s (the model moves
+on).
 uBlock Origin (camoufox's default addon) is the adblock — default ON,
 `adblock: false` excludes it (the offline audit sets that; a first
 launch without network would otherwise try an addons.mozilla.org

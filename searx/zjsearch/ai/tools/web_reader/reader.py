@@ -54,8 +54,9 @@ def page_spec() -> dict[str, t.Any]:
         "name": PAGE_TOOL,
         "description": (
             "Open ONE URL and read its current full page content, rendered in"
-            " a real browser and returned as compact markdown.  PDF documents"
-            " (.pdf urls) are read natively as full text.  Reach for it"
+            " a real browser and returned as compact markdown.  Document urls"
+            " (.pdf / .docx / .pptx / .xlsx / .xls) are read natively as full"
+            " text.  Reach for it"
             " when a source's snippet promises exactly the detail you still"
             " need (specs, prices, tables, documentation, exact numbers) or"
             " when a load-bearing claim must be checked against its source --"
@@ -167,10 +168,11 @@ def rendered_html(url: str) -> str:
 
 
 @functools.lru_cache(maxsize=1)
-def _pdf_network() -> Network:
-    """Dedicated curl network for the direct PDF fetches (the attachments
-    image network's shape): the default network is https-only -- this one
-    keeps the ``outgoing`` proxies / verify for remote endpoints."""
+def _document_network() -> Network:
+    """Dedicated curl network for the direct document fetches (the
+    attachments image network's shape): the default network is
+    https-only -- this one keeps the ``outgoing`` proxies / verify for
+    remote endpoints."""
     out = settings.get("outgoing", {})
     return Network(
         enable_http=True,
@@ -185,51 +187,54 @@ def _pdf_network() -> Network:
     )
 
 
-_PDF_FETCH_TIMEOUT = 30.0
-_PDF_MAX_BYTES = 30 * 1024 * 1024
-"""One PDF fetch's wall clock and body ceiling -- a paper arrives in
-seconds; a 30MB file is not a reading task."""
+_DOC_FETCH_TIMEOUT = 30.0
+_DOC_MAX_BYTES = 30 * 1024 * 1024
+"""One document fetch's wall clock and body ceiling -- a paper arrives
+in seconds; a 30MB file is not a reading task."""
 
 
-def _fetch_pdf(url: str) -> bytes:
-    """The PDF's bytes -- the browser sits OUT for this one path (its PDF
-    viewer renders chrome, not content): a direct fetch over the shared
-    loop instead, behind the same ``guard_url`` gate the render path
-    passed.  Raises :class:`PageReadError` on anything unreadable."""
+def _fetch_document(url: str) -> bytes:
+    """The document's bytes -- the browser sits OUT for this path (it
+    renders PDFs as viewer chrome and Office files as download prompts,
+    never content): a direct fetch over the shared loop instead, behind
+    the same ``guard_url`` gate the render path passed.  Raises
+    :class:`PageReadError` on anything unreadable."""
     async def _get():
-        return await _pdf_network().request(
-            "GET", url, timeout=_PDF_FETCH_TIMEOUT, headers={"User-Agent": gen_useragent()}
+        return await _document_network().request(
+            "GET", url, timeout=_DOC_FETCH_TIMEOUT, headers={"User-Agent": gen_useragent()}
         )
 
     try:
-        resp = asyncio.run_coroutine_threadsafe(_get(), get_loop()).result(_PDF_FETCH_TIMEOUT + 5)
+        resp = asyncio.run_coroutine_threadsafe(_get(), get_loop()).result(_DOC_FETCH_TIMEOUT + 5)
     except Exception as exc:  # pylint: disable=broad-except
-        raise PageReadError(f"the pdf could not be fetched ({exc})") from exc
+        raise PageReadError(f"the document could not be fetched ({exc})") from exc
     content = resp.content or b""
     if not content:
-        raise PageReadError("the pdf url returned an empty body")
-    if len(content) > _PDF_MAX_BYTES:
-        raise PageReadError(f"the pdf is too large to read ({len(content)} bytes)")
+        raise PageReadError("the document url returned an empty body")
+    if len(content) > _DOC_MAX_BYTES:
+        raise PageReadError(f"the document is too large to read ({len(content)} bytes)")
     mime = str(resp.headers.get("content-type") or "").split(";", maxsplit=1)[0].strip().lower()
-    if mime and "pdf" not in mime and not content.startswith(b"%PDF"):
-        raise PageReadError(f"the url does not serve a pdf (content-type {mime or 'unknown'})")
+    if mime and ("text/html" in mime or "text/plain" in mime) and not content.startswith(b"%PDF"):
+        # a .pdf/.docx url that 404s serves an error page -- say so, let
+        # markitdown's own parse errors handle the rest
+        raise PageReadError(f"the url does not serve a document (content-type {mime})")
     return content
 
 
-def _pdf_title(url: str) -> str:
+def _document_title(url: str) -> str:
     tail = urlsplit(url).path.rstrip("/").rsplit("/", 1)[-1]
-    return (tail or "PDF document")[:200]
+    return (tail or "document")[:200]
 
 
-def _read_pdf(url: str, limit: int | None) -> tuple[str, str]:
-    """One PDF document as markdown -- markitdown's pdfminer pass over the
-    fetched bytes (extract.py's PageReadError is the shared failure
-    shape).  Papers and reports skip the browser entirely."""
+def _read_document(url: str, extension: str, limit: int | None) -> tuple[str, str]:
+    """One document as markdown -- markitdown's pass over the fetched
+    bytes (extract.py's PageReadError is the shared failure shape).
+    Papers, spreadsheets, slide decks skip the browser entirely."""
     try:
-        text = convert_service.to_markdown(_fetch_pdf(url), "pdf")
+        text = convert_service.to_markdown(_fetch_document(url), extension)
     except convert_service.ConvertError as exc:
-        raise PageReadError(f"the pdf could not be read ({exc})") from exc
-    return _pdf_title(url), _cap(text, limit)
+        raise PageReadError(f"the document could not be read ({exc})") from exc
+    return _document_title(url), _cap(text, limit)
 
 
 def _cache_get(key: str) -> tuple[str, str] | None:
@@ -269,10 +274,11 @@ def read_page(url: str) -> tuple[str, str]:
     cached = _cache_get(key)
     if cached is not None:
         return cached
-    if urlsplit(guarded).path.lower().endswith(".pdf"):
-        # the browser's PDF viewer renders chrome, not content -- a .pdf
-        # url reads as a DIRECT document fetch + markitdown conversion
-        title, text = _read_pdf(guarded, max_chars())
+    extension = urlsplit(guarded).path.lower().rsplit(".", 1)[-1]
+    if convert_service.is_document_extension(extension):
+        # the browser renders these as viewer chrome or a download prompt,
+        # never content -- a document url FETCHES its bytes and converts
+        title, text = _read_document(guarded, extension, max_chars())
     else:
         html_text = rendered_html(guarded)
         if not html_text.strip():
