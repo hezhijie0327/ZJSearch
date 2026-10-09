@@ -673,3 +673,160 @@ Lessons that must survive this round:
 4. Commit in the house style — granular `[fix]/[mod]/[docs] theme
    zjsearch: …` commits; docs separate from code; never commit build
    output (static-root artifacts are git-ignored).
+
+## 7.5 Round record — 2026-10 (the six-lens full sweep: continue × subagents × four-model funnel × PGlite × UI drift)
+
+Scope: a full audit per this playbook with six parallel read-only sweeps
+(client UI/structure, server structure, the prompt system, the four-model
+services, the PGlite store, the continue chain), then the fix round, then
+live verification against `dev-settings.local.yml` (deepseek LLM /
+bigmodel embedding+rerank / typesafe decision / amap+baidu MCP / the
+built-in browser). Round record highlights that must not regress:
+
+- **The continue chain had a SILENT DATA-LOSS bug**: the evt-log seq
+  counters are memory-only, so a fresh tab resuming a dead run renumbered
+  from 1 -- every resumed event collided with the stored `run_event` PK
+  and `ON CONFLICT DO NOTHING` dropped the whole resumed wire (the
+  research streamed fine and replayed as nothing).  Fix: the counters
+  reseed from the store (`seedSeqCounterFromStore` on continue, from the
+  loaded rows on replay).  Regression: stop a run mid-research, reload
+  the tab, 继续 -- the resumed rounds must appear in the replay.
+- **A USER-STOPPED run now has a continue entry point**: the failed box
+  stays exempt for stopped runs (the quietness contract), so a quiet
+  accent 继续 pill renders beside the run footer
+  (`stopped && !answer && totalCalls && isLast`).  Without it the kept
+  checkpoint was unreachable from the UI.  The failed box is scoped to
+  `isLast` (continue/regenerate act on `core.runs[end]`; on earlier runs
+  they were a misleading silent no-op).
+- **继续 resumes THE RUN's own mode** (a balanced dropdown pick must not
+  convert an interrupted report), sends `clarify: answered-EMPTY` (a
+  parse_resume failure degrades to a fresh run WITHOUT re-opening the
+  clarify gate), seeds the seq counter, guards the double-click
+  (`continuingRef`), resets the stage spine on `client.resume` (the
+  re-fired plan/research no longer append echo duplicates), bails the
+  attach backoff on HTTP 404 (a swept handle never revives), and sends
+  the stored outline back (`resume.outline`) -- the server re-validates
+  it through `restored_outline()` and skips the outline gate, so an
+  interrupted report keeps the TOC the user already saw.
+- **The subagent digest was EMPTY by design** (the defect class this
+  round exists to catch): children had no `learnings` tool, so
+  `child.facts/gaps` never populated and `_sub_digest` returned a bare
+  「来源 N 条已入册」 while the child's actual report was discarded.
+  Children now register `learnings_spec()` + `system_one_spec()` (the
+  lead's judge gate) + `tool_spec(pages_on, ...)` (the reader
+  cross-reference), the sub prompt's discipline teaches "your ledger IS
+  your digest", `_promote_child` folds the child's rerank/decision
+  spend + judgments (tagged `sub:`) + gate usage into the run's account,
+  and the digest lists only ACTIVE facts (a superseded fact is history,
+  not a finding).  Unit vector: the FakeChild digest/promote checks.
+- **The ranking funnel's middle tier had NO timeout anywhere**: the
+  openai rerank leg built a fresh sync client per call (SDK default
+  ~600s) inside the settlement drain -- one hung gateway parked a worker
+  and stalled the round's stream.  Both rerank legs now run on a bounded
+  dispatch pool under a 20s budget (fail-open to the previous order),
+  the openai client is cached per (base, key), embeddings chunk to
+  MAX_BATCH internally (server internals sent 30-doc batches the route
+  cap never saw) and `embed_texts` takes a timeout; the two unbounded
+  `run_batch` callers (embed route 60s, the corpus rescue 8s) are
+  bounded too.
+- **Rerank/embed spend is accounted where it is spent**: the writer
+  context ordering, the corpus packs (Corpus(usage=...)), and the long
+  read's segment trim fold into `usage.rerank`; `evidence_check` folds
+  its tokens; the overview's spend remains per-request (accepted).
+- **Long page reads trim their writer feed by relevance** (the
+  `rerank-as-infrastructure` idea made real): past ~6k chars the feed
+  block is rebuilt from the rerank-top segments (line-boundary
+  ~1200-char segments, 380-char heads, ONE call) within
+  `reader.max_chars` (default 8k) -- the corpus and the client's reading
+  pane keep the FULL text; only the feed slims.  Fail-open everywhere.
+- **The belief ledger dedups near-duplicate facts** (embedding NN at the
+  memory-dedup floor, refs merging into the survivor) -- the small-model
+  pathology where one fact lands three ways stops at the ledger.
+- **Coverage provenance survives a plan rewrite**: `carry_provenance`
+  moves the outgoing items' gathered-sources counts onto the
+  containment-matching rewrites -- "keep the list TRUE" re-sends no
+  longer flicker the task card's evidence back to zero (verified live:
+  a balanced run re-planned 3 -> 6 subtasks, every task kept its 12
+  sources).
+- **The delegation gate widened one rung**: deep rung>=2, balanced
+  rung>=4 (the old deep-only rung-3 gate made delegation nearly
+  unreachable), and `<research_policy>` tells the model its
+  probe grade.  The researcher prompt gained the cross-verification
+  bullet in ALL modes (was deep-only), the change-the-instrument stop
+  rule (second angle before stopping, matching the machinery's own
+  patience), the ranked+deduped funnel transparency line in the
+  web_search spec, and the surprise-triggers-re-plan line; the report
+  sections compose `spine.citation_rules()`/`figures_rule()` again (the
+  hand-copied block had dropped the placement grammar and the [*]
+  escape); the balanced shape opens verdict-first and the deep shape
+  carries a length ceiling; the overview role teaches synthesis +
+  brevity.  A dead `prior_topics` wire was completed en passant: the
+  outline gates inject the knowledge-base topics block now, and
+  `build_outline_from_template` ACCEPTS the kwarg the route always
+  passed (a template-picked report run crashed with TypeError before
+  the gate even ran -- a shipped bug found by pylint E1123).
+- **The wire's closed alphabet lives in `core/wire_format.py`** (the
+  encode + EVENTS leaf); `agent.wire` re-exports, `core.ndjson` imports
+  core only -- importing the NDJSON wrapper no longer drags the whole AI
+  stack.  The page extraction moved to `browser/extract.py` (the engine
+  renders AND extracts; `tools.web_reader.extract` is a re-export shim)
+  -- `browser.session` stopped reaching up into tools.  The raw-args
+  JSON parser collapsed to `core.text.raw_args` (nine divergent copies
+  deleted); dead modules/constants swept (`agent/thinkgate.py`,
+  `wire.LATE_EVENTS`, `loop.time_monotonic`, the duplicated
+  `MAX_PARALLEL`, the memoized-forever MCP failure now `cache_clear()`s
+  and retries next run); ~20 stale `infra.*`/`runtime.*`/`framework.*`
+  doc references renamed; the run-host replay buffer strips the browser
+  mirror's volatile JPEG frames (a wait_user window's ~100 b64 payloads
+  no longer ride every reattach); the fence splitter's openers are
+  precompiled (they rebuilt per streamed delta in the hottest loop).
+- **PGlite**: the embed-pending partial index excludes `source_ref`
+  (they polluted it permanently -- the idle probe walked every ref row
+  per settle); `thread_head` gained its listing index; `knowledge_kind`
+  became the two-key sort `(kind, pinned DESC, updated DESC)`; the
+  trigram rescue rides the GiST as a KNN ordering (`title %> $1 ORDER
+  BY title <-> $1` -- the `word_similarity()` call seq-scanned);
+  `hybridRecall` over-fetches (the index legs ranked across ALL kinds
+  and narrow kind-sets starved); `tagVocabulary` filters kinds and
+  empty-tag rows (it ran before EVERY search POST); `deleteItem(run)`
+  cascades its evt rows + ref rows (+ref counter step-downs);
+  `deleteThread`/reset sweep `attachment` (bytes used to survive a
+  nuclear reset); a failed evt flush RESTORES its buffer (a rolled-back
+  settle no longer eats the batch); VACUUM covers `run_summary` +
+  `thread_head`.  Schema v5 stands; the source_ref-to-junction-table
+  refactor and a `schema_meta` migration seam are the recorded v6
+  candidates.
+- **UI drift batch**: `HOVER_CHIP` reused in the debug copy chips (the
+  hand-typed copies lacked `group-focus-within` -- two copy controls
+  were invisible to keyboards); the steer-chips block extracted to
+  `SteerChips` (it lived byte-identical in two pages, the dismiss glyph
+  had drifted to a literal ×); `CAP_CHIP_CLASS` exported once (four
+  hand-typed copies, one at an 11px clickable tier); the AI debug stage
+  lazy-loads behind `?aidebug` (~1,500 fixture lines off the production
+  thread chunk); the knowledge meta chip renamed `META_CHIP` (the
+  same-name divergent `CHIP_OUTLINE` invited exactly the drift this
+  round swept); the Dropdown portal carries `SCROLLBAR_NONE`; the AI
+  contract types moved to `lib/aicontracts.ts` (the kb layer stopped
+  importing features/); the confirm dialog plays its exit animation
+  (always-mounted + `useExitPresence`); hostname/filesize helpers
+  deduped; the icon/spacing tier outliers corrected.
+- **LIVE verification** (the real deployment config): the plugin/
+  operator matrix green (hash/time/random/stats/unit/stock/self, the
+  5-usd-to-eur trap, site:/-site: filters); one full wire replay (speed)
+  settles done with the funnel visible in `usage` (rerank 3 calls /
+  decision 9 / gates / judgments incl. the read gate + the pre-write
+  evidence check) and only the late set after settle; the browser E2E:
+  a real balanced run stopped mid-research, reloaded, continued via the
+  new pill -- SAME run section, rounds continuing (第 2 轮 -> ...),
+  sources numbering on, re-planned 3 -> 6 tasks with provenance kept,
+  settled with a cited answer + mermaid + related.  Mobile 390: zero
+  horizontal pan.  The debug stage lazy-loads and its nine scenarios
+  settle through the real fold.
+
+Known-red / accepted for later: the AI thread page's Lighthouse red
+(§7.1) stands; pylint R09xx in the four pre-existing files (§7.3)
+stands (my touched files hold 10.00); the overview's rerank/embed spend
+stays unaccounted (per-request one-shot, not a run budget); the
+prompts→tools name-constant edge is accepted (names live beside their
+specs; the cycle stays lazy-import safe); `handlers.execute` (645
+lines) and `_search` (575) await the handler-table refactor.

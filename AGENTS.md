@@ -150,7 +150,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   - **browser/** — the built-in render engine: ONE Camoufox
     (anti-detect Firefox) in a PERSISTENT context (the cookie store
     survives runs — the login stages build on it), behind the reader's
-    rendered-HTML seam.  `config` reads the opt-in `zjsearch.browser`
+    rendered-HTML seam; `extract.py` is the RENDERED-PAGE EXTRACTION
+    (markitdown over the whole markup + the bs4 title/links pass — the
+    engine renders AND extracts; `tools.web_reader.extract` re-exports
+    it, tools→browser is the legal edge and `browser.session` must
+    never reach up into tools for it).  `config` reads the opt-in `zjsearch.browser`
     block (enabled/mode/profile/adblock/proxy/allow_hosts/budgets +
     `params` -- a 1:1 passthrough into camoufox's launch_options whose
     identity/security keys (os/block_webrtc/humanize/persistent_context/
@@ -223,11 +227,15 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     CLOSED event set (open/think/say/calls/call/close/tasks/sources/
     answer/ask/gallery/related/memory/ctx/tags/usage/settle — a
     misspelled event raises; `ctx` is the storage-only resume
-    checkpoint, the CONTINUE contract below); `executor.py` is the
+    checkpoint, the CONTINUE contract below); the encode + EVENTS
+    alphabet lives in the CORE leaf `core/wire_format.py` (agent.wire
+    re-exports — core.ndjson must not import the agent engine to get
+    the validation); `executor.py` is the
     tool-executor contract (generator →
-    position-aligned `tool_results`); `thinkgate/echo/fences` carry the
-    channel doctrine, the cross-dialect reasoning echo payloads and the
-    stream fence splitter.  Every delta carries its entry id and
+    position-aligned `tool_results`); `echo/fences` carry the
+    cross-dialect reasoning echo payloads and the
+    stream fence splitter (openers precompiled — they matched per
+    streamed delta in the hottest loop).  Every delta carries its entry id and
     channel — the client appends, it never reconstructs.
   - **runs/** — the concrete tasks ON the engine. AI Search
     (`runs/search/`: profile/prompts/gates/tools/executor/route;
@@ -244,7 +252,21 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     model's judgments live where the model invokes them; every stage
     fails open, rerank rides searx's curl_cffi network layer with a
     `zjsearch-rerank` network escape hatch, and its prompt tokens
-    accumulate into the settle's `usage.rerank` bucket.  The cascade has
+    accumulate into the settle's `usage.rerank` bucket.  EVERY rerank
+    leg is BOUNDED (the hung-gateway lesson: the openai leg built a
+    fresh sync client per call with the SDK's ~600s default INSIDE the
+    settlement drain — one slow rerank gateway stalled the round's
+    whole stream): both legs run on a 4-worker dispatch pool under a
+    20s budget, the client is cached per (base, key), and the OTHER
+    rerank spenders (the writer's context ordering, the corpus packs,
+    the long-read segment trim) fold their tokens into the same bucket.
+    THE LONG-READ FEED TRIM: a page read past ~6k chars rebuilds its
+    WRITER-FEED block from the rerank-top segments (line-boundary
+    ~1200-char segments, 380-char heads, ONE call) within
+    `zjsearch.reader.max_chars` (default 8k when unset) — the page's
+    relevant middle survives instead of its head; the corpus and the
+    client's reading pane keep the FULL text; fail-open to the whole
+    text.  The cascade has
     a CROSS-SEARCH MEMORY: diverse_order's embeds ride out of `_ranked`
     keyed by returned position and `build_search_feed`'s dup_gate spends
     them at the mint point — a fresh url whose vector clears
@@ -1139,6 +1161,21 @@ one-shot plan tool are REMOVED — the task list is the only decomposition
 surface; the client's `spawn_subtask` tool name survives solely as a
 stored-legacy thread renderer.
 
+SUBAGENTS (`research_subtask`): the delegation gate is the DEPTH PROBE's
+rung — deep from rung 2, balanced from rung 4 (the four-field brief +
+batch cap + the shared registry make delegation safe; the old deep-only
+rung-3 gate made it nearly unreachable), and `<research_policy>` tells
+the model its grade.  THE CHILD IS A WHOLE RESEARCHER: its toolset
+carries `learnings_spec()` (THE LEDGER IS ITS DIGEST — the delegation
+contract promises facts + gaps, and `_sub_digest` builds exactly those
+from `child.facts`/`child.gaps`; a child without the tool returned a
+bare 「来源 N 条已入册」 and its report was discarded) and `judge` under
+the lead's decision gate; its SPEND joins the run's account
+(`_promote_child` folds the child's rerank/decision buckets, its
+judgments tagged `sub:`, and its gate usage — un-promoted, four
+subagents were dark matter on the model-stats card).  The digest lists
+only ACTIVE facts (superseded ones are history).
+
 GOAL is the LOOP mode: the four depths are budget/decomposition/
 output-shape differences on ONE loop, and goal's contract is "researches
 until the goal is met" — the loop ends on the task ledger closing (the
@@ -1312,8 +1349,28 @@ s clamp is 2000 — a heavy deep run gathers hundreds), and replaces
 `<resume_note>` continuation instruction.  The engine seeds
 `entry_base`/`round_base` so the resumed stream's timeline ids continue
 the stored ones (the client's `client.resume` fold resets only the
-failure state — steps, sources, ledger and cards all survive; a death
-mid-WRITE restarts the document, noted limit).  A checkpoint-less run
+failure state AND the stage spine — steps, sources, ledger and cards
+all survive; the re-fired plan/research phases must not append echo
+duplicates; a death mid-WRITE restarts the document, noted limit).
+CONTINUE HYGIENE (the 2026-10 round's data-loss lesson): the evt-log
+seq counters are MEMORY-ONLY — a fresh tab MUST reseed them from the
+store before appending (`seedSeqCounterFromStore` on continue, from the
+loaded rows on thread replay), or every resumed event collides with the
+stored `run_event` PK and `ON CONFLICT DO NOTHING` silently drops the
+whole resumed wire.  Continue locks the run's OWN mode (the dropdown's
+pick must not convert an interrupted report), sends
+`clarify: answered-EMPTY` (a parse_resume failure then degrades to a
+fresh run WITHOUT re-opening the clarify gate), guards the double-click
+(`continuingRef`), stops a still-alive hosted run first, and bails the
+attach backoff on HTTP 404 (a swept handle never revives).  A REPORT
+continue sends the stored outline back as `resume.outline` — the server
+re-validates it through `restored_outline()` and skips the outline gate
+(the TOC the user already saw stays; key_questions regenerate empty,
+accepted).  The ENTRY POINTS: the failed box's 继续 (scoped to the LAST
+run — continue/regenerate act on `core.runs[end]`), and for a
+USER-STOPPED run the quiet accent pill beside the run footer (the
+failed box stays exempt for stopped runs; without the pill the kept
+checkpoint was unreachable).  A checkpoint-less run
 (predating the feature) falls back to the legacy contract: a NEW run
 whose findings travel as the confirmed `<clarified>` direction.  A
 still-alive hosted run is stopped via run/control BEFORE the resume
@@ -1389,7 +1446,9 @@ sanitizer would downgrade must not be offered to the model).
 
 ## Knowledge base (知识库 -- the event-sourced browser-local research memory)
 
-The PGlite store IS the theme's research memory; schema v4 splits the
+The PGlite store IS the theme's research memory; schema v5 (v4's
+split plus `run_summary`/`stats`/`attachment` + the bytes/head triggers,
+marked by the `run_summary` table) splits the
 wire log into its OWN table (`run_event`, PK (run_id, n), DDL in
 `src/lib/pg.ts`) and keeps the queryable surfaces as PROJECTIONS in ONE
 `knowledge` table -- every scan, aggregate and work queue costs
@@ -1492,7 +1551,10 @@ loses the event -- shipped bug).
   ResultsPage recording effect and every read path were removed (the
   knowledge base is AI-runs-only).  `recordClassicResults`' corpus
   feed died with it -- the sources corpus grows from AI runs only.
-- BOOT: schema v4's upgrade is IN PLACE (the v3 evt rows copy into
+- BOOT: schema v4's upgrade is IN PLACE and v5 rides the `run_summary`
+  marker (a database without it dies WHOLESALE -- v5 now holds real user
+  data, so a future v6 needs a real `schema_meta` migration seam, not
+  another drop); the v3 evt rows copy into
   run_event with one idempotent INSERT..SELECT -- crash-resumable --
   then leave `knowledge`; the dead `parent_id` column drops).  Legacy
   v2 tables still die wholesale (CASCADE -- the old live-query
@@ -1503,7 +1565,23 @@ loses the event -- shipped bug).
   two work queues (the idle probes were full scans that found nothing,
   twice per settle), and a GiST trgm index serving the rescue as a KNN
   `title <-> query` ordering (gist_trgm_ops missing in a pglite build
-  degrades the rescue to its rare seq scan).
+  degrades the rescue to its rare seq scan).  The 2026-10 round's index
+  discipline: a partial index whose PREDICATE changes needs DROP-first
+  (`CREATE IF NOT EXISTS` keeps the stale definition); the embed-pending
+  predicate EXCLUDES `source_ref` (they carry search_text but are never
+  embedded -- the polluted index made the idle probe walk every ref row
+  per settle); `knowledge_kind` is the TWO-key sort `(kind, pinned
+  DESC, updated DESC)`; `thread_head` carries its listing index;
+  `hybridRecall` OVER-FETCHES (`limit*8`, min 64 -- the index legs rank
+  across ALL kinds and a narrow kind-set starves); the trigram rescue
+  is the index-served `title %> $1 ORDER BY title <-> $1` (a
+  `word_similarity()` call could never use the index).  DELETES CASCADE:
+  `deleteItem(run)` sweeps the run's evt rows + (run, source) ref rows
+  (stepping the sources' counters down); `deleteThread`/reset sweep
+  `attachment` (the data-URL bytes survived a nuclear reset once).  A
+  FAILED evt flush RESTORES its buffer -- a rolled-back settle
+  transaction must not eat the batch (a crashed TAB loses at most one
+  batch; a broken DB loses none).
   RESET drops the three tables CASCADE and re-runs the schema DDL ON THE
   SAME LIVE CONNECTION (`createSchema`) — the old close-and-reopen dance
   raced PGlite's IndexedDB flush (a reopened database served the
@@ -1610,9 +1688,14 @@ redundant, both fused into ONE post-run extractor:
   after the harmonization), and the researcher prompt teaches the plan
   as a LIVING HYPOTHESIS -- revise (add/split/merge/reword/drop) by
   resending the complete list whenever cross-checking proves an earlier
-  assumption wrong; the old "system marks done automatically" coverage
+  assumption wrong, and a SURPRISE (an unexpected player, a
+  contradicting number, an unconsidered facet) is a plan edit, not a
+  footnote; the old "system marks done automatically" coverage
   lie is gone from every prompt (statuses are the model's; the referee
-  only advises).
+  only advises).  A rewrite CARRIES PROVENANCE (`Coverage.carry_provenance`
+  moves the outgoing items' gathered-sources counts onto the
+  containment-matching rewrites) -- without it every re-plan flickered
+  the task card's evidence back to zero.
 - **MARKDOWN VOCABULARY IS A MIRROR CONTRACT** (DESIGN.md §5.1): the
   prompts teach exactly what the shared remark chain
   (`client/zjsearch/src/lib/markdownParts.ts`: GFM + ==mark== + emoji +
