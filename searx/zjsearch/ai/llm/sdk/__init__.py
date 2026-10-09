@@ -2,7 +2,7 @@
 """The SDK registry: ONE factory per family, centrally managed.
 
 :py:func:`resolve` binds deployment config into the family's SDK surface
-(:py:func:`infra.sdk.openai.factory` and friends).  ``family`` separates
+(:py:func:`llm.sdk.openai.factory` and friends).  ``family`` separates
 client cache namespaces -- the chat transport and the embedding feature
 can share a base_url while carrying different keys, and never share a
 cached client.
@@ -34,7 +34,7 @@ class Sdk:
 
     - ``kind`` / ``base`` -- the resolved wire kind and endpoint base.
     - ``json_tiers`` -- how many native structured-output attempts
-      :py:func:`infra.jsongate.json_completion` should try.
+      :py:func:`llm.jsongate.json_completion` should try.
     - ``embeds`` -- whether the family ships an embeddings API.
     - ``pump(messages, events, relay_reasoning, tools)`` (async) -- drive
       the SDK stream into the queue (the LlmStream contract).

@@ -55,7 +55,6 @@ _MAX_SESSIONS = 6
 runaway delegation cannot open unbounded browser tabs."""
 
 
-
 _SNAPSHOT_JS = """
 () => {
   const sel = 'a[href], button, input, select, textarea, [onclick], '
@@ -406,7 +405,7 @@ def extract(session_id: str, max_chars: int | None) -> dict[str, str]:
     """The CURRENT page condensed to reading material (title + markdown)
     -- the reader's extraction pipeline over the live DOM."""
     # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.tools.web_reader.extract import (
+    from searx.zjsearch.ai.browser.extract import (  # pylint: disable=import-outside-toplevel
         PageReadError,
         extract_page,
     )

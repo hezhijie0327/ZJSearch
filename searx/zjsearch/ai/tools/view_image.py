@@ -9,8 +9,8 @@ conversation as a user turn (dialect-neutral: user turns accept image
 parts on every provider).  Registered for every research run -- the
 model calls it only when a chart/diagram actually matters."""
 
-import json
 import typing as t
+from searx.zjsearch.ai.core.text import raw_args
 
 VIEW_IMAGE_TOOL = "view_image"
 
@@ -48,11 +48,6 @@ def view_image_spec() -> dict[str, t.Any]:
 def parse_view_image_call(call: dict[str, t.Any]) -> str:
     """The tool call's image URL -- sanitized (length + scheme gate; the
     SSRF check happens at fetch time)."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     url = str(args.get("url") or "").strip()[:2000]
     return url if url.startswith(("http://", "https://", "data:image/")) else ""

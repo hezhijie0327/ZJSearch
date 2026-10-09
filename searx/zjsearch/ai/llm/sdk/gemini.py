@@ -289,7 +289,7 @@ class GeminiSdk:
 
     async def embed(self, texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
         """One embeddings batch in input order (the column width rides the
-        ``params.output_dimensionality`` key -- infra.embed owns the width
+        ``params.output_dimensionality`` key -- llm.embed owns the width
         resolution).  The SDK's embed_content response carries NO token
         usage -- only the enterprise ``billable_character_count``, passed
         through when present."""

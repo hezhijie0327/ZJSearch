@@ -282,13 +282,13 @@ zjsearch:
       #                           # keyword (BM25, free/offline) | semantic
       #                           # (pgvector, needs zjsearch.embedding) |
       #                           # hybrid (weighted RRF over both, default)
-      # max_rounds: 4              # rounds SAFETY ceiling, not the plan
-      # stall_rounds: 2            # consecutive no-new-info rounds that
-      #                            # end the research (PROGRESS, not time)
+      # (the round budgets -- max_rounds / stall_rounds / detach_grace --
+      # are deliberately NOT deployment knobs: the depth probe's ladder
+      # personalizes them per question)
 
-  # ── the page-reader provider (AI Search's web_reader tool) ─────────
-  # renders one URL in a real Chrome (JS/SPA pages come out complete).
-  # Unconfigured or disabled = the tool never registers.
+  # ── the page reader's cap (AI Search's web_reader tool) ────────────
+  # enabled: true               # the tool never registers when false
+  # max_chars: 8000             # per-page extraction cap; UNSET = no cap
   # ── the thread-embedding model (the history drawer's semantic search):
   #    the key may travel via the ZJSEARCH_EMBEDDING_KEY env.
   #    Unconfigured = history search off.

@@ -10,7 +10,7 @@ type -- the routes map it to :py:func:`api.http.upstream_error_response`."""
 
 import typing as t
 
-from searx.zjsearch.ai.agent import wire
+from searx.zjsearch.ai.core import wire_format as wire
 
 
 class UpstreamDead(Exception):

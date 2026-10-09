@@ -19,8 +19,6 @@ from searx.zjsearch.ai.llm.decision import features as decision_features
 
 logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
 _REFEREE_MAX = 4
 """The coverage referee grades at most this many open subtasks per
 round (the advice note stays one readable block)."""
@@ -73,9 +71,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
                         " the final answer makes claims about must be researched by some subtask)?"
                     ),
                 }
-            judge_state: dict[str, t.Any] = {
-                "subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]
-            }
+            judge_state: dict[str, t.Any] = {"subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]}
             if entities:
                 judge_state["deliverable_entities"] = entities
             started = time.monotonic()

@@ -11,8 +11,9 @@ ends when the ledger closes (subtasks covered, gaps answered or
 explicitly abandoned), not when the model got bored.
 """
 
-import json
 import typing as t
+
+from searx.zjsearch.ai.core.text import raw_args
 
 LEARNINGS_TOOL = "learnings"
 
@@ -116,7 +117,7 @@ def parse_learnings_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     ``{"facts": [...], "open_gaps": [...], "close_gaps": [...]}`` -- every
     entry trimmed, capped and type-checked; malformed shapes drop
     silently (a ledger op must never crash a settlement)."""
-    args = _raw_args(call)
+    args = raw_args(call)
     facts: list[dict[str, t.Any]] = []
     for fact in (args.get("facts") if isinstance(args.get("facts"), list) else [])[:8]:
         if not isinstance(fact, dict):
@@ -150,14 +151,3 @@ def parse_learnings_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
             continue
         close_gaps.append({"q": q, "close_as": " ".join(str(gap.get("close_as") or "").split())[:GAP_MAX_CHARS]})
     return {"facts": facts, "open_gaps": open_gaps, "close_gaps": close_gaps}
-
-
-def _raw_args(call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The model's RAW tool-call arguments as a dict (the shared reader
-    lives in :py:mod:`args`; this module keeps its own tiny copy so the
-    parser stays a leaf -- a malformed arguments string is a no-op)."""
-    try:
-        value = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        return {}
-    return value if isinstance(value, dict) else {}

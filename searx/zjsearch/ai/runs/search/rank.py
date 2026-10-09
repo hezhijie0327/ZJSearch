@@ -6,13 +6,13 @@ researcher's feed is cut from: :py:func:`bm25_order` fuses the engines'
 order with BM25 text relevance (the classic page's ``bm25_reranker``
 plugin shares its tokenizer and fusion -- one source of truth), then
 :py:func:`rerank_order` re-scores the head with the deployment's rerank
-provider (``infra.rerank`` -- ``zjsearch.rerank``, ``sdk`` picks the
+provider (``llm.rerank`` -- ``zjsearch.rerank``, ``sdk`` picks the
 wire).  Ranking happens BEFORE the reveal, never as a model tool: the
 model cannot ask for a rerank of results it was never shown, so the
 cascade is mechanical infrastructure like Bocha's Semantic Reranker
 stage.  Every stage fails open -- no signal or any error leaves the
 previous order standing.  The PROVIDER legs (the Cohere-shaped HTTP wire
-and the native DashScope TextReRank) live in :py:mod:`infra.rerank`;
+and the native DashScope TextReRank) live in :py:mod:`llm.rerank`;
 this module is the strategy."""
 
 import logging
@@ -85,7 +85,7 @@ def rerank_doc(result: t.Any) -> str:
 
 def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
     """The rerank-model leg (POLICY): the deployment's rerank provider
-    (``infra.rerank`` -- ``zjsearch.rerank``, ``sdk`` picks the wire)
+    (``llm.rerank`` -- ``zjsearch.rerank``, ``sdk`` picks the wire)
     re-scores ``docs`` against ``query``.  RETURNS ``(order, tokens)`` --
     ``order`` maps rank position -> doc index (a full permutation:
     results the provider dropped trail in their incoming order) and

@@ -4,11 +4,11 @@
 Every module in this package drives ONE wire dialect (an official SDK
 talking to one API family) and exposes EXACTLY this surface -- adding a
 dialect means adding one module here plus one line in the package's
-``DIALECTS`` registry:
+``resolve()`` registry:
 
-- ``KIND: str`` -- the ``zjsearch.ai.sdk`` value it serves.
+- ``KIND: str`` -- the ``zjsearch.llm.sdk`` value it serves.
 - ``JSON_TIERS: int`` -- how many native structured-output attempts
-  :py:func:`json_gate.json_completion` should try (the openai dialects
+  :py:func:`llm.jsongate.json_completion` should try (the openai dialects
   speak two tiers -- strict ``json_schema``, then ``json_object``;
   single-tier dialects carry 1 and ignore the ``strict`` flag).
 - ``pump(cfg, base, messages, events, relay_reasoning, tools) -> None``
@@ -37,8 +37,8 @@ all, so single-turn consumers are unaffected.  A clean stream carries one
 ``("finish", meta)`` event right before ``end`` (see :py:mod:`..usage`).
 """
 
-import json
 import typing as t
+from searx.zjsearch.ai.core.text import raw_args
 
 
 def system_of(messages: list[dict[str, t.Any]]) -> str:
@@ -50,9 +50,6 @@ def system_of(messages: list[dict[str, t.Any]]) -> str:
 def json_args_of(raw: t.Any) -> dict[str, t.Any]:
     """A tool-call ``arguments`` JSON string as a dict -- malformed or empty
     arguments degrade to ``{}`` (the endpoint re-validates required fields
-    and answers a tool error the model can see)."""
-    try:
-        value = json.loads(str(raw or "") or "{}")
-    except ValueError:
-        return {}
-    return value if isinstance(value, dict) else {}
+    and answers a tool error the model can see).  The ONE lenient reader
+    lives in ``core.text`` (llm -> core is a legal downward edge)."""
+    return raw_args({"arguments": raw})

@@ -23,10 +23,9 @@ it never substitutes for live search and stale content loses to live
 sources.  The server stays stateless: the index rides the request,
 nothing is stored server-side."""
 
-import json
 import typing as t
 
-from searx.zjsearch.ai.core.text import query_terms
+from searx.zjsearch.ai.core.text import query_terms, raw_args
 
 PAST_RESEARCH_TOOL = "past_research"
 
@@ -74,12 +73,7 @@ def past_research_spec() -> dict[str, t.Any]:
 
 def parse_query(call: dict[str, t.Any]) -> str:
     """The tool call's query -- sanitized."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     return str(args.get("query") or "").strip()[:200]
 
 

@@ -6,8 +6,8 @@ carries the doctrine: snapshot is the primary read, the screenshot is a
 gated visual branch, ``wait_user`` is the human's operation window, and
 page content is untrusted input."""
 
-import json
 import typing as t
+from searx.zjsearch.ai.core.text import raw_args
 
 WEB_BROWSER_TOOL = "web_browser"
 
@@ -97,12 +97,7 @@ def parse_web_browser_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     """The sanitized arguments of one ``web_browser`` call: the action
     plus the per-action fields, trimmed to sane bounds (the public-url
     guard runs in the engine's gate)."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     action = str(args.get("action") or "").strip()
     if action not in _ACTIONS:
         return {"action": ""}

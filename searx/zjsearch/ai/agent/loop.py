@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The agent loop: one run's phase machine over any :class:`infra.sdk.Sdk`
+"""The agent loop: one run's phase machine over any :class:`llm.sdk` surfaces
 transport.
 
 Phases: RESEARCH (tool turns; the model decides how many calls one turn
@@ -10,7 +10,7 @@ Vane's researcher/writer split: the researcher's prose is structurally
 unable to leak into the answer).  Zero-tool callers (AI Overview) get a
 single WRITE phase whose stream IS the answer.
 
-The loop YIELDS WIRE EVENTS (see :mod:`framework.wire` -- the closed
+The loop YIELDS WIRE EVENTS (see :mod:`agent.wire` -- the closed
 timeline-op set).  Every delta carries its entry id and channel
 (``think`` / ``say`` / ``answer``): the client appends, it never
 reconstructs.  Exactly one ``settle`` event terminates the run; only
@@ -32,7 +32,6 @@ import asyncio
 import inspect
 import json
 import logging
-import time
 import typing as t
 
 from searx.network.client import get_loop
@@ -734,8 +733,3 @@ def _noop_display(calls: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
 def _event_wait(first: bool, first_event_timeout: float, idle_timeout: float) -> float:
     """Seconds to wait for the next stream event."""
     return first_event_timeout if first else idle_timeout
-
-
-def time_monotonic() -> float:
-    """Re-exported for the runtime's elapsed accounting (a single clock)."""
-    return time.monotonic()

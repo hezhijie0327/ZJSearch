@@ -15,11 +15,11 @@ The tool is registered for EVERY research run: arithmetic is cheap, an
 unsound number in a cited answer is not."""
 
 import ast
-import json
 import math
 import operator
 import statistics
 import typing as t
+from searx.zjsearch.ai.core.text import raw_args
 
 CALCULATOR_TOOL = "calculator"
 
@@ -75,12 +75,7 @@ def calculator_spec() -> dict[str, t.Any]:
 def parse_calculator_call(call: dict[str, t.Any]) -> tuple[str, int]:
     """(expression, precision) of one ``calculator`` call -- sanitized:
     the expression is capped, the precision clamped to the legal range."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     expression = str(args.get("expression") or "").strip()[:_MAX_EXPRESSION]
     try:
         precision = max(0, min(int(args.get("precision")), 12))

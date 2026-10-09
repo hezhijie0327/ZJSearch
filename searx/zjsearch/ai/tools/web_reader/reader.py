@@ -14,7 +14,6 @@ conditionally).
 import asyncio
 import collections
 import functools
-import json
 import logging
 import time
 import typing as t
@@ -31,6 +30,7 @@ from searx.zjsearch.ai.core import convert as convert_service
 from searx.zjsearch.ai.core.guard import public_url_rejection
 
 from .extract import PageReadError, _cap, extract_page
+from searx.zjsearch.ai.core.text import raw_args
 
 logger = logging.getLogger(__name__)
 
@@ -79,12 +79,7 @@ def page_spec() -> dict[str, t.Any]:
 def parse_page_call(call: dict[str, t.Any]) -> str:
     """The url of one ``web_reader`` tool call -- sanitized: trimmed and
     capped; the public-url guard runs in :func:`guard_url`."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     return str(args.get("url") or "").strip()[:2000]
 
 
@@ -199,6 +194,7 @@ def _fetch_document(url: str) -> bytes:
     never content): a direct fetch over the shared loop instead, behind
     the same ``guard_url`` gate the render path passed.  Raises
     :class:`PageReadError` on anything unreadable."""
+
     async def _get():
         return await _document_network().request(
             "GET", url, timeout=_DOC_FETCH_TIMEOUT, headers={"User-Agent": gen_useragent()}

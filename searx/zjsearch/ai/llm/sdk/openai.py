@@ -27,7 +27,7 @@ def _chat_wire_messages(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]])
     go over the wire verbatim EXCEPT the internal ``reasoning_blocks`` /
     ``thought_signature`` keys are stripped, and an assistant turn that
     reasoned echoes its ``reasoning_content`` back when the deployment
-    asked for it (``zjsearch.ai.reasoning_passback: true``)."""
+    asked for it (``zjsearch.llm.reasoning_passback: true``)."""
     passback = reasoning_passback(cfg)
     out: list[dict[str, t.Any]] = []
     for message in messages:
@@ -370,7 +370,7 @@ class OpenaiSdk:
 
     async def embed(self, texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
         """One embeddings-API batch in input order (the embedding column
-        width rides the ``params.dimensions`` key -- infra.embed owns the
+        width rides the ``params.dimensions`` key -- llm.embed owns the
         width resolution).  The API's ``usage.prompt_tokens`` rides along
         when the upstream reports it (the embeddings用量 stats)."""
         cfg = self.cfg

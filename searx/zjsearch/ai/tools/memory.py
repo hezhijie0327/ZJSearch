@@ -14,11 +14,10 @@ exists for the SAVE path and for explicit search once the list grows.
 The scenario is ours, not LobeHub's: one flat layer of self-contained
 facts (location, standing preferences, durable context), no taxonomy."""
 
-import json
 import logging
 import typing as t
 
-from searx.zjsearch.ai.core.text import query_terms
+from searx.zjsearch.ai.core.text import query_terms, raw_args
 from searx.zjsearch.ai.llm import decision as decision_service
 from searx.zjsearch.ai.llm import embed as embed_service
 
@@ -241,12 +240,7 @@ def evaluate_call(
     run's accepted saves) is the near-dup gate: a save that rephrases a
     stored fact settles as ``duplicate`` -- the model is told to update
     wording, not re-save."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     action = str(args.get("action") or "search")
     if action == "save":
         content = str(args.get("content") or "").strip()[:MAX_CONTENT]

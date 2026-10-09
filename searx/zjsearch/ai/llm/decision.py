@@ -163,7 +163,7 @@ def judge(  # pylint: disable=too-many-return-statements
     is a lens, not a dependency).  The question shapes follow the SDK's
     own vocabulary: ``choice`` (criteria = label -> description),
     ``score`` (criteria = ordered legend), ``noul`` (boolean).  The call
-    itself delegates to the FAMILY surface (``infra.sdk.typesafe`` -- the
+    itself delegates to the FAMILY surface (``llm.sdk.typesafe`` -- the
     client lifecycle, the extra_headers/extra_body escape hatches and the
     typed-answer downgrade live there), like the rerank service
     delegates to the dashscope family."""

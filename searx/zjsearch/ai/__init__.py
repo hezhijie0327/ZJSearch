@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""zjsearch theme: the AI stack, on a FIVE-package layout:
+"""zjsearch theme: the AI stack, on a EIGHT-package layout:
 
 - :py:mod:`searx.zjsearch.ai.core` -- cross-cutting foundations with
   zero AI semantics (settings-block readers, the HMAC token gate, the

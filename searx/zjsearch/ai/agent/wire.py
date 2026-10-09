@@ -79,53 +79,20 @@ bug and :py:func:`encode` refuses it):
 ======================  ===================================================
 """
 
-import json
 import typing as t
 
-EVENTS: frozenset[str] = frozenset(
-    {
-        "open",
-        "phase",
-        "think",
-        "say",
-        "calls",
-        "call",
-        "close",
-        "tasks",
-        "learnings",
-        "sources",
-        "decisions",
-        "answer",
-        "ask",
-        "steer",
-        "gallery",
-        "outline",
-        "artifact",
-        "section",
-        "browser",
-        "related",
-        "title",
-        "memory",
-        "ctx",
-        "tags",
-        "usage",
-        "settle",
-    }
-)
+from searx.zjsearch.ai.core import wire_format as core_wire
 
-LATE_EVENTS: frozenset[str] = frozenset({"related", "title", "memory", "tags", "usage"})
-"""The only events allowed AFTER ``settle`` (the post-settle related
-fallback completion and the memory/tag extraction trail behind by
-design -- the follow-up box unlocks on settle, not on them)."""
+EVENTS = core_wire.EVENTS
+"""The closed event alphabet -- defined once in the core leaf
+(:py:mod:`core.wire_format`), re-exported here as the protocol\'s home."""
 
 
 def encode(event: dict[str, t.Any]) -> str:
     """One wire line: JSON + newline, with the closed-set check (a misspelled
-    event is a programming error, not a silent client no-op)."""
-    kind = event.get("e")
-    if kind not in EVENTS:
-        raise ValueError(f"unknown wire event: {kind!r}")
-    return json.dumps(event, ensure_ascii=False) + "\n"
+    event is a programming error, not a silent client no-op).  Re-exported
+    from the core leaf -- see :py:mod:`core.wire_format`."""
+    return core_wire.encode(event)
 
 
 def settle(

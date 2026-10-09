@@ -54,7 +54,7 @@ def chat_key(cfg: dict[str, t.Any]) -> str:
 
 
 def extra_headers(cfg: dict[str, t.Any]) -> dict[str, str] | None:
-    """The ``zjsearch.ai.extra_headers`` block -- HTTP headers merged onto
+    """The ``zjsearch.llm.extra_headers`` block -- HTTP headers merged onto
     EVERY LLM request (per-request ``extra_headers=`` on the openai /
     anthropic SDKs, the client's ``HttpOptions.headers`` on gemini where
     the SDK merges them over its defaults with these winning).  The
@@ -65,7 +65,7 @@ def extra_headers(cfg: dict[str, t.Any]) -> dict[str, str] | None:
 
 
 def extra_body(cfg: dict[str, t.Any]) -> dict[str, t.Any] | None:
-    """The ``zjsearch.ai.extra_body`` block -- raw JSON body fields the
+    """The ``zjsearch.llm.extra_body`` block -- raw JSON body fields the
     chosen SDK has no typed kwarg for (server extensions such as LM
     Studio's ``chat_template_kwargs``), merged into the request body 1:1
     on every dialect."""
@@ -73,7 +73,7 @@ def extra_body(cfg: dict[str, t.Any]) -> dict[str, t.Any] | None:
 
 
 def params(cfg: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The ``zjsearch.ai.params`` block -- the chosen SDK's ``create()``
+    """The ``zjsearch.llm.params`` block -- the chosen SDK's ``create()``
     kwargs VERBATIM under their SDK names (no translation; see
     ``caching.model_kwargs`` for the two transport-level additions)."""
     raw = cfg.get("params")

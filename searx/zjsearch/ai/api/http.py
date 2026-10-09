@@ -75,7 +75,7 @@ def upstream_error_response(kind: str, payload: t.Any) -> flask.Response:
     if kind == "end":
         logger.warning(
             "zjsearch_ai: upstream produced no answer content -- reasoning-style models can spend very "
-            "long on their thinking; disable thinking via zjsearch.ai.extra_body "
+            "long on their thinking; disable thinking via zjsearch.llm.extra_body "
             "(e.g. chat_template_kwargs: {'enable_thinking': False}) or set params.max_tokens"
         )
     reason = jsongate.reason_of(payload if kind == "error" else None)
