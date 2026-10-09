@@ -164,20 +164,30 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # or a subagent's own keyed page (v2.1 R3B -- separate tabs in
         # the mirror, one persistent context)
         self.browser_session_id: str = "lead"
-        # the request-bound search worker, captured NOW on the request
-        # thread: the run executes on the run host's driver thread, and
-        # SearchWithPlugins needs a request context of its own per worker
-        # (it stores the request proxy and re-copies the context per
-        # engine thread).  No request context (unit tests) degrades to
-        # the plain method.
+        # the search's request-context TEMPLATE (app, environ, request),
+        # captured NOW on the request thread: the run executes on the run
+        # host's driver thread, and the search path needs a flask request
+        # context per worker -- but flask's RequestContext is NOT
+        # thread-safe for concurrent push/pop (one shared token stack;
+        # workers interleaving dies with "token was created in a
+        # different Context"), so gather CLONES a fresh context per job
+        # from this template: same request/environ, private token stack.
+        # No request context (unit tests) degrades to no wrapper.
         try:
             import flask  # pylint: disable=import-outside-toplevel
 
-            # (the mixin method resolves on the composed Searches -- the
-            # pragma is for the bare-core analysis)
-            self._ctx_search = flask.copy_current_request_context(self._search_one)  # pylint: disable=no-member
+            from flask.globals import request_ctx  # pylint: disable=import-outside-toplevel
+
+            ctx = request_ctx._get_current_object()  # pylint: disable=protected-access,no-member
+            self._search_ctx = (ctx.app, ctx.request.environ, ctx.request)
+            # the RESULT SERIALIZATION (feed.py's pretty-url / proxified
+            # image building) touches current_app -- the driver thread
+            # has no app context of its own, so the app object rides
+            # along and gather wraps the settlement in app_context()
+            self._flask_app = flask.current_app._get_current_object()  # pylint: disable=protected-access,no-member
         except (ImportError, RuntimeError):
-            self._ctx_search = self._search_one
+            self._search_ctx = None
+            self._flask_app = None
 
     def drain_image_injections(self) -> list[dict[str, t.Any]]:
         """view_image's fetched pictures, drained into the next model turn

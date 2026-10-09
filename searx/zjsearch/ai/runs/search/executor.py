@@ -39,7 +39,6 @@ class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
             cfg=parent.cfg,
         )
         child.reg = parent.reg
-        child._ctx_search = parent._ctx_search  # pylint: disable=protected-access
         if session_id:
             child.browser_session_id = session_id
         return child

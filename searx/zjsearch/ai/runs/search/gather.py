@@ -361,7 +361,45 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             },
         )
 
+    def _run_in_ctx(self, query: str, category: str, time_range: str, include: list[str], exclude: list[str]):
+        """One search inside a CLONED request context (a fresh
+        RequestContext per job -- see ``state._search_ctx`` for why the
+        shared context cannot be pushed concurrently)."""
+        if self._search_ctx is None:
+            return self._search_one(query, category, time_range, include, exclude)
+        # pylint: disable=import-outside-toplevel
+        from flask.ctx import RequestContext
+
+        app, environ, request_obj = self._search_ctx
+        with RequestContext(app, environ, request=request_obj):
+            return self._search_one(query, category, time_range, include, exclude)
+
     def _dispatch(  # pylint: disable=too-many-locals
+        self,
+        pool: concurrent.futures.ThreadPoolExecutor,
+        rnd: int,
+        search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
+        page_jobs: list[tuple[int, str]],
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        # the settlements' serialization touches the flask request/app
+        # context (favicons, pretty urls, proxified images) -- the driver
+        # thread has neither.  ONE cloned RequestContext held for the
+        # whole drain: the drain is single-threaded (no token-stack
+        # interleaving), the per-job worker clones are separate objects
+        # (safe), and the held request context also carries the app
+        # context its push installs.
+        if self._search_ctx is not None:
+            # pylint: disable=import-outside-toplevel
+            from flask.ctx import RequestContext
+
+            app, environ, request_obj = self._search_ctx
+            with RequestContext(app, environ, request=request_obj):
+                yield from self._dispatch_ctx(pool, rnd, search_jobs, page_jobs, feeds)
+            return
+        yield from self._dispatch_ctx(pool, rnd, search_jobs, page_jobs, feeds)
+
+    def _dispatch_ctx(  # pylint: disable=too-many-locals
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
@@ -371,15 +409,13 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
         for wire_id, query, category, time_range, include, exclude, dedup_key in search_jobs:
-            # the request-bound wrapper was captured at construction (on
-            # the request thread -- the run host's driver thread has no
-            # request context of its own): SearchWithPlugins stores the
-            # request proxy and search() copies the context again for
-            # each of its engine threads (mirrors the webapp view thread)
-            worker = self._ctx_search
-            # the call's wall clock starts AT SUBMIT (queue wait included):
-            # the settlement's ``ms`` is the wire's debug timing
-            futures[pool.submit(worker, query, category, time_range, include, exclude)] = (
+            # each job CLONES a fresh flask RequestContext from the
+            # template (same request/environ, PRIVATE token stack): the
+            # search path needs a request context per worker, and pushing
+            # the SHARED context from concurrent pool workers interleaves
+            # its token stack (every other search died with "token was
+            # created in a different Context").
+            futures[pool.submit(self._run_in_ctx, query, category, time_range, include, exclude)] = (
                 "search",
                 wire_id,
                 (query, category, dedup_key, time.monotonic()),
