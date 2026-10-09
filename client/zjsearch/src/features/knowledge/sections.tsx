@@ -23,6 +23,7 @@ import {
   MemoryStick,
   MessageCircleQuestion,
   Pencil,
+  Plus,
   Search,
   Sparkles,
   Star,
@@ -463,55 +464,64 @@ export function MemorySection({
     groups.set(day, list);
   }
   return (
-    <div>
-      <div className="mb-3 flex items-center">
-        <button
-          className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-          onClick={() => setAdding(true)}
-          type="button"
-        >
-          {t("knowledge_memory_add")}
-        </button>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* the ONE band language: 「记忆 · N」 with the add action at its
+          right edge -- the floating pill above a bare timeline read as a
+          different tab design */}
       {adding ? (
-        <div className="mb-3">
-          <MemoryComposer
-            onCancel={() => setAdding(false)}
-            onSubmit={(text) => {
-              onAdd(text);
-              setAdding(false);
-            }}
-            placeholder={t("knowledge_memory_add")}
-            submitLabel={t("knowledge_memory_save")}
-          />
-        </div>
+        <MemoryComposer
+          onCancel={() => setAdding(false)}
+          onSubmit={(text) => {
+            onAdd(text);
+            setAdding(false);
+          }}
+          placeholder={t("knowledge_memory_add")}
+          submitLabel={t("knowledge_memory_save")}
+        />
       ) : null}
-      {memories.length === 0 ? (
-        <div className="flex flex-col items-center justify-center px-2 py-16 text-center">
-          <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
-            <MemoryStick aria-hidden="true" className="size-7" />
-          </span>
-          <p className="mt-4 text-sm text-ink-2">{t("knowledge_memory_empty")}</p>
+      <Card>
+        <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
+          <p className="text-xs font-medium text-ink-3">
+            {t("knowledge_kind_memory")} · {memories.length}
+          </p>
+          <button
+            className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-ink-3 transition-colors hover:bg-surface hover:text-ink"
+            onClick={() => setAdding(true)}
+            type="button"
+          >
+            <Plus aria-hidden="true" className="size-3.5" />
+            {t("knowledge_memory_add")}
+          </button>
         </div>
-      ) : (
-        <div className="relative ps-5">
-          <span aria-hidden="true" className="absolute inset-block-0 start-2 w-px bg-line" />
-          {[...groups.entries()].map(([day, rows]) => (
-            <div className="mb-5" key={day}>
-              <p className="relative mb-2 text-xs font-medium text-ink-3">
-                <span
-                  aria-hidden="true"
-                  className="absolute -start-[13px] top-1 size-2 rounded-full bg-accent-strong"
-                />
-                {day}
-              </p>
-              {rows.map((memory) => (
-                <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
+        {memories.length === 0 ? (
+          <div className="flex flex-col items-center justify-center px-2 py-16 text-center">
+            <span className="grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
+              <MemoryStick aria-hidden="true" className="size-7" />
+            </span>
+            <p className="mt-4 text-sm text-ink-2">{t("knowledge_memory_empty")}</p>
+          </div>
+        ) : (
+          <div className="relative px-5 py-4 sm:px-6">
+            <div className="relative ps-5">
+              <span aria-hidden="true" className="absolute inset-block-0 start-2 w-px bg-line" />
+              {[...groups.entries()].map(([day, rows]) => (
+                <div className="mb-5" key={day}>
+                  <p className="relative mb-2 text-xs font-medium text-ink-3">
+                    <span
+                      aria-hidden="true"
+                      className="absolute -start-[13px] top-1 size-2 rounded-full bg-accent-strong"
+                    />
+                    {day}
+                  </p>
+                  {rows.map((memory) => (
+                    <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
+                  ))}
+                </div>
               ))}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

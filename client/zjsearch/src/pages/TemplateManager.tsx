@@ -219,13 +219,14 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
   return (
     <div className="space-y-6 animate-fade-in">
       <Card>
-        {/* the band carries the NEW action (a whole row for one button read
-            as waste): label left, count + new right */}
+        {/* the ONE band language: 「模板 · N」 with the action at its right
+            edge -- same anatomy as the memory tab's band */}
         <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
-          <p className="text-xs font-medium text-ink-3">{t("template_library")}</p>
-          <span className="text-xs tabular-nums text-ink-3">{shown.length}</span>
+          <p className="text-xs font-medium text-ink-3">
+            {t("knowledge_tab_templates")} · {shown.length}
+          </p>
           <button
-            className="ms-auto flex items-center gap-1 text-xs font-medium text-accent transition-colors hover:text-accent-hover"
+            className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-ink-3 transition-colors hover:bg-surface hover:text-ink"
             onClick={startNew}
             type="button"
           >
@@ -242,50 +243,56 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
             {templates.length === 0 ? t("template_none") : t("no_results_found")}
           </p>
         ) : (
-          <div className="grid gap-2.5 p-3 sm:grid-cols-2">
-            {shown.map((template) => (
-              <div
-                className="group relative flex flex-col gap-1 rounded-xl border border-line bg-surface p-3.5 pe-14 transition-colors hover:border-accent/40"
-                key={template.id}
+          shown.map((template) => (
+            <div
+              className="group flex items-center gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
+              key={template.id}
+            >
+              <button
+                className="min-w-0 flex-1 text-start"
+                onClick={() => {
+                  startEdit(template);
+                }}
+                type="button"
               >
-                <div className="flex items-baseline gap-1.5">
-                  <span className="min-w-0 truncate text-[13px] font-medium text-ink">{template.name}</span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
+                <span className="flex items-baseline gap-2">
+                  <span className="line-clamp-1 text-base font-medium leading-snug text-ink">{template.name}</span>
+                  <span className="shrink-0 text-xs text-ink-3">
                     {template.sections.length} {t("knowledge_tab_sections")}
                   </span>
-                </div>
-                <p className="line-clamp-2 text-[11px] leading-relaxed text-ink-3">
-                  {template.sections.map((section) => section.title).join(" / ")}
-                </p>
-                {/* the actions OVERLAY the top-right corner on hover -- in-flow
-                    actions reserved an empty line in every tile */}
-                <div className="absolute end-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-surface/90 p-0.5 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-                  <button
-                    aria-label={t("template_edit")}
-                    className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                    onClick={() => {
-                      startEdit(template);
-                    }}
-                    title={t("template_edit")}
-                    type="button"
-                  >
-                    <Pencil aria-hidden="true" className="size-3.5" />
-                  </button>
-                  <button
-                    aria-label={t("knowledge_menu_delete")}
-                    className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
-                    onClick={() => {
-                      remove(template.id);
-                    }}
-                    title={t("knowledge_menu_delete")}
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" className="size-3.5" />
-                  </button>
-                </div>
+                </span>
+                <span className="mt-1 flex items-center gap-2 text-xs text-ink-3">
+                  <span className="min-w-0 flex-1 truncate">
+                    {template.sections.map((section) => section.title).join(" / ")}
+                  </span>
+                </span>
+              </button>
+              <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                <button
+                  aria-label={t("template_edit")}
+                  className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                  onClick={() => {
+                    startEdit(template);
+                  }}
+                  title={t("template_edit")}
+                  type="button"
+                >
+                  <Pencil aria-hidden="true" className="size-3.5" />
+                </button>
+                <button
+                  aria-label={t("knowledge_menu_delete")}
+                  className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+                  onClick={() => {
+                    remove(template.id);
+                  }}
+                  title={t("knowledge_menu_delete")}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" className="size-3.5" />
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          ))
         )}
       </Card>
     </div>
