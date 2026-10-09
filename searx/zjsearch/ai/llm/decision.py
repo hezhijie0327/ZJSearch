@@ -115,6 +115,10 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
         "ladder_balanced": [4, 8, 16, 24, 32],
     },
     "evidence_check": {"enabled": True, "head": 8, "pass_min": 0.45},
+    # the report SYNTHESIZE's per-section citation spot check (runs/search/
+    # report/synth.py): sampled claims judged against their sources, a
+    # failing claim earns one targeted rewrite BEFORE delivery
+    "citation_gate": {"enabled": True, "support_min": 0.5},
     "memory_dedup": {
         "enabled": True,
         # the cosine above which a new fact "reads as" a stored one -- the

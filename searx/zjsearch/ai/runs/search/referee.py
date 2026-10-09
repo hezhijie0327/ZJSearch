@@ -59,12 +59,27 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
                 }
                 for i, item in enumerate(items[:max_tasks])
             }
+            # the deliverable-ENTITY check rides the same forward pass:
+            # when the run knows entities the final answer depends on (the
+            # report outline's screen or the single-write entity gate),
+            # plan completeness is askable -- an uncovered entity reads as
+            # an incomplete plan, not a weak subtask
+            entities = [str(x) for x in list(getattr(self, "deliverable_entities", []) or []) if str(x)]
+            if entities:
+                questions["plan_complete"] = {
+                    "type": "noul",
+                    "instructions": (
+                        "Does the subtask list cover EVERY listed deliverable entity (each entity"
+                        " the final answer makes claims about must be researched by some subtask)?"
+                    ),
+                }
+            judge_state: dict[str, t.Any] = {
+                "subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]
+            }
+            if entities:
+                judge_state["deliverable_entities"] = entities
             started = time.monotonic()
-            out = decision.judge(
-                {"subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]},
-                questions,
-                timeout=5.0,
-            )
+            out = decision.judge(judge_state, questions, timeout=5.0)
             answers = out.get("answers") if isinstance(out, dict) else None
             if not isinstance(answers, dict) or not answers:
                 return
@@ -72,6 +87,10 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             if usage.get("input_tokens"):
                 self.decision_usage["calls"] += len(answers)
                 self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
+            if entities:
+                complete = answers.get("plan_complete")
+                if isinstance(complete, dict) and float(complete.get("noul") or 1.0) < 0.5:
+                    self.entity_gap = entities
             self.weak_tasks = [
                 str(items[int(name.split("_")[1])].get("title") or "")[:80]
                 for name, answer in answers.items()

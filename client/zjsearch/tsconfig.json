@@ -20,7 +20,9 @@
     "noEmit": true,
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "mdast-util-mark": ["./src/types/mdast-util-mark.d.ts"],
+      "micromark-extension-mark": ["./src/types/micromark-extension-mark.d.ts"]
     }
   },
   "include": ["src", "tools", "vite.config.ts"]

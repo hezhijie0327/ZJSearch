@@ -17,6 +17,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   evidence: "ai_dec_evidence_check",
   coverage: "ai_dec_coverage",
   depth_probe: "ai_dec_depth_probe",
+  entity_coverage: "ai_dec_entity_coverage",
 };
 
 /** 概率条:label + 轨道填充 + 百分比(选中/过半用强调色)。 */

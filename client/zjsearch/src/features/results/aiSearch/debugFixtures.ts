@@ -489,6 +489,14 @@ const FULL_STAGE: DebugScenario = {
           ms: 583,
         },
         {
+          purpose: "entity_coverage",
+          question: "Deliverable entities the answer makes claims about; screened against the plan",
+          target: "Bachem",
+          entities: ["Bachem"],
+          uncovered: ["Bachem"],
+          ms: 120,
+        },
+        {
           purpose: "depth_probe",
           question: "How deep and broad does the research need to be (score 0-4)?",
           target: "多肽原料药全球竞争格局…",
@@ -534,7 +542,7 @@ const FULL_STAGE: DebugScenario = {
     {
       e: "section",
       id: "s1",
-      t: "全球供给由欧洲老牌 CDMO 与中国新锐共同主导。Novo Nordisk 的肽类原料药长期供应商包括 Polypeptide 与 Bachem[2];中国企业以成本与响应速度切入,翰宇药业多肽原料药业务收入 4.7 亿元,同比增长 32%[5]。",
+      t: "全球供给由欧洲老牌 CDMO 与中国新锐共同主导。Novo Nordisk 的肽类原料药长期供应商包括 Polypeptide 与 Bachem[2];中国企业以成本与响应速度切入,翰宇药业多肽原料药业务收入 4.7 亿元,同比增长 ==32%==[5]。\n\n> [!IMPORTANT] 格局判断\n> 产能军备竞赛已进入中国时间:三大头部扩产项目全部在 2026 年前落地[4],欧洲厂商的合计份额将首次跌破五成。\n\n中国 CDMO 全球产能份额的爬升轨迹[4]:\n\n```mermaid\nxychart\n  title \"中国 CDMO 全球产能份额 (%)\"\n  x-axis [2021, 2022, 2023, 2024, 2025]\n  y-axis \"份额 (%)\" 0 --> 40\n  bar [12, 16, 21, 25, 28]\n  line [12, 16, 21, 25, 28]\n```\n\n份额数据为四家头部厂商公开披露口径的加总估计[4,5]。",
     },
     {
       e: "related",
@@ -543,6 +551,27 @@ const FULL_STAGE: DebugScenario = {
         "深圳前海 vs 光明:哪个片区性价比更高?",
         "中国 CDMO 的 EHS 合规风险有哪些?",
       ],
+    },
+    {
+      // the run-level settle: WITHOUT it the stage replays forever as
+      // "streaming" -- MermaidBlock never mounts (settled gate) and the
+      // report document never reaches its final render path
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 21400,
+        output: 1980,
+        thoughts: 1140,
+        cached: 9030,
+        cache_write: 0,
+        research: { input: 16800, output: 1520 },
+        write: { input: 4600, output: 460 },
+        gates: { input: 1180, output: 96, calls: 6 },
+        rerank: { calls: 5, tokens: 3980 },
+        decision: { calls: 9, tokens: 2140 },
+      },
+      model: "deepseek-flash",
     },
   ],
 };

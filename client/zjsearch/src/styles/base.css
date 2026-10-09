@@ -77,10 +77,72 @@
   /* "selected by the AI" marks around result rows reached through Quick
       Answer citations: the dashed accent frame PERSISTS (an accumulating
       set of the results the AI cited); the locate tint flashes once per
-      jump.  outline never shifts layout and follows rounded corners. */
+      jump.  nothing else in the app emits <mark> -- the themed restyle is
+      global on purpose (DESIGN.md §5.1 shared vocabulary). */
   [data-ai-cited] {
     outline: 2px dashed var(--accent);
     outline-offset: -2px;
+  }
+
+  /* ==highlight== in AI-generated markdown (the Pandoc/Typora mark, the
+      browser default's yellow reads as a browser bug on every palette) */
+  mark {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    color: var(--ink);
+    border-radius: 3px;
+    padding: 0 1px;
+    box-decoration-break: clone;
+  }
+
+  /* Obsidian-style callouts in AI-generated markdown (remarkCallouts,
+      lib/markdownParts.ts): one accent rail + tinted ground per category,
+      all token-driven so the palette flip and print light-force carry.
+      Categories are the family canon's ten (ZJBlog tools/callouts.ts). */
+  .callout {
+    --callout-rail: var(--accent-strong);
+    margin: 0.5rem 0;
+    border: 1px solid var(--line);
+    border-inline-start: 3px solid var(--callout-rail);
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--callout-rail) 7%, var(--surface));
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+  .callout > summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .callout > summary::marker {
+    color: var(--callout-rail);
+  }
+  .callout .callout-title {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .callout > :last-child {
+    margin-bottom: 0;
+  }
+  .callout-success,
+  .callout-tip {
+    --callout-rail: var(--ok);
+  }
+  .callout-question {
+    --callout-rail: var(--accent-strong);
+  }
+  .callout-warning {
+    --callout-rail: var(--warning);
+  }
+  .callout-danger {
+    --callout-rail: var(--danger);
+  }
+  .callout-note,
+  .callout-info,
+  .callout-todo,
+  .callout-example,
+  .callout-quote {
+    --callout-rail: var(--ink-3);
   }
 
   [data-ai-flash] {

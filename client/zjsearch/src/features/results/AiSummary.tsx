@@ -8,9 +8,6 @@ import { ArrowUpRight, Brain, ChevronDown, Copy, RefreshCw, Sparkles } from "luc
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
-import remarkDeflist from "remark-deflist";
-import remarkEmoji from "remark-emoji";
-import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
@@ -26,6 +23,7 @@ import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
+import { SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { CODE_CHIP, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
@@ -48,11 +46,11 @@ async function mermaidFor(dark: boolean) {
   return mermaid;
 }
 
-/** 基础 remark 插件集 —— 系统 Prompt 实际广告的语法面（GFM / 表情 shortcode /
-    定义列表），随 results chunk 加载；KaTeX 数学管线因体积懒加载，见
-    MarkdownAnswer。不在 Prompt 里的扩展（如 ==mark==）刻意不装：模型不输出
-    它们，装了只是给不可信输出多开一条渲染路径。 */
-const BASE_REMARK = [remarkGfm, remarkEmoji, remarkDeflist];
+/** 基础 remark 插件集 —— 共享链 SHARED_REMARK（lib/markdownParts.ts，DESIGN.md
+    §5.1 家族契约）：prompt 教的语法与这里渲染的语法严格互为镜像 —— 教了的语
+    法渲染不了会裸奔，渲染得了但 prompt 不教的路径是给不可信输出白开的口子
+    （GFM / ==mark== / 表情 shortcode / callouts / 定义列表）；KaTeX 数学管
+    线因体积懒加载，见 MarkdownAnswer。 */
 
 /**
  * The whole-page AI Overview.  The server puts an {@link AiCapability}
@@ -621,8 +619,8 @@ function markdownComponents(
       </li>
     ),
     ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 ps-5 first:mt-0">{children}</ol>,
-    p: ({ children }) => (
-      <p className="my-2 break-words first:mt-0" dir="auto">
+    p: ({ children, className }) => (
+      <p className={className ? `my-2 break-words first:mt-0 ${className}` : "my-2 break-words first:mt-0"} dir="auto">
         {children}
       </p>
     ),
@@ -706,7 +704,7 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
       components={markdownComponents(meta, onCite, settled)}
       key={key}
       rehypePlugins={withMath ? mathPlugins[1] : undefined}
-      remarkPlugins={withMath ? [...BASE_REMARK, ...mathPlugins[0]] : BASE_REMARK}
+      remarkPlugins={withMath ? [...SHARED_REMARK, ...mathPlugins[0]] : SHARED_REMARK}
     >
       {text}
     </Markdown>

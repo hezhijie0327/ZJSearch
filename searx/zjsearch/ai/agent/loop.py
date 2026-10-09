@@ -52,14 +52,24 @@ IDLE_TIMEOUT = 125.0
 _RESEARCH = "research"
 _WRITE = "write"
 
-_STOP_HALT = "研究已按用户要求停止"
+_STOP_HALT = "stopped_by_user"
 """The user stop's settle halt: the run does NOT walk into the writer --
 stopping means stopping (the client's own stop path folds the same
-verdict locally, this one is for a second tab / a replay)."""
+verdict locally, this one is for a second tab / a replay).  Machine KEY,
+not prose: the client's i18n catalog renders it (unknown halt strings
+fall back to verbatim display)."""
 
-_WRAP_HALT = "连接中断,已就已收集材料收尾"
-"""The detach grace's wrap halt: the run walks into the writer with the
-material gathered so far -- every run ends with a REAL terminal state."""
+_WRAP_HALT = "wrap_grace_ended"
+"""The detach grace's wrap halt (the settle's client-facing KEY): the run
+walks into the writer with the material gathered so far -- every run ends
+with a REAL terminal state."""
+
+_WRAP_NOTE = (
+    "The connection was lost past the detach grace window -- the answer is"
+    " written from the material gathered so far."
+)
+"""The WRITER-facing half of the wrap halt (an honest English research
+note -- the model must never see a machine key)."""
 
 _CONTROL_SLICE = 1.0
 """The stop-observable event wait slice (seconds): a stop is seen
@@ -322,10 +332,11 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             if action == "stop":
                 stop_requested = True
             elif action == "wrap":
-                # the wrap halt rides BOTH surfaces: the writer's prompt
-                # (the honest truncation note) and the settle's halt (the
-                # record shows WHY a done run ended mid-research)
-                halt_message = halt_message or _WRAP_HALT
+                # the wrap halt rides BOTH surfaces, in each one's own
+                # language: the writer's prompt gets the honest English
+                # note, the settle's halt carries the client-facing KEY
+                # (the i18n catalog renders it)
+                halt_message = halt_message or _WRAP_NOTE
                 carried_error = carried_error or _WRAP_HALT
             elif action == "steer":
                 steer_text = str(directive.get("text") or "") or None

@@ -30,6 +30,7 @@ from searx.zjsearch.ai.browser import session as browser_session
 from searx.zjsearch.ai.tools import research_subtask as subtask_tool
 from searx.zjsearch.ai.llm import decision
 from searx.zjsearch.ai.runs.search import audit
+from searx.zjsearch.ai.runs.search import entity_gate
 from searx.zjsearch.ai.runs.search.progress import (
     BUDGET_LAST_ROUND_NOTE,
     FEED_CONVERGE_NOTE,
@@ -373,11 +374,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 done = sum(1 for item in items if item["status"] == "done")
                 summary = f"{done}/{len(items)}"
                 # the row settles like every other (a plan write is instant
-                # work -- leaving it pending read as 已中断 at the settle)
+                # work -- leaving it pending read as interrupted at the settle)
                 feed_text = (
-                    f"plan written: {done}/{len(items)} subtasks covered."
-                    " Search each subtask's keywords; a subtask with sources"
-                    " is marked done automatically."
+                    f"plan written: {done}/{len(items)} subtasks. Work the plan"
+                    " step by step; statuses are yours to update (resend the"
+                    " complete list to revise it), and the referee advises"
+                    " when a subtask's evidence runs thin."
                 )
                 if getattr(self, "weak_tasks", None):
                     feed_text += (
@@ -387,6 +389,23 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         + ")"
                     )
                     self.weak_tasks = []
+                if getattr(self, "entity_gap", None):
+                    feed_text += (
+                        "\n(plan review: the list does not yet cover these deliverable entities the"
+                        " final answer makes claims about -- add a subtask or delegate a"
+                        " research_subtask for each: "
+                        + "; ".join(self.entity_gap[:3])
+                        + ")"
+                    )
+                    self.entity_gap = []
+                # the deliverable-entity gate: ONCE per run, on the FIRST
+                # plan write -- entities the final answer depends on but
+                # no subtask covers become a feed note (the model closes
+                # the gap itself); the referee's plan_complete question
+                # keeps checking on later plan writes
+                note = entity_gate.run_once(self, items)
+                if note:
+                    feed_text += note
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",

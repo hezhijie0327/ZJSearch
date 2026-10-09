@@ -84,26 +84,40 @@ def identity() -> str:
 
 def markdown_surface() -> str:
     """The renderer's markdown vocabulary -- the FULL surface (GFM, task
-    lists, definition lists, emoji shortcodes, mermaid with quoted labels,
-    once-only LaTeX).  Both features render answers through the same
-    react-markdown pipeline, so both prompts advertise the same one."""
+    lists, definition lists, emoji shortcodes, ==mark== highlights,
+    Obsidian-style callouts, mermaid with quoted labels incl. xychart
+    charts, once-only LaTeX).  MIRROR CONTRACT with the client (DESIGN.md
+    §5.1, lib/markdownParts.ts): the prompt teaches exactly the grammar
+    the shared remark chain renders -- a taught-but-unrenderable grammar
+    falls back to raw text, a renderable-but-untaught path is an opening
+    for untrusted output nobody asked for.  Both features compose this
+    block, so the surfaces cannot drift."""
     return "\n".join(
         [
             "<markdown_surface>",
             "- Format freely in GitHub-flavored markdown -- the renderer"
             ' supports all of it: "## " section headings, bullet / numbered'
             ' lists, task lists ("- [x]" for step checklists), **bold**,'
-            " ~~strikethrough~~, tables for comparisons, > blockquotes for"
-            " short source quotes, `inline code` and fenced code blocks, ---"
-            " horizontal rules, definition lists (\"Term\" on one line,"
-            ' ": definition" below), emoji shortcodes like :tada: used'
-            " sparingly, and links when a source URL genuinely helps.",
-            "- When a diagram clarifies structure or flow better than prose,"
-            " emit a ```mermaid fenced block (flowchart, sequence, state, ER,"
-            " gantt, pie, mindmap, timeline).  Keep diagrams small -- around"
-            " 15 nodes at most -- and quote every node label that contains"
-            ' punctuation or parentheses: A["降水(雨/雪)"] -- not'
-            " A[降水(雨/雪)].",
+            " ==highlighted spans== for the few words that must not be"
+            " missed, ~~strikethrough~~, tables for comparisons, >"
+            " blockquotes for short source quotes, `inline code` and fenced"
+            " code blocks, --- horizontal rules, definition lists (\"Term\""
+            " on one line, ': definition' below), emoji shortcodes like"
+            " :tada: used sparingly, and links when a source URL genuinely"
+            " helps.",
+            "- Callouts make a judgment stand out (the key verdict, the"
+            " sharpest risk, the recommendation): a blockquote whose first"
+            ' line is "> [!WARNING] Title text" -- body lines quoted below.'
+            " Kinds: NOTE / TIP / IMPORTANT / QUESTION / WARNING / DANGER /"
+            " SUCCESS / EXAMPLE (use one where it earns its emphasis, not"
+            " one per section).",
+            "- When a diagram clarifies better than prose, emit a ```mermaid"
+            " fenced block (flowchart, sequence, state, ER, gantt, pie,"
+            " mindmap, timeline -- and xychart for BAR and LINE CHARTS"
+            " of numbers: quarterly revenue, market share, growth series)."
+            "  Keep diagrams small -- around 15 nodes at most -- and quote"
+            " every node label that contains punctuation or parentheses:"
+            ' A["降水(雨/雪)"] -- not A[降水(雨/雪)].',
             "- Math typesets as real equations -- write LaTeX: inline"
             " $E=mc^2$ or display $$\\int_0^1 f(x)\\,dx$$ blocks.  Each"
             " formula appears ONCE, in LaTeX only -- never repeat it as plain"

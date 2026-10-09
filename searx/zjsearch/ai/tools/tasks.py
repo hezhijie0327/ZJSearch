@@ -2,10 +2,10 @@
 """AI Search: the ``task_write`` tool -- spec and call parsing.
 
 The living task list (quality/goal): the model decomposes the request
-into subtasks and keeps their statuses current -- the client renders
-the list as the task card, and the list drives what gets researched
-next (the coverage tracker marks a subtask done only when real source
-titles matched it).
+into subtasks, keeps their statuses current AND reshapes the plan as the
+evidence demands -- the client renders the list as the task card, and
+the coverage tracker only records PROVENANCE (which source titles
+landed on which subtask); statuses are never written here.
 """
 
 import typing as t
@@ -17,24 +17,27 @@ TASK_TOOL = "task_write"
 
 def task_write_spec() -> dict[str, t.Any]:
     """The living task list (quality/goal): the model decomposes the
-    request into subtasks and keeps their statuses current -- the client
+    request into subtasks and keeps the plan current -- the client
     renders the list as the task card, and the list drives what gets
     delegated next."""
     return {
         "name": TASK_TOOL,
         "description": (
             "Create or update the SUBTASK LIST for this research -- it is"
-            " the ONLY way the plan or its statuses ever change.  First"
-            " round: decompose the request into 2-4 concrete, independent"
-            " subtasks (each answerable by its own focused research)."
-            " EVERY round afterwards: keep the list TRUE -- set a subtask"
-            ' to {"status": "done"} the moment its sources are gathered,'
-            ' "active" while researching it, and APPEND new subtasks whenever'
-            " the findings reveal an important facet you had not planned"
-            " for.  THE RESEARCH IS NOT COMPLETE while any subtask is"
+            " the ONLY way the plan or its statuses ever change, and the"
+            " plan is a LIVING hypothesis: revise it whenever the evidence"
+            " disagrees with it.  First round: decompose the request into"
+            " 2-4 concrete, independent subtasks (each answerable by its"
+            " own focused research).  EVERY round afterwards: keep the list"
+            ' TRUE -- set a subtask to {"status": "done"} the moment its'
+            ' sources are gathered, "active" while researching it, and'
+            " RESHAPE it as the findings demand: append an important facet"
+            " you had not planned for, split or merge subtasks, reword one"
+            " that drifted, and DROP a dead end outright (it just leaves"
+            " the list).  THE RESEARCH IS NOT COMPLETE while any subtask is"
             " pending or active: finish it, or hand over only once every"
-            " subtask is done.  The list is rendered to the user as your"
-            " research plan -- keep it current."
+            " subtask is done or consciously dropped.  The list is rendered"
+            " to the user as your research plan -- keep it current."
         ),
         "parameters": {
             "type": "object",
@@ -56,7 +59,7 @@ def task_write_spec() -> dict[str, t.Any]:
                         },
                         "required": ["title", "status"],
                     },
-                    "description": "The COMPLETE list (2-4 items) -- not a diff.",
+                    "description": "The COMPLETE list (2-8 items) -- not a diff; the newest call REPLACES the card.",
                 },
             },
             "required": ["items"],
@@ -69,7 +72,7 @@ def parse_task_call(call: dict[str, t.Any]) -> list[dict[str, str]]:
     args = raw_args(call)
     items = args.get("items")
     out: list[dict[str, str]] = []
-    for item in (items if isinstance(items, list) else [])[:6]:
+    for item in (items if isinstance(items, list) else [])[:8]:
         if not isinstance(item, dict):
             continue
         title = str(item.get("title") or "").strip()[:200]

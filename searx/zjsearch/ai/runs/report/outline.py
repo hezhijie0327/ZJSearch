@@ -2,7 +2,14 @@
 """The report OUTLINE gate: one structured completion turns the (already
 clarified) question into the report's section skeleton.  Fail-open: a
 dead transport or a malformed skeleton returns ``None`` and the run
-falls back to the single-write answer shape."""
+falls back to the single-write answer shape.
+
+The gate also carries the DELIVERABLE-ENTITY heuristic: the skeleton
+comes with the entities the final deliverable depends on understanding
+but that no section directly researches (the "opportunities for Cytiva"
+case -- the report cannot recommend for an actor it never studied), and
+:func:`uncovered_entities` screens them against the sections with the
+task card's term matcher (zero model cost)."""
 
 import logging
 import typing as t
@@ -10,24 +17,47 @@ import typing as t
 from searx.zjsearch.ai.llm import jsongate
 from searx.zjsearch.ai.prompts import report as report_prompts
 from searx.zjsearch.ai.prompts import spine
+from searx.zjsearch.ai.runs.search.coverage import Coverage
 
 logger = logging.getLogger(__name__)
 
 MAX_SECTIONS = 8
 MIN_SECTIONS = 3
 
+MAX_ENTITIES = 6
+"""Deliverable entities per outline -- a handful of blind spots, not a
+second research plan."""
 
-def build_outline(
-    cfg: dict[str, t.Any], question: str, lang: str, clarified: str, gate_usage: list[dict[str, t.Any]]
+_ATTACHMENT_HEAD = 3_000
+"""Per-attachment head inside the outline gate's user message: the
+attachment may BIND the deliverable's structure (a framework, a house
+format), so the skeleton editor must see what the question points at."""
+
+
+def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-arguments
+    cfg: dict[str, t.Any],
+    question: str,
+    lang: str,
+    clarified: str,
+    gate_usage: list[dict[str, t.Any]],
+    attachments: list[dict[str, str]] | None = None,
 ) -> dict[str, t.Any] | None:
     """The skeleton: ``{title, subtitle, sections: [{id, title, brief,
-    key_questions, status}]}`` -- ids minted here (``s1``...), the
-    server-synthesized ``summary`` / ``method`` sections are NOT part of
-    the gate's contract.  ``None`` on any failure."""
+    key_questions, status}], entities: [{name, why}]}`` -- ids minted
+    here (``s1``...), the server-synthesized ``summary`` / ``method``
+    sections are NOT part of the gate's contract.  ``attachments`` ride
+    as heads (they may bind the deliverable's structure).  ``None`` on
+    any failure."""
     system = "\n".join([report_prompts.OUTLINE_SYSTEM, spine.language_directive(lang)])
     user = f"<question>{question[:2000]}</question>"
     if clarified:
         user += f"\n<clarified_direction>{clarified}</clarified_direction>"
+    for file in attachments or []:
+        text = str(file.get("text") or "")[:_ATTACHMENT_HEAD]
+        if not text:
+            continue
+        name = str(file.get("name") or "attachment")
+        user += f'\n<attachment name="{name}">\n{text}\n</attachment>'
     try:
         value, usage = jsongate.json_completion(
             cfg,
@@ -65,8 +95,47 @@ def build_outline(
         )
     if len(sections) < MIN_SECTIONS:
         return None
+    entities: list[dict[str, str]] = []
+    for raw in value.get("entities") or []:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()[:80]
+        if not name:
+            continue
+        entities.append({"name": name, "why": str(raw.get("why") or "").strip()[:200]})
+        if len(entities) >= MAX_ENTITIES:
+            break
     return {
         "title": str(value.get("title") or "").strip()[:160] or question[:80],
         "subtitle": str(value.get("subtitle") or "").strip()[:200],
         "sections": sections,
+        "entities": entities,
     }
+
+
+def uncovered_entities(outline: dict[str, t.Any]) -> list[str]:
+    """The outline's deliverable entities NO section covers -- the
+    task card's own bidirectional-containment matcher applied to
+    entity-vs-section (title + brief + key_questions) terms, zero model
+    cost.  An entity whose name light up any section's text counts as
+    covered (the section will research it)."""
+    sections = outline.get("sections") or []
+    section_terms: list[str] = []
+    for sec in sections:
+        section_terms.extend(
+            Coverage.match_terms(" ".join([str(sec.get("title") or ""), str(sec.get("brief") or ""), *[
+                str(q) for q in (sec.get("key_questions") or [])
+            ]]))
+        )
+    uncovered: list[str] = []
+    for entity in outline.get("entities") or []:
+        name = str(entity.get("name") or "")
+        if not name:
+            continue
+        terms = Coverage.match_terms(name)
+        if not terms:
+            continue
+        hit = any(a in b or b in a for a in terms for b in section_terms)
+        if not hit:
+            uncovered.append(name)
+    return uncovered

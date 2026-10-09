@@ -367,7 +367,15 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     outline: dict[str, t.Any] | None = None
     if report_requested:
         outline = report_outline.build_outline(
-            cfg, research_q, lang, clarifications if clarify_state == "answered" else "", gate_usage
+            cfg,
+            research_q,
+            lang,
+            clarifications if clarify_state == "answered" else "",
+            gate_usage,
+            attachments=[
+                {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")}
+                for f in (attached_files or [])
+            ],
         )
         if outline is None:
             logger.info("zjsearch_ai_search: report outline gate failed -- falling back to the single write")
@@ -383,6 +391,17 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         cfg=cfg,
     )
     state.question_held = research_q
+    # the loop-side gates (the entity gate's extraction) append to the SAME
+    # list the settle's gates bucket folds
+    state.gate_usage = gate_usage
+    state.attached_files = [
+        {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
+    ]
+    if outline:
+        # the outline's deliverable-entity screen: entities no section
+        # researches become the researcher's <deliverable_entities> block
+        # and plan_review's plan_complete question
+        state.deliverable_entities = report_outline.uncovered_entities(outline)
     if depth_probe_entry:
         state.judgments.append(depth_probe_entry)
     # the clarify pre-screen's spend + verdict join the run's account (the
@@ -477,6 +496,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             user_memories=user_memories,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
+            deliverable_entities=state.deliverable_entities,
         ),
         tools=[tool_spec(pages_on, browser_on), calculator_spec(), user_memory_spec(), learnings_spec()]
         + (

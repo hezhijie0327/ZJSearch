@@ -2,17 +2,17 @@
 
 import { Children, isValidElement, type ReactNode } from "react";
 import Markdown from "react-markdown";
-import remarkDeflist from "remark-deflist";
-import remarkGfm from "remark-gfm";
 import { MermaidBlock } from "@/features/results/AiSummary.tsx";
+import { SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { CODE_CHIP } from "@/lib/styles.ts";
 
 /**
  * The knowledge inspector's markdown renderer (overview answers + archived
- * reader full texts): the same element styling language as the AI answer
- * card, minus the citation chips / mermaid machinery the run timeline
- * needs -- [n] stays plain text here (the cited sources live in the 来源
- * corpus one tab over).
+ * reader full texts): the SAME shared remark chain as every answer surface
+ * (lib/markdownParts.ts -- DESIGN.md §5.1; one vocabulary, one renderer)
+ * with the same element styling language as the AI answer card, minus the
+ * citation chips the run timeline needs -- [n] stays plain text here (the
+ * cited sources live in the 来源 corpus one tab over).
  */
 
 const HEADING = "mt-3 text-base font-semibold text-ink first:mt-0";
@@ -68,8 +68,8 @@ const components: Record<string, (props: MdProps) => ReactNode> = {
     </li>
   ),
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 ps-5 first:mt-0">{children}</ol>,
-  p: ({ children }) => (
-    <p className="my-2 break-words first:mt-0" dir="auto">
+  p: ({ children, className }) => (
+    <p className={className ? `my-2 break-words first:mt-0 ${className}` : "my-2 break-words first:mt-0"} dir="auto">
       {children}
     </p>
   ),
@@ -118,7 +118,7 @@ function textOf(children: ReactNode): string {
 export function InspectorMarkdown({ text }: { text: string }) {
   return (
     <div className="text-[13px] leading-relaxed">
-      <Markdown components={components} remarkPlugins={[remarkGfm, remarkDeflist]}>
+      <Markdown components={components} remarkPlugins={SHARED_REMARK}>
         {text}
       </Markdown>
     </div>

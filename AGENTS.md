@@ -1565,6 +1565,54 @@ redundant, both fused into ONE post-run extractor:
   Fail-open everywhere: embedding unconfigured means saves behave
   exactly as before.
 
+## vNext batch 1 (2026-10-09): deliverable entities, living plan, markdown v2
+
+- **THE DELIVERABLE-ENTITY HEURISTIC** (the Cytiva fix): a request like
+  "recommend opportunities for Cytiva on RCX's pipelines" decomposes into
+  RCX facets and never researches Cytiva itself -- the answer recommends
+  for an actor it never studied.  The report OUTLINE gate now sees the
+  ATTACHMENT HEADS (they may bind the deliverable) and returns
+  `entities: [{name, why}]` (entities the final deliverable depends on
+  but no section researches); `uncovered_entities()` screens them against
+  the sections with the task card's own term matcher (zero model cost).
+  Uncovered entities become the researcher's `<deliverable_entities>`
+  run_context block AND plan_review's `plan_complete` noul (state
+  `deliverable_entities` / `entity_gap`); single-write runs get the same
+  via `runs/search/entity_gate.py` (ONE jsongate extraction + term
+  screen on the FIRST task_write, judgment purpose `entity_coverage`).
+  The harness shows the blind spot; the MODEL closes it (add subtasks or
+  delegate research_subtask) -- never auto-dispatch.
+- **THE LIVING PLAN**: task_write is a full-snapshot replace (2-8 items
+  after the harmonization), and the researcher prompt teaches the plan
+  as a LIVING HYPOTHESIS -- revise (add/split/merge/reword/drop) by
+  resending the complete list whenever cross-checking proves an earlier
+  assumption wrong; the old "system marks done automatically" coverage
+  lie is gone from every prompt (statuses are the model's; the referee
+  only advises).
+- **MARKDOWN VOCABULARY IS A MIRROR CONTRACT** (DESIGN.md §5.1): the
+  prompts teach exactly what the shared remark chain
+  (`client/zjsearch/src/lib/markdownParts.ts`: GFM + ==mark== + emoji +
+  callouts + deflist, math lazy) renders -- update DESIGN.md §5.1, then
+  the chain, then `spine.markdown_surface()`, in that order.  Report
+  sections get the same vocabulary (`SECTION_SYSTEM` composes
+  `markdown_surface()`; REPORT_SHAPE carries the form doctrine: matrices
+  → tables, numeric series → mermaid `xychart`, verdicts/risks →
+  `[!IMPORTANT]`/`[!WARNING]` callouts).  The knowledge inspector renders
+  the SAME chain (InspectorMarkdown).  Mermaid-12's chart diagram is
+  registered as `xychart` -- the old `xychart-beta` name is GONE and
+  falls back to a code block.  Callout styles + themed `mark` live in
+  styles/base.css (token-driven, palette-flip and print safe).  Still
+  deliberately NOT taught/rendered: raw HTML (untrusted model output),
+  markdown images, PlantUML, Shiki.
+- **SETTLE HALTS ARE MACHINE KEYS**: the server emits
+  `stopped_by_user` / `wrap_grace_ended` (loop `_STOP_HALT`/`_WRAP_HALT`)
+  and the client's `aiSearch/halts.ts` renders them through i18n
+  (unknown halt strings stay verbatim -- legacy stored threads keep
+  reading).  The writer-facing half of the wrap halt is the English
+  `_WRAP_NOTE` (the model never sees a key).  Report-synthesized text
+  follows the run language (the summary section title, the section-gap
+  note) -- no hardcoded Chinese reaches en users.
+
 ## Custom plugin behaviour (server side, keep with the theme)
 
 - `unit_converter` / `currency_convert`: value-less queries ("kg to lb",

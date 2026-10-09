@@ -48,8 +48,10 @@ _DEPTH_RESEARCH: dict[str, str] = {
     "balanced": "Depth: BALANCED -- a handful of rounds covering the main"
     " facets: what it is, how it works or why it matters, and whatever"
     " context the reader needs not to be misled.  Keep a LIGHT findings"
-    " ledger: record facts when a round settles something real, skip the"
-    " bookkeeping when it would not change the answer.",
+    " ledger: record facts when a round settles something real, correct"
+    " (supersede/retract) an earlier fact the moment better evidence"
+    " overturns it, and skip the bookkeeping when it would not change the"
+    " answer.",
     "deep": "Depth: DEEP -- a LONG run (expect many rounds; the run's"
     " ceiling is high) and a full research project, not a summary pass."
     "  Open a task list of"
@@ -130,6 +132,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     user_memories: list[dict[str, str]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
+    deliverable_entities: list[str] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -286,13 +289,21 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             )
         else:
             task_block = (
-                "<task_list>\nYour research is DECOMPOSED:\n1. FIRST round:"
-                f" call {TASK_TOOL} with 2-4 concrete, independent subtasks"
-                " (each answerable by its own keyword searches).\n2. Search"
-                " each subtask's keywords -- the system tracks coverage"
-                " automatically (a subtask with sources is marked done).\n3."
-                " When all subtasks are covered, stop calling tools -- the"
-                " writer builds the answer from everything gathered.\n</task_list>"
+                "<task_list>\nYour research is DECOMPOSED, and the plan is a LIVING"
+                " hypothesis, not a contract:\n1. FIRST round: call"
+                f" {TASK_TOOL} with 2-4 concrete, independent subtasks (each"
+                " answerable by its own keyword searches).\n2. Work the plan"
+                " EVERY round and keep it TRUE: statuses are YOURS to set"
+                " (done when a subtask's material is gathered), and"
+                " cross-checking often proves an earlier assumption wrong --"
+                " when evidence reveals a dead end, a missing facet, or an"
+                " entity the final answer depends on, RESEND the COMPLETE"
+                " list: add, split, merge, reword or drop subtasks (a dropped"
+                " dead end simply leaves the list). The newest list replaces"
+                " the card -- never leave a subtask standing that the"
+                " evidence has already contradicted.\n"
+                "3. The research ends when the PLAN closes -- every subtask"
+                " done or consciously dropped -- not when you feel done.\n</task_list>"
             )
     learnings_block = (
         "<learnings>\n"
@@ -427,6 +438,18 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " the entities, figures and context they reveal.  They are"
             " question material, not search results: never treat them as"
             " sources.\n</attached_images>\n"
+        )
+    deliverable = [str(x) for x in (deliverable_entities or []) if str(x)]
+    if deliverable:
+        run_context += (
+            "<deliverable_entities>\nThe final answer will make claims or"
+            " recommendations ABOUT these entities, but the current plan has"
+            " NO subtask researching them -- the reader cannot use such"
+            " recommendations without knowing what each entity is:\n"
+            + "\n".join(f"- {name}" for name in deliverable[:5])
+            + "\nAdd a subtask for each via "
+            f"{TASK_TOOL} (or delegate a research_subtask) and gather their"
+            " basic sourced facts before the research ends.\n</deliverable_entities>\n"
         )
     for file in attached_files or []:
         text = str(file.get("text") or "")[:30_000]

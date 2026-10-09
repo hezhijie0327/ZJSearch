@@ -128,6 +128,28 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         self._ledger_seq = 0
         # the plan review's weak-subtask note (one shot per plan write)
         self.weak_tasks: list[str] = []
+        # plan_review's plan_complete verdict: the deliverable entities the
+        # current plan still does not cover (consumed by the task_write
+        # feed, then cleared -- one note per plan write)
+        self.entity_gap: list[str] = []
+        # the deliverable-entity heuristic: entities the FINAL answer
+        # depends on understanding that no planned subtask covers (the
+        # report outline's screen fills it before the run; the single-write
+        # entity gate fills it on the first task_write).  The researcher's
+        # <deliverable_entities> block and plan_review's plan_complete
+        # question consume it.
+        self.deliverable_entities: list[str] = []
+        # the single-write entity gate runs ONCE, on the first task_write
+        self.entity_gate_done = False
+        # the run's attachments (sanitized {name, text}), the entity gate's
+        # extraction context (the attachment may name the actors the answer
+        # makes claims about)
+        self.attached_files: list[dict[str, str]] = []
+        # the route's gate-usage list, RE-BOUND onto the state (the route
+        # assigns the same list object): loop-side gate completions (the
+        # entity gate's extraction) append here and fold into the settle's
+        # gates bucket through the route's own accounting
+        self.gate_usage: list[dict[str, t.Any]] = []
         # THIS round's new source titles (the coverage referee's evidence)
         self.round_new_titles: list[str] = []
         # whether THIS round recorded learnings (the 边做边记 discipline note)

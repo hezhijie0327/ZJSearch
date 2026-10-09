@@ -36,6 +36,7 @@ import { AttachmentPreview } from "@/features/results/aiSearch/AttachmentPreview
 import { BrowserMirrorSection } from "@/features/results/aiSearch/BrowserMirror.tsx";
 import { ToolRow } from "@/features/results/aiSearch/calls/ToolRow.tsx";
 import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
+import { haltText } from "@/features/results/aiSearch/halts.ts";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
 import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
@@ -1186,7 +1187,7 @@ function AiSearchRunSectionImpl({
               <p>{t("ai_search_failed")}</p>
               {run.error ? (
                 <p className="mt-1 break-words text-danger/80" dir="auto">
-                  {run.error}
+                  {haltText(run.error, t)}
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">

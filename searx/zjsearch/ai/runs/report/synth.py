@@ -47,10 +47,12 @@ def _stream_section_once(
     messages: list[dict[str, t.Any]],
     section_id: str,
     tally: t.Any,
+    gap_text: str,
 ) -> t.Iterator[dict[str, t.Any]]:
     """One section stream: answer deltas as ``section`` events; the usage
     lands in the tally; a transport error degrades THIS section to a
-    visible gap note (the document still ships)."""
+    visible gap note IN THE REPORT'S LANGUAGE (the document still
+    ships)."""
     stream = LlmStream(cfg, messages, relay_reasoning=False)
     produced = False
     try:
@@ -72,8 +74,7 @@ def _stream_section_once(
     finally:
         stream.cancel()
     if not produced:
-        gap = "本节生成失败" if "zh" in (spine.language_directive("") and "") else "section failed upstream"
-        yield {"e": "section", "id": section_id, "t": f"*{gap}*\n"}
+        yield {"e": "section", "id": section_id, "t": f"*{gap_text}*\n"}
 
 
 def make_synthesizer(
@@ -91,16 +92,26 @@ def make_synthesizer(
     lang_directive = spine.language_directive(lang)
 
     def stream(messages: list[dict[str, t.Any]], section_id: str, tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
-        yield from _stream_section_once(cfg, messages, section_id, tally)
+        yield from _stream_section_once(cfg, messages, section_id, tally, gap_text)
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
         tally.phase = "write"
         started = time.monotonic()
+        # the run's own two languages (the client renders the catalog tag
+        # verbatim into TOC entries): the synthesized sections' identity
+        # text follows the run language, never a hardcoded default
+        zh = lang.strip().lower().startswith("zh")
+        gap_text = "本节生成失败" if zh else "Section generation failed upstream"
+        summary_meta = (
+            ("执行摘要", "全文最重要的判断与依据")
+            if zh
+            else ("Executive Summary", "The report's key judgments and the basis for them")
+        )
         sections: list[dict[str, t.Any]] = [
             {
                 "id": "summary",
-                "title": "执行摘要",
-                "brief": "全文最重要的判断与依据",
+                "title": summary_meta[0],
+                "brief": summary_meta[1],
                 "key_questions": [],
                 "status": "pending",
             },
@@ -266,7 +277,7 @@ def make_synthesizer(
             if event.get("e") == "section":
                 rewrite += str(event.get("t") or "")
             yield event
-        if rewrite.strip() and "*本节生成失败" not in rewrite and "failed upstream" not in rewrite:
+        if rewrite.strip() and gap_text not in rewrite:
             yield {"e": "section", "id": sec["id"], "t": rewrite}  # replacement marker
 
     def _write_summary(question: str, written: dict[str, str], tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
