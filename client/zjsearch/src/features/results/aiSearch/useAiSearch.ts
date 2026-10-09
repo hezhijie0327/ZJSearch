@@ -169,7 +169,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!last) {
       return;
     }
-    if (last.status === "done") {
+    if (last.status === "done" && !last.stopped) {
+      // a finished run cannot be continued; a STOPPED one can (the user
+      // may reverse the stop) -- its checkpoint stays
       void clearRunCtx(`${core.threadId}:${last.runNo}`).catch(() => {});
     }
     void settleRun(core.threadId, last);
@@ -300,7 +302,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         if (event.e === "ctx") {
           const messages = Array.isArray(event.messages) ? (event.messages as unknown[]) : [];
           if (messages.length) {
-            void saveRunCtx(`${threadId}:${runNo}`, threadId, messages).catch(() => {});
+            saveRunCtx(`${threadId}:${runNo}`, threadId, messages).catch((error) => {
+              console.warn("zjs: runctx save failed", error);
+            });
           }
           return;
         }
@@ -516,8 +520,12 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     }
     void (async () => {
       const runId = `${threadIdRef.current}:${last.runNo}`;
-      const stored = await loadRunCtx(runId).catch(() => null);
+      const stored = await loadRunCtx(runId).catch((error) => {
+        console.warn("zjs: runctx load failed", error);
+        return null;
+      });
       if (!stored) {
+        console.info("zjs: no resume checkpoint for", runId, "-- legacy continue");
         continueLegacy(lang, mode, searchLanguage);
         return;
       }
