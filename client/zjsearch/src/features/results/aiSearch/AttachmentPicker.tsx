@@ -169,8 +169,10 @@ export function AttachmentPicker({
         </span>
       ))}
       {items.length < MAX_ATTACHMENTS ? (
+        // the visible-name-less wrapper carries NO aria-label of its own
+        // (prohibited on a role-less label): the hidden input's
+        // aria-label IS the control's accessible name
         <label
-          aria-label={t("attach_files")}
           className={`grid size-9 shrink-0 cursor-pointer place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2/70 hover:text-ink ${disabled ? "pointer-events-none opacity-40" : ""}`}
           title={t("attach_files")}
         >

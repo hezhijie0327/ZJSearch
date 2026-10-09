@@ -121,6 +121,35 @@ const FULL_STAGE: DebugScenario = {
         },
       ],
     },
+    // the PRE-FLIGHT verdicts (route-side gates riding _drive's preamble):
+    // the decisions card OPENS with them before the loop's first event
+    {
+      e: "decisions",
+      items: [
+        {
+          purpose: "depth_probe",
+          question: "How deep and broad does the research need to be (score 0-4)?",
+          target: "多肽原料药全球竞争格局…",
+          answer: {
+            type: "score",
+            score: 4,
+            probabilities: { 0: 0.01, 1: 0.02, 2: 0.07, 3: 0.25, 4: 0.65 },
+            legend: { 4: "Exhaustive" },
+            confidence: 0.65,
+          },
+          ms: 620,
+        },
+        {
+          purpose: "outline",
+          question: "The report skeleton: sections and the deliverable entities they cover",
+          target: "多肽原料药全球竞争格局 × 深圳住宅市场价格矩阵深度调研",
+          sections: 5,
+          entities: 1,
+          uncovered: 1,
+          ms: 1480,
+        },
+      ],
+    },
     { ...base },
     { e: "phase", name: "plan" },
     { e: "say", id: 1, t: "拆解为竞争格局、产能对比与深圳价格矩阵三条线,先做行业面,再落到片区数据。" },
@@ -693,6 +722,44 @@ const AWAITING_STAGE: DebugScenario = {
       },
       model: "deepseek-flash",
     },
+  ],
+};
+
+const STOPPED_STAGE: DebugScenario = {
+  id: "stopped",
+  label: "停止态(标题键化)",
+  q: "深度对比三家 CDMO 的合规记录",
+  mode: "report",
+  events: [
+    { e: "client.start", runNo: 1, q: "深度对比三家 CDMO 的合规记录", mode: "report" },
+    { ...base },
+    { e: "phase", name: "research" },
+    { e: "say", id: 1, t: "先并行两家已披露处罚记录的检索,第三家走监管官网。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_search",
+        q: "CDMO 药监处罚记录 对比",
+        status: "pending",
+        args: { query: "CDMO 药监处罚记录 对比" },
+      },
+    ]),
+    {
+      e: "sources",
+      items: [
+        {
+          n: 1,
+          title: "CDMO 合规监管处罚公开数据库",
+          url: "https://compliance.example.com/cdmo-penalties",
+          netloc: "compliance.example.com",
+          round: 1,
+          id: 1,
+          idx: 0,
+          content: "近三年 CDMO 企业药监处罚记录汇总,含警告信与召回事件。",
+        },
+      ],
+    },
+    { e: "settle", status: "error", halt: "stopped_by_user", finish: null, usage: null, model: null },
   ],
 };
 
@@ -1277,6 +1344,7 @@ export const DEBUG_SCENARIOS: DebugScenario[] = [
   STEER_STAGE,
   SUB_STAGE,
   DONE_STAGE,
+  STOPPED_STAGE,
   AWAITING_STAGE,
   FAILED_STAGE,
 ];

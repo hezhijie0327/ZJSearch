@@ -56,6 +56,7 @@ const NOUL_BY_NAME = {
   contains_answer_evidence: 0.9,
   consistent: 0.9,
   covered: 0.9,
+  good_title: 0.9,
 };
 
 function systemOneAnswer(body) {
@@ -495,7 +496,7 @@ function route(body, res) {
     streamChunks(
       res,
       textPieces(
-        `${GALLERY_FENCE}\n\n${WRITER_ANSWER}\n\n\`\`\`related\n${JSON.stringify({ questions: RELATED })}\n\`\`\``,
+        `${GALLERY_FENCE}\n\n${WRITER_ANSWER}\n\n\`\`\`related\n${JSON.stringify({ title: "ZJSearch Audit Briefing", questions: RELATED })}\n\`\`\``,
       ),
     );
     return;
