@@ -37,6 +37,7 @@ import {
   deleteThread,
   forgetMemory,
   type MemoryRow,
+  renameThread,
   resetAll,
   saveMemory,
   toggleItemPin,
@@ -554,6 +555,9 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                       run: () => deleteThread(thread.id),
                     })
                   }
+                  onRename={(thread, title) => {
+                    void renameThread(thread.id, title);
+                  }}
                   threads={visibleThreads}
                 />
               )}

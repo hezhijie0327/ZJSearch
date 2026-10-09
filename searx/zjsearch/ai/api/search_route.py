@@ -610,6 +610,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         decision_usage=state.decision_usage,
         judgments=state.judgments,
         known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
+        outline_title=str(outline["title"]) if outline else None,
     )
     driver = threading.Thread(
         target=_drive,
@@ -675,9 +676,13 @@ class _SettleTail:
         decision_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
+        outline_title: str | None = None,
     ):
         self.cfg = cfg
         self.question = question
+        # the report's own title (the writer-side outline editor's) -- the
+        # title pass's candidate when no fence title rode the answer
+        self.outline_title = (outline_title or None)
         self.lang = lang
         self.gate_usage = gate_usage
         # the executor's rerank-model account (a LIVE dict -- the settle
@@ -734,14 +739,70 @@ class _SettleTail:
             event = {**event, "judgments": self.judgments}
         return event
 
+    def _title_pass(self, answer: str, fence_title: str | None) -> str | None:
+        """The thread title's UNIFIED generation path, all three modes:
+        the candidate is the WRITER's own fence title (every single-write
+        answer carries one) or the report's outline title -- ONE decision
+        noul judges it (a short specific subject noun phrase?); GOOD
+        keeps it (the common case: no extra call), BAD or MISSING falls
+        to one small generation completion.  Fail-open everywhere: a dead
+        decision model or transport leaves the client's mechanical derive
+        standing."""
+        candidate = fence_title or self.outline_title
+        if candidate and decision.enabled() and decision.configured():
+            try:
+                out = decision.judge(
+                    {"question": self.question[:500], "title": candidate},
+                    {
+                        "good_title": {
+                            "type": "noul",
+                            "instructions": (
+                                "Is this a good THREAD TITLE: a short, specific noun phrase naming the"
+                                " research subject (in the question's language; not a generic label like"
+                                " 'report' or 'research', not a question, no quotes or trailing"
+                                " punctuation)?"
+                            ),
+                        }
+                    },
+                    timeout=5.0,
+                )
+                answers = out.get("answers") if isinstance(out, dict) else None
+                verdict = answers.get("good_title") if isinstance(answers, dict) else None
+                usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+                if self.decision_usage is not None and usage.get("input_tokens"):
+                    self.decision_usage["calls"] += 1
+                    self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
+                if isinstance(verdict, dict) and float(verdict.get("noul") or 0.0) >= 0.6:
+                    return candidate
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("zjsearch_ai_search: title gate skipped: %r", exc)
+        elif candidate:
+            # the decision model is off: an existing writer/outline title
+            # stands (no gate, no spend)
+            return candidate
+        try:
+            from searx.zjsearch.ai.runs.search.gates import generate_title
+
+            return generate_title(
+                self.cfg, self.question, answer, self.lang, self.outline_title, self.gate_usage
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("zjsearch_ai_search: title generation failed: %r", exc)
+            return None
+
     def late_events(  # pylint: disable=too-many-branches
-        self, answer: str, awaiting: bool, related_seen: bool
+        self, answer: str, awaiting: bool, related_seen: bool, fence_title: str | None = None
     ) -> t.Iterator[dict[str, t.Any]]:
-        """The LATE events after the settle: the related fallback and the
-        memory extraction (both suppressed on an awaiting run), then the
-        trailing usage event with the absolute gates sum."""
+        """The LATE events after the settle: the TITLE pass (decision-gate
+        the writer's own fence title; regenerate only when it fails), the
+        related fallback and the memory extraction (related/memory
+        suppressed on an awaiting run), then the trailing usage event
+        with the absolute gates sum."""
         if awaiting or not answer:
             return
+        title = self._title_pass(answer, fence_title)
+        if title:
+            yield {"e": "title", "text": title}
         if not related_seen:
             # the post-settle fallback: the small completion generates the
             # follow-up suggestions the writer's fence skipped (it can
@@ -909,6 +970,7 @@ def _drive(  # pylint: disable=too-many-branches
     answer_parts: list[str] = []
     awaiting = False
     related_seen = False
+    fence_title: str | None = None
     try:
         for event in preamble or []:
             handle.publish(event)
@@ -920,9 +982,11 @@ def _drive(  # pylint: disable=too-many-branches
                 awaiting = True
             elif kind == "related":
                 related_seen = True
+            elif kind == "title":
+                fence_title = str(event.get("text") or "").strip()[:60] or None
             if kind == "settle":
                 handle.publish(tail.merged_settle(event))
-                for late in tail.late_events("".join(answer_parts).strip(), awaiting, related_seen):
+                for late in tail.late_events("".join(answer_parts).strip(), awaiting, related_seen, fence_title):
                     handle.publish(late)
                 return
             handle.publish(event)

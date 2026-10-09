@@ -90,12 +90,14 @@ export function ThreadRows({
   onOpen,
   onPin,
   onRemove,
+  onRename,
   threads,
 }: {
   threads: ThreadSummary[];
   onOpen: (thread: ThreadSummary) => void;
   onPin: (thread: ThreadSummary, on: boolean) => void;
   onRemove: (thread: ThreadSummary) => void;
+  onRename?: (thread: ThreadSummary, title: string) => void;
   /** panel context: the empty state's home pill must leave the drawer, an
       anchor would be captured into a fallback panel */
   onHome?: () => void;
@@ -103,6 +105,8 @@ export function ThreadRows({
   const t = useT();
   // the directory's 报告 filter: only threads carrying report-mode runs
   const [reportsOnly, setReportsOnly] = useState(false);
+  // the inline rename: one thread at a time, Enter saves, Escape cancels
+  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   const shown = reportsOnly ? threads.filter((thread) => thread.reports > 0) : threads;
   if (threads.length === 0) {
     return (
@@ -156,18 +160,56 @@ export function ThreadRows({
           key={thread.id}
         >
           <div className="flex items-start justify-between gap-3">
-            <button
-              className="min-w-0 flex-1 text-start text-base font-medium leading-snug text-ink transition-colors hover:text-accent"
-              onClick={() => onOpen(thread)}
-              title={thread.title}
-              type="button"
-            >
-              <span className="line-clamp-2">
-                {thread.pinned ? <Star aria-hidden="true" className="me-1.5 inline size-3.5 text-accent" /> : null}
-                {thread.title || t("ai_search")}
-              </span>
-            </button>
-            <RowActions onPin={(on) => onPin(thread, on)} onRemove={() => onRemove(thread)} pinned={thread.pinned} />
+            {renaming?.id === thread.id ? (
+              <form
+                className="flex min-w-0 flex-1 items-center gap-1.5"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const draft = renaming.draft.trim();
+                  if (draft && onRename) {
+                    onRename(thread, draft);
+                  }
+                  setRenaming(null);
+                }}
+              >
+                <input
+                  autoFocus
+                  className="h-8 min-w-0 flex-1 rounded-lg border border-accent-strong bg-surface px-2 text-[13px] text-ink outline-none"
+                  onChange={(event) => {
+                    setRenaming({ id: thread.id, draft: event.target.value });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setRenaming(null);
+                    }
+                  }}
+                  value={renaming.draft}
+                />
+                <button className="text-xs text-accent" type="submit">
+                  {t("close")}
+                </button>
+              </form>
+            ) : (
+              <>
+                <button
+                  className="min-w-0 flex-1 text-start text-base font-medium leading-snug text-ink transition-colors hover:text-accent"
+                  onClick={() => onOpen(thread)}
+                  title={thread.title}
+                  type="button"
+                >
+                  <span className="line-clamp-2">
+                    {thread.pinned ? <Star aria-hidden="true" className="me-1.5 inline size-3.5 text-accent" /> : null}
+                    {thread.title || t("ai_search")}
+                  </span>
+                </button>
+                <RowActions
+                  onPin={(on) => onPin(thread, on)}
+                  onRemove={() => onRemove(thread)}
+                  onRename={onRename ? () => setRenaming({ id: thread.id, draft: thread.title || "" }) : undefined}
+                  pinned={thread.pinned}
+                />
+              </>
+            )}
           </div>
           {thread.preview ? (
             <p className="line-clamp-2 text-[13px] leading-relaxed text-ink-3" dir="auto">
@@ -199,11 +241,13 @@ export function ThreadRows({
 function RowActions({
   onPin,
   onRemove,
+  onRename,
   pinned,
   reveal = true,
 }: {
   onPin?: (on: boolean) => void;
   onRemove: () => void;
+  onRename?: () => void;
   pinned?: boolean;
   reveal?: boolean;
 }) {
@@ -212,6 +256,17 @@ function RowActions({
     <div
       className={`flex shrink-0 items-center gap-0.5 ${reveal ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100" : ""}`}
     >
+      {onRename ? (
+        <button
+          aria-label={t("knowledge_rename")}
+          className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          onClick={onRename}
+          title={t("knowledge_rename")}
+          type="button"
+        >
+          <Pencil aria-hidden="true" className="size-3.5" />
+        </button>
+      ) : null}
       {onPin ? (
         <button
           aria-label={t(pinned ? "knowledge_menu_unpin" : "knowledge_menu_pin")}

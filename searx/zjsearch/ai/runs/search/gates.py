@@ -202,6 +202,46 @@ def clarify_gate(
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
 
 
+def generate_title(
+    cfg: dict[str, t.Any],
+    question: str,
+    answer: str,
+    lang: str,
+    outline_title: str | None = None,
+    usage_out: UsageOut = None,
+) -> str | None:
+    """The settle-tail's TITLE generation (the fallback when the writer's
+    own fence title is missing or failed the decision gate): one small
+    completion returns a short noun phrase -- ``None`` on any failure
+    (the client keeps its mechanical derive)."""
+    hint = f"\nThe report document is titled: {outline_title} (stay consistent with it)." if outline_title else ""
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Name a research thread. Output ONLY a JSON object, no prose,"
+                " no markdown, no code fences:"
+                ' {"title": "<title>"} -- ONE short noun phrase (8-20'
+                " characters) in the question's language, specific to the"
+                " subject: not generic (\"研究报告\"/\"调研\"), not a question,"
+                " no quotes, no trailing punctuation."
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Question: {question}\n\nAnswer head:\n{answer[:800]}{hint}\n\nLanguage: {lang}",
+        },
+    ]
+    try:
+        value, usage = jsongate.json_completion(cfg, messages, "thread_title", {"type": "object"})
+    except Exception:  # pylint: disable=broad-except
+        return None
+    if usage_out is not None and usage:
+        usage_out.append(usage)
+    title = str((value or {}).get("title") or "").strip().strip('"“”')
+    return title[:40] or None
+
+
 def related_questions(
     cfg: dict[str, t.Any], question: str, answer: str, lang: str, usage_out: UsageOut = None
 ) -> list[str]:

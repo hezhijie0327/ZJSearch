@@ -1130,6 +1130,7 @@ const STEER_STAGE: DebugScenario = {
     },
     { e: "close", id: 3 },
     { e: "related", items: ["比亚迪 2025 出口数据怎么样?", "吉利银河 vs 比亚迪 单车型对比?"] },
+    { e: "title", text: "比亚迪 2025 出口数据" },
     {
       e: "settle",
       status: "done",

@@ -38,6 +38,10 @@ export interface RunSnapshot {
   model?: string | null;
   usage?: unknown;
   halted?: unknown;
+  /** the WRITER's own thread title (the related fence's title field or
+      the settle-tail's generated fallback) -- thread_head adopts it
+      before the mechanical derive, never over a manual rename */
+  title?: string;
   sources?: Array<{
     n?: number;
     url?: string;
@@ -82,6 +86,26 @@ export interface RunSnapshot {
       text?: string;
     }>;
   }>;
+}
+
+/** The thread's AUTO title (every mode -- the manual-rename lock beats
+    it): a REPORT run contributes its outline title verbatim; the other
+    two modes contribute the question's first clause, capped -- tidy, not
+    clever (an LLM title would need a new browser proxy route; the
+    mechanical derive is free and faithful). */
+function autoTitle(run: RunSnapshot): string | null {
+  const report = (run as { outline?: { title?: string } }).outline?.title?.trim();
+  if (report) {
+    return report.slice(0, 160);
+  }
+  const clause = String(run.q ?? "")
+    .split(/[。？！?!;；,，]/)
+    .find((part) => part.trim().length >= 6);
+  const base = (clause ?? String(run.q ?? "")).trim();
+  if (!base) {
+    return null;
+  }
+  return base.length > 24 ? `${base.slice(0, 24)}…` : base;
 }
 
 /** The mechanical tag layer: query tokens + the model's own task titles
@@ -347,8 +371,10 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
            (SELECT count(*) FROM knowledge kp WHERE kp.thread_id = $1 AND kp.kind = 'run' AND kp.meta->'report' IS NOT NULL),
            $4, 0)
          ON CONFLICT (thread_id) DO UPDATE SET preview = EXCLUDED.preview,
-           runs = EXCLUDED.runs, sources = EXCLUDED.sources, updated = EXCLUDED.updated`,
-        [threadId, run.q.slice(0, 300), String(run.answer ?? "").slice(0, 400), now],
+           runs = EXCLUDED.runs, sources = EXCLUDED.sources, reports = EXCLUDED.reports, updated = EXCLUDED.updated,
+           title = CASE WHEN thread_head.title_manual = 1 THEN thread_head.title
+                        ELSE COALESCE($5, $6, thread_head.title) END`,
+        [threadId, run.q.slice(0, 300), String(run.answer ?? "").slice(0, 400), now, run.title ?? null, autoTitle(run)],
         tx,
       );
       // the per-run rollup: the directory/inspector/stats reads that used
@@ -735,6 +761,17 @@ export function toggleThreadPin(threadId: string, on: boolean): void {
     await pgQuery("UPDATE knowledge SET pinned = $1 WHERE thread_id = $2 AND kind = 'run'", [on ? 1 : 0, threadId]);
     await pgQuery("UPDATE thread_head SET pinned = $1 WHERE thread_id = $2", [on ? 1 : 0, threadId]);
   });
+}
+
+/** The user's manual rename: the title lands with the title_manual lock,
+    so every later settle's auto title (writer fence, outline title,
+    mechanical derive) leaves it alone. */
+export async function renameThread(threadId: string, title: string): Promise<void> {
+  const clean = title.trim().slice(0, 160);
+  if (!clean) {
+    return;
+  }
+  await pgQuery("UPDATE thread_head SET title = $1, title_manual = 1 WHERE thread_id = $2", [clean, threadId]);
 }
 
 /** Pin/unpin ANY projection row (the row's own id -- threads pin as a

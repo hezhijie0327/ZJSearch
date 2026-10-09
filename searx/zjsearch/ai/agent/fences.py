@@ -34,6 +34,17 @@ def parse_fence_json(text: str) -> t.Any:
         return None
 
 
+def parse_related_title(text: str) -> str | None:
+    """The ```related fence body's ``title`` field -- the WRITER's own
+    thread title (the settle's decision gate judges it; a bad or missing
+    one falls to the generation pass)."""
+    value = parse_fence_json(text)
+    if not isinstance(value, dict):
+        return None
+    title = str(value.get("title") or "").strip().strip("\"\u201c\u201d'")
+    return title[:60] or None
+
+
 def parse_related_questions(text: str) -> list[str]:
     """The ```related fence body -> up to three clean question strings."""
     value = parse_fence_json(text)

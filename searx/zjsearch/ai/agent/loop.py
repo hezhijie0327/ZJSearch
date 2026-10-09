@@ -647,6 +647,9 @@ def _fence(
         found = fences.parse_related_questions(body)
         if found:
             yield {"e": "related", "items": found[:3]}
+        writer_title = fences.parse_related_title(body)
+        if writer_title:
+            yield {"e": "title", "text": writer_title}
         return
     if gallery_validator is None:
         return

@@ -323,6 +323,7 @@ export const EN = {
   ai_deep_report: "Generate deep report",
   report_template: "Report template",
   report_template_free: "Smart outline",
+  knowledge_rename: "Rename",
   knowledge_filter_reports: "Reports",
   template_manager: "Manage templates",
   template_new: "New template",

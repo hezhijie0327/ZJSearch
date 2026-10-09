@@ -96,6 +96,7 @@ EVENTS: frozenset[str] = frozenset(
         "section",
         "browser",
         "related",
+        "title",
         "memory",
         "tags",
         "usage",
@@ -103,7 +104,7 @@ EVENTS: frozenset[str] = frozenset(
     }
 )
 
-LATE_EVENTS: frozenset[str] = frozenset({"related", "memory", "tags", "usage"})
+LATE_EVENTS: frozenset[str] = frozenset({"related", "title", "memory", "tags", "usage"})
 """The only events allowed AFTER ``settle`` (the post-settle related
 fallback completion and the memory/tag extraction trail behind by
 design -- the follow-up box unlocks on settle, not on them)."""

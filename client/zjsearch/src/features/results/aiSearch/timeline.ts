@@ -268,6 +268,10 @@ export interface AiSearchRun {
   /** the server's halt explanation carried on settle (stall verdict,
       truncation, transport cut) -- the meta row renders it */
   halt?: string | null;
+  /** the WRITER's own thread title (the related fence's title field, or
+      the settle-tail's generated fallback) -- the thread_head projection
+      adopts it unless the user renamed manually */
+  title?: string;
   /** the extractor's concept tags (the LATE `tags` wire event) -- the
       settle writes them into the knowledge projections */
   tags?: string[];
@@ -389,7 +393,7 @@ export interface Core {
 /** Entries as step indices: think/say/calls events route by entry id. */
 export type EntryIndex = { think?: number; intent?: number; calls?: number };
 
-export const LATE_KINDS = new Set(["related", "memory", "tags", "usage"]);
+export const LATE_KINDS = new Set(["related", "title", "memory", "tags", "usage"]);
 /** The wire's LATE_EVENTS: they trail the settle on purpose and must
     fold in the settled phases too (the live-fold guard above). */
 
@@ -1003,6 +1007,9 @@ export function applyEvent(
       runs[lastIdx] = { ...run, galleries: [...run.galleries, fresh] };
       return { ...core, runs };
     }
+    case "title":
+      runs[lastIdx] = { ...run, title: String(event.text ?? "").slice(0, 60) };
+      return { ...core, runs };
     case "related":
       runs[lastIdx] = { ...run, related: ((event.items as string[]) ?? []).map(String).slice(0, 3) };
       return { ...core, runs };
