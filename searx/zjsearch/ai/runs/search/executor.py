@@ -41,4 +41,8 @@ class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
         child.reg = parent.reg
         if session_id:
             child.browser_session_id = session_id
+        # the child was constructed on the DRIVER thread (no request
+        # context there): inherit the parent's captured context TEMPLATE
+        # so the child's searches can clone contexts per job
+        child._search_ctx = parent._search_ctx  # pylint: disable=protected-access
         return child
