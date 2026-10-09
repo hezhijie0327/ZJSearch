@@ -122,9 +122,11 @@ export function IndexPage({ data }: { data: IndexData }) {
   const t = useT();
 
   // the hero's greeting: ONE line, by time of day (computed at mount --
-  // the hero is a transient landing, nobody needs it to roll over live)
+  // the hero is a transient landing, nobody needs it to roll over live).
+  // Five buckets on the Chinese convention: 凌晨/早上/中午/下午/晚上 --
+  // 中午 (11-13) and 下午 (13-18) are DIFFERENT greetings in zh.
   const hour = new Date().getHours();
-  const period = hour < 5 ? "night" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const period = hour < 5 ? "night" : hour < 11 ? "morning" : hour < 13 ? "noon" : hour < 18 ? "afternoon" : "evening";
   const greeting = t(`hero_greeting_${aiMode ? "ask" : "search"}_${period}` as StringKey);
 
   // "?" opens the shortcuts help on the home page too; the result-navigation
