@@ -828,17 +828,15 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
 /** The rail's 输出结构 control (report runs, research phase only): the
     run-time template pick rides run/control to the write boundary -- the
     synthesizer re-mints the outline from it before the first section
-    streams.  Presets AND the user's own PGlite templates.  The body is
-    the PICKED template's own section list (the rail's row language:
-    numbered rows, 可选 markers on droppable sections, the section count
-    in the header) -- the structure preview IS the information; the old
-    static instruction line told the user nothing their eyes could not
-    get elsewhere. */
+    streams.  Presets AND the user's own PGlite templates; the free
+    智能大纲 option leads and is the DEFAULT (no pick = the writer designs
+    the outline).  A picked template's own sections preview below in the
+    task card's row anatomy (the fixed index column, 13px ink title, 可选
+    at the row end) -- the structure IS the information, no prose. */
 function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) => Promise<boolean> }) {
   const t = useT();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [current, setCurrent] = useState("");
-  const [settleNote, setSettleNote] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void listTemplates().then((rows) => {
@@ -851,6 +849,7 @@ function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) =>
     };
   }, []);
   const options = [
+    { value: "", label: t("report_template_free") },
     ...REPORT_TEMPLATES.map((template) => ({ value: template.id, label: template.name })),
     ...templates.map((template) => ({ value: template.id, label: template.name })),
   ];
@@ -866,36 +865,29 @@ function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) =>
         <Dropdown
           ariaLabel={t("ai_output_structure")}
           onChange={(value) => {
+            setCurrent(value);
             const template = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === value);
             if (template) {
-              setCurrent(value);
-              void onPick(template).then((ok) => {
-                if (ok) {
-                  setSettleNote(true);
-                }
-              });
+              void onPick(template);
             }
           }}
           options={options}
           value={current}
         />
         {picked ? (
-          <ol className="mt-2.5 space-y-1.5">
+          <ol className="mt-3 space-y-1.5">
             {picked.sections.map((section, index) => (
-              <li className="flex items-baseline gap-2 px-1 text-[13px] leading-snug" key={`${index}-${section.title}`}>
-                <span className="font-mono text-[11px] tabular-nums text-ink-3">{index + 1}</span>
-                <span className="min-w-0 flex-1 text-ink-2">{section.title}</span>
+              <li className="flex items-start gap-2 text-[13px]" key={`${index}-${section.title}`}>
+                <span className="w-3 shrink-0 pt-0.5 text-center font-mono text-[11px] tabular-nums text-ink-3">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1 leading-relaxed text-ink">{section.title}</span>
                 {section.optional ? (
                   <span className="shrink-0 text-[11px] text-ink-3">{t("template_optional_short")}</span>
                 ) : null}
               </li>
             ))}
           </ol>
-        ) : (
-          <p className="mt-2 px-1 text-[11px] leading-relaxed text-ink-3">{t("ai_output_structure_free")}</p>
-        )}
-        {settleNote ? (
-          <p className="mt-2 px-1 text-[11px] leading-relaxed text-ink-3">{t("ai_output_structure_set")}</p>
         ) : null}
       </div>
     </section>
