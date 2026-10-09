@@ -97,6 +97,14 @@ def make_synthesizer(
     skeleton arrives as the first ``outline`` snapshot; the client's TOC
     follows automatically)."""
     lang_directive = spine.language_directive(lang)
+    # the run's own two languages (the client renders the catalog tag
+    # verbatim into TOC entries): the synthesized sections' identity
+    # text follows the run language, never a hardcoded default.  THIS
+    # scope, not the synthesizer's -- the sibling `stream` closure below
+    # yields it (a synthesizer-local was a NameError on the first real
+    # report's first section)
+    zh = lang.strip().lower().startswith("zh")
+    gap_text = "本节生成失败" if zh else "Section generation failed upstream"
 
     def stream(messages: list[dict[str, t.Any]], section_id: str, tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
         yield from _stream_section_once(cfg, messages, section_id, tally, gap_text)
@@ -112,11 +120,6 @@ def make_synthesizer(
             logger.info("zjsearch report: outline re-minted from a run-time template pick")
             outline = rebuilt
         started = time.monotonic()
-        # the run's own two languages (the client renders the catalog tag
-        # verbatim into TOC entries): the synthesized sections' identity
-        # text follows the run language, never a hardcoded default
-        zh = lang.strip().lower().startswith("zh")
-        gap_text = "本节生成失败" if zh else "Section generation failed upstream"
         summary_meta = (
             ("执行摘要", "全文最重要的判断与依据")
             if zh
