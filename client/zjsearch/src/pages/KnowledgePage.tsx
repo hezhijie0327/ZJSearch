@@ -4,6 +4,7 @@ import {
   Database,
   FileText,
   Globe,
+  LayoutTemplate,
   LibraryBig,
   MemoryStick,
   MessageCircleQuestion,
@@ -51,6 +52,7 @@ import { useRouter } from "@/lib/router.tsx";
 import { SEGMENT, SEGMENT_ACTIVE, SEGMENT_IDLE } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { KnowledgePageData } from "@/lib/types.ts";
+import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
 
 /**
  * The knowledge base (`/zjsearch/knowledge`): the browser-local research
@@ -128,7 +130,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // ── view tab: the overview archive (the classic page's AI 概览) leads,
   // then the research threads, sources, documents, memories; the graph is
   // a VIEW (global, memory rows carry no tags) and admin closes the bar ──
-  const [kind, setKind] = useState<KindFilter | "graph" | "admin">("answer");
+  const [kind, setKind] = useState<KindFilter | "graph" | "templates" | "admin">("answer");
   // the one-shot listings (feed / kind directories) are not live: a bump
   // re-fetches them after a pin or a delete lands
   const [listingBump, setListingBump] = useState(0);
@@ -367,14 +369,15 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // the search box serves the five content kinds; the time/pinned filter
   // row only the four list kinds (memories are a timeline -- they neither
   // pin nor take a time filter, the timeline groups by day itself)
-  const contentTab = kind !== "graph" && kind !== "admin";
+  const contentTab = kind !== "graph" && kind !== "templates" && kind !== "admin";
   const listTab = kind === "run" || kind === "answer" || kind === "source" || kind === "document";
-  const viewTabs: Array<{ id: KindFilter | "graph" | "admin"; label: string; icon: ReactNode }> = [
+  const viewTabs: Array<{ id: KindFilter | "graph" | "templates" | "admin"; label: string; icon: ReactNode }> = [
     { id: "answer", label: t("knowledge_kind_answer"), icon: <Sparkles className="size-3.5" /> },
     { id: "run", label: t("knowledge_kind_run"), icon: <MessageCircleQuestion className="size-3.5" /> },
     { id: "source", label: t("knowledge_kind_source"), icon: <Globe className="size-3.5" /> },
     { id: "document", label: t("knowledge_kind_document"), icon: <FileText className="size-3.5" /> },
     { id: "memory", label: t("knowledge_kind_memory"), icon: <MemoryStick className="size-3.5" /> },
+    { id: "templates", label: t("knowledge_tab_templates"), icon: <LayoutTemplate className="size-3.5" /> },
     { id: "graph", label: t("knowledge_graph"), icon: <Network className="size-3.5" /> },
     { id: "admin", label: t("knowledge_admin"), icon: <Database className="size-3.5" /> },
   ];
@@ -491,6 +494,8 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             <div aria-labelledby={`knowledge-tab-${kind}`} className="mt-5" id="knowledge-panel" role="tabpanel">
               {kind === "admin" ? (
                 <AdminView onReset={() => setConfirming("reset")} stats={stats} />
+              ) : kind === "templates" ? (
+                <TemplateManagerPanel />
               ) : kind === "memory" ? (
                 <MemorySection
                   memories={memoryList}

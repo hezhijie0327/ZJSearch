@@ -119,11 +119,6 @@ const industry: ReportTemplate = {
     the presets. */
 export const REPORT_TEMPLATES: readonly ReportTemplate[] = [intel, dd, competitor, industry];
 
-/** Parse the ?template= URL param: an unknown id means the free outline. */
-export function parseTemplateId(raw: string | null | undefined): string | null {
-  return REPORT_TEMPLATES.some((template) => template.id === raw) ? (raw as string) : null;
-}
-
 /** Validate an arbitrary parsed JSON against the template shape: 2-10
     titled sections; returns the normalized template (a fresh user- id)
     or null.  The structured editor and a pasted JSON both land here. */

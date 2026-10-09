@@ -1649,14 +1649,14 @@ redundant, both fused into ONE post-run extractor:
   `outline`/`clarify_gate` labeled client-side).
 - **REPORT TEMPLATES**: presets live CLIENT-side
   (`aiSearch/reportTemplates.ts` -- 商业情报/尽调/竞品对比/行业综述);
-  the picked template rides `?template=` and the request BODY as plain
-  JSON -- the server stays STATELESS (`parse_template` validates,
+  the server stays STATELESS (`parse_template` validates,
   `build_outline_from_template` adapts: the structure is binding, titles
   re-written with the question's real entities in the report language,
-  `optional` sections droppable).  The hero grows a template picker
-  beside the depth dropdown in report mode.  (User-defined templates:
-  any template JSON rides the same wire; the PGlite template kind +
-  editor UI are follow-ups, as are the KB's report badge/tab.)
+  `optional` sections droppable).  THE PICK IS RUN-TIME ONLY: the start
+  request carries no template and the hero carries NO picker (the old
+  `?template=` URL param is gone) -- the choice lives in the run rail's
+  输出结构 card after the research starts (see the vNext finishers
+  below).
 - **PGlite**: `RunSnapshot.outline` settles into `run.meta.report`
   (title/subtitle/section statuses) -- the knowledge base knows the
   document's shape without replaying the event log.
@@ -1680,14 +1680,19 @@ redundant, both fused into ONE post-run extractor:
 
 - **USER-DEFINED TEMPLATES** live as PGlite `kind='template'` rows
   (lib/kb/templates.ts -- the same store as the research memory, the
-  owner's call over a localStorage sketch).  The hero's 管理模板 dialog
-  is a STRUCTURED editor (name + section rows: title / brief /
-  key-questions / optional, add+remove, 2-10) -- new, edit and delete;
-  user templates ride the same `?template=` id and request-body path as
-  presets and hit the identical server adaptation gate.
+  owner's call over a localStorage sketch).  MANAGEMENT lives in the
+  knowledge drawer's 模板 tab (`TemplateManagerPanel` -- a STRUCTURED
+  editor: name + section rows: title / brief / key-questions / optional,
+  add+remove, 2-10; new, edit and delete) -- library work stays in the
+  library, NOT a hero dialog.  A user template and a preset reach the
+  identical server adaptation gate through the same rail pick.
 - **THE RAIL'S 输出结构 CONTROL**: a report run's right rail carries an
   output-structure picker while the research phase streams (deep mode,
-  before `run.outline` exists).  Picking POSTs `run/control
+  before `run.outline` exists) -- THE only template surface (the hero
+  has none).  The card is the rail's row language: the PICKED template's
+  own section list as numbered rows (可选 markers on droppable sections,
+  the section count in the header; free outline = one muted state line
+  `ai_output_structure_free`).  Picking POSTs `run/control
   {action:"template"}`; ControlBox holds ONE pending template and the
   SYNTHESIZER consumes it at the write boundary -- `make_synthesizer`'s
   `take_template` re-mints the outline via `build_outline_from_template`

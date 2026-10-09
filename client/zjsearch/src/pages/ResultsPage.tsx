@@ -24,7 +24,6 @@ import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSecti
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
-import { parseTemplateId, REPORT_TEMPLATES } from "@/features/results/aiSearch/reportTemplates.ts";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useAiSteer } from "@/features/results/aiSearch/useAiSteer.ts";
@@ -388,9 +387,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     if (handoff) {
       window.sessionStorage.removeItem("zjs-attach-handoff");
     }
-    const templateParam = parseTemplateId(new URLSearchParams(window.location.search).get("template"));
-    const template = templateParam ? REPORT_TEMPLATES.find((item) => item.id === templateParam) : undefined;
-    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language, handoffAttachments, template);
+    // the template PICK is the run rail's 输出结构 control -- the start
+    // request carries no template (the run-time pick rides run/control)
+    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language, handoffAttachments);
   });
   // AI Overview auto-open (audit/QA deep link): `&ai_overview=1` opens the
   // answer card WITHOUT a click once the results settled -- the Lighthouse

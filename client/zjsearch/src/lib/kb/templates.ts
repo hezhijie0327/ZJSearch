@@ -47,29 +47,3 @@ export async function saveTemplate(template: ReportTemplate): Promise<void> {
 export async function deleteTemplate(id: string): Promise<void> {
   await pgQuery("DELETE FROM knowledge WHERE id = $1 AND kind = 'template'", [id]);
 }
-
-/** Resolve a picker id (preset OR user row id) to the template object --
-    async because user templates live in PGlite. */
-export async function findTemplateAsync(id: string | null | undefined): Promise<ReportTemplate | undefined> {
-  if (!id) {
-    return undefined;
-  }
-  const { REPORT_TEMPLATES } = await import("@/features/results/aiSearch/reportTemplates.ts");
-  const preset = REPORT_TEMPLATES.find((template) => template.id === id);
-  if (preset) {
-    return preset;
-  }
-  const rows = await pgQuery<TemplateRow>("SELECT id, title, body FROM knowledge WHERE id = $1 AND kind = 'template'", [
-    id,
-  ]);
-  const row = (rows ?? [])[0];
-  if (!row) {
-    return undefined;
-  }
-  try {
-    const sections = JSON.parse(row.body) as ReportTemplateSection[];
-    return Array.isArray(sections) && sections.length >= 2 ? { id: row.id, name: row.title, sections } : undefined;
-  } catch {
-    return undefined;
-  }
-}
