@@ -1617,6 +1617,45 @@ redundant, both fused into ONE post-run extractor:
   follows the run language (the summary section title, the section-gap
   note) -- no hardcoded Chinese reaches en users.
 
+## vNext batch 2/3 (2026-10-09): transparency, templates, fusion
+
+- **WRITE-PHASE VISIBILITY**: the writer's reasoning surfaces as a live
+  ThinkScroll strip in the answer column (single-write streaming; the
+  last think step while `stage === "write"`) -- the folded research box
+  no longer swallows it; after the settle it lives on in the research
+  record.  PRE-FLIGHT TRANSPARENCY: clarify pre-screen + depth probe +
+  outline gate ride `_drive`'s preamble as one `decisions` event -- the
+  决策结果 card opens before the loop's first event (purposes
+  `outline`/`clarify_gate` labeled client-side).
+- **REPORT TEMPLATES**: presets live CLIENT-side
+  (`aiSearch/reportTemplates.ts` -- 商业情报/尽调/竞品对比/行业综述);
+  the picked template rides `?template=` and the request BODY as plain
+  JSON -- the server stays STATELESS (`parse_template` validates,
+  `build_outline_from_template` adapts: the structure is binding, titles
+  re-written with the question's real entities in the report language,
+  `optional` sections droppable).  The hero grows a template picker
+  beside the depth dropdown in report mode.  (User-defined templates:
+  any template JSON rides the same wire; the PGlite template kind +
+  editor UI are follow-ups, as are the KB's report badge/tab.)
+- **PGlite**: `RunSnapshot.outline` settles into `run.meta.report`
+  (title/subtitle/section statuses) -- the knowledge base knows the
+  document's shape without replaying the event log.
+- **OVERVIEW → DEEP REPORT**: the AI Overview card's done-state cluster
+  carries a 生成深度报告 action (SPA navigate to `ai=1&mode=report` with
+  the page query).  DocumentView's TOC scroll-spies (IntersectionObserver,
+  upper-third band).
+- **CROSS-SECTION DEDUP**: `corpus.pack(avoid=...)` demotes chunks whose
+  vectors clear the shared 0.92 repeat floor against already-written
+  section heads (one batch embed per section, fail-open).  The citation
+  gate samples 3..6 claims by section length; the pre-write evidence
+  check's face scales `max(8, min(24, sources // 5))`.
+- **SEARCH QUALITY LOOP**: the ranking cascade reports `no_signal` /
+  head duplicate ratio; a search that matched nothing textually or came
+  back >60% near-duplicates appends a REPHRASE-ADVICE note to its own
+  feed.  `RERANK_HEAD` is 30 (the whole engine fan-out rides the
+  cross-encoder); searx's `result.score` joins the BM25 fusion as a
+  third RRF leg (0.4 -- authority prior, tie-break only, fail-open).
+
 ## Custom plugin behaviour (server side, keep with the theme)
 
 - `unit_converter` / `currency_convert`: value-less queries ("kg to lb",
