@@ -129,7 +129,7 @@ export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: 
       <div
         aria-label={t("ai_browser_live")}
         aria-modal
-        className="relative z-10 mx-auto flex h-full w-full max-w-5xl animate-fade-up flex-col rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4"
+        className="relative z-10 mx-auto flex h-auto w-full max-w-5xl animate-fade-up flex-col rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4 landscape:h-full"
         onKeyDown={onDialogKeyDown}
         ref={dialogRef}
         role="dialog"
@@ -161,7 +161,7 @@ export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: 
         </div>
         {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the takeover stage -- clicks forward as viewport coordinates; keyboard users type via the bar or direct typing */}
         <div
-          className="flex min-h-0 flex-1 cursor-crosshair items-center justify-center overflow-hidden rounded-xl border border-line bg-ink/5"
+          className="flex min-h-0 cursor-crosshair items-start justify-center overflow-hidden rounded-xl border border-line bg-ink/5 landscape:flex-1 landscape:items-center"
           onClick={(event) => {
             const target = event.currentTarget;
             if (event.target === target) {
@@ -177,7 +177,7 @@ export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: 
               coordinate; keyboard users use the bar below */}
           <img
             alt={view.title || view.url}
-            className="max-h-full w-auto max-w-full cursor-crosshair"
+            className="w-full cursor-crosshair landscape:h-auto landscape:max-h-full landscape:w-auto"
             onClick={(event) => {
               event.stopPropagation();
               const rect = event.currentTarget.getBoundingClientRect();
