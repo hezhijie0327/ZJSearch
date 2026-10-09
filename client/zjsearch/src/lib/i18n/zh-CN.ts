@@ -324,6 +324,8 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_rename: "重命名",
   knowledge_filter_reports: "报告",
   knowledge_tab_templates: "模板",
+  template_library: "模板库",
+  knowledge_tab_sections: "节",
   template_new: "新建模板",
   template_edit: "编辑",
   template_name_ph: "模板名称",

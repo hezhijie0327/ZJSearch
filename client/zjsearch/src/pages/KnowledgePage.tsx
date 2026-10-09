@@ -377,8 +377,8 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     { id: "source", label: t("knowledge_kind_source"), icon: <Globe className="size-3.5" /> },
     { id: "document", label: t("knowledge_kind_document"), icon: <FileText className="size-3.5" /> },
     { id: "memory", label: t("knowledge_kind_memory"), icon: <MemoryStick className="size-3.5" /> },
-    { id: "templates", label: t("knowledge_tab_templates"), icon: <LayoutTemplate className="size-3.5" /> },
     { id: "graph", label: t("knowledge_graph"), icon: <Network className="size-3.5" /> },
+    { id: "templates", label: t("knowledge_tab_templates"), icon: <LayoutTemplate className="size-3.5" /> },
     { id: "admin", label: t("knowledge_admin"), icon: <Database className="size-3.5" /> },
   ];
   const graphOpen = kind === "graph";

@@ -323,6 +323,8 @@ export const EN = {
   knowledge_rename: "Rename",
   knowledge_filter_reports: "Reports",
   knowledge_tab_templates: "Templates",
+  template_library: "Template library",
+  knowledge_tab_sections: "sections",
   template_new: "New template",
   template_edit: "Edit",
   template_name_ph: "Template name",
