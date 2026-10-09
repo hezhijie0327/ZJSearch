@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Card, SectionLabel } from "@/components/SettingParts.tsx";
+import { Card } from "@/components/SettingParts.tsx";
 import { type ReportTemplate, validateTemplate } from "@/features/results/aiSearch/reportTemplates.ts";
 import { useT } from "@/lib/i18n.ts";
 import { deleteTemplate, listTemplates, saveTemplate } from "@/lib/kb/templates.ts";
@@ -21,7 +21,7 @@ interface EditingTemplate {
     and a preset reach the server through the same adaptation gate.  (The
     PICK itself is the run rail's 输出结构 card -- management is library
     work, the pick is a run-time decision.) */
-export function TemplateManagerPanel({ onChanged }: { onChanged?: () => void }) {
+export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => void; search?: string }) {
   const t = useT();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,56 +202,76 @@ export function TemplateManagerPanel({ onChanged }: { onChanged?: () => void }) 
       </div>
     );
   }
+  const needle = (search ?? "").trim().toLowerCase();
+  const shown = needle ? templates.filter((template) => template.name.toLowerCase().includes(needle)) : templates;
   return (
     <div className="space-y-6 animate-fade-in">
       <Card>
-        <SectionLabel label={t("template_library")} />
-        <button
-          className="flex w-full items-center gap-1.5 px-5 py-3 text-[13px] font-medium text-accent transition-colors hover:bg-surface-2/40 sm:px-6"
-          onClick={startNew}
-          type="button"
-        >
-          <Plus aria-hidden="true" className="size-3.5" />
-          {t("template_new")}
-        </button>
+        {/* the band carries the NEW action (a whole row for one button read
+            as waste): label left, count + new right */}
+        <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
+          <p className="text-xs font-medium text-ink-3">{t("template_library")}</p>
+          <span className="text-xs tabular-nums text-ink-3">{shown.length}</span>
+          <button
+            className="ms-auto flex items-center gap-1 text-xs font-medium text-accent transition-colors hover:text-accent-hover"
+            onClick={startNew}
+            type="button"
+          >
+            <Plus aria-hidden="true" className="size-3.5" />
+            {t("template_new")}
+          </button>
+        </div>
         {loading ? (
-          <p className="flex items-center gap-2 px-5 py-3 text-[13px] text-ink-3 sm:px-6">
+          <p className="flex items-center gap-2 px-5 py-4 text-[13px] text-ink-3 sm:px-6">
             <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
           </p>
-        ) : templates.length === 0 ? (
-          <p className="px-5 py-3 text-[13px] text-ink-3 sm:px-6">{t("template_none")}</p>
+        ) : shown.length === 0 ? (
+          <p className="px-5 py-4 text-[13px] text-ink-3 sm:px-6">
+            {templates.length === 0 ? t("template_none") : t("no_results_found")}
+          </p>
         ) : (
-          templates.map((template) => (
-            <div
-              className="flex items-center gap-2 px-5 py-3 transition-colors hover:bg-surface-2/40 sm:px-6"
-              key={template.id}
-            >
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{template.name}</span>
-              <span className="shrink-0 text-xs text-ink-3">
-                {template.sections.length} {t("knowledge_tab_sections")}
-              </span>
-              <button
-                className="text-xs text-accent underline-offset-2 hover:underline"
-                onClick={() => {
-                  startEdit(template);
-                }}
-                type="button"
+          <div className="grid gap-2.5 p-3 sm:grid-cols-2">
+            {shown.map((template) => (
+              <div
+                className="group relative flex flex-col gap-1.5 rounded-xl border border-line bg-surface p-3.5 transition-colors hover:border-accent/40"
+                key={template.id}
               >
-                {t("template_edit")}
-              </button>
-              <button
-                aria-label={t("knowledge_menu_delete")}
-                className="text-xs text-ink-3 transition-colors hover:text-danger"
-                onClick={() => {
-                  remove(template.id);
-                }}
-                title={t("knowledge_menu_delete")}
-                type="button"
-              >
-                <Trash2 aria-hidden="true" className="size-3.5" />
-              </button>
-            </div>
-          ))
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 truncate text-[13px] font-medium text-ink">{template.name}</span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
+                    {template.sections.length} {t("knowledge_tab_sections")}
+                  </span>
+                </div>
+                <p className="line-clamp-2 text-[11px] leading-relaxed text-ink-3">
+                  {template.sections.map((section) => section.title).join(" / ")}
+                </p>
+                <div className="mt-0.5 flex items-center justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    aria-label={t("template_edit")}
+                    className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                    onClick={() => {
+                      startEdit(template);
+                    }}
+                    title={t("template_edit")}
+                    type="button"
+                  >
+                    <Pencil aria-hidden="true" className="size-3.5" />
+                  </button>
+                  <button
+                    aria-label={t("knowledge_menu_delete")}
+                    className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+                    onClick={() => {
+                      remove(template.id);
+                    }}
+                    title={t("knowledge_menu_delete")}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
     </div>

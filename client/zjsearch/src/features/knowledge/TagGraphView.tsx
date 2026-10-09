@@ -499,7 +499,7 @@ export function TagGraphView({
         <Search aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
         <input
           aria-label={t("knowledge_graph_search")}
-          className="h-6 w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+          className="h-7 w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
             // Escape clears the box instead of closing the whole drawer

@@ -369,7 +369,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // the search box serves the five content kinds; the time/pinned filter
   // row only the four list kinds (memories are a timeline -- they neither
   // pin nor take a time filter, the timeline groups by day itself)
-  const contentTab = kind !== "graph" && kind !== "templates" && kind !== "admin";
+  const contentTab = kind !== "graph" && kind !== "admin";
   const listTab = kind === "run" || kind === "answer" || kind === "source" || kind === "document";
   const viewTabs: Array<{ id: KindFilter | "graph" | "templates" | "admin"; label: string; icon: ReactNode }> = [
     { id: "answer", label: t("knowledge_kind_answer"), icon: <Sparkles className="size-3.5" /> },
@@ -495,7 +495,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
               {kind === "admin" ? (
                 <AdminView onReset={() => setConfirming("reset")} stats={stats} />
               ) : kind === "templates" ? (
-                <TemplateManagerPanel />
+                <TemplateManagerPanel search={debounced} />
               ) : kind === "memory" ? (
                 <MemorySection
                   memories={memoryList}
