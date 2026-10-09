@@ -17,7 +17,7 @@ import {
 } from "@/features/results/aiSearch/timeline.ts";
 import { fetchEventStream, fetchJson } from "@/lib/http.ts";
 import { loadThreadAttachments, saveAttachments } from "@/lib/kb/attachments.ts";
-import { appendRunEvents, loadThreadEvents } from "@/lib/kb/events.ts";
+import { appendRunEvents, clearRunCtx, loadRunCtx, loadThreadEvents, saveRunCtx } from "@/lib/kb/events.ts";
 import { archiveDocument, loadMemories, saveMemory, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -95,8 +95,11 @@ export interface AiSearchState extends Core {
   setTemplate(template: ReportTemplate): Promise<boolean>;
   /** re-run the last run IN PLACE (the failed box's retry / regenerate) */
   retry(lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
-  /** continue an INTERRUPTED research as a new run in the same thread
-      (the failed box's 继续 -- the ledger travels, numbering continues) */
+  /** continue an INTERRUPTED research IN PLACE (the failed box's 继续):
+      the dead attempt's stored conversation replays as the request's
+      context -- same run, same timeline, numbering continues; a
+      checkpoint-less run falls back to a fresh run seeded with the
+      findings */
   continue(lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   /** restore a stored thread; false when the id is unknown */
   resume(threadId: string): Promise<boolean>;
@@ -117,6 +120,17 @@ function newThreadId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-4${Math.random().toString(16).slice(2, 11)}`;
+}
+
+/** The CONTINUE replay payload: the dead attempt's ctx checkpoints (its
+    exact conversation), its [n] sources (the server's registry reseeds so
+    repeat urls reuse their numbers), and the entry/round bases (the
+    resumed stream's timeline ids continue the stored ones). */
+interface ResumePayload {
+  messages: unknown[];
+  sources: Array<{ n: number; url: string; title: string }>;
+  entry_base: number;
+  round_base: number;
 }
 
 export function useAiSearch(capability: AiCapability | undefined): AiSearchState {
@@ -144,7 +158,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
 
   // the run's knowledge checkpoint: once the run is terminal its
   // projections land (idempotent per run id); DURING streaming the evt
-  // buffer flushes on its own debounce, nothing else needs doing
+  // buffer flushes on its own debounce, nothing else needs doing.  A
+  // COMPLETED run's resume checkpoint dies here (nothing can continue
+  // it); a failed one's stays -- the continue path's conversation.
   useEffect(() => {
     if ((core.phase !== "done" && core.phase !== "error") || !core.threadId) {
       return;
@@ -152,6 +168,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     const last = core.runs[core.runs.length - 1];
     if (!last) {
       return;
+    }
+    if (last.status === "done") {
+      void clearRunCtx(`${core.threadId}:${last.runNo}`).catch(() => {});
     }
     void settleRun(core.threadId, last);
   }, [core.phase, core.threadId, core.runs]);
@@ -167,6 +186,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     clarify?: { state: "answered" | "skipped"; text: string },
     attachments?: AiSearchAttachment[],
     template?: ReportTemplate,
+    resume?: ResumePayload,
   ) => {
     if (!capability) {
       return;
@@ -226,6 +246,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         mode: mode === "report" ? "deep" : mode,
         report: mode === "report" ? true : undefined,
         template: mode === "report" && template ? template : undefined,
+        // the CONTINUE replay: the dead attempt's conversation rides the
+        // request body -- the stateless server rebuilds its loop state
+        // from it instead of a fresh first turn
+        resume,
         attachments: wireAttachments.length ? wireAttachments : undefined,
         history,
         sources_base: sourcesBase,
@@ -267,6 +291,18 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         }
         if (event.e === "settle") {
           settled = true;
+        }
+        // the resume checkpoints are STORAGE-ONLY: the researcher's exact
+        // message list upserts into its own knowledge row (never the evt
+        // log -- the full list is redundant across rounds -- and never the
+        // reducer); a continued run reads the row back as its request's
+        // replayed conversation
+        if (event.e === "ctx") {
+          const messages = Array.isArray(event.messages) ? (event.messages as unknown[]) : [];
+          if (messages.length) {
+            void saveRunCtx(`${threadId}:${runNo}`, threadId, messages).catch(() => {});
+          }
+          return;
         }
         // VOLATILE BYTES never persist: the browser mirror's frames and
         // the web_browser rows' settlement images (screenshots, frames)
@@ -462,11 +498,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     );
   };
 
-  /** Continue an INTERRUPTED research (the failed box's 继续 button): a
-      NEW run in the same thread that inherits the ledger -- the global
-      [n] numbering continues after the gathered sources, and the failed
-      run's findings travel as the confirmed direction (the <clarified>
-      block), so the researcher resumes the gaps instead of restarting. */
+  /** Continue an INTERRUPTED research (the failed box's 继续 button): the
+      SAME run resumes in place -- the dead attempt's ctx checkpoint (its
+      EXACT conversation) rides the request back and the server rebuilds
+      its loop state from it (the [n] registry reseeds from the stored
+      sources, the timeline ids continue via entry/round bases).  A run
+      without a checkpoint (predating the feature) falls back to the old
+      contract: a new run seeded with the findings as the clarified
+      direction. */
   const continueRun = (lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
     if (core.phase !== "done" && core.phase !== "error") {
       return;
@@ -474,6 +513,67 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     const last = core.runs[core.runs.length - 1];
     if (!last || last.answer) {
       return; // a run that produced an answer has nothing to continue
+    }
+    void (async () => {
+      const runId = `${threadIdRef.current}:${last.runNo}`;
+      const stored = await loadRunCtx(runId).catch(() => null);
+      if (!stored) {
+        continueLegacy(lang, mode, searchLanguage);
+        return;
+      }
+      // a still-alive hosted run (the client's attach attempts gave up,
+      // the server has not noticed yet): stop it BEFORE the resumed run
+      // starts -- two researchers on one question is pure waste
+      const staleKey = runKeyRef.current;
+      if (staleKey && capability) {
+        void fetchJson("/zjsearch/ai/run/control", {
+          body: JSON.stringify({ tk: capability.tk, run_key: staleKey, action: "stop" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }).catch(() => {});
+      }
+      let entryBase = 0;
+      let roundBase = 0;
+      for (const step of last.steps) {
+        const withEntry = step as { entry?: number };
+        entryBase = Math.max(entryBase, Number(withEntry.entry) || 0);
+        const withRound = step as { round?: number };
+        roundBase = Math.max(roundBase, Number(withRound.round) || 0);
+      }
+      const resume: ResumePayload = {
+        messages: stored,
+        sources: core.sources
+          .filter((source) => source.url && source.n > 0)
+          .map((source) => ({ n: source.n, url: source.url, title: source.title })),
+        entry_base: entryBase,
+        round_base: roundBase,
+      };
+      appendRunEvents(runId, [{ e: "client.resume", runNo: last.runNo, mode, startedAt: Date.now() }]);
+      beginRun(
+        last.q,
+        lang,
+        [],
+        core.sources.length,
+        mode,
+        searchLanguage,
+        last.runNo,
+        undefined,
+        undefined,
+        undefined,
+        resume,
+      );
+      setCore((prev) =>
+        applyEvent(prev, { e: "client.resume", runNo: last.runNo, mode, startedAt: Date.now() }, LIVE_FX),
+      );
+    })();
+  };
+
+  /** The pre-checkpoint fallback: a NEW run that inherits the ledger the
+      old way -- the findings travel as the confirmed <clarified> block. */
+  const continueLegacy = (lang: string, mode: AiSearchMode, searchLanguage: string) => {
+    const last = core.runs[core.runs.length - 1];
+    if (!last) {
+      return;
     }
     const runNo = core.runs.length + 1;
     const text = continueBrief(last.q, last.learnings ?? [], last.gaps ?? []);

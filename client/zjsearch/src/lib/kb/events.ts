@@ -119,3 +119,49 @@ export async function loadThreadRunIds(threadId: string): Promise<string[]> {
   );
   return (rows ?? []).map((row) => row.run_id);
 }
+
+// --- the resume checkpoints (the wire's storage-only `ctx` events) -------
+//
+// The loop emits the researcher's EXACT message list at every round
+// boundary; the stateless server keeps no conversation, so the browser's
+// store IS the only copy -- a continued run replays the last checkpoint
+// as its request's conversation.  OUT-OF-LOG BY DESIGN: each checkpoint
+// upserts ONE knowledge row (kind "runctx") instead of appending to the
+// evt log -- the full list is redundant across rounds, an append-only
+// log would pay O(rounds²) storage for snapshots only the last of which
+// is ever read.  thread_id rides the row, so a thread delete sweeps it.
+
+/** Upsert one run's resume checkpoint (the latest `ctx` wins). */
+export async function saveRunCtx(runId: string, threadId: string, messages: unknown[]): Promise<void> {
+  const body = JSON.stringify(messages);
+  await pgQuery(
+    `INSERT INTO knowledge (id, kind, thread_id, run_id, title, body, bytes, created, updated, occurred_at)
+     VALUES ($1, 'runctx', $2, $3, $3, $4, $5, $6, $6, $6)
+     ON CONFLICT (id) DO UPDATE SET body = $4, bytes = $5, updated = $6`,
+    [`runctx:${runId}`, threadId, runId, body, body.length, Date.now()],
+  );
+}
+
+/** One run's stored resume checkpoint (the replayed conversation), or
+    ``null`` (an old run that predates the checkpoints). */
+export async function loadRunCtx(runId: string): Promise<unknown[] | null> {
+  const rows = await pgQuery<{ body: string }>("SELECT body FROM knowledge WHERE id = $1 AND kind = 'runctx'", [
+    `runctx:${runId}`,
+  ]);
+  const body = (rows ?? [])[0]?.body;
+  if (!body) {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop one run's resume checkpoint (a COMPLETED run's is dead weight --
+    nothing can continue it). */
+export async function clearRunCtx(runId: string): Promise<void> {
+  await pgQuery("DELETE FROM knowledge WHERE id = $1 AND kind = 'runctx'", [`runctx:${runId}`]);
+}

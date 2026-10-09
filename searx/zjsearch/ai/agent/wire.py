@@ -63,6 +63,14 @@ bug and :py:func:`encode` refuses it):
                         and strips ``img`` before persisting.
 ``related``             follow-up question suggestions.
 ``memory``              a durable fact the model saved about the user.
+``ctx``                 STORAGE-ONLY resume checkpoint: ``{round,
+                        messages}`` -- the researcher's EXACT message
+                        list at the round boundary, replayed verbatim
+                        when a dead process's run is continued (the
+                        server is stateless; the conversation lives in
+                        the browser's store).  The client persists it
+                        out-of-log (one upserted row, never appended to
+                        the evt log) and never renders it.
 ``settle``              the terminal state: ``{status: done|awaiting|
                         error, finish, usage, model, halt}``.  After it,
                         only ``related`` / ``memory`` may follow (the
@@ -98,6 +106,7 @@ EVENTS: frozenset[str] = frozenset(
         "related",
         "title",
         "memory",
+        "ctx",
         "tags",
         "usage",
         "settle",

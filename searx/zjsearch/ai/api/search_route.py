@@ -107,6 +107,82 @@ def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
 
 
+_RESUME_MAX_CHARS = 2_000_000
+"""The replayed conversation's JSON budget (a deep run's transcript with
+hundreds of sources lands well under it; a bigger payload is a corrupt
+store -- fresh-conversation fallback, not a 413)."""
+
+RESUME_NOTE = (
+    "<resume_note>The transcript above is your own research from a previous"
+    " process that died mid-run -- it is complete up to the last tool results"
+    " shown. Continue it where it stands: re-affirm your task ledger"
+    " (task_write) and findings ledger (learnings) first if they are not"
+    " current in this transcript, do NOT repeat searches or page reads whose"
+    " results already appear above (their sources keep their [n] numbers),"
+    " then continue the open ledger items. The user experiences this as the"
+    " same run resuming, not a restart.</resume_note>"
+)
+"""The researcher-facing continuation note appended AFTER the replayed
+conversation (an honest English note -- the model never sees machine
+keys)."""
+
+
+def parse_resume(raw: t.Any, sources_base: int) -> dict[str, t.Any] | None:
+    """The CONTINUE contract's replay payload: the client sends a dead
+    attempt's exact conversation back (the ``ctx`` checkpoints the loop
+    emitted -- the browser's store is the only conversation storage the
+    stateless server has).  Returns ``None`` for an absent or malformed
+    payload (the caller silently builds a fresh conversation instead);
+    assistant ``thinking`` blocks are STRIPPED -- their signatures never
+    survive a process border, and the transcript's text and tool turns
+    carry everything the continuation needs."""
+    if not isinstance(raw, dict):
+        return None
+    raw_messages = raw.get("messages")
+    if not isinstance(raw_messages, list) or not raw_messages:
+        return None
+    messages: list[dict[str, t.Any]] = []
+    for raw_message in raw_messages[:400]:
+        if not isinstance(raw_message, dict) or not str(raw_message.get("role") or ""):
+            return None
+        message = dict(raw_message)
+        content = message.get("content")
+        if isinstance(content, list):
+            message["content"] = [
+                block for block in content if not (isinstance(block, dict) and block.get("type") == "thinking")
+            ]
+        messages.append(message)
+    try:
+        if len(json.dumps(messages, ensure_ascii=False)) > _RESUME_MAX_CHARS:
+            return None
+    except (TypeError, ValueError):
+        return None
+
+    def _clamped(key: str, ceiling: int) -> int:
+        try:
+            return min(abs(int(raw.get(key))), ceiling)
+        except (TypeError, ValueError):
+            return 0
+
+    sources: list[dict[str, t.Any]] = []
+    raw_sources = raw.get("sources")
+    if isinstance(raw_sources, list):
+        for item in raw_sources[:2000]:
+            if not isinstance(item, dict):
+                continue
+            n = int(item.get("n") or 0)
+            url = str(item.get("url") or "").strip()
+            if n < 1 or n > sources_base or not url:
+                continue
+            sources.append({"n": n, "url": url[:500], "title": str(item.get("title") or "")[:300]})
+    return {
+        "messages": messages,
+        "sources": sources,
+        "entry_base": _clamped("entry_base", 100_000),
+        "round_base": _clamped("round_base", 1000),
+    }
+
+
 def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
     degraded: bool = False,
 ) -> flask.Response:
@@ -131,9 +207,24 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             if isinstance(item, dict) and item.get("q") and item.get("a"):
                 history.append({"q": str(item["q"])[:300], "a": str(item["a"])[:2000]})
     try:
-        sources_base = min(abs(int(payload.get("sources_base"))), 200)
+        # the [n] base is the thread's GLOBAL counter -- a heavy deep run
+        # gathers hundreds of sources, the old 200 clamp made a continue's
+        # fresh mints collide with the dead attempt's numbers
+        sources_base = min(abs(int(payload.get("sources_base"))), 2000)
     except (TypeError, ValueError):
         sources_base = 0
+    # the CONTINUE replay: the client sends a dead attempt's exact
+    # conversation back (the ctx checkpoints) -- the resumed run continues
+    # THE conversation instead of restarting the research.  ``None`` (an
+    # old client, a corrupt store) silently falls back to the fresh path.
+    resume = parse_resume(payload.get("resume"), sources_base)
+    if resume is not None:
+        logger.info(
+            "zjsearch_ai_search: resuming a dead run's conversation (%d messages, entry_base=%d, round_base=%d)",
+            len(resume["messages"]),
+            resume["entry_base"],
+            resume["round_base"],
+        )
     # the browser's research memory (the client recalls its PGlite corpus
     # before posting): WRITER-PHASE ONLY -- numbered after the live feed,
     # never seeded into the researcher (ready-made material kills the
@@ -175,6 +266,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     if clarify_state not in ("ask", "answered", "skipped"):
         clarify_state = "ask"
     clarifications = str(payload.get("clarifications") or "").strip()[:2000]
+    if resume is not None:
+        # a resume re-enters a conversation that already passed every
+        # gate: no clarify (the direction is in the transcript), and the
+        # research phase is the POINT of the call
+        clarify_state = "answered"
+        clarifications = ""
     # the REPORT shape: an outline-driven, per-section document -- only
     # for the deep modes (the ladder rung still sizes the research), and
     # always subject to the outline gate (a malformed skeleton falls back
@@ -189,8 +286,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the pre-flight gate (Vane's skipSearch, narrowed to our contract): a
     # question carrying a URL always researches (the page read IS the
     # research); everything else passes one small completion that skips
-    # research only for greetings, chat and writing tasks
-    research_needed = bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
+    # research only for greetings, chat and writing tasks -- a CONTINUE
+    # always researches (the transcript IS the research, no gate spend)
+    research_needed = resume is not None or bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
     # the clarify PRE-GATE (fail-open): two decision nouls decide whether
     # the query even reaches the (expensive) clarify completion -- AMBIGUOUS
     # (the answer's key depends on unstated intent) or HIGH-STAKES (a
@@ -414,6 +512,17 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         cfg=cfg,
     )
     state.question_held = research_q
+    if resume is not None:
+        # the dead attempt's [n] registry rejoins the run: a repeat of a
+        # known url reuses ITS number (no duplicate source), the page-dedup
+        # and the writers' citation identity carry over -- the transcript
+        # references [n]s only these seeds can resolve
+        for item in resume["sources"]:
+            norm = reader.normalize_url(item["url"])
+            if not norm or state.reg.known(norm) is not None:
+                continue
+            state.reg.note_url(norm, item["n"])
+            state.reg.note_meta(norm, item["title"], "")
     # the loop-side gates (the entity gate's extraction) append to the SAME
     # list the settle's gates bucket folds
     state.gate_usage = gate_usage
@@ -538,9 +647,17 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # window lapses
     handle = run_host.register(budget("detach_grace", mode, run_host.GRACE_DEFAULT))
 
-    events = engine.run(
-        cfg,
-        initial_messages(
+    if resume is not None:
+        # THE CONTINUE REPLAY: the dead attempt's exact conversation (its
+        # ctx checkpoints, thinking blocks stripped) + the continuation
+        # note -- the loop resumes the transcript where it stopped instead
+        # of building a fresh first turn
+        research_messages: list[dict[str, t.Any]] = [
+            *resume["messages"],
+            {"role": "user", "content": RESUME_NOTE},
+        ]
+    else:
+        research_messages = initial_messages(
             research_q,
             lang,
             history,
@@ -559,7 +676,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             image_parts=image_parts or None,
             attached_files=attached_files or None,
             deliverable_entities=state.deliverable_entities,
-        ),
+        )
+
+    events = engine.run(
+        cfg,
+        research_messages,
         tools=[tool_spec(pages_on, browser_on), calculator_spec(), user_memory_spec(), learnings_spec()]
         + (
             [system_one_spec()]
@@ -597,6 +718,8 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
         control=handle,
+        entry_base=resume["entry_base"] if resume else 0,
+        round_base=resume["round_base"] if resume else 0,
     )
     # the run host's DRIVER thread pulls the loop into the handle; the
     # settle's usage merges at generation (the executor's usage dicts are

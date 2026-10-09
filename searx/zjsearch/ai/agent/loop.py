@@ -30,6 +30,7 @@ recovery (the writer still answers from what was gathered).
 
 import asyncio
 import inspect
+import json
 import logging
 import time
 import typing as t
@@ -75,6 +76,21 @@ _CONTROL_SLICE = 1.0
 """The stop-observable event wait slice (seconds): a stop is seen
 within about a second mid-turn, and the per-event idle budgets keep
 their exact semantics via the waited accumulator."""
+
+
+def _ctx_snapshot(messages: list[dict[str, t.Any]], rounds: int) -> dict[str, t.Any]:
+    """The resume checkpoint's payload (the ``ctx`` wire event): the
+    researcher's EXACT message list at the round boundary.  The copy is
+    a JSON round-trip on purpose -- it freezes the list against the
+    loop's later mutations AND proves the payload survives the wire;
+    the client persists it out-of-log and a continued run replays it
+    verbatim as the next request's conversation (the stateless
+    server's only conversation storage is the browser's)."""
+    return {
+        "e": "ctx",
+        "round": rounds,
+        "messages": json.loads(json.dumps(messages, ensure_ascii=False, default=str)),
+    }
 
 
 class _Tally:
@@ -163,6 +179,7 @@ class _Run:
         idle_timeout: float,
         tools: list[dict[str, t.Any]] | None = None,
         interrupt_check: t.Callable[[], tuple[str, str] | None] | None = None,
+        entry_base: int = 0,
     ) -> None:
         self.cfg = cfg
         self.first_event_timeout = first_event_timeout
@@ -174,7 +191,10 @@ class _Run:
         # comes back ``interrupted``
         self.last_interrupt: tuple[str, str] = ("stop", "")
         self.tally = _Tally()
-        self.entries = 0
+        # a resumed run CONTINUES the dead attempt's entry-id space (the
+        # client's timeline appends to the same run section -- entry ids
+        # must never collide with the stored ones)
+        self.entries = entry_base
         # the write turn's gallery counter (the {{zjs-gallery:i}} indexes)
         self.galleries = 0
 
@@ -269,6 +289,8 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
     control: t.Any = None,
+    entry_base: int = 0,
+    round_base: int = 0,
 ) -> t.Iterator[dict[str, t.Any]]:
     """Drive one run, yielding wire events.  See the module docstring for
     the phase machine; the parameters:
@@ -303,12 +325,21 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       event wait is sliced so a stop/preempt cancels the in-flight
       stream within ~1s; a preempt carries its steering text and the run
       CONTINUES on the steered course).
+    - ``entry_base`` / ``round_base``: a CONTINUED run's seeds -- the
+      dead attempt's entry-id and round counts, so the resumed stream's
+      timeline ids never collide with the stored ones and the stall
+      detector's accounting carries over.
     """
     run_state = _Run(
-        cfg, first_event_timeout, idle_timeout, tools, interrupt_check=control.interrupt if control else None
+        cfg,
+        first_event_timeout,
+        idle_timeout,
+        tools,
+        interrupt_check=control.interrupt if control else None,
+        entry_base=entry_base,
     )
     researching = bool(tools and executor is not None)
-    rounds = 0
+    rounds = round_base
     halt_message: str | None = None
     carried_error: str | None = None
     refusals = 0
@@ -354,6 +385,10 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         # entries; this spine only tells the user where they are)
         current_phase = "plan"
         yield {"e": "phase", "name": current_phase}
+        # the FIRST resume checkpoint: the seeded conversation is the only
+        # copy of itself -- a process death before the first round
+        # completes must still be continuable
+        yield _ctx_snapshot(messages, rounds)
         while rounds < max_rounds and halt_message is None:
             entry = run_state.next_entry()
             yield {"e": "open", "id": entry, "kind": _RESEARCH, "round": rounds + 1}
@@ -461,6 +496,10 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 # USER message -- user turns accept image parts on every dialect
                 for message in post_round_injections():
                     messages.append(message)
+            # the round-boundary resume checkpoint: the conversation is
+            # COMPLETE through this round's tool results -- exactly the
+            # state a continued run replays
+            yield _ctx_snapshot(messages, rounds)
             yield {"e": "close", "id": entry}
             if round_progress is not None:
                 # the progress verdict lands AFTER the round's results are in

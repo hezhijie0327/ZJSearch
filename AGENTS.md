@@ -221,8 +221,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     the phase machine (RESEARCH tool turns → WRITE turn; ask_user is a
     first-class turn outcome) that YIELDS WIRE EVENTS; `wire.py` is the
     CLOSED event set (open/think/say/calls/call/close/tasks/sources/
-    answer/ask/gallery/related/memory/settle — a misspelled event
-    raises); `executor.py` is the tool-executor contract (generator →
+    answer/ask/gallery/related/memory/ctx/tags/usage/settle — a
+    misspelled event raises; `ctx` is the storage-only resume
+    checkpoint, the CONTINUE contract below); `executor.py` is the
+    tool-executor contract (generator →
     position-aligned `tool_results`); `thinkgate/echo/fences` carry the
     channel doctrine, the cross-dialect reasoning echo payloads and the
     stream fence splitter.  Every delta carries its entry id and
@@ -1295,13 +1297,31 @@ Bocha/Jina-style); tools give access to things the model cannot see.
 CONTINUE (断点继续): an interrupted research is a STORAGE question, not
 a server session — `startRun` persists the run row from run start, the
 1.5s evt flush keeps the log current, and the failed box's 继续 button
-(`useAiSearch.continue`) starts a NEW run in the same thread: the [n]
-numbering continues (`sources_base`), and the failed run's findings
-travel as the confirmed `<clarified>` direction — the researcher
-resumes the gaps instead of restarting.  The server stays stateless.
-A stale-run sweep (2h silent + "streaming", once per session at the
-first directory read) corrects rows whose tab died mid-research; the
-client live-fold accepts the wire's LATE events (related/memory/tags/
+(`useAiSearch.continue`) RESUMES THE SAME RUN in place: the loop emits a
+storage-only `ctx` wire event at every round boundary (`{round,
+messages}` — the researcher's EXACT message list, a JSON-frozen copy;
+the client upserts it into ONE knowledge row of kind `runctx`,
+out-of-log because the full list is redundant across rounds), and the
+continue POST carries it back as `resume` — the route's
+`parse_resume` validates it (malformed/oversized ⇒ silent
+fresh-conversation fallback), strips assistant `thinking` blocks (their
+signatures never survive a process border), reseeds the [n] registry
+from the stored sources (a repeat url reuses ITS number; `sources_base`'
+s clamp is 2000 — a heavy deep run gathers hundreds), and replaces
+`initial_messages()` with the replayed conversation + a
+`<resume_note>` continuation instruction.  The engine seeds
+`entry_base`/`round_base` so the resumed stream's timeline ids continue
+the stored ones (the client's `client.resume` fold resets only the
+failure state — steps, sources, ledger and cards all survive; a death
+mid-WRITE restarts the document, noted limit).  A checkpoint-less run
+(predating the feature) falls back to the legacy contract: a NEW run
+whose findings travel as the confirmed `<clarified>` direction.  A
+still-alive hosted run is stopped via run/control BEFORE the resume
+starts (two researchers on one question is pure waste).  The server
+stays stateless.  A stale-run sweep (2h silent + "streaming", once per
+session at the first directory read) corrects rows whose tab died
+mid-research; the client live-fold accepts the wire's LATE events
+(related/memory/tags/
 
 THE RUN HOST (`runs/host.py`, v2.1 R1): a research run's life is
 DECOUPLED from its client connection — the loop executes on a driver

@@ -567,6 +567,31 @@ export function applyEvent(
       const flagged = runs.map((item, index) => (index === lastIdx ? { ...item, stopped: true } : item));
       return { ...settle({ ...core, runs: flagged }, null, true, fx.now()), phase: "done" };
     }
+    case "client.resume": {
+      // the SAME run continues in place (the dead attempt's conversation
+      // rides the request back as the replayed context): steps, sources,
+      // ledger and cards all survive -- only the failure state resets.
+      // The server-side ledgers restart empty and refill as the model
+      // re-affirms them (the resume note instructs exactly that), so the
+      // visible cards never flash empty.
+      runs[lastIdx] = {
+        ...run,
+        status: "streaming",
+        error: null,
+        ask: null,
+        browser: null,
+        wrappingUp: false,
+        endedAt: null,
+        mode: (event.mode as AiSearchMode) ?? run.mode,
+      };
+      return { ...core, runs, phase: "streaming" };
+    }
+    case "ctx": {
+      // storage-only wire event (the resume checkpoint): intercepted
+      // BEFORE the fold on the live path -- this case only proves the
+      // reducer tolerates one (a fixture, a future path)
+      return core;
+    }
     case "phase": {
       // the macro-stage spine: one value active, the history kept (the
       // run_summary record replays it); unknown names ignore
@@ -680,7 +705,9 @@ export function applyEvent(
           ],
         }));
       }
-      const round = run.steps.filter((step) => step.kind === "calls").length + 1;
+      // the in-round display index: max existing + 1 (a resumed run's
+      // steps keep their stored rounds -- a count would restart at 1)
+      const round = run.steps.reduce((max, step) => Math.max(max, step.kind === "calls" ? step.round : 0), 0) + 1;
       runs[lastIdx] = {
         ...run,
         steps: [
