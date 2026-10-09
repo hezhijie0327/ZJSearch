@@ -392,6 +392,41 @@ export function downloadAnswerMarkdown(
   downloadText(`zjsearch_${safeTitle}.md`, lines.join("\n"), EXPORT_MIME.md ?? "text/markdown");
 }
 
+/** One REPORT document as Markdown: the outline's section titles become
+    `## ` headings in order (the same document the research page rendered)
+    with each section's body verbatim -- the knowledge inspector's ⬇ for a
+    report run, mirroring buildThreadMarkdown's source-list footing. */
+export function downloadReportMarkdown(
+  input: {
+    title: string;
+    subtitle?: string;
+    sections: Array<{ title: string; text: string }>;
+    sources: Array<{ n: number; title: string; url: string }>;
+  },
+  labels?: ExportLabels,
+): void {
+  const safeTitle =
+    input.title
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .trim()
+      .slice(0, 64) || "report";
+  const lines: string[] = [`# ${input.title}`, ""];
+  if (input.subtitle) {
+    lines.push(`_${input.subtitle}_`, "");
+  }
+  lines.push(`_zjsearch · ${new Date().toLocaleString()}_`, "");
+  for (const section of input.sections) {
+    lines.push(`## ${section.title}`, "", section.text.trim(), "");
+  }
+  if (input.sources.length > 0) {
+    lines.push(`**${labels?.sources || "Sources"}**`, "");
+    for (const source of [...input.sources].sort((a, b) => a.n - b.n)) {
+      lines.push(`- [${source.n}] [${source.title || source.url}](${source.url})`);
+    }
+  }
+  downloadText(`zjsearch_${safeTitle}.md`, lines.join("\n"), EXPORT_MIME.md ?? "text/markdown");
+}
+
 /** The structural run shape the AI-thread export reads (lib stays free of
     the feature's types). */
 export interface MarkdownRun {

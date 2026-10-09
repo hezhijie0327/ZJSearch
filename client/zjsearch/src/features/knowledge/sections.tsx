@@ -36,9 +36,11 @@ import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
+import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
+import { DocumentView } from "@/features/results/aiSearch/report/DocumentView.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { type EmbedUsageTotals, readEmbedUsage } from "@/lib/embed.ts";
-import { downloadAnswerMarkdown } from "@/lib/exporters.ts";
+import { downloadAnswerMarkdown, downloadReportMarkdown } from "@/lib/exporters.ts";
 import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { MemoryRow, OverviewUsage } from "@/lib/kb/projections.ts";
@@ -697,10 +699,14 @@ export function InspectorView({
   onRemove,
 }: {
   body: string | null;
-  /** run items: the loaded answer's cited sources + token usage */
+  /** run items: the loaded answer's cited sources + token usage (+ the
+      report document's outline + per-section texts when the run was a
+      report -- the inspector re-renders the SAME DocumentView) */
   extras: {
     sources: Array<{ n: number; url: string; title: string; host: string; favicon: string }>;
     usage: OverviewUsage | null;
+    report?: { title: string; subtitle?: string; sections: Array<{ id: string; title: string }> } | null;
+    sections?: Record<string, string> | null;
   } | null;
   item: KnowledgeItem;
   onBack: () => void;
@@ -733,6 +739,44 @@ export function InspectorView({
     const sections = (report?.sections ?? []).filter((section) => section.title);
     return sections.length >= 2 ? { title: report?.title ?? "", sections } : null;
   })();
+  // the REPORT DOCUMENT (the research page's own renderer): outline +
+  // per-section texts stored at settle -- present for every post-v5.2
+  // report run; the fallback for older rows stays the glued answer
+  const reportDoc = (() => {
+    if (item.kind !== "run" || !extras?.report || !extras.sections) {
+      return null;
+    }
+    const sectionTexts = extras.sections;
+    const docSections = extras.report.sections
+      .map((section) => ({
+        id: section.id,
+        title: section.title,
+        status: "done" as const,
+        text: sectionTexts[section.id] ?? "",
+      }))
+      .filter((section) => section.text.trim().length > 0);
+    return docSections.length >= 1
+      ? {
+          title: extras.report.title || item.title,
+          subtitle: extras.report.subtitle,
+          sections: docSections,
+        }
+      : null;
+  })();
+  // citation chips open the source (the knowledge base's honest action --
+  // the research page's rail scroll has no counterpart in the panel)
+  const citationMeta: AiSourceMeta[] = sources.map((source) => ({
+    domain: source.host || source.url,
+    favicon: String((extras?.sources ?? []).find((s) => s.n === source.n)?.favicon ?? ""),
+    t: source.title || source.url,
+    u: source.url,
+  }));
+  const onCite = (n: number) => {
+    const hit = sources.find((source) => source.n === n);
+    if (hit?.url) {
+      window.open(hit.url, "_blank", "noopener");
+    }
+  };
   // the MD/PDF exports' source list (overview: the stored cited sources;
   // research: the run's source_ref join)
   const exportSources = sources.map((source) => ({
@@ -743,6 +787,20 @@ export function InspectorView({
   }));
   const answerText = item.kind === "answer" ? (body ?? item.body) : (body ?? "");
   const downloadMd = () => {
+    if (reportDoc) {
+      // the report exports the DOCUMENT (headings from the outline, each
+      // section's body verbatim) -- not the headless glued text
+      downloadReportMarkdown(
+        {
+          title: reportDoc.title,
+          subtitle: reportDoc.subtitle,
+          sections: reportDoc.sections.map((section) => ({ title: section.title, text: section.text })),
+          sources: exportSources,
+        },
+        { sources: t("knowledge_inspector_sources") },
+      );
+      return;
+    }
     downloadAnswerMarkdown(item.title || item.url || t("knowledge_title"), answerText, exportSources, {
       sources: t("knowledge_inspector_sources"),
     });
@@ -852,6 +910,31 @@ export function InspectorView({
               ) : (
                 <InspectorMarkdown text={item.body} />
               )
+            ) : item.kind === "run" && reportDoc ? (
+              // THE SAME renderer the research page used -- identical
+              // syntax and layout (cover header, clickable TOC, per-section
+              // headings, citation chips, tables, mermaid); the body text
+              // rides the 14px answer tier, not the pane's 13px
+              <div className="text-sm leading-relaxed text-ink">
+                <DocumentView
+                  meta={citationMeta}
+                  onCite={onCite}
+                  run={{
+                    galleries: [],
+                    outline: {
+                      title: reportDoc.title,
+                      subtitle: reportDoc.subtitle,
+                      sections: reportDoc.sections.map(({ id, title, status }) => ({ id, title, status })),
+                    },
+                    // DocumentView reads runNo ONLY for its scroll-spy
+                    // anchor prefix -- the inspector shows one document at a
+                    // time; the run row's own tail number keeps prefixes unique
+                    runNo: Number(item.id.split(":").pop()) || 1,
+                    sections: Object.fromEntries(reportDoc.sections.map((section) => [section.id, section.text])),
+                  }}
+                  settled
+                />
+              </div>
             ) : item.kind === "run" ? (
               body ? (
                 <>

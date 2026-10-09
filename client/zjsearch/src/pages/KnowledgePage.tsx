@@ -214,6 +214,8 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   const [inspectedExtras, setInspectedExtras] = useState<{
     sources: ThreadAnswer["sources"];
     usage: ThreadAnswer["usage"];
+    report?: ThreadAnswer["report"];
+    sections?: ThreadAnswer["sections"];
   } | null>(null);
   useEffect(() => {
     if (inspected?.kind === "document") {
@@ -238,7 +240,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
         .then((result) => {
           if (cancelled) return;
           setInspectedBody(result.answer);
-          setInspectedExtras({ sources: result.sources, usage: result.usage });
+          setInspectedExtras({
+            sources: result.sources,
+            usage: result.usage,
+            report: result.report ?? null,
+            sections: result.sections ?? null,
+          });
         })
         .catch(() => {
           if (!cancelled) {

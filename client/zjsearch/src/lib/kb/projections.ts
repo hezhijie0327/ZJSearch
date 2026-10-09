@@ -56,6 +56,10 @@ export interface RunSnapshot {
     content?: string;
   }>;
   tasks?: Array<{ title?: string; status?: string }>;
+  /** the report shape's per-section texts ({id: markdown}) -- the
+      knowledge inspector re-renders the DOCUMENT (DocumentView) from
+      these + the outline in meta.report */
+  sections?: Record<string, string>;
   /** the belief ledger's facts + gaps (the learnings tool's snapshots) --
       the run row's meta carries them for the inspector */
   learnings?: unknown[];
@@ -382,14 +386,14 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       // to reassemble from the event log (or aggregate the whole
       // projections table) become one-row reads off this small table
       await pgQuery(
-        `INSERT INTO run_summary (run_id, thread_id, q, mode, model, status, events, sources, answer, usage, phases, started_at, settled_at)
+        `INSERT INTO run_summary (run_id, thread_id, q, mode, model, status, events, sources, answer, usage, phases, sections, started_at, settled_at)
          VALUES ($1, $2, $3, $4, $5, $6,
            (SELECT count(*) FROM run_event re WHERE re.run_id = $1),
-           $7, $8, $9::jsonb, $10::jsonb, $11, $12)
+           $7, $8, $9::jsonb, $10::jsonb, $13::jsonb, $11, $12)
          ON CONFLICT (run_id) DO UPDATE SET q = EXCLUDED.q, mode = EXCLUDED.mode, model = EXCLUDED.model,
            status = EXCLUDED.status, events = EXCLUDED.events, sources = EXCLUDED.sources,
            answer = EXCLUDED.answer, usage = EXCLUDED.usage, phases = EXCLUDED.phases,
-           started_at = EXCLUDED.started_at, settled_at = EXCLUDED.settled_at`,
+           sections = EXCLUDED.sections, started_at = EXCLUDED.started_at, settled_at = EXCLUDED.settled_at`,
         [
           runId,
           threadId,
@@ -403,6 +407,11 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           JSON.stringify(run.stages ?? []),
           Number(run.startedAt ?? now) || now,
           now,
+          // the report DOCUMENT's per-section texts: the knowledge
+          // inspector re-renders the same DocumentView the research page
+          // used (outline headings + per-section bodies) -- the glued
+          // answer string alone cannot reconstruct that structure
+          run.sections && Object.keys(run.sections).length ? JSON.stringify(run.sections) : null,
         ],
         tx,
       );

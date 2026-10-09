@@ -981,12 +981,14 @@ export function applyEvent(
       if (!id || !delta) {
         return core;
       }
-      // a markdown block boundary BETWEEN sections: the per-section panes
-      // render their own bodies, but the combined answer (knowledge
-      // projection, copy/export) glues sections back to back -- without
-      // the separator a section starting with `###` lands mid-paragraph
-      // and renders as literal text
-      const sep = run.answer && !run.answer.endsWith("\n") ? "\n\n" : "";
+      // a markdown block boundary BETWEEN SECTIONS (not between deltas --
+      // the check used to run per delta, prepending \n\n to EVERY streamed
+      // chunk and shattering the glued document into one-paragraph-per-
+      // delta fragments in the knowledge projection while the per-section
+      // panes looked fine): a NEW section id's first delta glues with the
+      // separator, a section's own deltas append raw
+      const fresh = !(run.sections?.[id] ?? "");
+      const sep = fresh && run.answer && !run.answer.endsWith("\n") ? "\n\n" : "";
       runs[lastIdx] = {
         ...run,
         sections: { ...(run.sections ?? {}), [id]: (run.sections?.[id] ?? "") + delta },

@@ -289,6 +289,11 @@ async function createSchema(db: Pg): Promise<void> {
     started_at  double precision,
     settled_at  double precision
   )`);
+  // v5.2: the report shape's per-section texts (the knowledge inspector
+  // renders the DOCUMENT the same way the research page does -- outline
+  // headings + per-section bodies -- which the glued answer string alone
+  // cannot reconstruct).  Idempotent for existing databases.
+  await db.query("ALTER TABLE run_summary ADD COLUMN IF NOT EXISTS sections jsonb");
   await db.query("CREATE INDEX IF NOT EXISTS run_summary_thread ON run_summary (thread_id, settled_at DESC)");
   await db.query(`CREATE TABLE IF NOT EXISTS stats (
     kind    text PRIMARY KEY,
