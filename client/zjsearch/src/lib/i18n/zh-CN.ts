@@ -178,6 +178,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_halt_stopped_by_user: "已按你的要求停止研究",
   ai_halt_wrap_grace_ended: "连接中断，已就已收集材料收尾",
   ai_output_structure: "输出结构",
+  ai_output_structure_free: "writer 将按调研结果自行设计结构；选择模板可固定文档框架。",
   report_template_free: "智能大纲",
   ai_search_running: "检索中…",
   ai_search_row_failed: "失败",

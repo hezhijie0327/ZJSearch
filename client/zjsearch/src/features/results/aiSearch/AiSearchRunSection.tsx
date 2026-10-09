@@ -888,7 +888,9 @@ function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) =>
               </li>
             ))}
           </ol>
-        ) : null}
+        ) : (
+          <p className="mt-3 px-1 text-[11px] leading-relaxed text-ink-3">{t("ai_output_structure_free")}</p>
+        )}
       </div>
     </section>
   );
