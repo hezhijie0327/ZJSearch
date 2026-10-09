@@ -39,7 +39,7 @@ import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { type EmbedUsageTotals, readEmbedUsage } from "@/lib/embed.ts";
 import { downloadAnswerMarkdown } from "@/lib/exporters.ts";
-import { formatDate } from "@/lib/format.ts";
+import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { MemoryRow, OverviewUsage } from "@/lib/kb/projections.ts";
 import type { ThreadSummary } from "@/lib/kb/recall.ts";
@@ -47,17 +47,13 @@ import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";
 import { printDocument } from "@/lib/print.ts";
 import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
-export function formatBytesLocal(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-/** The knowledge meta chip (the OUTLINE variant of lib CHIP: bordered, not
-    filled -- row meta and hero stats share it).  Named CHIP_OUTLINE: the
-    unqualified CHIP is the design system's FILLED chip (lib/styles). */
-export const CHIP_OUTLINE =
+/** The knowledge META chip: a 12px bordered chip for row meta and hero
+    stats (the lib CHIP_OUTLINE is the 13px CLICKABLE control tier -- a
+    same-name divergent token here once invited drift; this reads as its
+    own tier now). */
+export const META_CHIP =
   "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
 
 /** The in-panel views' back row: focus lands here on view swap (the
@@ -260,9 +256,9 @@ export function ThreadRows({
                 {t("knowledge_badge_report", { n: String(thread.reports) })}
               </span>
             ) : null}
-            <span className={CHIP_OUTLINE}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
+            <span className={META_CHIP}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
             {thread.sources > 0 ? (
-              <span className={CHIP_OUTLINE}>{t("knowledge_row_sources", { n: String(thread.sources) })}</span>
+              <span className={META_CHIP}>{t("knowledge_row_sources", { n: String(thread.sources) })}</span>
             ) : null}
           </div>
         </div>
@@ -415,9 +411,9 @@ export function SearchResults({
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                     <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
-                    {item.host ? <span className={CHIP_OUTLINE}>{item.host}</span> : null}
+                    {item.host ? <span className={META_CHIP}>{item.host}</span> : null}
                     {item.cited > 0 ? (
-                      <span className={CHIP_OUTLINE}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
+                      <span className={META_CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
                     ) : null}
                     {item.body && item.kind !== "source" ? (
                       <span className="min-w-0 flex-1 truncate">{item.body.slice(0, 90)}</span>
@@ -1011,12 +1007,12 @@ export function KindItemRows({
               </span>
               <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                 <span className="shrink-0">{formatDate(new Date(item.updated).toISOString())}</span>
-                {item.host ? <span className={CHIP_OUTLINE}>{item.host}</span> : null}
+                {item.host ? <span className={META_CHIP}>{item.host}</span> : null}
                 {item.cited > 0 ? (
-                  <span className={CHIP_OUTLINE}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
+                  <span className={META_CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
                 ) : null}
                 {item.refs > 0 ? (
-                  <span className={CHIP_OUTLINE}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
+                  <span className={META_CHIP}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
                 ) : null}
               </span>
             </button>
@@ -1063,7 +1059,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
         { label: t("knowledge_admin_documents"), value: String(stats.documents) },
         { label: t("knowledge_admin_memories"), value: String(stats.memories) },
         { label: t("knowledge_admin_events"), value: String(stats.events) },
-        { label: t("knowledge_admin_size"), value: formatBytesLocal(stats.approxBytes) },
+        { label: t("knowledge_admin_size"), value: formatFilesize(stats.approxBytes) ?? "--" },
       ]
     : [];
   return (
@@ -1223,34 +1219,54 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
 // ------------------------------------------------------------------ shared
 
 /** The one confirm dialog every destructive action funnels through (the
-    knowledge drawer's old pattern). */
+    knowledge drawer's old pattern).  ALWAYS-MOUNTED with an `open` flag:
+    the dismissal plays its exit animation (useExitPresence) instead of
+    snapping out of the DOM -- the one dialog in the panel that still
+    unmounted instantly. */
 export function ConfirmDialog({
   cancel,
   message,
   onConfirm,
+  open,
   title,
 }: {
   cancel: () => void;
   message: string;
   onConfirm: () => void;
+  open: boolean;
   title: string;
 }) {
   const t = useT();
-  const ref = useDialogFocus<HTMLDivElement>(true);
+  const { render, closing } = useExitPresence(open, 140);
+  const ref = useDialogFocus<HTMLDivElement>(open && !closing);
   useEffect(() => {
+    if (!open) {
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") cancel();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [cancel]);
+  }, [cancel, open]);
+  if (!render) {
+    return null;
+  }
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/60" />
+    <div
+      className={`fixed inset-0 z-[60] flex items-center justify-center p-4 ${closing ? "pointer-events-none" : ""}`}
+    >
+      <div
+        aria-hidden="true"
+        className={`absolute inset-0 bg-black/60 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      />
       <div
         aria-label={title}
         aria-modal="true"
-        className="relative z-10 w-full max-w-md rounded-2xl border border-line bg-surface p-5"
+        className={`relative z-10 w-full max-w-md rounded-2xl border border-line bg-surface p-5 ${
+          closing ? "animate-fade-out" : "animate-fade-up"
+        }`}
+        inert={closing || undefined}
         ref={ref}
         role="dialog"
       >

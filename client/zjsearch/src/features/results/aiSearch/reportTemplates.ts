@@ -10,20 +10,9 @@
 // adaptation pass re-titles every section with the question's actual
 // entities in the report's language, so en runs get en structures.
 
-export interface ReportTemplateSection {
-  title: string;
-  brief: string;
-  key_questions: string[];
-  /** optional sections drop when the adaptation finds them irrelevant */
-  optional?: boolean;
-}
+import type { ReportTemplate, ReportTemplateSection } from "@/lib/aicontracts.ts";
 
-export interface ReportTemplate {
-  /** stable picker id (the ?template= URL param value) */
-  id: string;
-  name: string;
-  sections: ReportTemplateSection[];
-}
+export type { ReportTemplate, ReportTemplateSection };
 
 const intel: ReportTemplate = {
   id: "intel",

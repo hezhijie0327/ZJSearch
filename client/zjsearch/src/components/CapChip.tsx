@@ -3,6 +3,12 @@
 import { ChevronLeft } from "lucide-react";
 import { useT } from "@/lib/i18n.ts";
 
+/** The AI rail's cap-chip recipe (the 12px meta-row toggle tier, min-h-6):
+    the four call sites used to hand-type this byte-identical string and
+    one of them had already drifted to an 11px clickable tier. */
+export const CAP_CHIP_CLASS =
+  "mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3 transition-colors hover:text-ink";
+
 /**
  * The one "+N ⇄ ‹ show less" chip for cap-and-expand rows (EnginesLine,
  * package/paper tags, weather sources) — pairs with `useCapExpand`, which

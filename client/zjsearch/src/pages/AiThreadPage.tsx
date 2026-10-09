@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { MessageCircleQuestion, Zap } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
-import { AiDebugStage } from "@/features/results/aiSearch/AiDebugStage.tsx";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions } from "@/features/results/aiSearch/depth.tsx";
+import { SteerChips } from "@/features/results/aiSearch/SteerChips.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useAiSteer } from "@/features/results/aiSearch/useAiSteer.ts";
@@ -17,6 +17,14 @@ import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
 import type { AiThreadPageData } from "@/lib/types.ts";
+
+// the debug stage LAZY-loads behind ?aidebug: its fixture catalog is
+// ~1,500 lines of QA-only data that otherwise rides EVERY real thread
+// visit in the page chunk (the stage itself is a QA surface, never a
+// user path)
+const AiDebugStage = lazy(() =>
+  import("@/features/results/aiSearch/AiDebugStage.tsx").then((m) => ({ default: m.AiDebugStage })),
+);
 
 /** The standalone AI conversation page (`/zjsearch/ai/thread/<uuid>`):
     the thread is
@@ -41,7 +49,16 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
             stage hold on the live page (a shrink-to-fit main drifts with
             the content -- research vs report read as a width change) */}
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
-          <AiDebugStage />
+          <Suspense
+            fallback={
+              <div aria-busy="true" className="mt-4 space-y-5">
+                <span className="zjs-skeleton block h-9 w-72 max-w-full" />
+                <span className="zjs-skeleton block h-24 w-full" />
+              </div>
+            }
+          >
+            <AiDebugStage />
+          </Suspense>
         </main>
       </Shell>
     );
@@ -275,35 +292,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                     placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                     value={followupQuery}
                   />
-                  {steer.chips.length ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {steer.chips.map((chip) => (
-                        <span
-                          className={`inline-flex max-w-[18rem] items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
-                            chip.state === "failed"
-                              ? "border-danger/50 text-danger"
-                              : "border-line bg-surface-2/50 text-ink-2"
-                          }`}
-                          key={chip.text}
-                        >
-                          <span className="truncate" dir="auto">
-                            {chip.text}
-                          </span>
-                          {chip.state === "failed" ? <span>{t("ai_steer_failed")}</span> : null}
-                          <button
-                            aria-label={t("remove")}
-                            className="text-ink-3 transition-colors hover:text-danger"
-                            onClick={() => {
-                              steer.retract(chip.text);
-                            }}
-                            type="button"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
+                  <SteerChips chips={steer.chips} onRetract={steer.retract} />
                   {followupAttachments.length ? (
                     <div className="mt-3">
                       <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />

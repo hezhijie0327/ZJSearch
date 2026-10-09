@@ -37,7 +37,7 @@ export function SettingRow({
             {description ? <p className="mt-0.5 text-xs leading-relaxed text-ink-3">{description}</p> : null}
           </div>
         </div>
-        {children ? <div className="mt-4 sm:pl-14">{children}</div> : null}
+        {children ? <div className="mt-4 sm:ps-14">{children}</div> : null}
       </div>
     );
   }

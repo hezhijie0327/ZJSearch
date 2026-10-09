@@ -2,7 +2,7 @@
 
 import { Award, BookOpen, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
-import { CapChip } from "@/components/CapChip.tsx";
+import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -233,7 +233,7 @@ export function AiSearchSources({
         </div>
       </Collapse>
       <CapChip
-        className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        className={CAP_CHIP_CLASS}
         expanded={expanded}
         hidden={hidden}
         onToggle={() => {

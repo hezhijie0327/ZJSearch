@@ -17,6 +17,7 @@ import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
 import { postBrowserInput } from "@/lib/browserInput.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
+import { hostnameOf } from "@/lib/link.ts";
 import { ICON_BTN, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 type MirrorView = NonNullable<AiSearchRun["browser"]>;
@@ -35,15 +36,6 @@ function frameCoords(event: {
     x: Math.round(((event.clientX - rect.left) / rect.width) * VIEWPORT_W),
     y: Math.round(((event.clientY - rect.top) / rect.height) * VIEWPORT_H),
   };
-}
-
-/** The session page's host (the card header's second slot). */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
 }
 
 function LivePulse() {
@@ -305,7 +297,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
                   title={item.title || item.url}
                   type="button"
                 >
-                  <span className="truncate">{isLead ? t("ai_browser_tab_lead") : hostOf(item.url)}</span>
+                  <span className="truncate">{isLead ? t("ai_browser_tab_lead") : hostnameOf(item.url)}</span>
                 </button>
               );
             })}
@@ -350,7 +342,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
                 <LivePulse />
                 <span className="min-w-0 flex-1 leading-snug">
                   <span className="block text-[13px] font-medium text-ink">{t("ai_browser_wait_bar")}</span>
-                  <span className="block truncate text-xs text-ink-3">{view.title || hostOf(view.url)}</span>
+                  <span className="block truncate text-xs text-ink-3">{view.title || hostnameOf(view.url)}</span>
                 </span>
                 <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[13px] font-medium text-accent-contrast">
                   {t("ai_browser_open")}

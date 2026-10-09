@@ -6,7 +6,7 @@
 // sections JSON (the exact shape the presets use and the request body
 // carries); title = the template's name; search_text = the name.
 
-import type { ReportTemplate, ReportTemplateSection } from "@/features/results/aiSearch/reportTemplates.ts";
+import type { ReportTemplate, ReportTemplateSection } from "@/lib/aicontracts.ts";
 import { pgQuery } from "@/lib/pg.ts";
 
 interface TemplateRow {

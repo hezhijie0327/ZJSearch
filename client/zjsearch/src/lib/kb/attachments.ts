@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchAttachment } from "@/lib/aicontracts.ts";
 import { pgQuery } from "@/lib/pg.ts";
 
 /**

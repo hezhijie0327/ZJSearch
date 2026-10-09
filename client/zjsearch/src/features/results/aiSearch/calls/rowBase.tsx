@@ -155,15 +155,12 @@ export function DebugArgs({ rawArgs }: { rawArgs: string }) {
     <div className="mt-1">
       <DebugLabel label={t("ai_debug_args")} />
       <div className="group relative">
-        <div
-          className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 text-xs leading-relaxed whitespace-pre-wrap break-words text-ink-2"
-          dir="ltr"
-        >
+        <div className={`${READ_PANE} max-h-40 overflow-y-auto overscroll-contain`} dir="ltr">
           {rawArgs}
         </div>
         <button
           aria-label={t("copy")}
-          className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+          className={`absolute end-2 top-2 ${HOVER_CHIP}`}
           onClick={() => {
             copyToast(rawArgs);
           }}
@@ -200,7 +197,7 @@ export function DebugFeed({ feed, error = false }: { feed: string; error?: boole
         </div>
         <button
           aria-label={t("copy")}
-          className="absolute end-2 top-2 grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-ink"
+          className={`absolute end-2 top-2 ${HOVER_CHIP}`}
           onClick={() => {
             copyToast(feed);
           }}

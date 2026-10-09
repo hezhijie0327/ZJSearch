@@ -24,6 +24,7 @@ import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSecti
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
+import { SteerChips } from "@/features/results/aiSearch/SteerChips.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useAiSteer } from "@/features/results/aiSearch/useAiSteer.ts";
@@ -1004,35 +1005,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                           value={followupQuery}
                         />
-                        {steer.chips.length ? (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {steer.chips.map((chip) => (
-                              <span
-                                className={`inline-flex max-w-[18rem] items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
-                                  chip.state === "failed"
-                                    ? "border-danger/50 text-danger"
-                                    : "border-line bg-surface-2/50 text-ink-2"
-                                }`}
-                                key={chip.text}
-                              >
-                                <span className="truncate" dir="auto">
-                                  {chip.text}
-                                </span>
-                                {chip.state === "failed" ? <span>{t("ai_steer_failed")}</span> : null}
-                                <button
-                                  aria-label={t("remove")}
-                                  className="text-ink-3 transition-colors hover:text-danger"
-                                  onClick={() => {
-                                    steer.retract(chip.text);
-                                  }}
-                                  type="button"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
+                        <SteerChips chips={steer.chips} onRetract={steer.retract} />
                         {followupAttachments.length ? (
                           <div className="mt-3">
                             <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />

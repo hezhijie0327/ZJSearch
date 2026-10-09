@@ -574,31 +574,34 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       </div>
 
       {/* ── confirm dialog (every deletion funnels through one dialog) ── */}
-      {confirming ? (
-        <ConfirmDialog
-          cancel={() => setConfirming(null)}
-          message={
-            typeof confirming === "string"
+      {/* ALWAYS mounted (the dialog owns its exit animation) -- the open
+          flag drives it */}
+      <ConfirmDialog
+        cancel={() => setConfirming(null)}
+        message={
+          confirming
+            ? typeof confirming === "string"
               ? t("knowledge_admin_reset_confirm")
               : t("ai_delete_body", { label: confirming.label })
+            : ""
+        }
+        onConfirm={() => {
+          if (confirming === "reset") {
+            resetAll();
+            flashToast(t("knowledge_admin_reset_done"), { tone: "accent" });
+            setKind("graph");
+            refreshStats();
+          } else if (confirming) {
+            confirming.run();
+            flashToast(t("knowledge_deleted"), { tone: "accent" });
+            refreshStats();
+            setListingBump((b) => b + 1);
           }
-          onConfirm={() => {
-            if (confirming === "reset") {
-              resetAll();
-              flashToast(t("knowledge_admin_reset_done"), { tone: "accent" });
-              setKind("graph");
-              refreshStats();
-            } else {
-              confirming.run();
-              flashToast(t("knowledge_deleted"), { tone: "accent" });
-              refreshStats();
-              setListingBump((b) => b + 1);
-            }
-            setConfirming(null);
-          }}
-          title={t("ai_delete_title")}
-        />
-      ) : null}
+          setConfirming(null);
+        }}
+        open={confirming !== null}
+        title={t("ai_delete_title")}
+      />
     </Shell>
   );
 }

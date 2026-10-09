@@ -9,6 +9,7 @@
 import { Check, ChevronDown } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 export interface DropdownOption {
@@ -218,7 +219,7 @@ export function Dropdown({
         ? createPortal(
             <ul
               aria-label={ariaLabel}
-              className={`fixed z-50 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
+              className={`fixed z-50 max-h-80 ${SCROLLBAR_NONE} overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
                 menuClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
               }`}
               inert={menuClosing || undefined}

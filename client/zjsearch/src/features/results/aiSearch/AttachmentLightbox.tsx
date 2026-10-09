@@ -155,7 +155,7 @@ export function Lightbox({
       {/* 工具条：计数 + 缩放档位 + 关闭 */}
       <div className="flex min-h-9 items-center justify-end gap-2 pb-2">
         {images.length > 1 && (
-          <span className="mr-auto font-mono text-xs text-ink-3">
+          <span className="me-auto font-mono text-xs text-ink-3">
             {index + 1} / {images.length}
           </span>
         )}
@@ -166,11 +166,11 @@ export function Lightbox({
           onClick={() => setZoom((current) => clampZoom(current / ZOOM_FACTOR))}
           type="button"
         >
-          <Minus aria-hidden="true" className="size-4" />
+          <Minus aria-hidden="true" className="size-4.5" />
         </button>
         {/* 点击百分比复位 100% */}
         <button
-          className="min-w-12 rounded px-1 font-mono text-xs text-ink-2 transition-colors hover:text-ink"
+          className="min-h-6 min-w-12 rounded px-2 font-mono text-xs text-ink-2 transition-colors hover:text-ink"
           onClick={resetZoom}
           type="button"
         >
@@ -183,10 +183,10 @@ export function Lightbox({
           onClick={() => setZoom((current) => clampZoom(current * ZOOM_FACTOR))}
           type="button"
         >
-          <Plus aria-hidden="true" className="size-4" />
+          <Plus aria-hidden="true" className="size-4.5" />
         </button>
         <button aria-label={t("lightbox.close")} className={ICON_BTN} onClick={close} type="button">
-          <X aria-hidden="true" className="size-4" />
+          <X aria-hidden="true" className="size-4.5" />
         </button>
       </div>
 

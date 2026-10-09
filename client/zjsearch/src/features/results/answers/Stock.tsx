@@ -277,13 +277,13 @@ export function StockAnswer({ answer }: { answer: Extract<AnswerData, { template
               <>
                 <span
                   aria-hidden="true"
-                  className="absolute right-0 top-0 -translate-y-1/2 rounded bg-surface px-1 text-[10px] text-ink-3"
+                  className="absolute right-0 top-0 -translate-y-1/2 rounded bg-surface px-1 text-[11px] text-ink-3"
                 >
                   {fmtNum(Math.max(...closes), "en")}
                 </span>
                 <span
                   aria-hidden="true"
-                  className="absolute bottom-0 right-0 translate-y-1/2 rounded bg-surface px-1 text-[10px] text-ink-3"
+                  className="absolute bottom-0 right-0 translate-y-1/2 rounded bg-surface px-1 text-[11px] text-ink-3"
                 >
                   {fmtNum(Math.min(...closes), "en")}
                 </span>
@@ -292,7 +292,7 @@ export function StockAnswer({ answer }: { answer: Extract<AnswerData, { template
             {/* price tag: hovered close, else the last one */}
             <div className="absolute right-0 -translate-y-1/2" style={{ top: `${scale.yPct(hoverClose ?? d.price)}%` }}>
               <span
-                className={`rounded border border-line bg-surface px-1 py-0.5 text-[10px] font-medium tabular-nums ${
+                className={`rounded border border-line bg-surface px-1 py-0.5 text-[11px] font-medium tabular-nums ${
                   hover !== null && hoverClose !== undefined ? tone : "text-ink"
                 }`}
               >
@@ -316,7 +316,7 @@ export function StockAnswer({ answer }: { answer: Extract<AnswerData, { template
             ) : null}
           </div>
           {/* x axis labels: five evenly spaced bars */}
-          <div aria-hidden="true" className="mt-1 flex justify-between text-[10px] text-ink-3">
+          <div aria-hidden="true" className="mt-1 flex justify-between text-[11px] text-ink-3">
             {xAxisLabels(active.labels).map((label, index) => (
               <span key={index}>{label}</span>
             ))}
