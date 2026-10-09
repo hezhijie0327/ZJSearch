@@ -446,7 +446,7 @@ features/results/aiSearch/
 **两个前置回答**(重新引入子代理前必须回答——`spawn_subtask` 曾被移除,任务卡成为唯一分解面):
 
 1. 旧 spawn_subtask 嵌套是旧协议时代的产物;wire v2(entry-stamped 闭集 + dumb renderer)、共享 dedup registry、coverage referee 都是当时不存在的承载面。此次回归是新地基上的旧思想,不是翻案。
-2. 委派质量是模型能力的倍增器,而本栈处处按小模型设计 → 子代理**不做默认路径**:仅 deep/report 工具面注册、depth rung ≥ 阈值(缺省 3,可配)才开放;15× 的 token 经济由"高价值复杂问题"场景自行把关——这正是 Anthropic 给出的适用边界。
+2. 委派质量是模型能力的倍增器,而本栈处处按小模型设计 → 子代理**不做默认路径**:仅 deep/report 工具面注册、depth rung ≥ 3 才开放(2026-10-09 定:不设部署开关——deep + rung 门本身就是门,多一个开关是多余的配置面);15× 的 token 经济由"高价值复杂问题"场景自行把关——这正是 Anthropic 给出的适用边界。
 
 **运行模型**:
 

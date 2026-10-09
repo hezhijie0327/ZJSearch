@@ -51,7 +51,7 @@ from searx.zjsearch.ai.runs.search.gates import (
     sanitize_questions,
     standalone_question,
 )
-from searx.zjsearch.ai.runs.profile import budget, enabled, subagents_enabled, SEARCH_MODES
+from searx.zjsearch.ai.runs.profile import budget, enabled, SEARCH_MODES
 from searx.zjsearch.ai.prompts.researcher import initial_messages
 from searx.zjsearch.ai.runs.search.writer import writer_messages
 from searx.zjsearch.ai.tools import (
@@ -473,7 +473,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             task_tool=register_tasks,
             browser_tool=browser_on,
             steerable=handle is not None,
-            subagent_tool=subagents_enabled() and mode == "deep" and depth_rung >= 3,
+            subagent_tool=mode == "deep" and depth_rung >= 3,
             user_memories=user_memories,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
@@ -490,11 +490,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])
         + ([extract_spec()] if outline is not None else [])
-        + (
-            [research_subtask_spec()]
-            if subagents_enabled() and mode == "deep" and depth_rung >= 3
-            else []
-        )
+        + ([research_subtask_spec()] if mode == "deep" and depth_rung >= 3 else [])
         + [view_image_spec()]
         + mcp_tools,
         executor=state.execute,
