@@ -89,6 +89,10 @@ export interface AiSearchState extends Core {
   /** answer the awaiting run's clarify questions (null = skip) and start
       its research on the SAME run */
   submitClarify(text: string | null, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
+  /** the report rail's output-structure control: ONE pending template the
+      write boundary consumes (research phase only -- the synthesizer
+      re-mints the outline from it before the first section streams) */
+  setTemplate(template: ReportTemplate): Promise<boolean>;
   /** re-run the last run IN PLACE (the failed box's retry / regenerate) */
   retry(lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   /** continue an INTERRUPTED research as a new run in the same thread
@@ -230,6 +234,13 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         clarifications: clarify?.text ?? "",
         thread: threadId || undefined,
         history_sources: withUrl.map((item) => ({ url: item.url as string, title: item.title })),
+        // the knowledge base's METADATA recall (titles only -- the red
+        // line holds): the outline gate sees adjacent past topics, the
+        // researcher's feed never does
+        history_topics: [...new Set(withUrl.map((item) => String(item.title || "").trim()).filter(Boolean))].slice(
+          0,
+          8,
+        ),
         user_memories: userMemories.map((memory) => memory.content),
         past_research: [
           ...readerHits.map((hit) => ({ url: hit.url, title: hit.title, text: hit.text })),
@@ -529,6 +540,23 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     }
   };
 
+  const setTemplate = async (template: ReportTemplate): Promise<boolean> => {
+    const runKey = runKeyRef.current;
+    if (!runKey || !capability) {
+      return false;
+    }
+    try {
+      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
+        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "template", template }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      return Boolean(out.ok);
+    } catch {
+      return false;
+    }
+  };
+
   const wrap = () => {
     const runKey = runKeyRef.current;
     if (!runKey || !capability) {
@@ -587,5 +615,18 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     return true;
   };
 
-  return { ...core, start, followup, submitClarify, resume, retry, continue: continueRun, stop, steer, wrap, reset };
+  return {
+    ...core,
+    start,
+    followup,
+    submitClarify,
+    resume,
+    retry,
+    continue: continueRun,
+    stop,
+    steer,
+    setTemplate,
+    wrap,
+    reset,
+  };
 }

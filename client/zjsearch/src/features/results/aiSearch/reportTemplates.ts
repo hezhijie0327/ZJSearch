@@ -123,3 +123,43 @@ export const REPORT_TEMPLATES: readonly ReportTemplate[] = [intel, dd, competito
 export function parseTemplateId(raw: string | null | undefined): string | null {
   return REPORT_TEMPLATES.some((template) => template.id === raw) ? (raw as string) : null;
 }
+
+/** Validate an arbitrary parsed JSON against the template shape: 2-10
+    titled sections; returns the normalized template (a fresh user- id)
+    or null.  The structured editor and a pasted JSON both land here. */
+export function validateTemplate(value: unknown, name: string): ReportTemplate | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const rawSections = (value as { sections?: unknown }).sections;
+  if (!Array.isArray(rawSections)) {
+    return null;
+  }
+  const sections: ReportTemplateSection[] = [];
+  for (const raw of rawSections.slice(0, 10)) {
+    if (typeof raw !== "object" || raw === null) {
+      continue;
+    }
+    const title = String((raw as { title?: unknown }).title ?? "").trim();
+    if (!title) {
+      continue;
+    }
+    sections.push({
+      title: title.slice(0, 120),
+      brief: String((raw as { brief?: unknown }).brief ?? "")
+        .trim()
+        .slice(0, 300),
+      key_questions: Array.isArray((raw as { key_questions?: unknown }).key_questions)
+        ? (raw as { key_questions: unknown[] }).key_questions
+            .map((q) => String(q).trim().slice(0, 200))
+            .filter(Boolean)
+            .slice(0, 3)
+        : [],
+      optional: Boolean((raw as { optional?: unknown }).optional),
+    });
+  }
+  if (sections.length < 2) {
+    return null;
+  }
+  return { id: `user-${Date.now().toString(36)}`, name: name.trim().slice(0, 40) || "模板", sections };
+}

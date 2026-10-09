@@ -340,10 +340,11 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       // idempotent -- a re-settle or a startRun-pre-inserted row can
       // never double-count); the title stays the FIRST run's question
       await pgQuery(
-        `INSERT INTO thread_head (thread_id, title, preview, runs, sources, updated, pinned)
+        `INSERT INTO thread_head (thread_id, title, preview, runs, sources, reports, updated, pinned)
          VALUES ($1, $2, $3,
            (SELECT count(*) FROM knowledge kr WHERE kr.thread_id = $1 AND kr.kind = 'run'),
            (SELECT count(*) FROM knowledge ks WHERE ks.thread_id = $1 AND ks.kind = 'source_ref'),
+           (SELECT count(*) FROM knowledge kp WHERE kp.thread_id = $1 AND kp.kind = 'run' AND kp.meta->'report' IS NOT NULL),
            $4, 0)
          ON CONFLICT (thread_id) DO UPDATE SET preview = EXCLUDED.preview,
            runs = EXCLUDED.runs, sources = EXCLUDED.sources, updated = EXCLUDED.updated`,

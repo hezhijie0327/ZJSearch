@@ -13,6 +13,7 @@ import {
   Lightbulb,
   ListEnd,
   ListTodo,
+  ListTree,
   LoaderCircle,
   MessageCircleQuestion,
   NotebookPen,
@@ -27,6 +28,7 @@ import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, use
 import { createPortal } from "react-dom";
 import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
+import { Dropdown } from "@/components/Dropdown.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
@@ -41,6 +43,7 @@ import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.t
 import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import { DocumentView } from "@/features/results/aiSearch/report/DocumentView.tsx";
+import { REPORT_TEMPLATES, type ReportTemplate } from "@/features/results/aiSearch/reportTemplates.ts";
 import type {
   AiAskQuestion,
   AiSearchCall,
@@ -54,6 +57,7 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { formatDuration } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
+import { listTemplates } from "@/lib/kb/templates.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml } from "@/lib/print.ts";
 import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
@@ -821,6 +825,58 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
   );
 }
 
+/** The rail's 输出结构 control (report runs, research phase only): the
+    run-time template pick rides run/control to the write boundary -- the
+    synthesizer re-mints the outline from it before the first section
+    streams.  Presets AND the user's own PGlite templates. */
+function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) => Promise<boolean> }) {
+  const t = useT();
+  const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+  const [current, setCurrent] = useState("");
+  const [settleNote, setSettleNote] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void listTemplates().then((rows) => {
+      if (!cancelled) {
+        setTemplates(rows);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const options = [
+    ...REPORT_TEMPLATES.map((template) => ({ value: template.id, label: template.name })),
+    ...templates.map((template) => ({ value: template.id, label: template.name })),
+  ];
+  return (
+    <section aria-label={t("ai_output_structure")} className="mb-5">
+      <RailHeader icon={ListTree} title={t("ai_output_structure")} />
+      <div className="mt-3">
+        <Dropdown
+          ariaLabel={t("ai_output_structure")}
+          onChange={(value) => {
+            const template = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === value);
+            if (template) {
+              setCurrent(value);
+              void onPick(template).then((ok) => {
+                if (ok) {
+                  setSettleNote(true);
+                }
+              });
+            }
+          }}
+          options={options}
+          value={current}
+        />
+        <p className="mt-1.5 px-1 text-[11px] leading-relaxed text-ink-3">
+          {settleNote ? t("ai_output_structure_set") : t("ai_output_structure_hint")}
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function AiSearchRunSectionImpl({
   run,
   isFirst,
@@ -834,6 +890,7 @@ function AiSearchRunSectionImpl({
   onRelated,
   onStop,
   onWrap,
+  onSetTemplate,
   onSubmitClarify,
 }: {
   run: AiSearchRun;
@@ -852,6 +909,8 @@ function AiSearchRunSectionImpl({
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
   onStop?: () => void;
+  /** the report rail's output-structure control (research phase only) */
+  onSetTemplate?: (template: ReportTemplate) => Promise<boolean>;
   /** 收尾: the run finishes its round and the writer answers from the
       material gathered (the graceful end beside the hard stop) */
   onWrap?: () => void;
@@ -1268,6 +1327,9 @@ function AiSearchRunSectionImpl({
                 run.browser ?? Object.values(run.browserSessions ?? {}).find((item) => item.img) ?? null;
               return mirror ? <BrowserMirrorSection sessions={run.browserSessions} view={mirror} /> : null;
             })()}
+            {streaming && run.mode === "deep" && !run.outline && onSetTemplate ? (
+              <OutputStructureCard onPick={onSetTemplate} />
+            ) : null}
             {run.attachments?.length ? (
               <section aria-label={t("ai_attach_section")} className="mb-5">
                 <RailHeader count={run.attachments.length} icon={Paperclip} title={t("ai_attach_section")} />

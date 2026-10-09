@@ -920,6 +920,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onFallback={onRunFallback}
                       onRegenerate={onRunRegenerate}
                       onRelated={onRunRelated}
+                      onSetTemplate={(template) => aiSearch.setTemplate(template)}
                       onStop={onRunStop}
                       onSubmitClarify={onRunClarify}
                       onWrap={() => {

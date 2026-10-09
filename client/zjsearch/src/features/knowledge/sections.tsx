@@ -101,6 +101,9 @@ export function ThreadRows({
   onHome?: () => void;
 }) {
   const t = useT();
+  // the directory's 报告 filter: only threads carrying report-mode runs
+  const [reportsOnly, setReportsOnly] = useState(false);
+  const shown = reportsOnly ? threads.filter((thread) => thread.reports > 0) : threads;
   if (threads.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center px-2 py-20 text-center">
@@ -130,7 +133,24 @@ export function ThreadRows({
   }
   return (
     <Card>
-      {threads.map((thread) => (
+      {threads.some((thread) => thread.reports > 0) ? (
+        <div className="flex items-center gap-2 px-5 pt-4 sm:px-6">
+          <button
+            className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-xs transition-colors ${
+              reportsOnly
+                ? "border border-accent-strong bg-accent-soft font-medium text-accent"
+                : "border border-line text-ink-3 hover:text-ink"
+            }`}
+            onClick={() => {
+              setReportsOnly((on) => !on);
+            }}
+            type="button"
+          >
+            {t("knowledge_filter_reports")}
+          </button>
+        </div>
+      ) : null}
+      {shown.map((thread) => (
         <div
           className="group flex flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
           key={thread.id}
@@ -156,6 +176,11 @@ export function ThreadRows({
           ) : null}
           <div className="flex flex-wrap items-center gap-2 text-xs text-ink-3">
             <span className="shrink-0">{formatDate(new Date(thread.updated).toISOString())}</span>
+            {thread.reports > 0 ? (
+              <span className="inline-flex min-h-6 items-center rounded-full border border-accent-strong/40 bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
+                {t("knowledge_badge_report", { n: String(thread.reports) })}
+              </span>
+            ) : null}
             <span className={CHIP_OUTLINE}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
             {thread.sources > 0 ? (
               <span className={CHIP_OUTLINE}>{t("knowledge_row_sources", { n: String(thread.sources) })}</span>
@@ -599,6 +624,18 @@ export function InspectorView({
         }));
   const usage: OverviewUsage | null =
     item.kind === "run" ? (extras?.usage ?? null) : ((item.meta?.usage as OverviewUsage | undefined) ?? null);
+  // the REPORT document's shape (settled into run.meta.report) -- the
+  // inspector renders it as a reading TOC above the glued answer
+  const reportToc = (() => {
+    if (item.kind !== "run") {
+      return null;
+    }
+    const report = item.meta?.report as
+      | { title?: string; sections?: Array<{ id?: string; title?: string }> }
+      | undefined;
+    const sections = (report?.sections ?? []).filter((section) => section.title);
+    return sections.length >= 2 ? { title: report?.title ?? "", sections } : null;
+  })();
   // the MD/PDF exports' source list (overview: the stored cited sources;
   // research: the run's source_ref join)
   const exportSources = sources.map((source) => ({
@@ -720,7 +757,31 @@ export function InspectorView({
               )
             ) : item.kind === "run" ? (
               body ? (
-                <InspectorMarkdown text={body} />
+                <>
+                  {reportToc ? (
+                    <nav aria-label={t("ai_report_toc")} className="mb-4 rounded-xl bg-surface-2/40 px-3 py-2.5">
+                      <p className="px-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-ink-3">
+                        {String(reportToc.title || t("ai_report_toc"))}
+                      </p>
+                      <ol className="space-y-0.5">
+                        {reportToc.sections.map((section, index) => (
+                          <li
+                            className="flex items-center gap-2 px-1.5 py-0.5 text-[13px] text-ink-2"
+                            key={section.id ?? String(index)}
+                          >
+                            <span className="w-4 shrink-0 text-end font-mono text-[11px] tabular-nums text-ink-3">
+                              {index + 1}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate" dir="auto">
+                              {section.title}
+                            </span>
+                          </li>
+                        ))}
+                      </ol>
+                    </nav>
+                  ) : null}
+                  <InspectorMarkdown text={body} />
+                </>
               ) : (
                 <p className="text-[13px] text-ink-3">…</p>
               )

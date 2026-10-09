@@ -376,6 +376,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     outline_attachments = [
         {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
     ]
+    # the knowledge base's METADATA recall: the client's pre-run corpus
+    # recall distilled to TITLES (the red line -- the researcher's feed
+    # never sees recalled content; the outline gate sees only topics)
+    prior_topics = [str(topic).strip()[:120] for topic in (payload.get("history_topics") or []) if str(topic).strip()][:8]
     if report_requested:
         if report_template is not None:
             outline = report_outline.build_outline_from_template(
@@ -450,6 +454,27 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         state.judgments.append(pre_entry)
 
     past_ref: list[dict[str, t.Any]] = []
+
+    def _take_template() -> dict[str, t.Any] | None:
+        """The rail's 输出结构 channel: consume the ControlBox's pending
+        template and RE-MINT the outline from it right here (the same
+        adaptation gate the route-time outline used -- question, clarified
+        direction and attachment heads all apply).  ``None`` = no pick."""
+        if handle is None:
+            return None
+        template = handle.control.take_template()
+        if template is None:
+            return None
+        return report_outline.build_outline_from_template(
+            cfg,
+            research_q,
+            lang,
+            clarifications if clarify_state == "answered" else "",
+            template,
+            gate_usage,
+            attachments=outline_attachments,
+            prior_topics=prior_topics,
+        )
 
     def assign_past_sources() -> list[dict[str, t.Any]]:
         """Number the recalled past-research sources AFTER the live feed's
@@ -561,7 +586,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         display=lambda calls: [display_item(idx, call) for idx, call in enumerate(calls, 1)],
         **(
             {
-                "synthesizer": report_synth.make_synthesizer(cfg, state, outline, research_q, lang, gate_usage),
+                "synthesizer": report_synth.make_synthesizer(
+                    cfg, state, outline, research_q, lang, gate_usage, take_template=_take_template
+                ),
                 "writer": None,
             }
             if outline is not None

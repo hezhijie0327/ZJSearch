@@ -71,6 +71,7 @@ class ControlBox:
         self._stop = False
         self._preempt: str | None = None
         self._steers: "deque[str]" = deque()
+        self._pending_template: dict | None = None
 
     def stop(self) -> None:
         with self._lock:
@@ -119,6 +120,21 @@ class ControlBox:
             out = list(self._steers)
             self._steers.clear()
             return out
+
+    def set_template(self, template: dict) -> None:
+        """The rail's 输出结构 control: one PENDING template for the write
+        boundary -- the synthesizer re-mints the outline from it before
+        the first section streams.  The latest write wins (a second set
+        before the boundary simply replaces it)."""
+        with self._lock:
+            self._pending_template = template
+
+    def take_template(self) -> dict | None:
+        """The synthesizer's boundary consume (one shot)."""
+        with self._lock:
+            template = self._pending_template
+            self._pending_template = None
+            return template
 
 
 class Subscription:  # pylint: disable=too-few-public-methods

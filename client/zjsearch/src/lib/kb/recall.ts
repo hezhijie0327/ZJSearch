@@ -135,6 +135,9 @@ export interface ThreadSummary {
   title: string;
   runs: number;
   sources: number;
+  /** the thread's REPORT-mode runs (run.meta.report settles it) -- the
+      directory's 报告 badge + filter read it */
+  reports: number;
   updated: number;
   pinned: boolean;
   /** the latest run's answer head -- the row shows the result, the
@@ -174,7 +177,7 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
   await pg();
   sweepStaleRuns();
   const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT thread_id AS id, title, preview, runs, sources, updated, pinned
+    `SELECT thread_id AS id, title, preview, runs, sources, reports, updated, pinned
      FROM thread_head ORDER BY pinned DESC, updated DESC LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
@@ -183,6 +186,7 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
     title: String(row.title ?? ""),
     runs: Number(row.runs) || 0,
     sources: Number(row.sources) || 0,
+    reports: Number(row.reports) || 0,
     updated: Number(row.updated) || 0,
     pinned: Number(row.pinned) === 1,
     preview: String(row.preview ?? ""),

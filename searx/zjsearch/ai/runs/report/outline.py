@@ -42,13 +42,15 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
     clarified: str,
     gate_usage: list[dict[str, t.Any]],
     attachments: list[dict[str, str]] | None = None,
+    prior_topics: list[str] | None = None,
 ) -> dict[str, t.Any] | None:
     """The skeleton: ``{title, subtitle, sections: [{id, title, brief,
     key_questions, status}], entities: [{name, why}]}`` -- ids minted
     here (``s1``...), the server-synthesized ``summary`` / ``method``
     sections are NOT part of the gate's contract.  ``attachments`` ride
-    as heads (they may bind the deliverable's structure).  ``None`` on
-    any failure."""
+    as heads (they may bind the deliverable's structure);
+    ``prior_topics`` is the KNOWLEDGE BASE's metadata recall (titles
+    only -- the red line: never content).  ``None`` on any failure."""
     system = "\n".join([report_prompts.OUTLINE_SYSTEM, spine.language_directive(lang)])
     user = f"<question>{question[:2000]}</question>"
     if clarified:
@@ -193,6 +195,29 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
     if usage:
         gate_usage.append(usage)
     return _parse_outline(value, question)
+
+
+def _prior_topics_block(topics: list[str] | None) -> str:
+    """The knowledge base's METADATA recall (titles only -- the research
+    feed's red line stays): the plan may build on, refresh, or explicitly
+    differentiate from the adjacent past work; the sources themselves
+    join at the writer phase (history_sources)."""
+    clean = [str(topic).strip()[:120] for topic in (topics or []) if str(topic).strip()]
+    if not clean:
+        return ""
+    lines = "\n".join(f"- {topic}" for topic in clean[:8])
+    parts = [
+        "",
+        "<prior_research_topics>",
+        "The user's PAST research sessions already covered these adjacent",
+        "topics (titles only):",
+        lines,
+        "Consider whether the plan builds on, refreshes, or deliberately",
+        "differentiates from them -- this is metadata, not material.",
+        "</prior_research_topics>",
+        "",
+    ]
+    return "\n".join(parts)
 
 
 def uncovered_entities(outline: dict[str, t.Any]) -> list[str]:

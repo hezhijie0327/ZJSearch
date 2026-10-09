@@ -85,18 +85,32 @@ def make_synthesizer(
     question: str,
     lang: str,
     gate_usage: list[dict[str, t.Any]],  # pylint: disable=unused-argument
+    take_template: t.Callable[[], dict[str, t.Any] | None] | None = None,
 ) -> t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]]:
     """Bind the run's state and outline; returns the synthesizer the loop
     calls with the tally at write-phase time.  ``gate_usage`` receives the
     outline gate's spend on the route side; the citation gate's verdicts
-    land in ``state.judgments`` (the 决策结果 card)."""
+    land in ``state.judgments`` (the 决策结果 card).  ``take_template`` is
+    the rail's 输出结构 channel: ONE pending template consumed at the write
+    boundary -- a template the user picked while the research ran REPLACES
+    the route-time outline before the first section streams (the rebuilt
+    skeleton arrives as the first ``outline`` snapshot; the client's TOC
+    follows automatically)."""
     lang_directive = spine.language_directive(lang)
 
     def stream(messages: list[dict[str, t.Any]], section_id: str, tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
         yield from _stream_section_once(cfg, messages, section_id, tally, gap_text)
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
+        nonlocal outline
         tally.phase = "write"
+        # the write boundary's template consume: the rail's last 输出结构
+        # pick (if any) re-mints the skeleton HERE -- the research ran on
+        # its own ledger either way, only the document's shape changes
+        rebuilt = take_template() if take_template is not None else None
+        if rebuilt is not None:
+            logger.info("zjsearch report: outline re-minted from a run-time template pick")
+            outline = rebuilt
         started = time.monotonic()
         # the run's own two languages (the client renders the catalog tag
         # verbatim into TOC entries): the synthesized sections' identity

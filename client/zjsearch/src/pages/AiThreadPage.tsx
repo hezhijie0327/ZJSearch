@@ -199,6 +199,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                   setFollowupQuery("");
                   aiSearch.followup(question, aiLang, researchMode);
                 }}
+                onSetTemplate={(template) => aiSearch.setTemplate(template)}
                 onStop={() => {
                   aiSearch.stop();
                 }}

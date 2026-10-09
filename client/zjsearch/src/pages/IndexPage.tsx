@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Lightbulb, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
@@ -11,15 +11,17 @@ import { Shell } from "@/components/Shell.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
-import { parseTemplateId, REPORT_TEMPLATES } from "@/features/results/aiSearch/reportTemplates.ts";
+import { parseTemplateId, REPORT_TEMPLATES, type ReportTemplate } from "@/features/results/aiSearch/reportTemplates.ts";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
+import { listTemplates } from "@/lib/kb/templates.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
 import type { BasicPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 import { preloadResultsPage } from "@/pages/lazyPages.ts";
+import { TemplateManagerDialog } from "@/pages/TemplateManager.tsx";
 
 interface IndexData extends BasicPageData {
   selected_categories?: string[];
@@ -86,6 +88,19 @@ export function IndexPage({ data }: { data: IndexData }) {
   const [templateId, setTemplateId] = useState<string | null>(() =>
     parseTemplateId(new URLSearchParams(window.location.search).get("template")),
   );
+  const [userTemplates, setUserTemplates] = useState<ReportTemplate[]>([]);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void listTemplates().then((rows) => {
+      if (!cancelled) {
+        setUserTemplates(rows);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [selected, setSelected] = useState<string[]>(
     data.selected_categories && data.selected_categories.length > 0
       ? data.selected_categories
@@ -122,8 +137,14 @@ export function IndexPage({ data }: { data: IndexData }) {
     });
   };
 
+  const refreshTemplates = () => {
+    void listTemplates().then((rows) => {
+      setUserTemplates(rows);
+    });
+  };
   const [helpOpen, setHelpOpen] = useState(false);
   const { render: renderHelp, closing: helpClosing } = useExitPresence(helpOpen);
+  const { render: renderTemplateManager, closing: templateManagerClosing } = useExitPresence(templateManagerOpen);
   const [hintHidden, setHintHidden] = useState(() => window.localStorage.getItem("zjs-hint-hidden") === "1");
   const settings = useSettings();
   const t = useT();
@@ -209,9 +230,21 @@ export function IndexPage({ data }: { data: IndexData }) {
                   options={[
                     { value: "", label: t("report_template_free") },
                     ...REPORT_TEMPLATES.map((template) => ({ value: template.id, label: template.name })),
+                    ...userTemplates.map((template) => ({ value: template.id, label: template.name })),
                   ]}
                   value={templateId ?? ""}
                 />
+              ) : null}
+              {aiMode && aiDepth === "report" ? (
+                <button
+                  className="text-[13px] text-ink-3 underline-offset-2 transition-colors hover:text-ink hover:underline"
+                  onClick={() => {
+                    setTemplateManagerOpen(true);
+                  }}
+                  type="button"
+                >
+                  {t("template_manager")}
+                </button>
               ) : null}
               {aiMode ? null : (
                 <button
@@ -299,6 +332,15 @@ export function IndexPage({ data }: { data: IndexData }) {
           </button>
         </div>
       </Collapse>
+      {renderTemplateManager ? (
+        <TemplateManagerDialog
+          closing={templateManagerClosing}
+          onChanged={refreshTemplates}
+          onClose={() => {
+            setTemplateManagerOpen(false);
+          }}
+        />
+      ) : null}
       {renderHelp ? (
         <HelpModal closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
       ) : null}

@@ -35,7 +35,7 @@ async function liveQuery<T>(sql: string, params: unknown[], onUpdate: (rows: T[]
 export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): Promise<StoreSubscription> {
   void pg().then(() => sweepStaleRuns());
   return liveQuery<Record<string, unknown>>(
-    `SELECT thread_id AS id, title, preview, runs, sources, updated, pinned
+    `SELECT thread_id AS id, title, preview, runs, sources, reports, updated, pinned
      FROM thread_head ORDER BY pinned DESC, updated DESC LIMIT 40`,
     [],
     (rows) =>
@@ -44,6 +44,7 @@ export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): 
           id: String(row.id),
           title: String(row.title ?? ""),
           runs: Number(row.runs) || 0,
+          reports: Number(row.reports) || 0,
           sources: Number(row.sources) || 0,
           updated: Number(row.updated) || 0,
           pinned: Number(row.pinned) === 1,

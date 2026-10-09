@@ -266,6 +266,9 @@ async function createSchema(db: Pg): Promise<void> {
     updated   double precision NOT NULL DEFAULT 0,
     pinned    integer NOT NULL DEFAULT 0
   )`);
+  // v5.1: the thread directory carries its report count (the 报告 badge +
+  // the directory's report filter read it; idempotent for existing DBs)
+  await db.query("ALTER TABLE thread_head ADD COLUMN IF NOT EXISTS reports integer NOT NULL DEFAULT 0");
   await db.query(`CREATE TABLE IF NOT EXISTS run_summary (
     run_id      text PRIMARY KEY,
     thread_id   text NOT NULL,

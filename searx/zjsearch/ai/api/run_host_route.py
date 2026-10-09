@@ -68,8 +68,21 @@ def _control_view() -> t.Any:
         # into the writer with the material gathered -- the same halt the
         # detach grace uses
         handle.wrap()
+    elif action == "template":
+        # the rail's 输出结构 control: ONE pending template the write
+        # boundary consumes -- the synthesizer re-mints the outline from
+        # it before the first section streams (writer-not-started only by
+        # construction: the control carries nothing once the write phase
+        # owns the loop, and a consumed slot is a no-op)
+        from searx.zjsearch.ai.runs.report import outline as report_outline
+
+        template = report_outline.parse_template(payload.get("template"))
+        if template is None:
+            error = "template payload failed validation"
+        else:
+            handle.control.set_template(template)
     else:
-        error = "action must be stop / steer / preempt / wrap"
+        error = "action must be stop / steer / preempt / wrap / template"
     if error:
         return flask.jsonify({"ok": False, "error": error}), 422
     return flask.jsonify({"ok": True})
