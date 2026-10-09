@@ -830,3 +830,43 @@ stays unaccounted (per-request one-shot, not a run budget); the
 prompts→tools name-constant edge is accepted (names live beside their
 specs; the cycle stays lazy-import safe); `handlers.execute` (645
 lines) and `_search` (575) await the handler-table refactor.
+
+## 7.6 Round record — 2026-10 (the inspector-document round: the shattering glue)
+
+One user-reported defect with a two-layer lesson: the knowledge panel's
+report preview rendered ONE TOKEN PER LINE, and the fix turned into an
+upgrade the inspector had been waiting for.
+
+- **The glue shattered per delta**: the `section` wire event's fold
+  computed the markdown block-boundary separator (`\n\n`) PER DELTA, not
+  per section -- every streamed chunk became its own paragraph in the
+  glued `run.answer`. The research page never showed it (per-section
+  panes render their own buffers); only consumers of the GLUE broke:
+  the knowledge projection, the copy path, the exports. Regression: a
+  report run's knowledge preview must render flowing paragraphs.
+- **The inspector now renders the DOCUMENT, not the glue**: settleRun
+  persists per-section texts (`run_summary.sections`, v5.2 idempotent
+  column) beside the outline it already stored in `run.meta.report`;
+  the run inspector renders THE SAME `DocumentView` the research page
+  used (cover, clickable TOC, per-section headings, citation chips,
+  tables, mermaid, the 14px answer tier). Citation chips open the
+  source in a new tab (the panel has no rail to scroll to). Older rows
+  keep the glued-text fallback.
+- **The report's MD export is the document**: `downloadReportMarkdown`
+  builds title + subtitle + `## ` section headings in outline order +
+  verbatim bodies + the numbered source list (the headless glued text
+  was the old shape). The 📄 print view inherits the structure
+  (verified light-on-white, sources tail, clean afterprint teardown).
+- **The idempotent re-settle IS the migration**: replaying a stored
+  thread re-fires the settle checkpoint, which re-writes the run's
+  projections with the replayed (fixed) fold -- the corrupted row
+  repaired itself on the first reload after the rebuild, no data
+  migration needed. Anything that breaks the replay fold now has a
+  built-in repair path: fix the fold, reload the thread.
+- Verification recipe (§5 extension): patch `URL.createObjectURL`
+  before clicking ⬇ to capture the exported blob and assert on its
+  content (headings count, source lines, placeholder absence) -- the
+  download itself is not observable in the IAB; the §5 recipe 5
+  print-probe (window.print no-op patch → `#zjs-print-view-root`
+  inspection → tokens-to-initial color check → manual `afterprint`)
+  passed unchanged against the new document renderer.
