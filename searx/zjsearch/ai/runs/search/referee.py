@@ -218,7 +218,12 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         gate = decision_features("evidence_check")
         if not gate.get("enabled") or not decision.enabled() or not decision.configured():
             return []
-        candidates = list(self.head_sources.items())[: int(gate.get("head", 8) or 8)]
+        # the check's face scales with the run's evidence base: a report
+        # resting on 100+ sources warrants more than the chat-shaped 8
+        # (capped at 24 -- fail-open, still one noul per source)
+        head_n = int(gate.get("head", 8) or 8)
+        head_n = max(head_n, min(24, len(self.head_sources) // 5))
+        candidates = list(self.head_sources.items())[:head_n]
         if not candidates:
             return []
         started = time.monotonic()

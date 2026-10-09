@@ -26,9 +26,11 @@ from searx.zjsearch.ai.llm import rerank as rerank_service
 
 logger = logging.getLogger(__name__)
 
-RERANK_HEAD = 20
+RERANK_HEAD = 30
 """How many BM25-ranked results the rerank model re-scores -- a reranker
-is a head-precision instrument; the tail keeps its BM25 order behind it."""
+is a head-precision instrument; the tail keeps its BM25 order behind it.
+30 (of the 30-result engine fan-out) = the WHOLE head rides the
+cross-encoder."""
 
 RERANK_SNIPPET_CHARS = 400
 """The per-document text sent to the rerank model: title + snippet head
@@ -59,7 +61,17 @@ def bm25_order(query: str, results: list[t.Any]) -> list[int] | None:
     if float(scores.max()) <= 0:
         return None
     bm25_ranking = sorted(non_empty, key=lambda i: float(scores[i]), reverse=True)
-    fused = _rrf([bm25_ranking, list(non_empty)], [1.0, 0.25], RRF_K)
+    # the engines' own score as a THIRD RRF leg (a cheap authority prior:
+    # searx aggregates engine weights into result.score -- text relevance
+    # still dominates, the prior only breaks text ties toward the engines'
+    # consensus).  Fail-open: results without scores simply don't join.
+    scored = [i for i in non_empty if float(_field(results[i], "score", 0) or 0) > 0]
+    legs: list[list[int]] = [bm25_ranking, list(non_empty)]
+    weights = [1.0, 0.25]
+    if len(scored) >= 2:
+        legs.append(sorted(scored, key=lambda i: -float(_field(results[i], "score", 0) or 0)))
+        weights.append(0.4)
+    fused = _rrf(legs, weights, RRF_K)
     ranked = set(fused)
     return fused + [i for i in range(len(results)) if i not in ranked]
 

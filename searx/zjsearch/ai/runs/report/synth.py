@@ -20,6 +20,7 @@ import typing as t
 
 from searx.zjsearch.ai.agent import wire
 from searx.zjsearch.ai.llm import decision
+from searx.zjsearch.ai.llm import embed as embed_service
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.llm.streaming import LlmStream
 from searx.zjsearch.ai.prompts import report as report_prompts
@@ -155,7 +156,19 @@ def make_synthesizer(
         sec: dict[str, t.Any], prev_tail: str, written: dict[str, str], status: dict[str, str]
     ) -> list[dict[str, t.Any]]:
         query = " ".join([sec["title"], sec["brief"], *sec["key_questions"]])
-        material = state.corpus.pack(query, k=14, budget=PACK_BUDGET_DEFAULT)
+        # the cross-section dedup's probe vectors: the already-written
+        # sections' heads -- chunks repeating them get demoted from the
+        # pack (fail-open: embedding off keeps every chunk eligible)
+        avoid_vectors: list[list[float]] = []
+        if embed_service.configured() and written:
+            try:
+                heads = [text[:400] for text in list(written.values())[-6:]]
+                batch = embed_service.run_batch(heads, timeout=8.0)
+                if batch and len(batch[0]) == len(heads):
+                    avoid_vectors = batch[0]
+            except Exception:  # pylint: disable=broad-except
+                avoid_vectors = []
+        material = state.corpus.pack(query, k=14, budget=PACK_BUDGET_DEFAULT, avoid=avoid_vectors)
         system = "\n".join([report_prompts.SECTION_SYSTEM, lang_directive])
         user = _section_user(sec, outline, prev_tail, written, material, state.artifacts)
         _ = status
@@ -200,7 +213,11 @@ def make_synthesizer(
         gate_cfg = decision_features("citation_gate")
         if gate_cfg.get("enabled") is False:
             return
-        claims = _CLAIM_RE.findall(text)[:_MAX_GATE_CLAIMS]
+        # the sampling scales with the section (a 2k-char section warrants
+        # more than three spot checks; 6 is the ceiling -- still a spot
+        # check, never an audit)
+        max_claims = max(_MAX_GATE_CLAIMS, min(6, len(text) // 800))
+        claims = _CLAIM_RE.findall(text)[:max_claims]
         if not claims:
             return
         needed: set[int] = set()

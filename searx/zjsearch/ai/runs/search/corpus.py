@@ -35,6 +35,9 @@ RERANK_HEAD = 24
 PACK_BUDGET_DEFAULT = 9_000
 """Default per-section context budget in characters."""
 EMBED_RESCUE_LIMIT = 120
+REPEAT_COSINE = 0.92
+"""The cross-section repeat threshold (the memory-dedup floor -- the one
+shared notion of "reads as the same material again")."""
 """The embedding rescue embeds at most this many chunk heads (one batch
 round trip; the corpus head is where BM25's zero signal lives anyway)."""
 
@@ -89,7 +92,14 @@ class Corpus:
         the merged index stays consistent."""
         self._chunks.extend(other._chunks)  # pylint: disable=protected-access
 
-    def pack(self, query: str, *, k: int = 14, budget: int = PACK_BUDGET_DEFAULT) -> list[str]:
+    def pack(
+        self,
+        query: str,
+        *,
+        k: int = 14,
+        budget: int = PACK_BUDGET_DEFAULT,
+        avoid: list[list[float]] | None = None,
+    ) -> list[str]:
         """The section's key material: the top-k chunks as numbered feed
         lines (``[n] title — text``), most-relevant first, within the
         character budget.  BM25 ranks, the rerank provider re-scores the
@@ -102,6 +112,24 @@ class Corpus:
             order = self._embed_rescue(query)
         if order is None:
             order = list(range(len(self._chunks)))
+        if avoid:
+            # the CROSS-SECTION dedup: chunks whose vector clears the repeat
+            # threshold against an already-written section are DEMOTED (the
+            # report's License-Out section must not re-pack the pipeline
+            # section's material verbatim); one batch embed over the
+            # retrieval head, any failure keeps the order standing
+            try:
+                cand = order[:RERANK_HEAD]
+                batch = embed_service.run_batch([self._head(i) for i in cand], timeout=8.0)
+                if batch and len(batch[0]) == len(cand):
+                    drop = {
+                        cand[j]
+                        for j in range(len(cand))
+                        if any(embed_service.cosine(batch[0][j], av) > REPEAT_COSINE for av in avoid)
+                    }
+                    order = [i for i in order if i not in drop]
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("zjsearch corpus: cross-section dedup skipped: %r", exc)
         if rerank_service.configured() and len(order) > 1:
             heads = [self._head(i) for i in order[:RERANK_HEAD]]
             try:

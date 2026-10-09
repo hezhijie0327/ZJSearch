@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { LoaderCircle } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
 import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { citeToLinks } from "@/lib/citations.ts";
@@ -43,6 +43,35 @@ export function DocumentView({
   const outline = run.outline;
   const anchorId = (id: string) => `zjs-report-${run.runNo}-${id}`;
   const doneCount = useMemo(() => outline.sections.filter((s) => s.status === "done").length, [outline.sections]);
+  // scroll-spy: the TOC row of the section nearest the viewport top gets
+  // the active accent (IntersectionObserver -- rootMargin picks whichever
+  // section crosses the upper third of the document pane)
+  const [activeId, setActiveId] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const id = (entry.target as HTMLElement).id.replace(`zjs-report-${run.runNo}-`, "");
+            setActiveId(id);
+          }
+        }
+      },
+      { rootMargin: "-15% 0px -70% 0px" },
+    );
+    for (const section of outline.sections) {
+      const el = document.getElementById(anchorId(section.id));
+      if (el) {
+        io.observe(el);
+      }
+    }
+    return () => {
+      io.disconnect();
+    };
+  }, [outline.sections, run.runNo]);
   const jump = (id: string) => {
     document.getElementById(anchorId(id)) &&
       scrollIntoViewAnimated(document.getElementById(anchorId(id)) as HTMLElement);
@@ -70,7 +99,9 @@ export function DocumentView({
           {outline.sections.map((section, index) => (
             <li key={section.id}>
               <button
-                className="group flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start text-[13px] text-ink-2 transition-colors hover:bg-surface-2/70 hover:text-ink"
+                className={`group flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start text-[13px] transition-colors hover:bg-surface-2/70 ${
+                  activeId === section.id ? "bg-surface-2/70 font-medium text-accent" : "text-ink-2 hover:text-ink"
+                }`}
                 onClick={() => {
                   jump(section.id);
                 }}
