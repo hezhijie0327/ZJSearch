@@ -175,8 +175,7 @@ export const EN = {
   ai_halt_stopped_by_user: "Research stopped at your request",
   ai_halt_wrap_grace_ended: "Connection lost -- the run wrapped up with the material gathered so far",
   ai_output_structure: "Output structure",
-  ai_output_structure_free:
-    "The writer designs the outline from the research -- pick a template to fix the document's shape.",
+  ai_output_structure_free: "Designed automatically from the research",
   report_template_free: "Smart outline",
   ai_search_running: "searching…",
   ai_search_row_failed: "failed",
