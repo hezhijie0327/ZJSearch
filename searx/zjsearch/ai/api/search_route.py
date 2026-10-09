@@ -545,6 +545,16 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     state.attached_files = [
         {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
     ]
+    if attached_files:
+        # THE REPORT PATH'S FRAMEWORK PIPE: the synthesizer's sections never
+        # see the researcher's prompt blocks, so every attached file ALSO
+        # lands in the RUN CORPUS as uncited chunks -- the per-section pack
+        # then retrieves exactly the rule lines that section needs (a
+        # RULE-CCM-02 row matches the 管线/Spec-in section's query).  The
+        # single-write writer already carried the binding note; without this
+        # the report body could never apply the framework it was built on.
+        for file in state.attached_files:
+            state.corpus.add(str(file["text"])[:60_000], ref_n=0, title=str(file["name"])[:120], kind="attachment")
     if outline:
         # the outline's deliverable-entity screen: entities no section
         # researches become the researcher's <deliverable_entities> block

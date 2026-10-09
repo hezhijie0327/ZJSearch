@@ -41,6 +41,7 @@ class SynthesizerClosureTest(unittest.TestCase):
             artifacts={},
             entries={},
             judgments=[],
+            attached_files=[],
         )
         synthesizer = synth.make_synthesizer({}, state, outline, "q", "zh-CN", [])
         events = []

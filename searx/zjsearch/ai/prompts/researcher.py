@@ -476,8 +476,11 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " basic sourced facts before the research ends.\n</deliverable_entities>\n"
         )
     for file in attached_files or []:
-        text = str(file.get("text") or "")[:30_000]
-        trunc = "\n[... the file was truncated ...]" if len(str(file.get("text") or "")) > 30_000 else ""
+        # 60K = the uploads layer's per-file cap (a framework contract must
+        # arrive WHOLE -- the old 30K re-cap cut the 57KB BP framework in
+        # half and the run could never cite the rules it never saw)
+        text = str(file.get("text") or "")[:60_000]
+        trunc = "\n[... the file was truncated ...]" if len(str(file.get("text") or "")) > 60_000 else ""
         run_context += (
             "<attached_file>\nThe user attached this file -- its FULL text"
             " follows.  Factor it into the plan; it is user-provided"

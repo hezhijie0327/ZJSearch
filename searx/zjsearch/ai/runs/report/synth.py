@@ -187,7 +187,7 @@ def make_synthesizer(
                 avoid_vectors = []
         material = state.corpus.pack(query, k=14, budget=PACK_BUDGET_DEFAULT, avoid=avoid_vectors)
         system = "\n".join([report_prompts.SECTION_SYSTEM, lang_directive])
-        user = _section_user(sec, outline, prev_tail, written, material, state.artifacts)
+        user = _section_user(sec, outline, prev_tail, written, material, state.artifacts, state.attached_files or None)
         _ = status
         return [
             {"role": "system", "content": system},
@@ -293,7 +293,7 @@ def make_synthesizer(
             return
         fix_note = "\n".join(f"- {claim}" for claim in failed)
         revision = (
-            _section_user(sec, outline, "", written, [], state.artifacts)
+            _section_user(sec, outline, "", written, [], state.artifacts, state.attached_files or None)
             + "\n<revision>\nYou already wrote this section:\n<section>\n"
             + text[:6000]
             + "\n</section>\nThe following cited claims are NOT supported by their"
@@ -337,6 +337,7 @@ def _section_user(
     written: dict[str, str],
     material: list[str],
     artifacts: list[dict[str, t.Any]],
+    attachments: list[dict[str, str]] | None = None,
 ) -> str:
     """One section's user turn: the outline snapshot (place + neighbours),
     the previous section's tail (continuity), the packed key material and
@@ -355,11 +356,23 @@ def _section_user(
     if prev_tail:
         parts.append(f"<previous_section_tail>\n{prev_tail}\n</previous_section_tail>")
     if material:
-        parts.append(
-            "<key_material>\nThe numbered lines are this run's sources; cite them by their [n].\n"
-            + "\n".join(material)
-            + "\n</key_material>"
-        )
+        header = "<key_material>\nThe numbered lines are this run's sources; cite them by their [n]."
+        if attachments:
+            header += (
+                "\nLines WITHOUT a [n] that begin with a file name are the USER'S ATTACHED"
+                " FRAMEWORK -- its rules are BINDING for this section's judgments: apply them"
+                " by their rule ID (e.g. [RULE-CCM-02]) right after the claim they support,"
+                " and never invent a rule ID the framework does not contain."
+            )
+        parts.append(header + "\n" + "\n".join(material) + "\n</key_material>")
+        if attachments:
+            names = ", ".join(f'\"{str(f.get("name") or "attachment")}\"' for f in attachments[:3])
+            parts.append(
+                "<attachments>\nThe user attached framework file(s) "
+                + names
+                + " -- the report's conclusions must FOLLOW the framework's rule set, and every"
+                " opportunity/recommendation cites the rule IDs it applies.\n</attachments>"
+            )
     if artifacts:
         tables = []
         for artifact in artifacts[:6]:
@@ -379,5 +392,3 @@ def _section_user(
             " numbers in prose.\n" + "\n\n".join(tables) + "\n</recorded_tables>"
         )
     return "\n".join(p for p in parts if p)
-
-

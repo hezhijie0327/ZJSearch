@@ -88,7 +88,7 @@ def _answer_images_block() -> str:
     )
 
 
-def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-positional-arguments
+def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-positional-arguments, too-many-branches
     question: str,
     lang: str,
     history: list[dict[str, str]],
@@ -222,6 +222,12 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             " prefer the live sources.\n</past_research>"
         )
     cap = writer_context_max(mode)
+    # the attachment rides the SAME single turn -- its bulk comes off the
+    # feed's budget so the turn always fits the window (report mode never
+    # lands here: the synthesizer packs per-section instead)
+    attach_chars = sum(min(len(str(f.get("text") or "")), 60_000) for f in attached_files or [])
+    if attach_chars:
+        cap = max(20_000, cap - attach_chars)
     context = "\n\n".join(_fit_context(feed, cap, relevance))
     if len(context) > cap:
         # a single oversized block: the last-resort slice the eviction
@@ -232,7 +238,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         f"{context if not direct else 'No sources: this answer does not need them.'}\n</context>"
     )
     for file in attached_files or []:
-        text = str(file.get("text") or "")[:30_000]
+        text = str(file.get("text") or "")[:60_000]
         user += f'\n<attached_file name="{file.get("name") or "attachment.md"}">\n' f"{text}\n</attached_file>"
     if image_parts:
         user = shared.user_message(user, image_parts)
