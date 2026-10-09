@@ -41,7 +41,6 @@ from searx.zjsearch.ai.tools import (
     ASK_TOOL,
     VIEW_IMAGE_TOOL,
     WEB_BROWSER_TOOL,
-    view_image_spec as _view_image_spec_unused,
     DECISION_TOOL,
     LEARNINGS_TOOL,
     PAGE_TOOL,
@@ -60,6 +59,7 @@ from searx.zjsearch.ai.tools import (
     USER_MEMORY_TOOL,
 )
 
+from searx.zjsearch.ai.core.text import raw_args
 from searx.zjsearch.ai.runs.search.state import MAX_PARALLEL, _FEED_SOFT_LIMIT
 
 logger = logging.getLogger(__name__)
@@ -365,7 +365,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 items = parse_task_call(call)
                 # the research plan: the orchestrator decomposes the request
                 # into facets -- the task card tracks which facets have
-                # sources, the researcher follows the plan step by step
+                # sources, the researcher follows the plan step by step.
+                # A re-write keeps the outgoing list's PROVENANCE (the
+                # gathered-sources counts the round searches lit up) --
+                # "keep the list TRUE" re-sends must not wipe the card's
+                # evidence back to zero.
+                self.coverage.carry_provenance(items)
                 self.coverage.task_list = items
                 # the plan REVIEW (fail-open): one decision pass per subtask -- the
                 # weak ones get an early sharpen-note in the plan's feed
@@ -393,9 +398,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     feed_text += (
                         "\n(plan review: the list does not yet cover these deliverable entities the"
                         " final answer makes claims about -- add a subtask or delegate a"
-                        " research_subtask for each: "
-                        + "; ".join(self.entity_gap[:3])
-                        + ")"
+                        " research_subtask for each: " + "; ".join(self.entity_gap[:3]) + ")"
                     )
                     self.entity_gap = []
                 # the deliverable-entity gate: ONCE per run, on the FIRST
@@ -798,7 +801,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                             "call": wire_id,
                             "status": "ok",
                             "action": "search",
-                            "label": str(self._raw_json(call).get("query") or ""),
+                            "label": str(raw_args(call).get("query") or ""),
                             "preview": feed[:600],
                             "ms": ms,
                             "feed": feed[:800],
@@ -809,7 +812,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # progressive disclosure: the discovery tool returns the
                 # matched tools' full schemas (a text result like any other)
                 gathered = True
-                feed_text = mcp.search_mcp_tools(str(self._raw_json(call).get("query") or ""))
+                feed_text = mcp.search_mcp_tools(str(raw_args(call).get("query") or ""))
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",
@@ -824,7 +827,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 continue
             if tool_name.startswith("mcp_"):
                 gathered = True
-                feed = mcp.call_mcp_tool_sync(tool_name, self._raw_json(call))
+                feed = mcp.call_mcp_tool_sync(tool_name, raw_args(call))
                 feeds[wire_id - 1] = feed
                 # progressive disclosure: the row's preview is the head of
                 # what came back (the full text rode the feed to the model)
@@ -967,16 +970,32 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         corpus, its entries join the evidence pool, and the compressed
         digest becomes that call's tool result."""
         from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
-        from searx.zjsearch.ai.tools import calculator_spec, page_spec, tool_spec  # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.tools import (  # pylint: disable=import-outside-toplevel
+            calculator_spec,
+            learnings_spec,
+            page_spec,
+            system_one_spec,
+            tool_spec,
+        )
 
         cfg = self.cfg
         pages_on = reader.configured()
         browser_on = browser_config.ready()
+        judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
         child_tools = (
-            [tool_spec(False, browser_on), calculator_spec()]
+            [tool_spec(pages_on, browser_on), calculator_spec(), learnings_spec()]
             + ([page_spec()] if pages_on else [])
             + ([web_browser_tool.web_browser_spec()] if browser_on else [])
+            + ([system_one_spec()] if judge_on else [])
         )
+        # the child's LEDGER IS its digest: the delegation contract promises
+        # the lead "facts + gaps + the source lines", and ``_sub_digest``
+        # builds exactly that from ``child.facts``/``child.gaps`` -- which
+        # only the learnings tool writes.  A child without it returned a
+        # bare "来源 N 条已入册" and its actual report was lost (the
+        # assignment-batch defect this registration closes).  The judge
+        # rides the same gate as the lead's -- a structured tie-break is
+        # exactly what a worker without the lead's context needs.
         lang = self.lang or "en"
         today = time.strftime("%Y-%m-%d")
         children: dict[int, t.Any] = {}
@@ -1028,9 +1047,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 round_progress=self._sub_round_progress(child),
             )
             threads.append(
-                threading.Thread(
-                    target=drive, args=(job_idx, child, events), daemon=True, name=f"zjs-sub-{job_idx}"
-                )
+                threading.Thread(target=drive, args=(job_idx, child, events), daemon=True, name=f"zjs-sub-{job_idx}")
             )
             threads[-1].start()
             # the call row settles immediately (the delegation was
@@ -1103,6 +1120,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
 
         # settle: promote each child's material into the parent's world
         # and write the compressed digest as the call's tool result
+        promoted_any = False
         for job_idx, (wire_id, parsed) in enumerate(sub_jobs):
             if feeds[wire_id - 1]:
                 continue  # the batch-cap refusal already settled this call
@@ -1111,6 +1129,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             feeds[wire_id - 1] = digest
             if child is not None:
                 self._promote_child(rnd, child)
+                promoted_any = True
             # the digest is the ROW's receipt too: a second settlement on
             # the same wire id updates the row (the expansion renders it)
             yield (
@@ -1125,7 +1144,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     "result": digest,
                 },
             )
-        if any(feeds[wire_id - 1] and "子任务" in (feeds[wire_id - 1] or "") for wire_id, _ in sub_jobs):
+        if promoted_any:
             # the promoted facts/gaps join the ledger: the AUTHORITATIVE
             # snapshot flies so the findings card renders them live (the
             # same event the learnings tool emits)
@@ -1141,8 +1160,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         """A settled subagent's material joins the parent's world: active
         facts + open gaps into the belief ledger, the [n] feed lines into
         the writer's feed, the entries into the evidence pool, the chunks
-        into the corpus.  The sources themselves were already minted into
-        the SHARED registry as the child searched."""
+        into the corpus.  The child's MODEL SPEND joins the run's account
+        (rerank/decision buckets, the judgment ledger, the gate spend) --
+        un-promoted, four subagents' funnels were dark matter on the
+        model-stats card.  The sources themselves were already minted
+        into the SHARED registry as the child searched."""
         ops: dict[str, t.Any] = {"facts": [], "open_gaps": []}
         for fact in child.facts:
             if fact.get("status") == "active":
@@ -1159,6 +1181,15 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         self.entries.update(child.entries)
         self.head_sources.update(child.head_sources)
         self.corpus.absorb(child.corpus)
+        for bucket in ("rerank_usage", "decision_usage"):
+            child_spend = getattr(child, bucket, None) or {}
+            if child_spend.get("calls") or child_spend.get("tokens"):
+                own = getattr(self, bucket)
+                own["calls"] = own.get("calls", 0) + int(child_spend.get("calls") or 0)
+                own["tokens"] = own.get("tokens", 0) + int(child_spend.get("tokens") or 0)
+        for judgment in child.judgments or []:
+            self.judgments.append({**judgment, "purpose": f"sub:{judgment.get('purpose') or ''}".rstrip(":")})
+        self.gate_usage.extend(getattr(child, "gate_usage", None) or [])
 
     def _sub_digest(self, parsed: dict[str, str], child: t.Any) -> str:
         """The compressed report-back: established facts (each [n]-cited),
@@ -1168,7 +1199,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         if child is None:
             lines.append("the subagent did not report")
             return "\n".join(lines)[:2000]
-        active = [fact for fact in child.facts if fact.get("status") != "retracted"]
+        active = [fact for fact in child.facts if fact.get("status") == "active"]
         if active:
             lines.append("已确认:")
             for fact in active[:8]:
@@ -1180,7 +1211,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             if open_gaps:
                 lines.append("未决:")
                 for gap in open_gaps:
-                    lines.append(f"- {str(gap.get('text') or '')[:160]}")
+                    lines.append(f"- {str(gap.get('q') or gap.get('text') or '')[:160]}")
         lines.append(f"来源 {len(child.entries)} 条已入册")
         return "\n".join(lines)[:2000]
 

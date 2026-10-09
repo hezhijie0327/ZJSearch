@@ -6,8 +6,8 @@ with what the run already established?
 :py:func:`finding_conflict` -- a new ledger fact vs the established ones
 (embedding nearest-neighbour recall above a similarity floor, then one
 consistency noul).  Fail-open (``None`` on any skip): the scan is a
-lens, not a dependency.  The PROVIDER calls ride :py:mod:`infra.embed`
-+ :py:mod:`infra.decision` directly (no tools, no model turns).
+lens, not a dependency.  The PROVIDER calls ride :py:mod:`llm.embed`
++ :py:mod:`llm.decision` directly (no tools, no model turns).
 
 (The per-citation POST-WRITE audit that once lived here -- the writer's
 [n] marks graded against their sources -- was removed with its phase:
@@ -28,6 +28,34 @@ AUDIT_TIMEOUT = 5.0
 CONFLICT_SIMILARITY = 0.82
 """The embedding similarity above which two facts are ABOUT the same
 thing -- only there does a consistency judgment mean anything."""
+
+DEDUP_SIMILARITY = 0.92
+"""The near-duplicate floor (the memory-dedup threshold): two ledger
+facts this alike read as one fact rephrased -- the second is dropped and
+its refs merge into the survivor."""
+
+
+def near_duplicate(text: str, established: list[str]) -> int | None:
+    """The established fact ``text`` duplicates (its 0-based index), or
+    ``None``: embedding nearest-neighbour above :py:data:`DEDUP_SIMILARITY`
+    -- the small-model pathology where one fact is rephrased three ways
+    ends here instead of tripling the ledger.  Embedding-only (no
+    decision call), fail-open."""
+    if not (text and established and embed_service.enabled() and embed_service.configured()):
+        return None
+    try:
+        batch = embed_service.run_batch([text] + list(established), timeout=8.0)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("zjsearch_audit: ledger dedup embed failed: %s", exc)
+        return None
+    if not batch or len(batch[0]) != len(established) + 1:
+        return None
+    vectors = batch[0]
+    probe = vectors[0]
+    best = max(range(len(established)), key=lambda i: embed_service.cosine(probe, vectors[i + 1]))
+    if embed_service.cosine(probe, vectors[best + 1]) < DEDUP_SIMILARITY:
+        return None
+    return best
 
 
 def _nearest_fact(fact_text: str, established: list[str]) -> int | None:

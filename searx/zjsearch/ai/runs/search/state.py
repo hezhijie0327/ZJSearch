@@ -12,17 +12,15 @@ worker pool), :py:mod:`.referee` (the decision gates) and
 composes them into :class:`Searches`.
 """
 
-import json
 import logging
 import time
 import typing as t
 
 
+from searx.zjsearch.ai.runs.search import audit
 from searx.zjsearch.ai.runs.search import corpus
 from searx.zjsearch.ai.runs.search.coverage import Coverage
 from searx.zjsearch.ai.runs.search.registry import SourcesRegistry
-
-logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
     run owns exactly one instance (the executor class composes it with
     its behavior mixins)."""
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments, too-many-statements
         self,
         prefs: t.Any,
         user_plugins: list[str],
@@ -173,7 +171,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the RUN CORPUS (runs.search.corpus): the report synthesizer's
         # retrievable memory -- every result/page/fact lands here while
         # the research runs; a plain answer run never reads it (zero cost)
-        self.corpus = corpus.Corpus()
+        self.corpus = corpus.Corpus(usage=self.rerank_usage)
         # the report mode's recorded TABLE ARTIFACTS (extract_table):
         # snapshot-replace per id on the wire, per-section context at
         # synthesis time
@@ -232,9 +230,14 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         new/superseding/retracting facts and opened/closed gaps.  Returns
         ``(facts_written, gaps_opened, gaps_closed)`` for the row's feed
         echo.  Superseding/retracting RETIRES the old fact (status flips,
-        history stays -- the wire snapshot carries the full ledger)."""
+        history stays -- the wire snapshot carries the full ledger).  A
+        new fact that only REPHRASES an active one (embedding
+        nearest-neighbour, the memory-dedup floor) merges its refs into
+        the survivor instead of appending -- the small-model pathology
+        where one fact lands three ways stops at the ledger."""
         written = 0
         by_id = {fact["id"]: fact for fact in self.facts}
+        active = [fact for fact in self.facts if fact["status"] == "active"]
         for op in ops.get("facts") or []:
             self._ledger_seq += 1
             fact = {
@@ -248,8 +251,15 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
                 target = by_id.get(op.get(key))
                 if target is not None and target["status"] == "active":
                     target["status"] = "superseded" if key == "supersedes" else "retracted"
+            dup = audit.near_duplicate(fact["text"], [item["text"] for item in active])
+            if dup is not None:
+                survivor = active[dup]
+                old_refs = survivor.get("refs") or []
+                survivor["refs"] = list(dict.fromkeys([*old_refs, *fact["refs"]]))[:8]
+                continue
             self.facts.append(fact)
             by_id[fact["id"]] = fact
+            active.append(fact)
             self.corpus.add(fact["text"], ref_n=int((fact.get("refs") or [0])[0] or 0), kind="fact")
             written += 1
         opened = 0
@@ -304,16 +314,6 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
     @next_n.setter
     def next_n(self, value: int) -> None:
         self.reg.next_n = value
-
-    @staticmethod
-    def _raw_json(call: dict[str, t.Any]) -> dict[str, t.Any]:
-        """The model's raw call arguments as a dict (the MCP bridge passes
-        them to the server verbatim under the tool's own schema)."""
-        try:
-            value = json.loads(str(call.get("arguments") or "") or "{}")
-        except ValueError:
-            return {}
-        return value if isinstance(value, dict) else {}
 
     @staticmethod
     def _append_note(feeds: list[str | None], note: str) -> None:

@@ -30,6 +30,7 @@ contract) and the guide lane's drain.  Pure stdlib threading: no flask,
 no event loop -- unit tests run it bare.
 """
 
+import json
 import logging
 import queue
 import secrets
@@ -54,6 +55,21 @@ restart)."""
 POLL_SLICE = 1.0
 """The subscription wait slice: subscriber cancellation and the driver
 finished-flag are observed within about a second."""
+
+
+def _replay_line(event: dict[str, t.Any], line: str) -> str:
+    """The buffer's copy of one wire line: a ``browser`` mirror event
+    loses its volatile ``img`` bytes (the record stays -- url, title,
+    action -- only the JPEG does not ride a replay)."""
+    if event.get("e") != "browser" or "img" not in event:
+        return line
+    try:
+        payload = json.loads(line)
+    except ValueError:
+        return line
+    payload.pop("img", None)
+    return json.dumps(payload, ensure_ascii=False) + "\n"
+
 
 MAX_PENDING_STEERS = 3
 """The steer lane's queue cap: a chatty user cannot pile unbounded
@@ -179,11 +195,17 @@ class RunHandle:
     def publish(self, event: dict[str, t.Any]) -> str:
         """Seq-stamp one wire event, encode it once and fan it out.  The
         buffer keeps EVERY line (settle and the late tail alike) -- a
-        late attach replays the true ending, not just the head."""
+        late attach replays the true ending, not just the head.  The
+        browser mirror's ``img`` frames are LIVE-ONLY: live subscribers
+        get the volatile JPEG, the buffer keeps the slimmed line (a
+        ``wait_user`` window emits a frame every ~2s for minutes -- a
+        reattach replaying hundreds of base64 payloads was pure waste,
+        and the client's evt-log persistence drops the bytes for the
+        same reason)."""
         with self._lock:
             self._seq += 1
             line = wire.encode({**event, "seq": self._seq})
-            self._lines.append(line)
+            self._lines.append(_replay_line(event, line))
             if event.get("e") == "settle":
                 self._settled = True
                 self._settled_at = time.monotonic()

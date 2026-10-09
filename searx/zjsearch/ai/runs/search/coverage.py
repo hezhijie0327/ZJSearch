@@ -48,6 +48,26 @@ class Coverage:
                     terms.extend(token[i : i + 4] for i in range(len(token) - 3))
         return terms
 
+    def carry_provenance(self, items: list[dict[str, t.Any]]) -> None:
+        """Carry the outgoing list's per-subtask ``sources`` provenance
+        onto the incoming one, by the tracker's own bidirectional
+        containment on the titles.  A plan re-send replaces
+        ``task_list`` WHOLESALE -- without this, every "keep the list
+        TRUE" rewrite wiped the evidence the card had already gathered
+        and the counts flickered back to zero."""
+        if not self.task_list or not items:
+            return
+        for item in items:
+            new_terms = self.match_terms(str(item.get("title") or ""))
+            for old in self.task_list:
+                sources = old.get("sources")
+                if not sources:
+                    continue
+                old_terms = self.match_terms(str(old.get("title") or ""))
+                if any(a in b or b in a for a in new_terms for b in old_terms):
+                    item["sources"] = list(sources)
+                    break
+
     def track(  # pylint: disable=unused-argument
         self, query: str, source_titles: list[str] | None = None, source_ns: list[int] | None = None
     ) -> None:

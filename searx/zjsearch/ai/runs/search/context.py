@@ -72,15 +72,17 @@ def _fit_context(feed: list[str], cap: int, relevance: list[int] | None = None) 
     return blocks or ["The research found no usable sources."]
 
 
-async def _relevance_order(question: str, feed: list[str]) -> list[int] | None:
+async def _relevance_order(question: str, feed: list[str], usage: dict[str, int] | None = None) -> list[int] | None:
     """The feed blocks ranked against the question -- the writer's fill
     order when the context would overflow (the cap then keeps the MOST
     RELEVANT material instead of the newest).  The funnel's middle tier
     ranks first (the rerank cross-encoder, ONE call over the block
     heads); the embedding cosine is the fallback when the rerank service
-    is unconfigured.  ``None`` on any skip: a fitting feed, both models
-    off, an upstream failure -- the chronological eviction stands,
-    silently."""
+    is unconfigured.  ``usage`` (the run's ``rerank_usage`` dict) folds
+    the rerank leg's spend into the settle's account -- a discarded
+    bucket undercounts the model-stats card.  ``None`` on any skip: a
+    fitting feed, both models off, an upstream failure -- the
+    chronological eviction stands, silently."""
     blocks = [block for block in feed if block]
     if len(blocks) < 2 or sum(len(block) for block in blocks) <= _RERANK_ABOVE:
         return None
@@ -89,9 +91,12 @@ async def _relevance_order(question: str, feed: list[str]) -> list[int] | None:
         # the cross-encoder: query-conditioned relevance, the signal the
         # bi-encoder approximates -- its order wins whenever it answers
         try:
-            order, _tokens = rerank_service.rerank(question, heads)
+            order, tokens = rerank_service.rerank(question, heads)
         except Exception:  # pylint: disable=broad-except
-            order = None
+            order, tokens = None, 0
+        if tokens and usage is not None:
+            usage["calls"] = usage.get("calls", 0) + 1
+            usage["tokens"] = usage.get("tokens", 0) + tokens
         if order is not None and len(order) == len(blocks):
             return order
     result = await embed_texts([question] + heads)

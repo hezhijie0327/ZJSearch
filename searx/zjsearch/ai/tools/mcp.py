@@ -19,8 +19,10 @@ headers).  Streamable HTTP ONLY -- stdio / SSE servers are out of
 scope.  Unconfigured = the capability is silent: no specs, no sessions.
 
 The official ``mcp`` SDK drives the wire (MIT, theme requirement
-section); sessions open lazily on the SHARED network loop and stay
-cached per server -- one initialized session serves every call.  Tool
+section); each operation runs inside ONE self-contained connection
+(open -> initialize -> act -> close) on the shared network loop -- the
+SDK's anyio task groups cannot survive the next ``run_coroutine_threadsafe``
+task, so sessions are deliberately NOT cached across calls.  Tool
 names are namespaced ``mcp_<server>_<tool>`` so two servers can never
 collide with each other or with the built-ins."""
 
@@ -42,11 +44,8 @@ answer inside these is a dead end for the run (the model is told the
 call failed)."""
 
 MAX_SERVERS = 6
-"""Session cap -- each open MCP server holds a connection; a runaway
-config must not hold dozens."""
-
-_sessions: dict[str, t.Any] = {}
-"""server name -> (ClientSession, asyncio.ExitStack) on the shared loop."""
+"""The config-entry cap -- a runaway ``zjsearch.mcp`` list must not
+hand the model dozens of servers."""
 
 
 def mcp_cfg() -> list[tuple[str, str, dict[str, str]]]:
@@ -278,13 +277,16 @@ def search_mcp_tools(query: str, limit: int = 6) -> str:
 
 def mcp_specs() -> list[dict[str, t.Any]]:
     """The namespaced tool specs (blocking; the first call pays the
-    handshakes, later calls hit the memoized future)."""
+    handshakes, later calls hit the memoized future).  A FAILED
+    discovery clears the memo -- one network blip at first use must not
+    empty the MCP surface until process restart; the next run retries."""
     if not configured() or _sdk() is None:
         return []
     try:
         return _specs_future().result(_SESSION_TIMEOUT * MAX_SERVERS)
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_mcp: tool discovery failed: %s", exc)
+        _specs_future.cache_clear()
         return []
 
 

@@ -69,6 +69,10 @@ class FenceSplitter:
     the NEXT fence's opener."""
 
     _OPENERS = ("zjs-images", "related")
+    _OPENER_RES = tuple(re.compile(r"```\s*" + opener + r"\b") for opener in _OPENERS)
+    """Precompiled opener matchers -- ``feed`` runs for EVERY writer
+    delta of every run; the per-delta pattern rebuild once lived in the
+    hottest loop of the stack."""
     HOLD = 20
 
     def __init__(self) -> None:
@@ -102,8 +106,8 @@ class FenceSplitter:
                 text = text[end + 3 :]
                 continue
             match = None
-            for opener in self._OPENERS:
-                found = re.search(r"```\s*" + opener + r"\b", text)
+            for pattern in self._OPENER_RES:
+                found = pattern.search(text)
                 if found and (match is None or found.start() < match.start()):
                     match = found
             if match is None:

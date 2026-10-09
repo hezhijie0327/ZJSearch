@@ -35,18 +35,22 @@ RERANK_HEAD = 24
 PACK_BUDGET_DEFAULT = 9_000
 """Default per-section context budget in characters."""
 EMBED_RESCUE_LIMIT = 120
+"""The embedding rescue embeds at most this many chunk heads (one batch
+round trip; the corpus head is where BM25's zero signal lives anyway)."""
 REPEAT_COSINE = 0.92
 """The cross-section repeat threshold (the memory-dedup floor -- the one
 shared notion of "reads as the same material again")."""
-"""The embedding rescue embeds at most this many chunk heads (one batch
-round trip; the corpus head is where BM25's zero signal lives anyway)."""
 
 
 class Corpus:
     """The run's chunk store + its retriever."""
 
-    def __init__(self) -> None:
+    def __init__(self, usage: dict[str, int] | None = None) -> None:
         self._chunks: list[dict[str, t.Any]] = []
+        # the run's ``rerank_usage`` dict (Searches state owns it): the
+        # pack's rerank spend folds here so the model-stats card sees the
+        # report synthesizer's calls too, not just the search cascade's
+        self._usage = usage
 
     def add(self, text: str, *, ref_n: int = 0, title: str = "", url: str = "", kind: str = "result") -> None:
         """Ingest one material item, split into line-boundary chunks.  ``n``
@@ -92,7 +96,7 @@ class Corpus:
         the merged index stays consistent."""
         self._chunks.extend(other._chunks)  # pylint: disable=protected-access
 
-    def pack(
+    def pack(  # pylint: disable=too-many-locals, too-many-branches
         self,
         query: str,
         *,
@@ -132,13 +136,17 @@ class Corpus:
                 logger.debug("zjsearch corpus: cross-section dedup skipped: %r", exc)
         if rerank_service.configured() and len(order) > 1:
             heads = [self._head(i) for i in order[:RERANK_HEAD]]
+            reranked: list[int] | None = None
+            tokens = 0
             try:
-                reranked, _tokens = rerank_service.rerank(query, heads)
+                reranked, tokens = rerank_service.rerank(query, heads)
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("zjsearch corpus: rerank failed: %r", exc)
-                reranked = None
+            if tokens and self._usage is not None:
+                self._usage["calls"] = self._usage.get("calls", 0) + 1
+                self._usage["tokens"] = self._usage.get("tokens", 0) + tokens
             if reranked is not None and len(reranked) == len(heads):
-                head_idx = [order[slot] for slot in reranked]
+                head_idx = [order[slot] for slot in reranked]  # pylint: disable=not-an-iterable
                 order = head_idx + order[RERANK_HEAD:]
         out: list[str] = []
         used = 0
@@ -184,7 +192,7 @@ class Corpus:
             return None
         head = self._chunks[:EMBED_RESCUE_LIMIT]
         try:
-            batch = embed_service.run_batch([query] + [chunk["text"][:400] for chunk in head])
+            batch = embed_service.run_batch([query] + [chunk["text"][:400] for chunk in head], timeout=8.0)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch corpus: embed rescue failed: %r", exc)
             return None

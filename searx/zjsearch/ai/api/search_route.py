@@ -3,7 +3,7 @@
 
 Thin by design (Vane's api.ts, Morphic's app/api/chat/route.ts): parse
 and authorize the request, run the pre-flight gates, assemble
-:py:func:`framework.loop.run` with its tools / executor / writer, and
+:py:func:`agent.loop.run` with its tools / executor / writer, and
 encode the timeline ops as NDJSON.  All the mechanics live in the
 sibling modules.  After the loop's ``settle``, only two LATE events may
 follow -- the related-questions fallback completion and the memory
@@ -46,6 +46,7 @@ from searx.zjsearch.ai.runs import host as run_host
 from searx.zjsearch.ai.runs.search.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runs.search.gates import (
     clarify_gate,
+    generate_title,
     related_questions,
     research_gate,
     sanitize_questions,
@@ -180,6 +181,10 @@ def parse_resume(raw: t.Any, sources_base: int) -> dict[str, t.Any] | None:
         "sources": sources,
         "entry_base": _clamped("entry_base", 100_000),
         "round_base": _clamped("round_base", 1000),
+        # the interrupted REPORT's stored outline (best-effort -- the
+        # client's snapshot is lossy, key_questions regenerate empty; the
+        # TOC the user already saw stays stable, which is the point)
+        "outline": raw.get("outline") if isinstance(raw.get("outline"), dict) else None,
     }
 
 
@@ -278,7 +283,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # to the single-write answer shape below)
     report_requested = bool(payload.get("report")) and mode in ("balanced", "deep")
     max_rounds = budget("max_rounds", mode, 2)
-    depth_probe_entry: dict[str, t.Any] | None = None
     # the delegation gate's rung: 0 unless the depth probe graded the
     # question -- subagents are the HEAVY question's tool (rung >= 3) and
     # never fire without the effort grader
@@ -466,9 +470,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the report TEMPLATE rides the request body (presets AND user-defined
     # ones -- the server stays stateless): a valid template switches the
     # outline gate from free generation to FIXED-structure adaptation
-    report_template = (
-        report_outline.parse_template(payload.get("template")) if report_requested else None
-    )
+    report_template = report_outline.parse_template(payload.get("template")) if report_requested else None
     if report_requested and payload.get("template") is not None and report_template is None:
         logger.info("zjsearch_ai_search: malformed report template -- falling back to the free outline")
     outline_attachments = [
@@ -477,8 +479,22 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the knowledge base's METADATA recall: the client's pre-run corpus
     # recall distilled to TITLES (the red line -- the researcher's feed
     # never sees recalled content; the outline gate sees only topics)
-    prior_topics = [str(topic).strip()[:120] for topic in (payload.get("history_topics") or []) if str(topic).strip()][:8]
-    if report_requested:
+    prior_topics = [str(topic).strip()[:120] for topic in (payload.get("history_topics") or []) if str(topic).strip()][
+        :8
+    ]
+    if report_requested and resume is not None and resume.get("outline"):
+        # THE CONTINUE's outline restoration: the interrupted report's
+        # stored skeleton re-validated -- a fresh gate completion would
+        # mint a DIFFERENT TOC mid-thread (the outline event replaces the
+        # stored one client-side); a malformed restore falls through to
+        # the gates below
+        restored = report_outline.restored_outline(resume["outline"], research_q)
+        if restored is not None:
+            outline = restored
+            logger.info(
+                "zjsearch_ai_search: restored the interrupted report's outline (%d sections)", len(restored["sections"])
+            )
+    if report_requested and outline is None:
         if report_template is not None:
             outline = report_outline.build_outline_from_template(
                 cfg,
@@ -613,7 +629,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             sources_base,
             galleries_on=bool(state.reg.gallery_pool),
             past_sources=assign_past_sources(),
-            relevance=await _relevance_order(research_q, state.feed),
+            relevance=await _relevance_order(research_q, state.feed, usage=state.rerank_usage),
             learnings=state.facts,
             gaps=state.gaps,
         )
@@ -671,7 +687,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             task_tool=register_tasks,
             browser_tool=browser_on,
             steerable=handle is not None,
-            subagent_tool=mode == "deep" and depth_rung >= 3,
+            # delegation gate: the depth probe's rung decides -- deep runs
+            # delegate from rung 2 (the heavy tool for a clearly heavy
+            # question), balanced from rung 4 (the comparison question with
+            # genuinely independent facets earns it too); the old
+            # deep-only rung-3 gate made delegation nearly unreachable
+            subagent_tool=(mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4),
+            depth_rung=depth_rung,
             user_memories=user_memories,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
@@ -693,7 +715,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])
         + ([extract_spec()] if outline is not None else [])
-        + ([research_subtask_spec()] if mode == "deep" and depth_rung >= 3 else [])
+        + (
+            [research_subtask_spec()]
+            if (mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4)
+            else []
+        )
         + [view_image_spec()]
         + mcp_tools,
         executor=state.execute,
@@ -805,7 +831,7 @@ class _SettleTail:
         self.question = question
         # the report's own title (the writer-side outline editor's) -- the
         # title pass's candidate when no fence title rode the answer
-        self.outline_title = (outline_title or None)
+        self.outline_title = outline_title or None
         self.lang = lang
         self.gate_usage = gate_usage
         # the executor's rerank-model account (a LIVE dict -- the settle
@@ -904,11 +930,7 @@ class _SettleTail:
             # stands (no gate, no spend)
             return candidate
         try:
-            from searx.zjsearch.ai.runs.search.gates import generate_title
-
-            return generate_title(
-                self.cfg, self.question, answer, self.lang, self.outline_title, self.gate_usage
-            )
+            return generate_title(self.cfg, self.question, answer, self.lang, self.outline_title, self.gate_usage)
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("zjsearch_ai_search: title generation failed: %r", exc)
             return None

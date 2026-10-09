@@ -21,6 +21,7 @@ from searx.webadapter import get_search_query_from_webapp
 from searx.zjsearch.ai.tools import web_reader as reader
 from searx.zjsearch.ai.runs.search.feed import FEED_DEEP, RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.llm.decision import features as decision_features
+from searx.zjsearch.ai.llm import rerank as rerank_service
 from searx.zjsearch.ai.runs.search.rank import (
     RERANK_HEAD,
     bm25_order,
@@ -38,12 +39,39 @@ _ANSWER_FEED_MAX = 3
 _ANSWER_FEED_CHARS = 600
 """One plugin answer's feed cap (the stock card's text form fits)."""
 
-MAX_PARALLEL = 6
-"""Worker threads per parallel batch -- uncapped per-round call counts
-(the model's call) queue behind these slots so a chatty round cannot
-stampede the instance.  Every queued search gets to run; each engine
-request carries its own per-request timeout, which is what bounds a
-batch -- no artificial wall clock."""
+
+PAGE_TRIM_ABOVE = 6_000
+"""The extracted page length past which the writer-feed relevance trim
+may run: below it the whole text rides the feed (the cap eviction at
+24k+ is far away), above it the page's MIDDLE -- the section the writer
+will actually lean on -- is worth one rerank call to keep."""
+_PAGE_SEGMENT_CHARS = 1_200
+"""The trim's segment size (one readable paragraph block; the corpus
+splitter's shape)."""
+_SEGMENT_HEAD_CHARS = 380
+"""What one segment sends to the rerank model (the cascade's head
+discipline -- rank the head, keep the whole)."""
+_FEED_PAGE_BUDGET = 8_000
+"""The writer-feed budget per long page when ``zjsearch.reader.max_chars``
+is unset -- the same order of magnitude as the classic deep read."""
+
+
+def _split_segments(text: str) -> list[str]:
+    """Line-boundary segments of ~:py:data:`_PAGE_SEGMENT_CHARS` (the
+    corpus splitter's shape -- a paragraph block per segment, never a
+    mid-sentence cut)."""
+    segments: list[str] = []
+    buf: list[str] = []
+    size = 0
+    for line in text.split("\n"):
+        if size + len(line) > _PAGE_SEGMENT_CHARS and buf:
+            segments.append("\n".join(buf))
+            buf, size = [], 0
+        buf.append(line)
+        size += len(line) + 1
+    if buf:
+        segments.append("\n".join(buf))
+    return segments
 
 
 class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
@@ -285,6 +313,61 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
         needs no request context."""
         return reader.read_page(url)
 
+    def _page_feed_text(self, title: str, text: str) -> str:  # pylint: disable=too-many-return-statements
+        """The page's WRITER-FEED body: the whole extracted text when it
+        fits, the rerank-relevant segments when it does not.  A long
+        read's feed block used to ride verbatim (only the reader's
+        ``max_chars`` -- UNSET by default -- and the 24k whole-block
+        eviction bound it), so an 8k-table-of-contents page could crowd
+        the 3 paragraphs the writer actually needs.  The trim splits the
+        text into line-boundary segments, ONE rerank call ranks the
+        segment heads against the run's question, and the top segments
+        reassemble in ORIGINAL reading order within the page budget.
+        Fail-open everywhere: unconfigured rerank, a short page, an
+        empty question, a failed call -- the full text stands.  The
+        corpus and the client's reading pane keep the FULL text; only
+        the feed slims."""
+        if len(text) <= PAGE_TRIM_ABOVE:
+            return text
+        if not rerank_service.configured():
+            return text
+        question = str(getattr(self, "question_held", "") or "").strip()
+        if not question:
+            return text
+        segments = _split_segments(text)
+        if len(segments) < 4:
+            return text
+        budget = reader.max_chars() or _FEED_PAGE_BUDGET
+        if budget >= len(text):
+            return text
+        heads = [f"{title}. {segment[:_SEGMENT_HEAD_CHARS]}" for segment in segments]
+        try:
+            order, tokens = rerank_service.rerank(question, heads)
+        except Exception:  # pylint: disable=broad-except
+            return text
+        if not order or len(order) != len(segments):
+            return text
+        if tokens:
+            self.rerank_usage["calls"] = self.rerank_usage.get("calls", 0) + 1
+            self.rerank_usage["tokens"] = self.rerank_usage.get("tokens", 0) + tokens
+        keep: set[int] = set()
+        used = 0
+        for slot in order:  # most relevant first, at least one always fits
+            size = len(segments[slot]) + 1
+            if keep and used + size > budget:
+                continue
+            keep.add(slot)
+            used += size
+        kept = "\n".join(segments[i] for i in sorted(keep))
+        dropped = len(segments) - len(keep)
+        if dropped:
+            kept += (
+                f"\n\n[... {dropped} less-relevant section(s) of this page"
+                " were trimmed from the research feed; the full text is"
+                " archived under its source ...]"
+            )
+        return kept
+
     def _finish_page(
         self,
         rnd: int,
@@ -318,7 +401,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             self.reg.note_url(norm, n)
             cite = f"NEW source [{n}] -- cite it as [{n}]"
         netloc = urlsplit(url).netloc
-        feed_text = f'Opened {url} (title: "{title}"; {cite}):\n\n{text}'
+        feed_text = f'Opened {url} (title: "{title}"; {cite}):\n\n{self._page_feed_text(title, text)}'
         feeds[idx - 1] = feed_text
         self.feed.append(feeds[idx - 1])
         self.feed_chars += len(feeds[idx - 1])

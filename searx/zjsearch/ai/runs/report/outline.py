@@ -55,6 +55,7 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
     user = f"<question>{question[:2000]}</question>"
     if clarified:
         user += f"\n<clarified_direction>{clarified}</clarified_direction>"
+    user += _prior_topics_block(prior_topics)
     for file in attachments or []:
         text = str(file.get("text") or "")[:_ATTACHMENT_HEAD]
         if not text:
@@ -123,6 +124,15 @@ def _parse_outline(value: t.Any, question: str) -> dict[str, t.Any] | None:
     }
 
 
+def restored_outline(value: t.Any, question: str) -> dict[str, t.Any] | None:
+    """A CONTINUE's stored outline re-validated through the shared
+    sanitizer -- the interrupted report's TOC travels back with the
+    resume payload and the document keeps the skeleton the user already
+    saw, instead of a fresh gate completion minting a different one
+    mid-thread.  ``None`` (re-mint) on anything malformed."""
+    return _parse_outline(value, question)
+
+
 def parse_template(payload: t.Any) -> dict[str, t.Any] | None:
     """The sanitized report TEMPLATE out of the request payload (the
     client carries presets AND user-defined templates in the body -- the
@@ -132,7 +142,7 @@ def parse_template(payload: t.Any) -> dict[str, t.Any] | None:
     if not isinstance(payload, dict):
         return None
     raw_sections = payload.get("sections")
-    if not isinstance(raw_sections, list) or not (2 <= len(raw_sections) <= 10):
+    if not isinstance(raw_sections, list) or not 2 <= len(raw_sections) <= 10:
         return None
     sections: list[dict[str, t.Any]] = []
     for raw in raw_sections:
@@ -165,6 +175,7 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
     template: dict[str, t.Any],
     gate_usage: list[dict[str, t.Any]],
     attachments: list[dict[str, str]] | None = None,
+    prior_topics: list[str] | None = None,
 ) -> dict[str, t.Any] | None:
     """The TEMPLATE instantiation gate: one structured completion adapts
     the fixed skeleton to THIS question (entity names into the titles,
@@ -177,6 +188,7 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
         user += f"\n<clarified_direction>{clarified}</clarified_direction>"
     template_json = json.dumps({"name": template["name"], "sections": template["sections"]}, ensure_ascii=False)
     user += f"\n<template name=\"{template['name']}\">\n{template_json[:6000]}\n</template>"
+    user += _prior_topics_block(prior_topics)
     for file in attachments or []:
         text = str(file.get("text") or "")[:_ATTACHMENT_HEAD]
         if not text:
@@ -230,9 +242,15 @@ def uncovered_entities(outline: dict[str, t.Any]) -> list[str]:
     section_terms: list[str] = []
     for sec in sections:
         section_terms.extend(
-            Coverage.match_terms(" ".join([str(sec.get("title") or ""), str(sec.get("brief") or ""), *[
-                str(q) for q in (sec.get("key_questions") or [])
-            ]]))
+            Coverage.match_terms(
+                " ".join(
+                    [
+                        str(sec.get("title") or ""),
+                        str(sec.get("brief") or ""),
+                        *[str(q) for q in (sec.get("key_questions") or [])],
+                    ]
+                )
+            )
         )
     uncovered: list[str] = []
     for entity in outline.get("entities") or []:
