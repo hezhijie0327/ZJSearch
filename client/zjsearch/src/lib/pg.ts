@@ -78,7 +78,7 @@ export function pg(): Promise<Pg> {
     contents are destroyed. */
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
-  for (const table of ["knowledge", "run_event", "thread_head", "run_summary", "stats"]) {
+  for (const table of ["knowledge", "run_event", "thread_head", "run_summary", "stats", "attachment"]) {
     await db.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
   }
   await createSchema(db);
@@ -186,6 +186,8 @@ function scheduleVacuum(db: Pg): void {
         localStorage.setItem("zjs-pg-vacuum-at", String(Date.now()));
         await db.query("VACUUM ANALYZE knowledge");
         await db.query("VACUUM ANALYZE run_event");
+        await db.query("VACUUM ANALYZE run_summary");
+        await db.query("VACUUM ANALYZE thread_head");
       } catch (err) {
         console.warn("zjsearch pg: vacuum pass failed (harmless)", err);
       }
@@ -308,6 +310,7 @@ async function createSchema(db: Pg): Promise<void> {
     created   double precision NOT NULL DEFAULT 0
   )`);
   await db.query("CREATE INDEX IF NOT EXISTS attachment_run ON attachment (run_id)");
+  await db.query("CREATE INDEX IF NOT EXISTS attachment_thread ON attachment (thread_id)");
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
   );
@@ -361,9 +364,16 @@ async function createSchema(db: Pg): Promise<void> {
   // every row's jsonb
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_tags ON knowledge USING gin (tags jsonb_ops)");
   // the two work queues ran a full scan per settle to select NOTHING when
-  // idle -- the partial indexes make the idle probe an index check
+  // idle -- the partial indexes make the idle probe an index check.  The
+  // embed-pending predicate EXCLUDES source_ref rows (they carry
+  // search_text from title+host but are never embedded): without the kind
+  // guard the partial index fills with permanent members and the probe
+  // walks them all, every settle, forever (the v4 pathology one level
+  // down).  DROP-first: a definition change needs it (CREATE IF NOT
+  // EXISTS would keep the stale index).
+  await db.query("DROP INDEX IF EXISTS knowledge_embed_pending");
   await db.query(
-    "CREATE INDEX IF NOT EXISTS knowledge_embed_pending ON knowledge (updated) WHERE embed_model IS NULL AND search_text <> ''",
+    "CREATE INDEX knowledge_embed_pending ON knowledge (updated) WHERE embed_model IS NULL AND search_text <> '' AND kind <> 'source_ref'",
   );
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_tnormed ON knowledge (updated) WHERE (meta->>'tnormed') IS DISTINCT FROM '1' AND tags <> '[]'::jsonb",
@@ -378,13 +388,21 @@ async function createSchema(db: Pg): Promise<void> {
     // zero-signal-only) seq scan
     console.warn("zjsearch pg: gist_trgm_ops unavailable -- the trigram rescue stays a seq scan", err);
   }
-  await db.query("CREATE INDEX IF NOT EXISTS knowledge_kind ON knowledge (kind, updated DESC)");
+  // the kind listing index serves the TWO-key sort (pinned DESC, updated
+  // DESC) the directory's per-kind tabs issue on every refetch -- the old
+  // (kind, updated) shape filtered on the first key and sorted the whole
+  // kind partition in WASM.  DROP-first for the same reason.
+  await db.query("DROP INDEX IF EXISTS knowledge_kind");
+  await db.query("CREATE INDEX knowledge_kind ON knowledge (kind, pinned DESC, updated DESC)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_thread ON knowledge (thread_id, kind)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_run ON knowledge (run_id, n)");
   await db.query("CREATE INDEX IF NOT EXISTS knowledge_url ON knowledge (url_hash)");
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_embedded ON knowledge (embed_model) WHERE embed_model IS NOT NULL",
   );
+  // the thread directory's listing sort (the live subscription re-fires
+  // it on every settle/pin/delete)
+  await db.query("CREATE INDEX IF NOT EXISTS thread_head_listing ON thread_head (pinned DESC, updated DESC)");
 }
 
 /** The keyword text behind a BM25 index: the CJK-aware pre-segmentation

@@ -42,6 +42,13 @@ async function hybridRecall(
       scores.set(item.id, { item, score: (entry?.score ?? 0) + rrf });
     });
   };
+  // OVER-FETCH: both index legs (bm25, hnsw) return their top-N across
+  // ALL kinds and the kind filter applies after -- a narrow kind-set
+  // (recallPages' documents vs thousands of call/source rows) could
+  // starve its leg to zero hits on a corpus full of matches.  The wider
+  // window gives the filter something to keep; the RRF's rank weights
+  // make the extra depth harmless.
+  const fetchN = Math.max(limit * 8, 64);
   const [keywordRows, semanticRows] = await Promise.all([
     keywords
       ? pgQuery<Record<string, unknown>>(
@@ -49,7 +56,7 @@ async function hybridRecall(
            FROM knowledge
            WHERE kind IN (${kindList}) AND (search_text <@> to_bm25query($1, 'knowledge_bm25')) <> 0
            ORDER BY _score DESC LIMIT $2`,
-          [keywords, limit * 2],
+          [keywords, fetchN],
         )
       : Promise.resolve([] as Record<string, unknown>[]),
     semanticReady
@@ -63,7 +70,7 @@ async function hybridRecall(
              FROM knowledge
              WHERE kind IN (${kindList}) AND embedding IS NOT NULL
              ORDER BY embedding <=> $1::vector LIMIT $2`,
-            [toVectorLiteral(vector), limit * 2],
+            [toVectorLiteral(vector), fetchN],
           );
         })()
       : Promise.resolve([] as Record<string, unknown>[]),
@@ -71,11 +78,15 @@ async function hybridRecall(
   bump(keywordRows, 1.0);
   bump(semanticRows, 1.0);
   if (scores.size === 0 && trimmed.length >= 2) {
+    // the rescue rides the GiST trigram index as a KNN ordering
+    // (title %> query + ORDER BY title <-> query) -- the old
+    // word_similarity() function call could never use the index and
+    // seq-scanned every searchable row computing similarities
     const rescued = await pgQuery<Record<string, unknown>>(
-      `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, word_similarity($1, title) AS _score
+      `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, similarity(title, $1) AS _score
        FROM knowledge
-       WHERE kind IN (${kindList}) AND word_similarity($1, title) >= 0.3
-       ORDER BY _score DESC LIMIT $2`,
+       WHERE kind IN (${kindList}) AND title %> $1
+       ORDER BY title <-> $1 LIMIT $2`,
       [trimmed, limit],
     );
     bump(rescued, 1.0);
@@ -91,8 +102,12 @@ async function tagVocabulary(): Promise<string[]> {
   if (vocabularyCache && Date.now() - vocabularyCache.at < 60000) {
     return vocabularyCache.tags;
   }
+  // the SAME kinds the graph view counts, and never the tag-less rows:
+  // unfiltered this jsonb expansion ran over EVERY row (runctx blobs,
+  // call rows, source_refs) before EVERY AI search POST
   const rows = await pgQuery<{ tag: string }>(
     `SELECT DISTINCT t AS tag FROM knowledge, jsonb_array_elements_text(CASE WHEN jsonb_typeof(tags) = 'array' THEN tags ELSE '[]'::jsonb END) AS t
+     WHERE kind IN ('source', 'answer', 'document', 'memory', 'run') AND tags <> '[]'::jsonb
      ORDER BY tag`,
   );
   const tags = (rows ?? []).map((row) => row.tag);

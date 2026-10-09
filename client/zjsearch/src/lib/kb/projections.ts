@@ -16,6 +16,7 @@
     - the delete/pin/reset mutations. */
 
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
+import { fetchJson } from "@/lib/http.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
 import { aiTokenValue, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
 import { invalidateStatsCache } from "@/lib/kb/stats.ts";
@@ -720,7 +721,10 @@ async function normalizeTags(): Promise<void> {
     if (batch.length === 0) {
       return;
     }
-    const response = await fetch("/zjsearch/ai/tags", {
+    // the shared HTTP chokepoint (a manual resp.ok guard is the shape the
+    // lib/http contract bans): a FAILED normalization is the caller's
+    // no-op -- the catch below keeps the raw tags
+    const data = await fetchJson<{ items?: Array<{ tags?: string[] }> }>("/zjsearch/ai/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -730,11 +734,10 @@ async function normalizeTags(): Promise<void> {
           return { tags: Array.isArray(parsed) ? parsed.map(String) : [] };
         }),
       }),
-    });
-    if (!response.ok) {
+    }).catch(() => null);
+    if (!data) {
       return;
     }
-    const data = (await response.json()) as { items?: Array<{ tags?: string[] }> };
     const items = data.items ?? [];
     for (let i = 0; i < batch.length && i < items.length; i++) {
       const row = batch[i];
@@ -782,14 +785,28 @@ export function toggleItemPin(id: string, on: boolean): void {
   });
 }
 
-/** Delete one projection row by id.  A run takes its summary row with
-    it; an overview takes its (query, source) ref rows and steps the
-    cited sources' counters back down; other kinds are a single DELETE
-    (sources go through deleteSource, which cascades by url_hash). */
+/** Delete one projection row by id.  A run takes its WHOLE trail with it
+    (the evt rows and the (run, source) ref rows used to orphan forever --
+    a single-run delete left them unreferenced and un-counted); an
+    overview takes its (query, source) ref rows and steps the cited
+    sources' counters back down; other kinds are a single DELETE (sources
+    go through deleteSource, which cascades by url_hash). */
 export function deleteItem(id: string): void {
   void enqueue(async () => {
     if (id.startsWith("run:")) {
-      await pgQuery("DELETE FROM run_summary WHERE run_id = $1", [id.slice(4)]);
+      const runId = id.slice(4);
+      const refs = await pgQuery<{ url_hash: string }>(
+        "SELECT url_hash FROM knowledge WHERE kind = 'source_ref' AND run_id = $1",
+        [runId],
+      );
+      for (const row of refs ?? []) {
+        await pgQuery("UPDATE knowledge SET refs = GREATEST(refs - 1, 0) WHERE kind = 'source' AND url_hash = $1", [
+          row.url_hash,
+        ]);
+      }
+      await pgQuery("DELETE FROM run_event WHERE run_id = $1", [runId]);
+      await pgQuery("DELETE FROM knowledge WHERE kind = 'source_ref' AND run_id = $1", [runId]);
+      await pgQuery("DELETE FROM run_summary WHERE run_id = $1", [runId]);
     } else if (id.startsWith("ovw:")) {
       const queryHash = id.slice(4);
       const refs = await pgQuery<{ url_hash: string }>(
@@ -812,14 +829,15 @@ export function deleteItem(id: string): void {
 }
 
 /** A thread's everything: events, projections, the run rollups,
-    provenance -- one DELETE per table (the thread head row goes with
-    it). */
+    provenance, the uploaded attachment bytes -- one DELETE per table
+    (the thread head row goes with it). */
 export function deleteThread(threadId: string): void {
   void enqueue(async () => {
     await pgQuery("DELETE FROM knowledge WHERE thread_id = $1", [threadId]);
     await pgQuery("DELETE FROM run_event WHERE thread_id = $1", [threadId]);
     await pgQuery("DELETE FROM run_summary WHERE thread_id = $1", [threadId]);
     await pgQuery("DELETE FROM thread_head WHERE thread_id = $1", [threadId]);
+    await pgQuery("DELETE FROM attachment WHERE thread_id = $1", [threadId]);
     invalidateStatsCache();
   });
 }
