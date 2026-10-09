@@ -8,8 +8,7 @@ character document never hangs on one attention window.  A
 section-level citation gate samples the section's [n] claims against
 their sources BEFORE delivery: a failing claim earns one targeted
 rewrite, never a post-hoc badge.  The executive summary is written
-LAST (it needs the finished sections) and the methodology note is
-machine-written -- the run's own meta is the honest one.
+LAST (it needs the finished sections).
 
 All wire events flow through the agent loop's synthesizer hook; the
 usage lands in the same tally as the research phase."""
@@ -106,13 +105,6 @@ def make_synthesizer(
                 "status": "pending",
             },
             *outline["sections"],
-            {
-                "id": "method",
-                "title": "研究方法与数据说明",
-                "brief": "研究过程、来源与局限",
-                "key_questions": [],
-                "status": "pending",
-            },
         ]
 
         def snapshot(over: dict[str, str] | None = None) -> dict[str, t.Any]:
@@ -145,12 +137,6 @@ def make_synthesizer(
             yield event
         written["summary"] = text.strip()
         status["summary"] = "done"
-        yield snapshot(status)
-        # the methodology note: machine-written, no model round trip
-        method = _method_note(state, cfg, time.monotonic() - started)
-        written["method"] = method
-        yield {"e": "section", "id": "method", "t": method}
-        status["method"] = "done"
         yield snapshot(status)
         yield wire.settle("done", **tally.settle_kwargs())
 
@@ -350,20 +336,3 @@ def _section_user(
     return "\n".join(p for p in parts if p)
 
 
-def _method_note(state: t.Any, cfg: dict[str, t.Any], seconds: float) -> str:
-    """The machine-written methodology note -- the run's own meta is the
-    honest one (the sample reports' 研究方法与数据说明)."""
-    active_facts = sum(1 for fact in state.facts if fact.get("status") == "active")
-    minutes = max(1, int(seconds // 60))
-    return (
-        "### 研究方法与数据说明\n\n"
-        f"- 本报告由 AI Search 报告模式生成：研究阶段共 {state.round_no} 轮，"
-        f"触达 {len(state.entries)} 个不同来源（其中 {len(state.head_sources)} 个经重点核读），"
-        f"沉淀 {active_facts} 条经验证的事实"
-        + (f"，录制 {len(state.artifacts)} 张数据表格" if state.artifacts else "")
-        + f"，全程约 {minutes} 分钟。\n"
-        f"- 撰写模型：`{cfg.get('model', '')}`；每个章节独立成稿，引用 [n] 对应来源列表，"
-        "关键数字均经来源交叉核验，引用门抽检不过的表述会在交付前重写。\n"
-        "- 局限：来源以公开网页为准，数据窗口受限于检索时点；"
-        "对无法核实的数字，正文以引用缺失或文字说明标注，而非估算填充。"
-    )

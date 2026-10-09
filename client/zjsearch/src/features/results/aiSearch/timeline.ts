@@ -954,10 +954,16 @@ export function applyEvent(
       if (!id || !delta) {
         return core;
       }
+      // a markdown block boundary BETWEEN sections: the per-section panes
+      // render their own bodies, but the combined answer (knowledge
+      // projection, copy/export) glues sections back to back -- without
+      // the separator a section starting with `###` lands mid-paragraph
+      // and renders as literal text
+      const sep = run.answer && !run.answer.endsWith("\n") ? "\n\n" : "";
       runs[lastIdx] = {
         ...run,
         sections: { ...(run.sections ?? {}), [id]: (run.sections?.[id] ?? "") + delta },
-        answer: run.answer + delta,
+        answer: run.answer + sep + delta,
       };
       return { ...core, runs };
     }

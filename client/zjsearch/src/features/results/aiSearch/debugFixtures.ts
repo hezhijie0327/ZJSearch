@@ -524,7 +524,6 @@ const FULL_STAGE: DebugScenario = {
         { id: "s2", title: "产能与投资对比", status: "pending" },
         { id: "s3", title: "深圳分片区价格矩阵", status: "pending" },
         { id: "s4", title: "风险与机会评估", status: "pending" },
-        { id: "method", title: "研究方法与数据说明", status: "pending" },
       ],
     },
     {
