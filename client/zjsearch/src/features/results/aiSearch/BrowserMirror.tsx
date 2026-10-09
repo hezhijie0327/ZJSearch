@@ -129,7 +129,7 @@ export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: 
       <div
         aria-label={t("ai_browser_live")}
         aria-modal
-        className="relative z-10 mx-auto flex h-auto w-full max-w-5xl animate-fade-up flex-col rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4 landscape:h-full"
+        className="relative z-10 mx-auto my-auto flex h-auto w-full max-w-5xl animate-fade-up flex-col rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4 landscape:h-full"
         onKeyDown={onDialogKeyDown}
         ref={dialogRef}
         role="dialog"
