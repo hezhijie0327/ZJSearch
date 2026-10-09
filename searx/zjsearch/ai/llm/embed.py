@@ -12,7 +12,7 @@ so a shared base_url with a different key never collides with the chat
 client.
 
 The Flask proxy the BROWSER calls is a runtime route
-(``runtime.embed_route``) -- this module is the server-internal engine
+(``api.embed_route``) -- this module is the server-internal engine
 (:py:func:`embed_texts`, no flask, no HMAC).
 """
 
@@ -124,7 +124,7 @@ def configured() -> bool:
 
 def dimensions_of(cfg_block: dict[str, t.Any] | None = None) -> int:
     """The effective embedding width of (this module's) block -- a thin
-    re-read over :py:func:`infra.config.dimensions` with the block's own
+    re-read over :py:func:`llm.config.dimensions` with the block's own
     family.  MUST match the browser's pgvector column, which is created
     from THIS value (the capability payload carries it)."""
     block = cfg_block if cfg_block is not None else cfg()
@@ -175,16 +175,42 @@ async def _embed(texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] 
     return await resolve(bound, family="embedding").embed(texts)
 
 
-async def embed_texts(texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None] | None:
+async def _embed_chunked(texts: list[str]) -> tuple[list[list[float]], dict[str, t.Any] | None]:
+    """``_embed`` with the :py:data:`MAX_BATCH` ceiling ENFORCED -- the
+    route caps the browser's batches, but server internals legitimately
+    send more (the rank cascade's 30-doc head, the ledger conflict scan's
+    fact list), and some upstreams reject or silently truncate oversized
+    batches.  Over-ceiling input splits into concurrent slices on the
+    shared loop; the usage metas merge (their counters sum)."""
+    if len(texts) <= MAX_BATCH:
+        return await _embed(texts)
+    slices = [texts[i : i + MAX_BATCH] for i in range(0, len(texts), MAX_BATCH)]
+    parts = await asyncio.gather(*(_embed(one) for one in slices))
+    vectors: list[list[float]] = []
+    usage: dict[str, t.Any] = {}
+    for part_vectors, part_usage in parts:
+        vectors.extend(part_vectors)
+        for key, value in (part_usage or {}).items():
+            usage[key] = usage.get(key, 0) + value if isinstance(value, (int, float)) else value
+    return vectors, usage or None
+
+
+async def embed_texts(
+    texts: list[str], timeout: float | None = None
+) -> tuple[list[list[float]], dict[str, t.Any] | None] | None:
     """The SERVER-side embedding call (the configured SDK, the shared
     loop): ``None`` when the feature is off/unconfigured or the upstream
     fails -- every consumer (the writer's context ranking) degrades
-    silently.  Server-internal: no flask, no HMAC (the route's browser
-    proxy is separate)."""
+    silently.  ``timeout`` bounds the await (``None`` waits unbounded --
+    the writer phase passes its own budget).  Server-internal: no flask,
+    no HMAC (the route's browser proxy is separate)."""
     if not enabled() or not configured():
         return None
     try:
-        return await _embed([str(text)[:MAX_TEXT_CHARS] for text in texts])
+        call = _embed_chunked([str(text)[:MAX_TEXT_CHARS] for text in texts])
+        if timeout is not None:
+            call = asyncio.wait_for(call, timeout)
+        return await call
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_embedding: embed_texts failed: %s", exc)
         return None
@@ -216,7 +242,7 @@ def run_batch(
     if missing:
         try:
             fresh, usage = asyncio.run_coroutine_threadsafe(
-                _embed([prepared[i] for i in missing]), get_loop()
+                _embed_chunked([prepared[i] for i in missing]), get_loop()
             ).result(timeout)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch_embedding: upstream failed: %s", exc)

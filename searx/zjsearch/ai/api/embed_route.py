@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The ``POST /zjsearch/ai/embed`` endpoint: a thin, HMAC-gated browser
-proxy to the embedding service (:py:mod:`infra.embed` -- the engine and
+proxy to the embedding service (:py:mod:`llm.embed` -- the engine and
 its config live there; this module is only the gate + validation + the
 shared-loop call).
 """
@@ -25,7 +25,7 @@ def _embed_view() -> flask.Response:
             flask.jsonify({"error": "texts must be a non-empty list of at most 16 strings"}),
             422,
         )
-    result = embed.run_batch([str(text) for text in texts])
+    result = embed.run_batch([str(text) for text in texts], timeout=60.0)
     if result is None:
         return flask.jsonify({"error": "embedding upstream failed"}), 502
     vectors, model, usage = result

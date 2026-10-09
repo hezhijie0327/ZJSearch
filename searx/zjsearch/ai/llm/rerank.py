@@ -19,14 +19,16 @@ wire:
 Both legs share the fail-open contract: ``(None, 0)`` on any skip, one
 debug line, the caller's previous order stands.  The RANKING POLICY
 (head selection, the BM25 fusion, where the order lands) lives in
-``runtime/rank.py`` -- this module is the provider, not the strategy.
+``runs.search.rank`` -- this module is the provider, not the strategy.
 NOTE: the wires ride their SDKs' own HTTP stacks -- the searx network
 layer (proxies / the named-network escape hatch) applies to neither; a
 rerank gateway behind Tor wants the openai leg pointed at a local
 forwarding proxy instead.
 """
 
+import concurrent.futures
 import logging
+import threading
 import typing as t
 
 from searx.zjsearch.ai.llm.config import extra_body, extra_headers
@@ -38,6 +40,28 @@ logger = logging.getLogger(__name__)
 
 SDKS = ("openai", "dashscope")
 """The ``zjsearch.rerank.sdk`` values -- one wire per provider family."""
+
+CALL_TIMEOUT = 20.0
+"""One rerank call's total budget, in seconds.  A healthy gateway answers
+30 docs in well under a second; the budget only exists so a HUNG upstream
+cannot stall the run driver (every rerank call site runs inside a
+settlement drain or the write phase -- the SDK default timeout would hold
+a search round hostage for minutes).  On expiry the caller's previous
+order stands, fail-open like every other skip."""
+
+_CALLERS: "concurrent.futures.ThreadPoolExecutor" = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="zjs-rerank"
+)
+"""The bounded dispatch pool: the sync SDK calls run here so a hung
+gateway holds a pool worker, never the caller's thread.  A worker lost to
+a genuinely wedged socket is reclaimed by the gateway's own TCP timeout
+eventually; the pool degrades to fewer parallel reranks, the run proceeds."""
+
+_clients: dict[tuple[str, str], t.Any] = {}
+_clients_lock = threading.Lock()
+"""The openai leg's sync clients, cached per (base_url, api_key) -- the
+same pool-reuse discipline as ``sdk.clients`` (a fresh client per call
+paid a new connection handshake on EVERY search of EVERY round)."""
 
 DEFAULT_PATH = "/rerank"
 """The openai leg's default request path -- the industry convention
@@ -84,14 +108,46 @@ def rerank(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
     """The provider dispatch: one rerank call on the configured wire.
     RETURNS ``(order, tokens)`` -- ``order`` maps rank position -> doc
     index (a full permutation) and ``tokens`` is the billed prompt-token
-    count; ``(None, 0)`` on any skip, fail-open."""
+    count; ``(None, 0)`` on any skip, fail-open.  The sync SDK call runs
+    on the bounded dispatch pool under :py:data:`CALL_TIMEOUT` -- a hung
+    upstream frees the caller (previous order stands) instead of parking
+    the settlement drain."""
     block = cfg()
     if not enabled(block) or not block.get("model"):
         return None, 0
-    family = sdk(block)
+    future = _CALLERS.submit(_dispatch, block, query, docs)
+    try:
+        return future.result(CALL_TIMEOUT)
+    except concurrent.futures.TimeoutError:
+        logger.warning("zjsearch rerank: no answer within %.0fs, keeping the previous order", CALL_TIMEOUT)
+        return None, 0
+
+
+def _dispatch(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tuple[list[int] | None, int]:
+    family = sdk(cfg_block)
     if family == "dashscope":
-        return _dashscope(block, query, docs)
-    return _openai(block, query, docs)
+        return _dashscope(cfg_block, query, docs)
+    return _openai(cfg_block, query, docs)
+
+
+def _openai_client(cfg_block: dict[str, t.Any]) -> t.Any:
+    """The openai leg's sync client, cached per (base_url, api_key)."""
+    from openai import OpenAI  # pylint: disable=import-outside-toplevel
+
+    base = str(cfg_block.get("base_url") or "").rstrip("/")
+    key = (base, rerank_key(cfg_block))
+    with _clients_lock:
+        client = _clients.get(key)
+        if client is None:
+            client = OpenAI(
+                api_key=key[1],
+                base_url=base or None,
+                default_headers=extra_headers(cfg_block) or None,
+                timeout=CALL_TIMEOUT,
+                max_retries=0,
+            )
+            _clients[key] = client
+    return client
 
 
 def _openai(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tuple[list[int] | None, int]:
@@ -101,13 +157,7 @@ def _openai(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tuple[l
     ride the client's default headers, ``extra_body`` merges into the
     request body 1:1 (a gateway header, a provider-private field like
     ``return_documents``)."""
-    from openai import OpenAI  # pylint: disable=import-outside-toplevel
-
-    client = OpenAI(
-        api_key=rerank_key(cfg_block),
-        base_url=str(cfg_block.get("base_url") or "").rstrip("/") or None,
-        default_headers=extra_headers(cfg_block) or None,
-    )
+    client = _openai_client(cfg_block)
     path = str(cfg_block.get("path") or DEFAULT_PATH)
     body: dict[str, t.Any] = {
         "model": str(cfg_block["model"]),
