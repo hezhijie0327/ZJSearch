@@ -64,12 +64,24 @@ export async function flushRunEventsBody(runId: string | undefined, client?: Que
       const base = index * 5;
       return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}::jsonb)`;
     });
-    await pgQuery(
-      `INSERT INTO run_event (run_id, n, thread_id, occurred_at, data)
-       VALUES ${rows.join(",")} ON CONFLICT DO NOTHING`,
-      values,
-      client,
-    );
+    try {
+      await pgQuery(
+        `INSERT INTO run_event (run_id, n, thread_id, occurred_at, data)
+         VALUES ${rows.join(",")} ON CONFLICT DO NOTHING`,
+        values,
+        client,
+      );
+    } catch (error) {
+      // the batch returns to the buffer: a FAILED flush must not destroy
+      // the events -- "a crashed tab loses at most one batch" is a crash
+      // contract, not a broken-database one (a rolled-back settle
+      // transaction used to eat the batch permanently)
+      const existing = evtBuffers.get(id) ?? [];
+      const merged = [...buffer, ...existing];
+      merged.sort((a, b) => a.n - b.n);
+      evtBuffers.set(id, merged);
+      throw error;
+    }
   }
 }
 
@@ -84,6 +96,27 @@ export async function loadRunEvents(runId: string): Promise<Array<{ n: number; e
     [runId],
   );
   return (rows ?? []).map(decodeEventRow);
+}
+
+/** Re-seed one run's wire-sequence counter from a KNOWN stored max (the
+    replay path -- the loaded evt rows carry their n).  The counters are
+    memory-only, and a fresh tab continuing a run whose rows already
+    exist would renumber from 1 -- every resumed event colliding with the
+    stored PK (run_id, n) and silently dropped by ON CONFLICT DO NOTHING
+    (the resumed research streamed fine and replayed as nothing). */
+export function seedSeqCounter(runId: string, storedMax: number): void {
+  if (storedMax > (seqCounters.get(runId) ?? 0)) {
+    seqCounters.set(runId, storedMax);
+  }
+}
+
+/** The same reseed from the STORE itself (the continue path -- the tab
+    holds no evt rows to read the max from). */
+export async function seedSeqCounterFromStore(runId: string): Promise<void> {
+  const rows = await pgQuery<{ maxn: number | null }>("SELECT max(n) AS maxn FROM run_event WHERE run_id = $1", [
+    runId,
+  ]);
+  seedSeqCounter(runId, Number(rows?.[0]?.maxn ?? 0));
 }
 
 /** A whole thread's event log, runs in chronological order (events carry

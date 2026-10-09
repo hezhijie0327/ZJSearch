@@ -43,18 +43,9 @@ export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error"
 /** One user-attached image on a run (the composer's paperclip): METADATA
     only in the event log / fold -- the bytes live in the browser's
     attachment table and are filled in by the resume path (`data`). */
-export interface AiSearchAttachment {
-  /** "image" = data URL bytes; "file" = the document (md/txt as TEXT,
-      pdf/docx/pptx/xlsx as base64 bytes -- the server converts) */
-  kind: "image" | "file";
-  mime: string;
-  name?: string;
-  bytes?: number;
-  /** image: the compressed data URL; file: the document's text or its
-      base64 bytes -- present in the live run and after the
-      attachment-table join, absent from the folded event metadata */
-  data?: string;
-}
+import type { AiSearchAttachment } from "@/lib/aicontracts.ts";
+
+export type { AiSearchAttachment };
 
 export interface AiAskQuestion {
   q: string;
@@ -573,7 +564,11 @@ export function applyEvent(
       // ledger and cards all survive -- only the failure state resets.
       // The server-side ledgers restart empty and refill as the model
       // re-affirms them (the resume note instructs exactly that), so the
-      // visible cards never flash empty.
+      // visible cards never flash empty.  The stage spine RESTARTS with
+      // the resumed stream (plan -> research -> write re-fire): keeping
+      // the old stages would append echo duplicates ([plan, research,
+      // plan, research]) -- the phases are one-directional, so the fresh
+      // sequence IS the run's history from here.
       runs[lastIdx] = {
         ...run,
         status: "streaming",
@@ -582,6 +577,7 @@ export function applyEvent(
         browser: null,
         wrappingUp: false,
         endedAt: null,
+        stages: [],
         mode: (event.mode as AiSearchMode) ?? run.mode,
       };
       return { ...core, runs, phase: "streaming" };

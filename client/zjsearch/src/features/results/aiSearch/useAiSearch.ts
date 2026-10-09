@@ -17,7 +17,15 @@ import {
 } from "@/features/results/aiSearch/timeline.ts";
 import { fetchEventStream, fetchJson } from "@/lib/http.ts";
 import { loadThreadAttachments, saveAttachments } from "@/lib/kb/attachments.ts";
-import { appendRunEvents, clearRunCtx, loadRunCtx, loadThreadEvents, saveRunCtx } from "@/lib/kb/events.ts";
+import {
+  appendRunEvents,
+  clearRunCtx,
+  loadRunCtx,
+  loadThreadEvents,
+  saveRunCtx,
+  seedSeqCounter,
+  seedSeqCounterFromStore,
+} from "@/lib/kb/events.ts";
 import { archiveDocument, loadMemories, saveMemory, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -124,13 +132,20 @@ function newThreadId(): string {
 
 /** The CONTINUE replay payload: the dead attempt's ctx checkpoints (its
     exact conversation), its [n] sources (the server's registry reseeds so
-    repeat urls reuse their numbers), and the entry/round bases (the
-    resumed stream's timeline ids continue the stored ones). */
+    repeat urls reuse their numbers), the entry/round bases (the resumed
+    stream's timeline ids continue the stored ones), and -- report mode --
+    the stored outline (the server restores the document skeleton instead
+    of re-minting a different TOC mid-thread). */
 interface ResumePayload {
   messages: unknown[];
   sources: Array<{ n: number; url: string; title: string }>;
   entry_base: number;
   round_base: number;
+  outline?: {
+    title: string;
+    subtitle?: string;
+    sections: Array<{ title: string; brief?: string }>;
+  };
 }
 
 export function useAiSearch(capability: AiCapability | undefined): AiSearchState {
@@ -145,6 +160,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   // same run continues from the server buffer, never a restart.  Reset
   // per beginRun (the clarify / no-research streams carry no host).
   const runKeyRef = useRef("");
+  // the continue path's re-entry guard (the double-click race)
+  const continuingRef = useRef(false);
   const entryIndexRef = useRef<Map<number, EntryIndex>>(new Map());
   // the current run's recalled-refs badge map (set at beginRun, read by
   // the sources fold)
@@ -194,6 +211,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return;
     }
     runKeyRef.current = "";
+    continuingRef.current = false;
     const controller = new AbortController();
     abortRef.current?.abort();
     abortRef.current = controller;
@@ -352,9 +370,15 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
               if (settled) {
                 return;
               }
-            } catch {
-              // the attach itself failed (run swept, network still down):
-              // the backoff loop retries
+            } catch (error) {
+              if (String(error).includes("HTTP 404")) {
+                // the handle is GONE (server restart, swept TTL): no amount
+                // of backoff revives it -- settle locally now instead of
+                // making the user wait out the full backoff ladder
+                break;
+              }
+              // the attach itself failed (network still down): the backoff
+              // loop retries
             }
           }
         }
@@ -506,18 +530,27 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       SAME run resumes in place -- the dead attempt's ctx checkpoint (its
       EXACT conversation) rides the request back and the server rebuilds
       its loop state from it (the [n] registry reseeds from the stored
-      sources, the timeline ids continue via entry/round bases).  A run
+      sources, the timeline ids continue via entry/round bases).  The
+      run's OWN mode carries (the dropdown's current pick must not
+      convert an interrupted report into a balanced answer).  A run
       without a checkpoint (predating the feature) falls back to the old
       contract: a new run seeded with the findings as the clarified
       direction. */
-  const continueRun = (lang: string, mode: AiSearchMode = "balanced", searchLanguage = "") => {
+  const continueRun = (lang: string, _mode: AiSearchMode = "balanced", searchLanguage = "") => {
     if (core.phase !== "done" && core.phase !== "error") {
       return;
+    }
+    if (continuingRef.current) {
+      return; // the click is async (the ctx load) -- the phase check alone
+      // lets a double-click race a second POST of the same resume payload
     }
     const last = core.runs[core.runs.length - 1];
     if (!last || last.answer) {
       return; // a run that produced an answer has nothing to continue
     }
+    continuingRef.current = true;
+    // 继续 resumes THE RUN's own shape
+    const mode: AiSearchMode = last.mode;
     void (async () => {
       const runId = `${threadIdRef.current}:${last.runNo}`;
       const stored = await loadRunCtx(runId).catch((error) => {
@@ -548,6 +581,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         const withRound = step as { round?: number };
         roundBase = Math.max(roundBase, Number(withRound.round) || 0);
       }
+      // the evt-log numbering floor: without this the fresh tab's counters
+      // restart at 1 and every resumed event silently collides with the
+      // stored rows (ON CONFLICT DO NOTHING) -- the resume streamed and
+      // replayed as nothing
+      await seedSeqCounterFromStore(runId).catch(() => {});
       const resume: ResumePayload = {
         messages: stored,
         sources: core.sources
@@ -556,6 +594,15 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         entry_base: entryBase,
         round_base: roundBase,
       };
+      if (mode === "report" && last.outline?.sections.length) {
+        // the interrupted report's TOC travels back: the server restores
+        // it instead of re-minting a different skeleton mid-thread
+        resume.outline = {
+          title: last.outline.title,
+          subtitle: last.outline.subtitle,
+          sections: last.outline.sections.map((section) => ({ title: section.title, brief: section.brief })),
+        };
+      }
       appendRunEvents(runId, [{ e: "client.resume", runNo: last.runNo, mode, startedAt: Date.now() }]);
       beginRun(
         last.q,
@@ -565,7 +612,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         mode,
         searchLanguage,
         last.runNo,
-        undefined,
+        // clarify answered-EMPTY: if the server later rejects the stored
+        // conversation (schema drift, oversize) the fallback is a fresh
+        // run WITHOUT re-opening the clarify gate -- the run already
+        // passed it once
+        { state: "answered", text: "" },
         undefined,
         undefined,
         resume,
@@ -706,6 +757,19 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return rows?.length ? { ...run, attachments: rows } : run;
     });
     core = { ...core, runs: runsWithAttach };
+    // the evt-log numbering floor rides the replay: a follow-up run
+    // started in THIS tab after a reload appends after the stored rows,
+    // never from 1 (the resume path's seq-collision fix, replay side)
+    for (const run of core.runs) {
+      const runId = `${threadId}:${run.runNo}`;
+      let max = 0;
+      for (const entry of events) {
+        if (entry.runId === runId && entry.n > max) {
+          max = entry.n;
+        }
+      }
+      seedSeqCounter(runId, max);
+    }
     // normalize: an interrupted run is a done run with interrupted call
     // rows; an awaiting clarify never survives a reload; a mirror that
     // outlived its stream is DEAD (the live card must not render on a

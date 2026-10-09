@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CapChip } from "@/components/CapChip.tsx";
+import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
@@ -263,7 +263,7 @@ function FindingsCard({
         </ul>
       </Collapse>
       <CapChip
-        className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        className={CAP_CHIP_CLASS}
         expanded={expanded}
         hidden={factsHidden}
         onToggle={() => {
@@ -339,7 +339,7 @@ function GapsCard({
         </ul>
       </Collapse>
       <CapChip
-        className="mt-2 ms-1 inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-[11px] text-ink-3 transition-colors hover:text-ink"
+        className={CAP_CHIP_CLASS}
         expanded={expanded}
         hidden={gapsHidden}
         onToggle={() => {
@@ -989,8 +989,9 @@ function AiSearchRunSectionImpl({
   sourceMeta: AiSourceMeta[];
   onCite?: (index: number) => void;
   onRegenerate?: () => void;
-  /** continue an INTERRUPTED research as a new run in the same thread
-      (the failed box's primary action when research gathered material) */
+  /** continue an INTERRUPTED research IN PLACE (the failed box's primary
+      action when research gathered material -- the same run's stored
+      conversation replays as the request's context) */
   onContinue?: () => void;
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
@@ -1343,8 +1344,27 @@ function AiSearchRunSectionImpl({
           {!streaming && !failed ? (
             <AiRunFooter finish={run.finish ?? null} model={run.model ?? null} usage={run.usage ?? null} />
           ) : null}
+          {/* a USER-STOPPED run keeps its checkpoint (the user may reverse
+              the stop) but wears NO red failed box -- the quiet continue
+              pill IS the reversal entry point; without it the checkpoint
+              was unreachable from the UI */}
+          {!streaming && !failed && run.stopped && !run.answer.trim() && totalCalls > 0 && isLast && onContinue ? (
+            <div className="mt-1">
+              <button
+                className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+                onClick={onContinue}
+                type="button"
+              >
+                <Play aria-hidden="true" className="size-3.5" />
+                {t("ai_continue_research")}
+              </button>
+            </div>
+          ) : null}
 
-          {failed ? (
+          {/* the failed box acts on THE LAST run only (continue/regenerate
+              target core.runs[end] -- on an earlier run they were a
+              misleading silent no-op; a mid-thread failure is history) */}
+          {failed && isLast ? (
             <div className="rounded-lg border border-line p-3 text-xs text-danger">
               <p>{t("ai_search_failed")}</p>
               {run.error ? (
@@ -1353,10 +1373,12 @@ function AiSearchRunSectionImpl({
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap items-center gap-2">
-                {/* an INTERRUPTED research keeps its ledger: 继续 starts a
-                    new run in the same thread -- numbering and findings
-                    travel, the researcher resumes the gaps (the primary
-                    action whenever this run actually gathered material) */}
+                {/* an INTERRUPTED research keeps its ledger: 继续 resumes
+                    THE SAME RUN in place -- the stored conversation replays
+                    as the request's context, numbering and findings stay,
+                    the researcher continues the open ledger items (the
+                    primary action whenever this run actually gathered
+                    material) */}
                 {onContinue && !run.answer.trim() && totalCalls > 0 ? (
                   <button
                     className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
@@ -1402,7 +1424,7 @@ function AiSearchRunSectionImpl({
             narrow screens (the run hides the slot entirely when it can
             never get content: a settled no-source run) */}
         {run.sources.length > 0 || streaming ? (
-          <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:h-[calc(100vh-3.5rem)] lg:w-80 lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:overscroll-contain lg:pb-10 lg:pr-0.5 xl:w-96">
+          <aside className="mt-5 w-full lg:sticky lg:top-14 lg:mt-0 lg:flex lg:h-[calc(100vh-3.5rem)] lg:w-80 lg:shrink-0 lg:flex-col lg:overflow-y-auto lg:overscroll-contain lg:pb-10 lg:pe-0.5 xl:w-96">
             {/* FIXED-HEIGHT SCROLLER, not a max-h: flex children never
                 shrink below their content, so a capped aside only clips
                 its paint -- the bottom sat unreachable under the floating
