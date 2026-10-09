@@ -1685,6 +1685,28 @@ redundant, both fused into ONE post-run extractor:
   from adjacent past work; metadata only, the researcher-feed red line
   untouched.
 
+## Thread titles (2026-10-09): writer-generated, decision-gated, manually final
+
+- **THE WRITER TITLES THE RESEARCH**: the related fence's contract is now
+  `{"title": ..., "questions": [...]}` -- one short subject noun phrase
+  (8-20 chars, answer language) written by the same completion that wrote
+  the answer; report runs' title candidate is the outline editor's own
+  title.  The fence parse splits `parse_related_title`; `_fence` emits a
+  new wire event `title` (closed set + LATE set).
+- **THE DECISION GATE** (`_SettleTail._title_pass`): ONE noul judges the
+  candidate (short, specific, subject noun phrase, question's language)
+  -- GOOD keeps it (no extra call), BAD/MISSING falls to one small
+  generation completion (`gates.generate_title`, outline-title hint,
+  fail-open).  Decision off = the candidate stands ungated; transport
+  dead = the client's mechanical derive (first question clause, 24 chars)
+  stands.  The judgment's tokens join `decision_usage` (deliberately NOT
+  the decisions ledger -- card noise).
+- **PRIORITY CHAIN** at the thread_head projection, behind the NEW
+  `title_manual` lock (idempotent ALTER): manual rename > writer fence
+  title > outline title > mechanical derive.  `renameThread()` sets both;
+  the knowledge directory's thread rows carry an inline rename (pencil,
+  Enter saves / Escape cancels) and a renamed title survives every settle.
+
 ## Custom plugin behaviour (server side, keep with the theme)
 
 - `unit_converter` / `currency_convert`: value-less queries ("kg to lb",
