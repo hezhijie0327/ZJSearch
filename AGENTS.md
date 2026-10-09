@@ -64,6 +64,10 @@ lockfile, untouched).
 - Local instance for theme work (default_theme: zjsearch, all search formats on):
   `SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/dev-settings.yml ./manage webapp.run`
 - First setup: `./manage pyenv.install` (Python venv in `./local/py3`).
+- PyPI access goes through the CERNET mirror in this environment —
+  append `-i https://mirrors.cernet.edu.cn/pypi/web/simple` to every
+  pip install (direct PyPI stalls/times out); the owner's standing
+  instruction, keep it in mind for dependency updates too.
 - One-time browser install for the built-in page reader (or a system
   Chrome suffices, no download):
   `./local/py3/bin/python -m searx.zjsearch.ai.browser.install`

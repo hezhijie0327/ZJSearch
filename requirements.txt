@@ -26,15 +26,15 @@ typing-extensions==4.16.0
 #   typesafe-sdk      the SystemOne decision-model surface
 # consumers: infra/sdk/*.py, infra/embed.py, infra/decision.py,
 # runtime/rank.py
-openai==3.20.0
-anthropic==1.9.0
-google-genai==2.25.0
+openai==3.26.1
+anthropic==1.12.1
+google-genai==2.29.0
 dashscope==1.27.7
 typesafe-sdk==0.7.2
 
 # zjsearch theme: the BM25 result reranker (searx/plugins/bm25_reranker.py)
 # -- Apache-2.0, numpy is its only runtime dependency
-bm25s==0.3.11
+bm25s==0.3.13
 
 # zjsearch theme: the AI stack's unified document converter
 # (searx/zjsearch/ai/core/convert.py -- the page reader's HTML -> Markdown
@@ -46,7 +46,7 @@ markitdown[pdf,docx,pptx,xlsx]==0.1.8
 # zjsearch theme: the MCP tool-server bridge (searx/zjsearch/ai/capabilities/mcp.py)
 # -- MIT; streamable-HTTP client over the shared network loop; without it the
 # mcp config degrades to silence
-mcp==2.2.0
+mcp==2.3.0
 
 # zjsearch theme: the page reader's render engine (searx/zjsearch/ai/browser/)
 # -- MIT python package driving the Camoufox anti-detect Firefox build (uBlock
