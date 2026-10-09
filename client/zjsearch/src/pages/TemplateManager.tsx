@@ -95,91 +95,11 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
     return (
       <div className="space-y-6 animate-fade-in">
         <Card>
-          <div className="space-y-2.5 px-5 py-4 sm:px-6">
-            <input
-              className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-[13px] text-ink outline-none focus:border-accent-strong"
-              onChange={(event) => {
-                setEditing({ ...editing, name: event.target.value });
-              }}
-              placeholder={t("template_name_ph")}
-              value={editing.name}
-            />
-            {editing.sections.map((section, index) => (
-              <div className="space-y-1.5 rounded-xl border border-line p-2.5" key={index}>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[11px] text-ink-3">{index + 1}</span>
-                  <input
-                    className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-accent-strong"
-                    onChange={(event) => {
-                      const sections = [...editing.sections];
-                      sections[index] = { ...section, title: event.target.value };
-                      setEditing({ ...editing, sections });
-                    }}
-                    placeholder={t("template_section_title_ph")}
-                    value={section.title}
-                  />
-                  <button
-                    aria-label={t("knowledge_menu_delete")}
-                    className="text-xs text-ink-3 transition-colors hover:text-danger"
-                    onClick={() => {
-                      setEditing({ ...editing, sections: editing.sections.filter((_, i) => i !== index) });
-                    }}
-                    title={t("knowledge_menu_delete")}
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" className="size-3.5" />
-                  </button>
-                </div>
-                <input
-                  className="h-8 w-full rounded-lg border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-accent-strong"
-                  onChange={(event) => {
-                    const sections = [...editing.sections];
-                    sections[index] = { ...section, brief: event.target.value };
-                    setEditing({ ...editing, sections });
-                  }}
-                  placeholder={t("template_section_brief_ph")}
-                  value={section.brief}
-                />
-                <input
-                  className="h-8 w-full rounded-lg border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-accent-strong"
-                  onChange={(event) => {
-                    const sections = [...editing.sections];
-                    sections[index] = { ...section, questions: event.target.value };
-                    setEditing({ ...editing, sections });
-                  }}
-                  placeholder={t("template_questions_ph")}
-                  value={section.questions}
-                />
-                <label className="flex items-center gap-1.5 text-xs text-ink-3">
-                  <input
-                    checked={section.optional}
-                    onChange={(event) => {
-                      const sections = [...editing.sections];
-                      sections[index] = { ...section, optional: event.target.checked };
-                      setEditing({ ...editing, sections });
-                    }}
-                    type="checkbox"
-                  />
-                  {t("template_optional")}
-                </label>
-              </div>
-            ))}
-            <button
-              className="inline-flex h-8 items-center rounded-lg border border-line px-3 text-[13px] text-ink-2 transition-colors hover:text-ink disabled:opacity-40"
-              disabled={editing.sections.length >= 10}
-              onClick={() => {
-                setEditing({
-                  ...editing,
-                  sections: [...editing.sections, { title: "", brief: "", questions: "", optional: false }],
-                });
-              }}
-              type="button"
-            >
-              <Plus aria-hidden="true" className="me-1 size-3.5" />
-              {t("template_add_section")}
-            </button>
-            {error ? <p className="text-xs text-danger">{error}</p> : null}
-            <div className="flex items-center justify-end gap-2 pt-1">
+          {/* the band carries the actions: a long form keeps 保存 reachable
+              without scrolling to its tail */}
+          <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
+            <p className="text-xs font-medium text-ink-3">{editing.id ? t("template_edit") : t("template_new")}</p>
+            <div className="ms-auto flex items-center gap-2">
               <button
                 className="h-8 rounded-lg border border-line px-3 text-[13px] text-ink-2 transition-colors hover:text-ink"
                 onClick={() => {
@@ -197,6 +117,93 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
                 {t("template_save")}
               </button>
             </div>
+          </div>
+          <div className="space-y-3 px-5 py-4 sm:px-6">
+            <input
+              className="h-9 w-full rounded-lg border border-line bg-surface px-3 text-[13px] text-ink outline-none focus:border-accent-strong"
+              onChange={(event) => {
+                setEditing({ ...editing, name: event.target.value });
+              }}
+              placeholder={t("template_name_ph")}
+              value={editing.name}
+            />
+            <div className="space-y-2.5">
+              {editing.sections.map((section, index) => (
+                <div className="space-y-2 rounded-xl border border-line p-3" key={index}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] tabular-nums text-ink-3">{index + 1}</span>
+                    <input
+                      className="h-8 min-w-0 flex-1 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-accent-strong"
+                      onChange={(event) => {
+                        const sections = [...editing.sections];
+                        sections[index] = { ...section, title: event.target.value };
+                        setEditing({ ...editing, sections });
+                      }}
+                      placeholder={t("template_section_title_ph")}
+                      value={section.title}
+                    />
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-ink-3">
+                      <input
+                        checked={section.optional}
+                        onChange={(event) => {
+                          const sections = [...editing.sections];
+                          sections[index] = { ...section, optional: event.target.checked };
+                          setEditing({ ...editing, sections });
+                        }}
+                        type="checkbox"
+                      />
+                      {t("template_optional_short")}
+                    </label>
+                    <button
+                      aria-label={t("knowledge_menu_delete")}
+                      className="grid size-7 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+                      onClick={() => {
+                        setEditing({ ...editing, sections: editing.sections.filter((_, i) => i !== index) });
+                      }}
+                      title={t("knowledge_menu_delete")}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" className="size-3.5" />
+                    </button>
+                  </div>
+                  <input
+                    className="h-8 w-full rounded-lg border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-accent-strong"
+                    onChange={(event) => {
+                      const sections = [...editing.sections];
+                      sections[index] = { ...section, brief: event.target.value };
+                      setEditing({ ...editing, sections });
+                    }}
+                    placeholder={t("template_section_brief_ph")}
+                    value={section.brief}
+                  />
+                  <input
+                    className="h-8 w-full rounded-lg border border-line bg-surface px-2 text-[13px] text-ink outline-none focus:border-accent-strong"
+                    onChange={(event) => {
+                      const sections = [...editing.sections];
+                      sections[index] = { ...section, questions: event.target.value };
+                      setEditing({ ...editing, sections });
+                    }}
+                    placeholder={t("template_questions_ph")}
+                    value={section.questions}
+                  />
+                </div>
+              ))}
+            </div>
+            <button
+              className="flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-line text-[13px] text-ink-3 transition-colors hover:border-accent/50 hover:text-ink disabled:opacity-40"
+              disabled={editing.sections.length >= 10}
+              onClick={() => {
+                setEditing({
+                  ...editing,
+                  sections: [...editing.sections, { title: "", brief: "", questions: "", optional: false }],
+                });
+              }}
+              type="button"
+            >
+              <Plus aria-hidden="true" className="size-3.5" />
+              {t("template_add_section")}
+            </button>
+            {error ? <p className="text-xs text-danger">{error}</p> : null}
           </div>
         </Card>
       </div>
