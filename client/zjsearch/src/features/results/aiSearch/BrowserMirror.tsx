@@ -17,7 +17,7 @@ import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
 import { postBrowserInput } from "@/lib/browserInput.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
-import { ICON_BTN, SCROLLBAR_NONE, SEGMENT, SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
+import { ICON_BTN, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 type MirrorView = NonNullable<AiSearchRun["browser"]>;
 
@@ -124,8 +124,8 @@ export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: 
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/80 p-2 backdrop-blur-sm sm:p-6">
-      <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/70" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/60 p-2 backdrop-blur-sm sm:p-6">
+      <div aria-hidden="true" className="absolute inset-0 animate-fade-in" onClick={onClose} />
       <div
         aria-label={t("ai_browser_live")}
         aria-modal
@@ -285,20 +285,19 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
       </div>
       <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
         {multi ? (
-          // the session tabs: the segmented-control language (one shape, the
-          // active tab fills accent) -- the host label IS the tab; no
-          // separate title bar (the active tab's title reads below), no
-          // visible scrollbar
-          <div
-            className={`flex items-center gap-1 overflow-x-auto border-b border-line bg-surface px-1.5 py-1.5 ${SCROLLBAR_NONE}`}
-          >
+          // the session tabs: BROWSER anatomy -- rounded-top tabs on a
+          // dimmed track, the ACTIVE tab shares the title bar's surface
+          // and merges into it (Chrome's attached-tab look); no scrollbar
+          <div className={`flex items-end gap-1 bg-surface-2/60 px-1.5 pt-1.5 ${SCROLLBAR_NONE} overflow-x-auto`}>
             {entries.map(([sid, item]) => {
               const active = sid === tab;
               const isLead = sid === "lead";
               return (
                 <button
                   aria-label={item.title || sid}
-                  className={`${SEGMENT} ${SEGMENT_SM} shrink-0 px-2.5 py-1 text-xs ${active ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
+                  className={`flex min-w-0 max-w-44 shrink-0 items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-xs transition-colors ${
+                    active ? "bg-surface font-medium text-ink" : "text-ink-3 hover:bg-surface/60 hover:text-ink-2"
+                  }`}
                   key={sid}
                   onClick={() => {
                     setTab(sid);
