@@ -1138,7 +1138,7 @@ output-shape differences on ONE loop, and goal's contract is "researches
 until the goal is met" — the loop ends on the task ledger closing (the
 model stops calling tools) or a stalled run (3 unproductive rounds),
 never on a small count.  `max_rounds: 32` is the runaway guard, not the
-plan (override: `zjsearch.feature.ai_search.max_rounds`); the prompt
+plan (the ceiling is INTERNAL: mode budgets 6/60/120, the depth probe's ladder personalizes it per question — deliberately not a deployment knob); the prompt
 tells the researcher to keep working open ledger items and to switch
 tools freely (searches, page reads, the calculator).
 

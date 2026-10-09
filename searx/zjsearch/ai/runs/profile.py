@@ -41,14 +41,13 @@ def enabled() -> bool:
 
 
 def budget(key: str, mode: str, default: int) -> int:
-    """Budget for one run: an explicit ``zjsearch.feature.ai_search.<key>`` setting
-    wins, otherwise the mode's default, otherwise ``default``."""
-    value = _cfg().get(key)
-    if value is not None:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            pass
+    """The mode's built-in budget (``max_rounds`` / ``stall_rounds`` /
+    ``max_seconds``): ENGINEERING GUARDS calibrated to the mode design,
+    deliberately NOT deployment knobs -- ``max_rounds`` is already
+    personalized per question by the depth probe's ladder, and exposing
+    the runaway/stall ceilings invites tuning that defeats them
+    (``detach_grace`` stays configurable: that one is genuinely
+    operational).  ``default`` covers an unknown mode."""
     return _MODE_BUDGETS.get(mode, {}).get(key, default)
 
 
