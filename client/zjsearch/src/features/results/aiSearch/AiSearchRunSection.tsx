@@ -28,7 +28,6 @@ import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, use
 import { createPortal } from "react-dom";
 import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
-import { Dropdown } from "@/components/Dropdown.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
@@ -828,11 +827,12 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
 /** The rail's 输出结构 control (report runs, research phase only): the
     run-time template pick rides run/control to the write boundary -- the
     synthesizer re-mints the outline from it before the first section
-    streams.  Presets AND the user's own PGlite templates; the free
-    智能大纲 option leads and is the DEFAULT (no pick = the writer designs
-    the outline).  A picked template's own sections preview below in the
-    task card's row anatomy (the fixed index column, 13px ink title, 可选
-    at the row end) -- the structure IS the information, no prose. */
+    streams.  ONE selectable list, no dropdown: 智能大纲 leads (the
+    DEFAULT -- no pick = the writer designs the outline) and every
+    template is a row of the same anatomy (label + a second line: the
+    free option's description, a template's section titles).  The
+    selected row wears the sanctioned selection language; the section
+    count rides the RailHeader. */
 function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) => Promise<boolean> }) {
   const t = useT();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
@@ -848,49 +848,57 @@ function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) =>
       cancelled = true;
     };
   }, []);
-  const options = [
-    { value: "", label: t("report_template_free") },
-    ...REPORT_TEMPLATES.map((template) => ({ value: template.id, label: template.name })),
-    ...templates.map((template) => ({ value: template.id, label: template.name })),
+  const options: Array<{ id: string; label: string; sub: string; count: number }> = [
+    { id: "", label: t("report_template_free"), sub: t("ai_output_structure_free"), count: 0 },
+    ...[...REPORT_TEMPLATES, ...templates].map((template) => ({
+      id: template.id,
+      label: template.name,
+      sub: template.sections.map((section) => section.title).join(" / "),
+      count: template.sections.length,
+    })),
   ];
-  const picked = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === current);
+  const picked = options.find((option) => option.id === current && option.id !== "");
   return (
     <section aria-label={t("ai_output_structure")} className="mb-5">
-      <RailHeader
-        count={picked ? picked.sections.length : undefined}
-        icon={ListTree}
-        title={t("ai_output_structure")}
-      />
-      <div className="mt-3">
-        <Dropdown
-          ariaLabel={t("ai_output_structure")}
-          onChange={(value) => {
-            setCurrent(value);
-            const template = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === value);
-            if (template) {
-              void onPick(template);
-            }
-          }}
-          options={options}
-          value={current}
-        />
-        {picked ? (
-          <ol className="mt-3 space-y-1.5">
-            {picked.sections.map((section, index) => (
-              <li className="flex items-start gap-2 text-[13px]" key={`${index}-${section.title}`}>
-                <span className="w-3 shrink-0 pt-0.5 text-center font-mono text-[11px] tabular-nums text-ink-3">
-                  {index + 1}
-                </span>
-                <span className="min-w-0 flex-1 leading-relaxed text-ink">{section.title}</span>
-                {section.optional ? (
-                  <span className="shrink-0 text-[11px] text-ink-3">{t("template_optional_short")}</span>
+      <RailHeader count={picked ? picked.count : undefined} icon={ListTree} title={t("ai_output_structure")} />
+      <div aria-label={t("ai_output_structure")} className="mt-3 space-y-1.5" role="radiogroup">
+        {options.map((option) => {
+          const selected = option.id === current;
+          return (
+            <button
+              aria-checked={selected}
+              className={`w-full rounded-lg border px-2.5 py-2 text-start transition-colors ${
+                selected ? "border-accent-strong bg-accent-soft" : "border-line hover:bg-surface-2/40"
+              }`}
+              key={option.id || "free"}
+              onClick={() => {
+                setCurrent(option.id);
+                const template = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === option.id);
+                if (template) {
+                  void onPick(template);
+                }
+              }}
+              role="radio"
+              type="button"
+            >
+              <span
+                className={`flex items-center justify-between gap-2 text-[13px] ${
+                  selected ? "font-medium text-accent" : "text-ink"
+                }`}
+              >
+                <span className="min-w-0 truncate">{option.label}</span>
+                {option.id ? (
+                  <span className="shrink-0 text-[11px] font-normal tabular-nums text-ink-3">
+                    {option.count} {t("knowledge_tab_sections")}
+                  </span>
                 ) : null}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="mt-2.5 px-1 text-[11px] text-ink-3">{t("ai_output_structure_free")}</p>
-        )}
+              </span>
+              <span className={`mt-0.5 block truncate text-[11px] ${selected ? "text-accent/70" : "text-ink-3"}`}>
+                {option.sub}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
