@@ -125,7 +125,7 @@ export function TemplateManagerDialog({
           </span>
           <button
             aria-label={t("close")}
-            className={ICON_BTN + " ms-auto"}
+            className={`${ICON_BTN} ms-auto`}
             data-dialog-close=""
             onClick={onClose}
             type="button"
@@ -158,11 +158,12 @@ export function TemplateManagerDialog({
                     value={section.title}
                   />
                   <button
+                    aria-label={t("knowledge_menu_delete")}
                     className="text-xs text-ink-3 transition-colors hover:text-danger"
                     onClick={() => {
                       setEditing({ ...editing, sections: editing.sections.filter((_, i) => i !== index) });
                     }}
-                    title={t("close")}
+                    title={t("knowledge_menu_delete")}
                     type="button"
                   >
                     <Trash2 aria-hidden="true" className="size-3.5" />
@@ -268,11 +269,12 @@ export function TemplateManagerDialog({
                       {t("template_edit")}
                     </button>
                     <button
+                      aria-label={t("knowledge_menu_delete")}
                       className="text-xs text-ink-3 transition-colors hover:text-danger"
                       onClick={() => {
                         remove(template.id);
                       }}
-                      title={t("close")}
+                      title={t("knowledge_menu_delete")}
                       type="button"
                     >
                       <Trash2 aria-hidden="true" className="size-3.5" />

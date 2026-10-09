@@ -1327,7 +1327,7 @@ function AiSearchRunSectionImpl({
                 run.browser ?? Object.values(run.browserSessions ?? {}).find((item) => item.img) ?? null;
               return mirror ? <BrowserMirrorSection sessions={run.browserSessions} view={mirror} /> : null;
             })()}
-            {streaming && run.mode === "deep" && !run.outline && onSetTemplate ? (
+            {streaming && run.mode === "report" && !run.outline && onSetTemplate ? (
               <OutputStructureCard onPick={onSetTemplate} />
             ) : null}
             {run.attachments?.length ? (

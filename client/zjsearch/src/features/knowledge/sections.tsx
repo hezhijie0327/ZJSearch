@@ -82,6 +82,61 @@ function BackRow({ onClick }: { onClick: () => void }) {
 
 // ------------------------------------------------------------------ rows
 
+/** The inline rename form (one thread at a time): the input focuses on
+    mount through the imperative pattern (no autoFocus attribute), Enter
+    saves, Escape cancels. */
+function RenameForm({
+  initial,
+  onCancel,
+  onSave,
+}: {
+  initial: string;
+  onCancel: () => void;
+  onSave: (draft: string) => void;
+}) {
+  const t = useT();
+  const [draft, setDraft] = useState(initial);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  return (
+    <form
+      className="flex min-w-0 flex-1 items-center gap-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const trimmed = draft.trim();
+        if (trimmed) {
+          onSave(trimmed);
+        }
+        onCancel();
+      }}
+    >
+      <input
+        className="h-8 min-w-0 flex-1 rounded-lg border border-accent-strong bg-surface px-2 text-[13px] text-ink outline-none"
+        onChange={(event) => {
+          setDraft(event.target.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onCancel();
+          }
+        }}
+        ref={ref}
+        value={draft}
+      />
+      <button
+        aria-label={t("knowledge_rename")}
+        className="grid size-7 shrink-0 place-items-center rounded-full text-accent transition-colors hover:bg-surface-2"
+        title={t("knowledge_rename")}
+        type="submit"
+      >
+        <Check aria-hidden="true" className="size-3.5" />
+      </button>
+    </form>
+  );
+}
+
 /** The thread directory as Vane-style rows: title + meta chips + a hover
     menu (pin / delete).  Clicking a row navigates to the AI thread page
     -- the detail view lives THERE, not here. */
@@ -106,7 +161,7 @@ export function ThreadRows({
   // the directory's 报告 filter: only threads carrying report-mode runs
   const [reportsOnly, setReportsOnly] = useState(false);
   // the inline rename: one thread at a time, Enter saves, Escape cancels
-  const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
+  const [renaming, setRenaming] = useState<{ id: string } | null>(null);
   const shown = reportsOnly ? threads.filter((thread) => thread.reports > 0) : threads;
   if (threads.length === 0) {
     return (
@@ -161,34 +216,15 @@ export function ThreadRows({
         >
           <div className="flex items-start justify-between gap-3">
             {renaming?.id === thread.id ? (
-              <form
-                className="flex min-w-0 flex-1 items-center gap-1.5"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const draft = renaming.draft.trim();
-                  if (draft && onRename) {
-                    onRename(thread, draft);
-                  }
+              <RenameForm
+                initial={thread.title || ""}
+                onCancel={() => {
                   setRenaming(null);
                 }}
-              >
-                <input
-                  autoFocus
-                  className="h-8 min-w-0 flex-1 rounded-lg border border-accent-strong bg-surface px-2 text-[13px] text-ink outline-none"
-                  onChange={(event) => {
-                    setRenaming({ id: thread.id, draft: event.target.value });
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      setRenaming(null);
-                    }
-                  }}
-                  value={renaming.draft}
-                />
-                <button className="text-xs text-accent" type="submit">
-                  {t("close")}
-                </button>
-              </form>
+                onSave={(draft) => {
+                  onRename?.(thread, draft);
+                }}
+              />
             ) : (
               <>
                 <button
@@ -205,7 +241,7 @@ export function ThreadRows({
                 <RowActions
                   onPin={(on) => onPin(thread, on)}
                   onRemove={() => onRemove(thread)}
-                  onRename={onRename ? () => setRenaming({ id: thread.id, draft: thread.title || "" }) : undefined}
+                  onRename={onRename ? () => setRenaming({ id: thread.id }) : undefined}
                   pinned={thread.pinned}
                 />
               </>

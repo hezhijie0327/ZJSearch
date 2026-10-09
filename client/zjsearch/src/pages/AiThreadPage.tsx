@@ -82,6 +82,16 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   const [followupQuery, setFollowupQuery] = useState("");
   const [followupAttachments, setFollowupAttachments] = useState<AiSearchAttachment[]>([]);
   const [researchMode, setResearchMode] = useState<AiSearchMode>("balanced");
+  // the composer adopts the thread's own depth once runs exist: continue/
+  // retry/followup submit researchMode, so it must match the dropdown's
+  // display (a thread URL carries no mode param -- the balanced default
+  // would silently downgrade a report thread's next run)
+  const lastRunMode = aiSearch.runs[aiSearch.runs.length - 1]?.mode;
+  useEffect(() => {
+    if (lastRunMode) {
+      setResearchMode(lastRunMode);
+    }
+  }, [lastRunMode]);
 
   // restore once per page instance (the router remounts pages per payload);
   // the resume is ASYNC now (it may read PGlite when this tab's mirror
@@ -133,7 +143,6 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
     setFollowupAttachments([]);
   };
 
-  const lastMode = aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode;
   // the composer's guide lane (same dual-mode contract as the results
   // page): while the run streams, the input steers it
   const steering = aiSearch.phase === "streaming";
@@ -307,7 +316,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                         setResearchMode(value as AiSearchMode);
                       }}
                       options={depthOptions(t)}
-                      value={lastMode}
+                      value={researchMode}
                     />
                     <div className="flex items-center gap-2">
                       <AttachmentPicker

@@ -41,7 +41,10 @@ export function DocumentView({
 }) {
   const t = useT();
   const outline = run.outline;
-  const anchorId = (id: string) => `zjs-report-${run.runNo}-${id}`;
+  // the anchor prefix is a STABLE string per run (the effect below reads it
+  // directly -- a fresh anchorId closure would re-run the observer every render)
+  const anchorPrefix = `zjs-report-${run.runNo}-`;
+  const anchorId = (id: string) => `${anchorPrefix}${id}`;
   const doneCount = useMemo(() => outline.sections.filter((s) => s.status === "done").length, [outline.sections]);
   // scroll-spy: the TOC row of the section nearest the viewport top gets
   // the active accent (IntersectionObserver -- rootMargin picks whichever
@@ -55,7 +58,7 @@ export function DocumentView({
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            const id = (entry.target as HTMLElement).id.replace(`zjs-report-${run.runNo}-`, "");
+            const id = (entry.target as HTMLElement).id.replace(anchorPrefix, "");
             setActiveId(id);
           }
         }
@@ -63,7 +66,7 @@ export function DocumentView({
       { rootMargin: "-15% 0px -70% 0px" },
     );
     for (const section of outline.sections) {
-      const el = document.getElementById(anchorId(section.id));
+      const el = document.getElementById(`${anchorPrefix}${section.id}`);
       if (el) {
         io.observe(el);
       }
@@ -71,7 +74,7 @@ export function DocumentView({
     return () => {
       io.disconnect();
     };
-  }, [outline.sections, run.runNo]);
+  }, [outline.sections, anchorPrefix]);
   const jump = (id: string) => {
     document.getElementById(anchorId(id)) &&
       scrollIntoViewAnimated(document.getElementById(anchorId(id)) as HTMLElement);

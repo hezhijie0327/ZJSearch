@@ -1046,7 +1046,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                               setResearchMode(value as AiSearchMode);
                             }}
                             options={depthOptions(t)}
-                            value={aiSearch.runs[aiSearch.runs.length - 1]?.mode ?? researchMode}
+                            value={researchMode}
                           />
                           <div className="flex items-center gap-2">
                             <AttachmentPicker
