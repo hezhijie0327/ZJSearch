@@ -348,12 +348,9 @@ export const EN = {
   attach_files: "Attach images or files",
   ai_attach_section: "Attachments",
   ai_browser_tab_lead: "Lead session",
-  ai_browser_tab_bg: "bg",
   ai_browser_live: "Browser",
   ai_browser_wait: "{s}s",
   ai_browser_wait_hint: "time left in this operation window",
-  ai_browser_hint:
-    "Operate the live page below (sign in, verify, click through) -- the page returns to the model when you're done",
   ai_browser_full: "Open the takeover view",
   ai_browser_close: "Back to the card",
   ai_browser_done: "Done",

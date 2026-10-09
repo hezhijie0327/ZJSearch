@@ -17,7 +17,7 @@ import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
 import { postBrowserInput } from "@/lib/browserInput.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
-import { ICON_BTN } from "@/lib/styles.ts";
+import { ICON_BTN, SCROLLBAR_NONE, SEGMENT, SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 
 type MirrorView = NonNullable<AiSearchRun["browser"]>;
 
@@ -285,26 +285,28 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
       </div>
       <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
         {multi ? (
-          <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-surface px-1.5 py-1">
+          // the session tabs: the segmented-control language (one shape, the
+          // active tab fills accent) -- the host label IS the tab; no
+          // separate title bar (the active tab's title reads below), no
+          // visible scrollbar
+          <div
+            className={`flex items-center gap-1 overflow-x-auto border-b border-line bg-surface px-1.5 py-1.5 ${SCROLLBAR_NONE}`}
+          >
             {entries.map(([sid, item]) => {
               const active = sid === tab;
               const isLead = sid === "lead";
               return (
                 <button
                   aria-label={item.title || sid}
-                  className={`flex min-w-0 max-w-40 shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    active
-                      ? "border-accent-strong/50 bg-accent-soft font-medium text-accent"
-                      : "border-line text-ink-3 hover:text-ink-2"
-                  }`}
+                  className={`${SEGMENT} ${SEGMENT_SM} shrink-0 px-2.5 py-1 text-xs ${active ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
                   key={sid}
                   onClick={() => {
                     setTab(sid);
                   }}
+                  title={item.title || item.url}
                   type="button"
                 >
                   <span className="truncate">{isLead ? t("ai_browser_tab_lead") : hostOf(item.url)}</span>
-                  {!active ? <span className="shrink-0 text-[11px] opacity-70">{t("ai_browser_tab_bg")}</span> : null}
                 </button>
               );
             })}
@@ -314,7 +316,6 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
           <span className="min-w-0 flex-1 truncate text-xs text-ink-2" title={activeView.url}>
             {activeView.title || activeView.url}
           </span>
-          <span className="hidden shrink-0 font-mono text-[11px] text-ink-3 sm:inline">{hostOf(activeView.url)}</span>
         </div>
         {leadActive ? (
           <button
@@ -339,7 +340,6 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
           />
         )}
       </div>
-      <p className="mt-2 px-1 text-xs leading-relaxed text-ink-3">{t("ai_browser_hint")}</p>
       {waiting
         ? createPortal(
             <div className="fixed inset-x-4 bottom-4 z-40 flex justify-center lg:hidden">
