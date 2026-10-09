@@ -30,14 +30,14 @@ const intel: ReportTemplate = {
   name: "商业情报报告",
   sections: [
     {
-      title: "标的概况与市场定位",
-      brief: "标的公司/主体的业务、规模与所处市场位置",
-      key_questions: ["主体是谁、做什么、收入结构如何", "所处市场的规模与格局"],
+      title: "公司概况与市场定位",
+      brief: "研究对象的业务、规模与所处市场位置",
+      key_questions: ["公司是谁、做什么、收入结构如何", "所处市场的规模与格局"],
     },
     {
-      title: "关键产品管线与阶段",
-      brief: "核心产品/管线的进展与关键节点",
-      key_questions: ["有哪些关键管线/产品线", "各自处于什么阶段、下一步里程碑"],
+      title: "核心产品与发展阶段",
+      brief: "核心产品/业务线的进展与关键节点",
+      key_questions: ["有哪些核心产品或业务线", "各自处于什么阶段、下一步里程碑"],
     },
     {
       title: "监管与合规信号",
@@ -45,13 +45,13 @@ const intel: ReportTemplate = {
       key_questions: ["近期有哪些监管动作", "政策趋势利好还是收紧"],
     },
     {
-      title: "供应链与 CMC 信号",
-      brief: "上游供应、产能与生产制造层面的行为信号",
+      title: "供应链与生产动态",
+      brief: "上游供应、产能与生产制造层面的动向",
       key_questions: ["供应链与产能有何变化", "生产/工艺合作动向"],
     },
     {
       title: "合作与授权格局",
-      brief: "License-in/out、合作与竞争联盟",
+      brief: "技术授权、合作与竞争联盟",
       key_questions: ["有哪些已达成的交易", "交易条款与市场热度"],
     },
     {
@@ -68,10 +68,14 @@ const dd: ReportTemplate = {
   sections: [
     {
       title: "业务与收入结构",
-      brief: "标的主营业务、客户与收入构成",
+      brief: "主营业务、客户与收入构成",
       key_questions: ["收入靠什么", "客户集中度与粘性"],
     },
-    { title: "市场与竞争", brief: "市场空间、竞争对手与标的站位", key_questions: ["市场还有多大", "标的核心壁垒"] },
+    {
+      title: "市场与竞争",
+      brief: "市场空间、竞争对手与自身站位",
+      key_questions: ["市场还有多大", "核心竞争壁垒是什么"],
+    },
     { title: "财务健康度", brief: "盈利能力、现金流与负债水平", key_questions: ["盈利质量如何", "现金流与负债风险"] },
     { title: "法务与合规风险", brief: "诉讼、监管处罚与合规隐患", key_questions: ["有哪些未决纠纷", "合规记录如何"] },
     {

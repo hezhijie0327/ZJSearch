@@ -827,16 +827,17 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
 /** The rail's 输出结构 control (report runs, research phase only): the
     run-time template pick rides run/control to the write boundary -- the
     synthesizer re-mints the outline from it before the first section
-    streams.  ONE selectable list, no dropdown: 智能大纲 leads (the
-    DEFAULT -- no pick = the writer designs the outline) and every
-    template is a row of the same anatomy (label + a second line: the
-    free option's description, a template's section titles).  The
-    selected row wears the sanctioned selection language; the section
-    count rides the RailHeader. */
+    streams.  COLLAPSED BY DEFAULT: the trigger IS the selected option's
+    own row anatomy (label + a second line -- the free 智能大纲's
+    description or a template's section titles -- and the 节 count at the
+    end), so both states read identically; opening it reveals the option
+    list (scroll-capped: users keep adding templates).  智能大纲 leads and
+    is the default. */
 function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) => Promise<boolean> }) {
   const t = useT();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [current, setCurrent] = useState("");
+  const [open, setOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void listTemplates().then((rows) => {
@@ -848,8 +849,9 @@ function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) =>
       cancelled = true;
     };
   }, []);
+  const freeOption = { id: "", label: t("report_template_free"), sub: t("ai_output_structure_free"), count: 0 };
   const options: Array<{ id: string; label: string; sub: string; count: number }> = [
-    { id: "", label: t("report_template_free"), sub: t("ai_output_structure_free"), count: 0 },
+    freeOption,
     ...[...REPORT_TEMPLATES, ...templates].map((template) => ({
       id: template.id,
       label: template.name,
@@ -857,48 +859,106 @@ function OutputStructureCard({ onPick }: { onPick: (template: ReportTemplate) =>
       count: template.sections.length,
     })),
   ];
-  const picked = options.find((option) => option.id === current && option.id !== "");
+  const selected = options.find((option) => option.id === current) ?? freeOption;
+  const picked = current ? selected : undefined;
+  const choose = (id: string) => {
+    setCurrent(id);
+    setOpen(false);
+    const template = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === id);
+    if (template) {
+      void onPick(template);
+    }
+  };
   return (
     <section aria-label={t("ai_output_structure")} className="mb-5">
       <RailHeader count={picked ? picked.count : undefined} icon={ListTree} title={t("ai_output_structure")} />
-      <div aria-label={t("ai_output_structure")} className="mt-3 space-y-1.5" role="radiogroup">
-        {options.map((option) => {
-          const selected = option.id === current;
-          return (
-            <button
-              aria-checked={selected}
-              className={`w-full rounded-lg border px-2.5 py-2 text-start transition-colors ${
-                selected ? "border-accent-strong bg-accent-soft" : "border-line hover:bg-surface-2/40"
-              }`}
-              key={option.id || "free"}
-              onClick={() => {
-                setCurrent(option.id);
-                const template = [...REPORT_TEMPLATES, ...templates].find((item) => item.id === option.id);
-                if (template) {
-                  void onPick(template);
-                }
-              }}
-              role="radio"
-              type="button"
-            >
-              <span
-                className={`flex items-center justify-between gap-2 text-[13px] ${
-                  selected ? "font-medium text-accent" : "text-ink"
-                }`}
-              >
-                <span className="min-w-0 truncate">{option.label}</span>
-                {option.id ? (
-                  <span className="shrink-0 text-[11px] font-normal tabular-nums text-ink-3">
-                    {option.count} {t("knowledge_tab_sections")}
+      <div className="relative mt-3">
+        <button
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          className="flex w-full items-center gap-2 rounded-lg border border-line px-2.5 py-2 text-start transition-colors hover:bg-surface-2/40"
+          onClick={() => {
+            setOpen((value) => !value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setOpen(false);
+            }
+          }}
+          type="button"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] text-ink">{selected.label}</span>
+            <span className="mt-0.5 block truncate text-[11px] text-ink-3">{selected.sub}</span>
+          </span>
+          {picked ? (
+            <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
+              {picked.count} {t("knowledge_tab_sections")}
+            </span>
+          ) : null}
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3.5 shrink-0 text-ink-3 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        {picked && !open ? (
+          <ol className="mt-2 space-y-1 px-1">
+            {[...REPORT_TEMPLATES, ...templates]
+              .find((template) => template.id === picked.id)
+              ?.sections.map((section, index) => (
+                <li className="flex items-start gap-2 text-[13px]" key={`${index}-${section.title}`}>
+                  <span className="w-3 shrink-0 pt-0.5 text-center font-mono text-[11px] tabular-nums text-ink-3">
+                    {index + 1}
                   </span>
-                ) : null}
-              </span>
-              <span className={`mt-0.5 block truncate text-[11px] ${selected ? "text-accent/70" : "text-ink-3"}`}>
-                {option.sub}
-              </span>
-            </button>
-          );
-        })}
+                  <span className="min-w-0 flex-1 leading-relaxed text-ink">{section.title}</span>
+                  {section.optional ? (
+                    <span className="shrink-0 text-[11px] text-ink-3">{t("template_optional_short")}</span>
+                  ) : null}
+                </li>
+              ))}
+          </ol>
+        ) : null}
+        {open ? (
+          <div
+            aria-label={t("ai_output_structure")}
+            className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-72 space-y-1 overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-pop"
+            role="listbox"
+          >
+            {options.map((option) => {
+              const isSelected = option.id === current;
+              return (
+                <button
+                  aria-selected={isSelected}
+                  className={`w-full rounded-md px-2.5 py-2 text-start transition-colors ${
+                    isSelected ? "border border-accent-strong bg-accent-soft" : "hover:bg-surface-2/40"
+                  }`}
+                  key={option.id || "free"}
+                  onClick={() => {
+                    choose(option.id);
+                  }}
+                  role="option"
+                  type="button"
+                >
+                  <span
+                    className={`flex items-center justify-between gap-2 text-[13px] ${
+                      isSelected ? "font-medium text-accent" : "text-ink"
+                    }`}
+                  >
+                    <span className="min-w-0 truncate">{option.label}</span>
+                    {option.id ? (
+                      <span className="shrink-0 text-[11px] font-normal tabular-nums text-ink-3">
+                        {option.count} {t("knowledge_tab_sections")}
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className={`mt-0.5 block truncate text-[11px] ${isSelected ? "text-accent/70" : "text-ink-3"}`}>
+                    {option.sub}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
     </section>
   );
