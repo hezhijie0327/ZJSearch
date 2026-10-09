@@ -235,6 +235,13 @@ export function AiDebugStage() {
         onRegenerate={() => {
           pick(scenario.id);
         }}
+        onSetTemplate={() => {
+          // the simulator has no run host behind the pick: resolving ok
+          // lets the 输出结构 card's picked state (preview rows + the
+          // settle note) be QA'd here, where every report run's most
+          // consequential control lives
+          return Promise.resolve(true);
+        }}
         onSubmitClarify={(text) => answerClarify(text ?? "")}
         run={run}
         sourceMeta={meta}

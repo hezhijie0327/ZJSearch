@@ -1338,9 +1338,135 @@ const SUB_STAGE: DebugScenario = {
   ],
 };
 
+/** The ANSWER-TAIL panorama: the gallery placeholder + gallery event (the
+    zjs-images fence's client contract), and every LATE event the settle
+    trails -- related, title, memory (a silent fold), tags, and the
+    trailing usage event's ABSOLUTE gates bucket.  Nothing else in the
+    stage exercised these, which is exactly how a rendering regression
+    would have shipped unnoticed. */
+const PANORAMA_STAGE: DebugScenario = {
+  id: "panorama",
+  label: "全景(画廊 · 追问 · 标题 · 记忆 · 标签 · gates)",
+  q: "全景模拟:答案尾部的每个面",
+  mode: "balanced",
+  events: [
+    { e: "client.start", runNo: 1, q: "全景模拟:答案尾部的每个面", mode: "balanced" },
+    { ...base },
+    { e: "phase", name: "research" },
+    { e: "say", id: 1, t: "两轮材料即可:一条检索、一条页面读取。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_search",
+        q: "panorama fixture answers",
+        status: "ok",
+        n: 6,
+        ms: 1180,
+        args: { query: "panorama fixture answers" },
+      },
+    ]),
+    { e: "sources", items: [SOURCES[1]] },
+    { e: "call", id: 1, call: 1, status: "ok", n: 6, ms: 1180, feed: "6 条结果进入 feed [1]" },
+    { e: "close", id: 1 },
+    {
+      e: "open",
+      id: 2,
+      kind: "research",
+      round: 2,
+    },
+    { e: "think", id: 2, t: "读取第二来源的全文,给画廊一个可引用的图源。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_reader",
+        q: "example.com/peptide-report",
+        status: "ok",
+        ms: 2140,
+        chars: 1520,
+        args: { url: "https://example.com/peptide-report" },
+      },
+    ]),
+    { e: "sources", items: [SOURCES[2]] },
+    {
+      e: "call",
+      id: 2,
+      call: 1,
+      status: "ok",
+      ms: 2140,
+      chars: 1520,
+      preview: "The panorama fixture's reading pane: the page's clean text, archived under its url.",
+      text: "The panorama fixture's reading pane: the page's clean text, archived under its url. It is long enough to render the folded reading pane with a measurable clamp.",
+    },
+    { e: "close", id: 2 },
+    {
+      e: "learnings",
+      items: [
+        {
+          facts: ["全景场景覆盖答案尾部的全部晚期事件 [1]"],
+          gaps: [],
+        },
+      ],
+    },
+    {
+      e: "tasks",
+      items: [
+        { title: "两条材料到位", status: "done" },
+        { title: "答案尾部渲染验证", status: "active" },
+      ],
+    },
+    { e: "phase", name: "write" },
+    { e: "open", id: 3, kind: "write", round: 0 },
+    {
+      e: "answer",
+      t: "全景场景把答案尾部逐一过一遍:引用落在 [1] 与 [2],下方的画廊占位符由 gallery 事件填充。\n\n{{zjs-gallery:0}}\n\n占位符之后的正文继续流动,验证占位符两侧的文本都完好。",
+    },
+    {
+      e: "gallery",
+      items: [
+        {
+          u: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='640' height='360'><rect width='100%' height='100%' fill='%23222'/><text x='50%' y='50%' fill='%23c9a227' font-size='28' text-anchor='middle'>gallery fixture</text></svg>",
+          n: 2,
+        },
+      ],
+    },
+    {
+      e: "answer",
+      t: "\n\n画廊之后的行为不受影响——这正是要守住的部分。",
+    },
+    { e: "close", id: 3 },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 3810,
+        output: 210,
+        thoughts: 140,
+        cached: 1024,
+        cache_write: 0,
+        research: { input: 2600, output: 60 },
+        write: { input: 1210, output: 150 },
+        gates: { input: 500, output: 22, calls: 2 },
+        rerank: null,
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+    { e: "related", items: ["画廊占位符两侧的文本还在吗?", "gates 用量卡片显示了吗?"] },
+    { e: "title", text: "全景模拟:答案尾部面面观" },
+    { e: "memory", content: "用户的审计报告偏好深色主题" },
+    { e: "tags", items: ["全景模拟", "答案尾部", "画廊"] },
+    {
+      e: "usage",
+      gates: { calls: 5, tokens: 3120 },
+    },
+  ],
+};
+
 export const DEBUG_SCENARIOS: DebugScenario[] = [
   BROWSER_STAGE,
   FULL_STAGE,
+  PANORAMA_STAGE,
   STEER_STAGE,
   SUB_STAGE,
   DONE_STAGE,
