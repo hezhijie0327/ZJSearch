@@ -79,7 +79,7 @@ _SNAPSHOT_JS = """
     out.push(ref + '\\t' + role + '\\t' + name);
     if (out.length >= %d) break;
   }
-  return out.join('\n');
+  return out.join('\\n');
 }
 """ % SNAPSHOT_MAX_ELEMENTS
 
