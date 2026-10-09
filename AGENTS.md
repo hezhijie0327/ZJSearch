@@ -1656,6 +1656,35 @@ redundant, both fused into ONE post-run extractor:
   cross-encoder); searx's `result.score` joins the BM25 fusion as a
   third RRF leg (0.4 -- authority prior, tie-break only, fail-open).
 
+## vNext finishers (2026-10-09): user templates, live structure control, report face
+
+- **USER-DEFINED TEMPLATES** live as PGlite `kind='template'` rows
+  (lib/kb/templates.ts -- the same store as the research memory, the
+  owner's call over a localStorage sketch).  The hero's 管理模板 dialog
+  is a STRUCTURED editor (name + section rows: title / brief /
+  key-questions / optional, add+remove, 2-10) -- new, edit and delete;
+  user templates ride the same `?template=` id and request-body path as
+  presets and hit the identical server adaptation gate.
+- **THE RAIL'S 输出结构 CONTROL**: a report run's right rail carries an
+  output-structure picker while the research phase streams (deep mode,
+  before `run.outline` exists).  Picking POSTs `run/control
+  {action:"template"}`; ControlBox holds ONE pending template and the
+  SYNTHESIZER consumes it at the write boundary -- `make_synthesizer`'s
+  `take_template` re-mints the outline via `build_outline_from_template`
+  before the first outline snapshot streams (the client TOC follows).
+  Research keeps its own ledger either way; only the document's shape
+  changes.  The lane is naturally writer-safe: the consume is one-shot,
+  and once the write phase owns the loop nothing reads it.
+- **THE KNOWLEDGE BASE'S REPORT FACE**: `thread_head.reports` (idempotent
+  ALTER + recompute from `meta->'report'` at both upserts) drives the
+  directory's 报告 ×N badge, a 报告 filter chip, and the run inspector's
+  reading TOC (the settled outline above the glued answer).
+- **METADATA RECALL** (batch 3.3): the client's pre-run recall distills
+  to `history_topics` (titles only, ≤8) and BOTH outline gates receive a
+  `<prior_research_topics>` block -- build on, refresh, or differentiate
+  from adjacent past work; metadata only, the researcher-feed red line
+  untouched.
+
 ## Custom plugin behaviour (server side, keep with the theme)
 
 - `unit_converter` / `currency_convert`: value-less queries ("kg to lb",
