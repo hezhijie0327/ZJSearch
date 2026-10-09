@@ -2,7 +2,7 @@
 """AI Search: the RESEARCHER's message builders.
 
 The researcher half of the researcher/writer split (the writer's
-conversation contract lives in :py:mod:`runtime.writer`), composed from
+conversation contract lives in :py:mod:`runs.search.writer`), composed from
 the SHARED fragments in :py:mod:`searx.zjsearch.ai.prompts.spine` (the
 same source both AI features speak, so they cannot drift): the
 researcher gets the round policy and the tool-capability blocks, never
@@ -43,8 +43,9 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " are thin, and stop after it.  task_write is optional here -- a"
     " light 2-3 item plan only when the facets are genuinely distinct"
     " (most speed runs search directly) -- and keep learnings to ONE"
-    " final call with the facts that survive.  Do not ask the user"
-    " anything.",
+    " final call with the facts that survive.  Ask the user only to"
+    " avoid a genuinely wrong high-stakes guess (see the ask tool);"
+    " otherwise never.",
     "balanced": "Depth: BALANCED -- a handful of rounds covering the main"
     " facets: what it is, how it works or why it matters, and whatever"
     " context the reader needs not to be misled.  Keep a LIGHT findings"
@@ -64,8 +65,9 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " after a search round surfaces the promising hits, spend the NEXT"
     " round reading the 2-4 sources you will actually build on"
     " (web_reader), and read whenever a figure, quote or claim your"
-    " answer will lean on only exists as a snippet head.  Cross-verify"
-    " load-bearing claims against independent sources.  The research ends when the LEDGER"
+    " answer will lean on only exists as a snippet head.  Verify"
+    " load-bearing claims against independent sources (see"
+    " <how_to_search>).  The research ends when the LEDGER"
     " closes -- every subtask covered, every gap answered or explicitly"
     " abandoned -- not when you feel done.",
 }
@@ -133,6 +135,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
     deliverable_entities: list[str] | None = None,
+    depth_rung: int = 0,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -178,6 +181,10 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             "- ALWAYS run at least one search per question facet -- even for"
             " topics you already know: the user expects live, cited sources,"
             " not your memory.",
+            "- A load-bearing figure or claim only ONE snippet carries is"
+            " UNVERIFIED: confirm it in a second independent source (search"
+            " the claim's own wording) or read the first source -- one"
+            " source is a lead, two are a fact.",
             "- Optional filters (time_range) are not supported by every"
             " engine: when a filtered search comes back EMPTY, retry the"
             " same intent once without the filter before concluding there is"
@@ -296,8 +303,11 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
                 " EVERY round and keep it TRUE: statuses are YOURS to set"
                 " (done when a subtask's material is gathered), and"
                 " cross-checking often proves an earlier assumption wrong --"
-                " when evidence reveals a dead end, a missing facet, or an"
-                " entity the final answer depends on, RESEND the COMPLETE"
+                " when evidence reveals a dead end, a missing facet, an"
+                " entity the final answer depends on, or a SURPRISE (an"
+                " unexpected player, a contradicting number, a facet you"
+                " had not considered -- surprises are plan edits, not"
+                " footnotes), RESEND the COMPLETE"
                 " list: add, split, merge, reword or drop subtasks (a dropped"
                 " dead end simply leaves the list). The newest list replaces"
                 " the card -- never leave a subtask standing that the"
@@ -377,7 +387,10 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " reads pages, and reports a compressed digest back.  Delegate"
             " when the question has 2-4 independent facets worth parallel"
             " depth; do NOT delegate a quick lookup you can search"
-            " yourself.  Brief each subagent with the four fields (objective"
+            " yourself.  Use it too when ONE facet needs many reads (a"
+            " broad landscape scan) that would flood your own context --"
+            " the subagent reads wide and returns only the digest.  Brief"
+            " each subagent with the four fields (objective"
             " / output_format / tool_guidance / boundaries): vague briefs"
             " produce duplicated work.  Batch the independent subtasks in"
             " ONE round so they run in parallel; their digests arrive as"
@@ -404,11 +417,22 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         lines.append(
             "<research_policy>\nThere is NO time limit and no cap on how"
             f" many searches you may run -- only a safety ceiling of"
-            f" {max_rounds} rounds (a round = one parallel batch).  The REAL"
+            f" {max_rounds} rounds (a round = one parallel batch)"
+            + (
+                f" -- the depth probe graded this question {depth_rung}/4, so"
+                " size the ambition (facets, reads, delegations) to that grade"
+                if depth_rung
+                else ""
+            )
+            + ".  The REAL"
             " rule is progress: every round must add NEW information."
             "  Repeating a query or finding nothing new wastes the run -- if"
-            " your latest round produced no new leads, stop researching; the"
-            " writer answers from what you have.  Stop early, too, when the"
+            " your latest round produced no new leads, first CHANGE THE"
+            " INSTRUMENT or angle (different keywords, another category, the"
+            " other language, a live SERP through the browser session when"
+            " the engines are walled); stop researching only when a second"
+            " different angle also returns nothing new -- the writer"
+            " answers from what you have.  Stop early, too, when the"
             " rounds converge: fresh angles returning the same facts mean"
             " the picture is complete.\n</research_policy>"
         )

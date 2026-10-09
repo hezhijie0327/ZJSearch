@@ -2,7 +2,7 @@
 """AI Search: the WRITER's message builders.
 
 The writer half of the researcher/writer split (the researcher's
-conversation opener lives in :py:mod:`runtime.researcher`), composed
+conversation opener lives in :py:mod:`prompts.researcher`), composed
 from the SHARED fragments in :py:mod:`searx.zjsearch.ai.prompts.spine`
 (the same source both AI features speak, so they cannot drift): the
 byte-stable answer contract -- ordered cache-friendly, stable blocks
@@ -29,13 +29,17 @@ _DEPTH_SHAPE: dict[str, str] = {
     " one clause.",
     "balanced": "Shape: short paragraphs with the key terms in **bold**; a"
     " bullet list or definition list when enumerating; a table only for a"
-    " genuine 2-3 way comparison.  Keep it moderate.",
+    " genuine 2-3 way comparison.  Keep it moderate.  Open with the direct"
+    " answer or verdict in the first sentence, then the support -- never"
+    " an aimless lead-in.",
     "deep": "Shape: a thorough, structured answer in \"##\" sections --"
     " definitions, mechanics, comparisons, recent developments -- citing"
     " every major claim.  Real matrices (companies x metrics, options x"
     " tradeoffs) go into markdown tables with a citation on every"
     " load-bearing cell; a short bold-lead paragraph opens the answer"
-    " before the first heading.",
+    " before the first heading.  Be thorough, not exhaustive: cut any"
+    " section that merely restates the question; when two candidate"
+    " depths exist, write the shorter.",
 }
 
 _FOLLOWUPS_BLOCK = (

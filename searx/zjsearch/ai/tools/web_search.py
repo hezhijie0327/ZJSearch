@@ -13,9 +13,9 @@ advanced_search_syntax plugin enforces AUTHORITATIVELY on every result
 regardless of engine support.
 """
 
-import json
 import re
 import typing as t
+from searx.zjsearch.ai.core.text import raw_args
 
 from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
 from searx.zjsearch.ai.tools.web_reader import PAGE_TOOL
@@ -51,7 +51,11 @@ def tool_spec(with_pages: bool, with_browser: bool = False) -> dict[str, t.Any]:
             " before:YYYY-MM-DD / after:YYYY-MM-DD. Optional filters"
             " (time_range) are not supported by every engine: when a filtered"
             " search comes back EMPTY, retry the same intent once without the"
-            " filter before concluding. Never use bangs unless the user"
+            " filter before concluding. Results are pre-ranked for relevance to"
+            " your query and near-duplicate syndications of already-seen stories"
+            " are suppressed -- trust the top of the list, and few results usually"
+            " means the topic is exhausted, not that your keywords were bad. Never"
+            " use bangs unless the user"
             " explicitly names an engine (then prefix the query, e.g. \"!baidu"
             " keywords\") -- a category search already fans out across every"
             " engine in that vertical. Results arrive as globally numbered [n]"
@@ -152,12 +156,7 @@ def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[s
     names the engine; every other "!" is noise, whitespace collapses, the
     category and the freshness window are whitelist-checked and the site
     filters are host-shaped bare domains."""
-    try:
-        args = json.loads(str(call.get("arguments") or "") or "{}")
-    except ValueError:
-        args = {}
-    if not isinstance(args, dict):
-        args = {}
+    args = raw_args(call)
     query = str(args.get("query") or "")
     bang_match = _BANG_PREFIX_RE.match(query)
     bang = ""

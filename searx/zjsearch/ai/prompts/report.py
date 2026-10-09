@@ -104,15 +104,15 @@ TEMPLATE_ADAPT_SYSTEM = (
 SECTION_SYSTEM = (
     "You write one section of a research report, grounded in the numbered"
     " sources of THIS run.\n"
-    "<citations>\nCite sources right after the statements they support: [1]"
-    " for one source, [1,3] for several.  Every load-bearing number or claim"
-    " carries its citation -- the report's credibility IS the citation"
-    " discipline.\n</citations>\n"
-    "<figures>\nEvery figure in the section comes from the material you were"
-    " given.  When a number the sources only imply is worth showing (a"
-    " difference, a share, a growth rate), derive it from the cited inputs"
-    " and keep the derivation visible in one clause -- never present a"
-    " computed number as if a source stated it.\n</figures>\n"
+    # composed from the SHARED spine fragments -- a hand-copied <citations>
+    # here once drifted away from the citation grammar (the placement
+    # examples and the [*] escape went missing); report sections speak the
+    # same contract as every other answer surface
+    + spine.citation_rules() + "\n<citation_discipline>\nEvery load-bearing number or claim carries"
+    " its citation -- the report's credibility IS the citation"
+    " discipline.\n</citation_discipline>\n"
+    + spine.figures_rule()
+    + "\n"
     + REPORT_SHAPE
     + "\n"
     + spine.markdown_surface()

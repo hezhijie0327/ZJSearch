@@ -4,7 +4,7 @@
 NOT a separate feature design -- the FIXED QUICK TASK of the shared
 engine: the client assembles the numbered source context from the page
 payload it already has, and the run is a single WRITE turn over that
-context (the zero-tool case of :py:func:`framework.loop.run`, the same
+context (the zero-tool case of :py:func:`agent.loop.run`, the same
 shape a speed-mode run's final phase takes).  The stream is the SAME
 timeline NDJSON the search endpoint speaks -- ``think`` deltas fold,
 ``answer`` deltas are the answer, one ``settle`` carries finish/usage.
@@ -107,7 +107,10 @@ def build_answer_messages(
             lang,
             "<role>\nYou are the \"AI Overview\" feature of a search engine:"
             " answer the user's question directly, grounded in the numbered"
-            " sources provided.\n</role>",
+            " sources provided.  Synthesize ACROSS the sources -- never one"
+            " summary per source, never a source list; keep it short (a few"
+            " sentences unless the question genuinely demands more), and"
+            " lead with the answer.\n</role>",
         )
     )
     if image_parts:
