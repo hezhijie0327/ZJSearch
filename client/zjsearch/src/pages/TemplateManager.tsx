@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/SettingParts.tsx";
 import { type ReportTemplate, validateTemplate } from "@/features/results/aiSearch/reportTemplates.ts";
@@ -142,18 +142,23 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
                       placeholder={t("template_section_title_ph")}
                       value={section.title}
                     />
-                    <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-ink-3">
-                      <input
-                        checked={section.optional}
-                        onChange={(event) => {
-                          const sections = [...editing.sections];
-                          sections[index] = { ...section, optional: event.target.checked };
-                          setEditing({ ...editing, sections });
-                        }}
-                        type="checkbox"
-                      />
+                    <button
+                      aria-pressed={section.optional}
+                      className={`flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                        section.optional
+                          ? "border-accent-strong bg-accent-soft text-accent"
+                          : "border-line text-ink-3 hover:text-ink"
+                      }`}
+                      onClick={() => {
+                        const sections = [...editing.sections];
+                        sections[index] = { ...section, optional: !section.optional };
+                        setEditing({ ...editing, sections });
+                      }}
+                      type="button"
+                    >
+                      <Check aria-hidden="true" className="size-3" />
                       {t("template_optional_short")}
-                    </label>
+                    </button>
                     <button
                       aria-label={t("knowledge_menu_delete")}
                       className="grid size-7 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
@@ -240,10 +245,10 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
           <div className="grid gap-2.5 p-3 sm:grid-cols-2">
             {shown.map((template) => (
               <div
-                className="group relative flex flex-col gap-1.5 rounded-xl border border-line bg-surface p-3.5 transition-colors hover:border-accent/40"
+                className="group relative flex flex-col gap-1 rounded-xl border border-line bg-surface p-3.5 pe-14 transition-colors hover:border-accent/40"
                 key={template.id}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-baseline gap-1.5">
                   <span className="min-w-0 truncate text-[13px] font-medium text-ink">{template.name}</span>
                   <span className="shrink-0 text-[11px] tabular-nums text-ink-3">
                     {template.sections.length} {t("knowledge_tab_sections")}
@@ -252,7 +257,9 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
                 <p className="line-clamp-2 text-[11px] leading-relaxed text-ink-3">
                   {template.sections.map((section) => section.title).join(" / ")}
                 </p>
-                <div className="mt-0.5 flex items-center justify-end gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                {/* the actions OVERLAY the top-right corner on hover -- in-flow
+                    actions reserved an empty line in every tile */}
+                <div className="absolute end-1.5 top-1.5 flex items-center gap-0.5 rounded-full bg-surface/90 p-0.5 opacity-0 shadow-sm transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                   <button
                     aria-label={t("template_edit")}
                     className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"

@@ -323,6 +323,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_deep_report: "生成深度报告",
   knowledge_rename: "重命名",
   knowledge_filter_reports: "报告",
+  knowledge_search_templates: "搜索模板…",
   knowledge_tab_templates: "模板",
   template_library: "模板库",
   knowledge_tab_sections: "节",
