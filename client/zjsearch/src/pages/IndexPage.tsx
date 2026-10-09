@@ -11,6 +11,7 @@ import { Shell } from "@/components/Shell.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { depthOptions, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
+import { parseTemplateId, REPORT_TEMPLATES } from "@/features/results/aiSearch/reportTemplates.ts";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
@@ -80,6 +81,11 @@ export function IndexPage({ data }: { data: IndexData }) {
   const [aiDepth, setAiDepth] = useState<AiSearchMode>(() =>
     parseDepthMode(new URLSearchParams(window.location.search).get("mode")),
   );
+  // the report template pick rides ?template= beside the depth (validated
+  // against the presets; report mode only)
+  const [templateId, setTemplateId] = useState<string | null>(() =>
+    parseTemplateId(new URLSearchParams(window.location.search).get("template")),
+  );
   const [selected, setSelected] = useState<string[]>(
     data.selected_categories && data.selected_categories.length > 0
       ? data.selected_categories
@@ -112,6 +118,7 @@ export function IndexPage({ data }: { data: IndexData }) {
       pageno: 1,
       ai: aiMode || undefined,
       mode: aiMode ? aiDepth : undefined,
+      template: aiMode && aiDepth === "report" ? (templateId ?? undefined) : undefined,
     });
   };
 
@@ -192,7 +199,21 @@ export function IndexPage({ data }: { data: IndexData }) {
                   options={depthOptions(t)}
                   value={aiDepth}
                 />
-              ) : (
+              ) : null}
+              {aiMode && aiDepth === "report" ? (
+                <Dropdown
+                  ariaLabel={t("report_template")}
+                  onChange={(value) => {
+                    setTemplateId(value || null);
+                  }}
+                  options={[
+                    { value: "", label: t("report_template_free") },
+                    ...REPORT_TEMPLATES.map((template) => ({ value: template.id, label: template.name })),
+                  ]}
+                  value={templateId ?? ""}
+                />
+              ) : null}
+              {aiMode ? null : (
                 <button
                   aria-expanded={optionsOpen}
                   className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-[13px] transition-colors ${

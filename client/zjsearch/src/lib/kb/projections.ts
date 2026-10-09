@@ -61,6 +61,14 @@ export interface RunSnapshot {
   /** the macro stages the run walked (the wire's ``phase`` events, in
       order) -- the run_summary row replays them for the directory */
   stages?: string[];
+  /** the REPORT mode's outline (the wire's ``outline`` event) -- settles
+      into run.meta.report so the knowledge base knows the document's
+      shape without replaying the event log */
+  outline?: {
+    title?: string;
+    subtitle?: string;
+    sections?: Array<{ id?: string; title?: string; status?: string }>;
+  };
   steps?: Array<{
     kind: string;
     round?: number;
@@ -308,6 +316,17 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
             stopped: run.stopped ?? false,
             sources: (run.sources ?? []).length,
             answer: String(run.answer ?? "").slice(0, 600),
+            report: run.outline
+              ? {
+                  title: run.outline.title ?? "",
+                  subtitle: run.outline.subtitle ?? "",
+                  sections: (run.outline.sections ?? []).map((section) => ({
+                    id: section.id ?? "",
+                    title: section.title ?? "",
+                    status: section.status ?? "done",
+                  })),
+                }
+              : null,
           }),
           JSON.stringify(tags),
           segmentKeywords(run.q),

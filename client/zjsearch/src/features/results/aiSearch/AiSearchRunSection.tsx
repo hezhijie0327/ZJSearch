@@ -941,6 +941,14 @@ function AiSearchRunSectionImpl({
     researchForced ??
     ((streaming && run.answer === "" && run.stage !== "write" && !run.direct) ||
       (run.status === "awaiting" && run.ask !== null));
+  // the WRITE phase's reasoning: with the research box folded, the writer's
+  // think stream would flow into an invisible pane and the run reads as
+  // frozen ("nothing is moving") -- the last think step during the write
+  // phase IS the writer's thinking; it surfaces as a live strip in the
+  // answer column (single-write mode; the report document is its own
+  // progress surface)
+  const writeThinkText =
+    run.stage === "write" ? ([...run.steps].reverse().find((step) => step.kind === "think")?.text ?? "") : "";
   // a settled run without an answer is a FAILURE the user must see (the
   // writer can degrade to an empty/fence-only stream after a full
   // research phase -- silent nothing reads as a hung page), EXCEPT when
@@ -1115,6 +1123,14 @@ function AiSearchRunSectionImpl({
               <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
               {t("ai_wrapup")}
             </p>
+          ) : null}
+          {/* the writer's live reasoning: the machine-voice strip the folded
+              research box can no longer show -- visible ONLY while it
+              streams (after the settle it lives on in the 研究过程 record) */}
+          {run.wrappingUp && streaming && !run.outline && writeThinkText.trim() ? (
+            <div className="mt-2">
+              <ThinkScroll active text={writeThinkText} />
+            </div>
           ) : null}
           {/* the answer column continues below */}
           {streaming && !run.answer && (run.wrappingUp || run.direct) && !run.outline ? (

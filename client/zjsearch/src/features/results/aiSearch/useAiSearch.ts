@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { continueBrief } from "@/features/results/aiSearch/ledger.ts";
+import type { ReportTemplate } from "@/features/results/aiSearch/reportTemplates.ts";
 import {
   type AiSearchAttachment,
   type AiSearchMode,
@@ -76,6 +77,7 @@ export interface AiSearchState extends Core {
     mode?: AiSearchMode,
     searchLanguage?: string,
     attachments?: AiSearchAttachment[],
+    template?: ReportTemplate,
   ): void;
   followup(
     q: string,
@@ -160,6 +162,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     runNo: number,
     clarify?: { state: "answered" | "skipped"; text: string },
     attachments?: AiSearchAttachment[],
+    template?: ReportTemplate,
   ) => {
     if (!capability) {
       return;
@@ -218,6 +221,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         // research depths)
         mode: mode === "report" ? "deep" : mode,
         report: mode === "report" ? true : undefined,
+        template: mode === "report" && template ? template : undefined,
         attachments: wireAttachments.length ? wireAttachments : undefined,
         history,
         sources_base: sourcesBase,
@@ -326,6 +330,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     mode: AiSearchMode = "balanced",
     searchLanguage = "",
     attachments?: AiSearchAttachment[],
+    template?: ReportTemplate,
   ) => {
     if (!capability) {
       return;
@@ -343,7 +348,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     appendRunEvents(`${threadIdRef.current}:1`, [
       { e: "client.start", q, runNo: 1, mode, startedAt: Date.now(), attachments: meta },
     ]);
-    beginRun(q, lang, [], 0, mode, searchLanguage, 1, undefined, attachments);
+    beginRun(q, lang, [], 0, mode, searchLanguage, 1, undefined, attachments, template);
     // the LIVE run shows the staged bytes immediately (the evt log only
     // carries metadata; the table owns the bytes for the replay path)
     const staged = (attachments ?? []).filter((item) => item.data);

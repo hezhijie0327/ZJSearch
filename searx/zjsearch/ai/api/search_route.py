@@ -365,18 +365,37 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         except Exception:  # pylint: disable=broad-except
             pass
     outline: dict[str, t.Any] | None = None
+    # the report TEMPLATE rides the request body (presets AND user-defined
+    # ones -- the server stays stateless): a valid template switches the
+    # outline gate from free generation to FIXED-structure adaptation
+    report_template = (
+        report_outline.parse_template(payload.get("template")) if report_requested else None
+    )
+    if report_requested and payload.get("template") is not None and report_template is None:
+        logger.info("zjsearch_ai_search: malformed report template -- falling back to the free outline")
+    outline_attachments = [
+        {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
+    ]
     if report_requested:
-        outline = report_outline.build_outline(
-            cfg,
-            research_q,
-            lang,
-            clarifications if clarify_state == "answered" else "",
-            gate_usage,
-            attachments=[
-                {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")}
-                for f in (attached_files or [])
-            ],
-        )
+        if report_template is not None:
+            outline = report_outline.build_outline_from_template(
+                cfg,
+                research_q,
+                lang,
+                clarifications if clarify_state == "answered" else "",
+                report_template,
+                gate_usage,
+                attachments=outline_attachments,
+            )
+        else:
+            outline = report_outline.build_outline(
+                cfg,
+                research_q,
+                lang,
+                clarifications if clarify_state == "answered" else "",
+                gate_usage,
+                attachments=outline_attachments,
+            )
         if outline is None:
             logger.info("zjsearch_ai_search: report outline gate failed -- falling back to the single write")
     state = Searches(
@@ -402,8 +421,26 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # researches become the researcher's <deliverable_entities> block
         # and plan_review's plan_complete question
         state.deliverable_entities = report_outline.uncovered_entities(outline)
+        outline_entry = {
+            "purpose": "outline",
+            "question": "The report skeleton: sections and the deliverable entities they cover",
+            "target": str(outline["title"])[:120],
+            "sections": len(outline["sections"]),
+            "entities": len(outline.get("entities") or []),
+            "uncovered": len(state.deliverable_entities),
+            "ms": 0,
+        }
+    else:
+        outline_entry = None
+    # the PRE-FLIGHT verdicts surface BEFORE the loop's first event (the
+    # 决策结果 card opens with them): the clarify pre-screen, the depth
+    # probe and the outline gate -- each already judged while the client
+    # watched the boot skeleton
+    preflight = [entry for entry in (pre_entry, depth_probe_entry, outline_entry) if entry]
     if depth_probe_entry:
         state.judgments.append(depth_probe_entry)
+    if outline_entry:
+        state.judgments.append(outline_entry)
     # the clarify pre-screen's spend + verdict join the run's account (the
     # awaiting path passes the same two straight to its own _Ndjson)
     if pre_usage.get("calls"):
@@ -553,7 +590,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             handle,
             events,
             tail,
-            [{"e": "decisions", "items": [depth_probe_entry]}] if depth_probe_entry else None,
+            [{"e": "decisions", "items": preflight}] if preflight else None,
         ),
         daemon=True,
         name="zjsearch-run-driver",

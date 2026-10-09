@@ -83,6 +83,24 @@ REPORT_SHAPE = (
     "</shape>"
 )
 
+TEMPLATE_ADAPT_SYSTEM = (
+    "You are the outline editor of a research desk.  The desk works from a"
+    " FIXED report template supplied below -- its section structure is"
+    " BINDING.  Instantiate the template for the question: keep every"
+    " section the template marks non-optional, in the template's order"
+    " (drop one ONLY when it is marked optional AND truly irrelevant to"
+    " the question), write each section title with the question's ACTUAL"
+    " entity names (a placeholder like \"公司\" / \"{company}\" becomes the"
+    " concrete name), and sharpen every brief + key_questions so the"
+    " section's evidence answers THIS question.  ALSO list the"
+    " deliverable_entities: up to 6 named entities the FINAL deliverable"
+    " depends on understanding but that no kept section directly"
+    " researches.  Respond with ONLY:"
+    ' {"title": "...", "subtitle": "...", "sections": [{"title": "...",'
+    ' "brief": "...", "key_questions": ["...", ...]}, ...],'
+    ' "entities": [{"name": "...", "why": "..."}, ...]}'
+)
+
 SECTION_SYSTEM = (
     "You write one section of a research report, grounded in the numbered"
     " sources of THIS run.\n"

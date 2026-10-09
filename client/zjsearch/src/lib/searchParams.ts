@@ -26,6 +26,8 @@ export interface SearchParams {
   ai?: boolean;
   /** AI research depth (speed/balanced/quality), only meaningful with ai */
   mode?: string;
+  /** the report template preset id, only meaningful with ai+mode=report */
+  template?: string;
 }
 
 /** One entry per search parameter, shared by the URL builder and the POST
@@ -55,6 +57,9 @@ export function searchParamEntries(params: SearchParams): Array<[string, string]
   }
   if (params.ai && params.mode) {
     entries.push(["mode", params.mode]);
+  }
+  if (params.ai && params.mode === "report" && params.template) {
+    entries.push(["template", params.template]);
   }
   if (params.categories && params.categories.length > 0) {
     entries.push(["categories", params.categories.join(",")]);
