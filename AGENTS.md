@@ -1050,7 +1050,13 @@ dependency (CJK font embedding would torpedo the no-webfont budget): the
 `printDocument({title, fileTag, heading, source, sources})` -- the shared
 pipeline (wordmark, injected heading, cloned rendered content with chrome
 stripped, numbered sources at the tail, dark-mermaid light re-renders,
-filename via `document.title`).  `styles/print.css` is print-only by
+filename via `document.title`).  THE PAPER IS THE VIEW: the sheet mounts
+visible immediately (`.zjs-print-preview` -- white ground, 210mm measure,
+close chip, Escape), `window.print()` rides right after the mount, a real
+browser's dialog opens OVER the paper, and `afterprint` never tears it
+down -- the user dismisses the paper themselves (embedded webviews cannot
+open the dialog at all, and theirs fires a PHANTOM afterprint at
+unpredictable times; measured ~1s and ~9s -- never race it).  `styles/print.css` is print-only by
 construction (`@media print` + selectors that match nothing on screen) and
 PAPER IS ALWAYS LIGHT ON A PURE-WHITE GROUND: the color tokens are
 `@property`-registered, so `initial` restores the light palette from
