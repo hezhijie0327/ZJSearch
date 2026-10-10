@@ -396,7 +396,15 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " ONE round so they run in parallel; their digests arrive as"
             " tool results -- aggregate them, never re-research what a"
             " digest already settled.  Do not delegate more than 3-4"
-            " subtasks per round.\n</subagent_delegation>"
+            " subtasks per round.\n\nEvery digest opens with its 【子任务 Sn】"
+            " tag -- Sn is that subagent's id for the REST of the run:"
+            " message_subtask(id, message) sends it a follow-up it executes"
+            " INSIDE the context it built (its sources, ledger and reads"
+            " are kept) and a fresh digest comes back.  A digest that was"
+            " close-but-incomplete, a gap its digest reported, a correction"
+            " after you learned something new -- message it, don't"
+            " re-delegate (a new subagent would re-search the facet from"
+            " zero).\n</subagent_delegation>"
         )
 
     if steerable:

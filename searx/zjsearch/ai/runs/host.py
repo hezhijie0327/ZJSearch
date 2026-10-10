@@ -122,6 +122,18 @@ class ControlBox:
                 return ("preempt", text)
         return None
 
+    def peek_interrupt(self) -> tuple[str, str] | None:
+        """The NON-destructive observation (same priority order): the
+        subagent pump polls this to propagate a stop/preempt into the
+        running children WITHOUT consuming the lead's own preempt slot --
+        the lead's loop must still see it and inject the steering."""
+        with self._lock:
+            if self._stop:
+                return ("stop", "")
+            if self._preempt is not None:
+                return ("preempt", self._preempt)
+        return None
+
     def poll_steer(self) -> str | None:
         """The boundary's ONE guide-lane drain (FIFO)."""
         with self._lock:
@@ -318,6 +330,20 @@ class RunHandle:
                 and self._detached_at is not None
                 and (time.monotonic() - self._detached_at) >= self.grace_seconds
             )
+
+    def touch(self) -> bool:
+        """The keepalive heartbeat (the backgrounded tab's proof of life):
+        the detach clock RESTARTS from now, so the grace window counts
+        from the last subscriber OR the last heartbeat, whichever came
+        later -- a backgrounded tab whose fetch the OS dropped keeps the
+        run alive (its worker still beats), a closed tab stops beating
+        and the grace wraps the run as before.  ``False`` when the run
+        already ended (the client stops beating)."""
+        with self._lock:
+            if self._settled or self._finished:
+                return False
+            self._detached_at = time.monotonic()
+            return True
 
     def terminal_expired(self, now: float) -> bool:
         with self._lock:

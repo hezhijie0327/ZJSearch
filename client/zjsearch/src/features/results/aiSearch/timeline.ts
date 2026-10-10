@@ -71,7 +71,8 @@ export interface AiSearchCall {
     | "extract_table"
     | "view_image"
     | "web_browser"
-    | "research_subtask";
+    | "research_subtask"
+    | "message_subtask";
   /** mcp rows: the server-scoped tool label (without the namespace);
       user_memory rows: "save" | "search" */
   name?: string;
@@ -145,6 +146,20 @@ export type AiSearchStep =
       /** discarded = the write phase had already closed the guide lane
           (the composer's pending chip flips to 未送达) */
       status: "drained" | "discarded";
+    }
+  | {
+      /** the research conversation was compacted at the round boundary
+          (micro = old page-read bodies cleared locally; auto/reactive =
+          an LLM summary + the authoritative state block re-injected as
+          a <compacted_context> user message) */
+      kind: "compact";
+      trigger: "micro" | "auto" | "reactive";
+      /** token estimates before/after */
+      pre: number;
+      post: number;
+      /** rounds summarized / preserved verbatim (micro: 0) */
+      summarized: number;
+      kept: number;
     }
   | {
       kind: "sub";
@@ -685,6 +700,27 @@ export function applyEvent(
       runs[lastIdx] = { ...run, steps };
       return { ...core, runs };
     }
+    case "compact": {
+      // the research conversation was compacted at the round boundary:
+      // a separator line between the steps (the context gauge moment)
+      const rawTrigger = String(event.trigger ?? "auto");
+      const steps = [
+        ...run.steps,
+        {
+          kind: "compact" as const,
+          trigger: (["micro", "auto", "reactive"].includes(rawTrigger) ? rawTrigger : "auto") as
+            | "micro"
+            | "auto"
+            | "reactive",
+          pre: Number(event.pre) || 0,
+          post: Number(event.post) || 0,
+          summarized: Number(event.summarized) || 0,
+          kept: Number(event.kept) || 0,
+        },
+      ];
+      runs[lastIdx] = { ...run, steps };
+      return { ...core, runs };
+    }
     case "calls": {
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
       if (inSub) {
@@ -1136,6 +1172,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "view_image",
   "web_browser",
   "research_subtask",
+  "message_subtask",
 ]);
 
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {

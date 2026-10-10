@@ -10,6 +10,7 @@ import {
   Compass,
   Copy,
   CornerDownRight,
+  FoldVertical,
   Lightbulb,
   ListEnd,
   ListTodo,
@@ -577,6 +578,28 @@ function StepSegment({
         >
           {step.text}
           {step.status === "discarded" ? <span className="ms-1.5 text-xs text-ink-3 no-underline">未送达</span> : null}
+        </p>
+      </div>
+    );
+  }
+  if (step.kind === "compact") {
+    // the compaction separator: the moment the research context shed its
+    // weight (micro: old page bodies cleared; auto/reactive: summarized
+    // + state re-injected) -- one dim line, not a step
+    const label =
+      step.trigger === "micro"
+        ? t("ai_compact_micro_line", { pre: String(step.pre), post: String(step.post) })
+        : t("ai_compact_line", {
+            pre: String(step.pre),
+            post: String(step.post),
+            rounds: String(step.summarized),
+          });
+    return (
+      <div className={`flex items-center gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
+        <FoldVertical aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
+        <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-line/60" />
+        <p className="py-0.5 text-xs text-ink-3" dir="auto">
+          {label}
         </p>
       </div>
     );

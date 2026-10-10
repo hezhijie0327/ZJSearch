@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 
 from searx.zjsearch.ai.browser import config as browser_config
+from searx.zjsearch.ai.core.config import zj_block
 from searx.zjsearch.ai.runs import attachments as uploads_fetch
 from searx.zjsearch.ai.tools import mcp
 from searx.zjsearch.ai.tools import web_browser as web_browser_tool
@@ -36,6 +37,7 @@ from searx.zjsearch.ai.runs.search.progress import (
     FEED_CONVERGE_NOTE,
     round_progress,
 )
+from searx.zjsearch.ai.runs.search.state import ChildControl, SubagentHandle, state_block
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
@@ -63,6 +65,22 @@ from searx.zjsearch.ai.core.text import raw_args
 from searx.zjsearch.ai.runs.search.state import MAX_PARALLEL, _FEED_SOFT_LIMIT
 
 logger = logging.getLogger(__name__)
+
+PLAN_REMINDER_EVERY = 6
+"""Rounds between task-card cadence reminders (B2)."""
+
+
+def subagents_auto_background_ms() -> int:
+    """The delegation batch's foreground deadline (``zjsearch.subagents
+    .auto_background_ms``, default 180_000) -- past it, still-running
+    children are promoted to the run's BACKGROUND lane and the lead
+    continues researching.  ``0`` disables the promotion."""
+    raw = zj_block("subagents")
+    try:
+        value = int(raw.get("auto_background_ms", 180_000))
+    except (TypeError, ValueError):
+        return 180_000
+    return max(0, value)
 
 
 class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
@@ -323,6 +341,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
         page_jobs: list[tuple[int, str]] = []
         sub_jobs: list[tuple[int, dict[str, str]]] = []
+        followup_jobs: list[tuple[int, dict[str, str]]] = []
         gathered = False
         for wire_id, call in enumerate(calls, 1):
             started = time.monotonic()
@@ -871,6 +890,14 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 sub_jobs.append((wire_id, subtask_tool.parse_research_subtask_call(call)))
                 gathered = True
                 continue
+            if str(call.get("name") or "") == subtask_tool.MESSAGE_SUBTASK_TOOL:
+                # the FOLLOW-UP: a message to a registered subagent -- it
+                # resumes inside the context it built.  Executed AFTER the
+                # round's delegation batch, so a same-round delegate+message
+                # pair still finds its target in the registry.
+                followup_jobs.append((wire_id, subtask_tool.parse_message_subtask_call(call)))
+                gathered = True
+                continue
             feed, event, job = self._search_plan(call, wire_id)
             if feed:
                 feeds[wire_id - 1] = feed
@@ -883,6 +910,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         self.round_gathered = gathered
         if sub_jobs:
             yield from self._run_subagents(rnd, sub_jobs, feeds)
+        if followup_jobs:
+            yield from self._run_followups(rnd, followup_jobs, feeds)
         # the pool is deliberately NOT in a with-block: when the consumer
         # disappears (client disconnect / stop) the generator closes right
         # here -- a with-exit would wait for the still-running work and
@@ -920,6 +949,19 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 " different keywords, another facet, another category -- or"
                 " stop researching and let the writer answer.)",
             )
+        # the task-card CADENCE reminder (B2): a long run's plan drifts --
+        # every PLAN_REMINDER_EVERY rounds the card's standing is nudged
+        # through the same note channel as the budget/progress notes
+        task_list = self.coverage.task_list
+        if task_list and rnd - self.last_plan_reminder_round >= PLAN_REMINDER_EVERY:
+            done = sum(1 for item in task_list if item.get("status") == "done")
+            self._append_note(
+                feeds,
+                f"(plan reminder: the task card stands at {done}/{len(task_list)}"
+                " done -- re-check it and revise it via task_write if the"
+                " plan has drifted.)",
+            )
+            self.last_plan_reminder_round = rnd
         # the model-facing budget note rides the round's tool results: the
         # next turn reads it with the results it describes (Vane injects
         # the iteration counter into the system prompt every turn -- this
@@ -944,32 +986,20 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         if round_judgments:
             yield ("decisions", {"round": rnd, "items": [dict(entry) for entry in round_judgments]})
 
-    SUB_ENTRY_BASE = 10_000
-    """The subagents' entry-id space (the lead's counter never reaches
-    it): the client groups a sub's think/call events under the `open
-    kind:"sub"` row by id."""
-
     SUB_MAX_PARALLEL = 4
     """Concurrent subagents per delegation batch (the design's cap)."""
 
-    def _run_subagents(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
-        self,
-        rnd: int,
-        sub_jobs: list[tuple[int, dict[str, str]]],
-        feeds: list[str | None],
-    ) -> t.Iterator[tuple[str, t.Any]]:
-        """One delegation batch: every ``research_subtask`` call spawns a
-        nested research loop on its OWN thread (own context window, own
-        small round budget, the SHARED source registry so overlapping
-        searches settle as duplicates mechanically).  Their wire events
-        interleave into the parent stream with remapped entry ids (kind
-        "sub"); the child's open/timeline events for OTHER surfaces
-        (phase/tasks/decisions/...) are dropped -- those are the LEAD's
-        surfaces.  After each child settles: its active facts join the
-        parent's ledger, its feed lines join the parent's writer feed and
-        corpus, its entries join the evidence pool, and the compressed
-        digest becomes that call's tool result."""
-        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+    def _sub_toolset(self) -> list[dict[str, t.Any]]:
+        """The SUBAGENT's toolset: the shared discipline tools -- search,
+        calculator, the findings ledger (ITS digest), page reads, the
+        browser session and the structured judge.  Built per delegation
+        pass: the availability flags are the RUN's.  The child's LEDGER
+        IS its digest: the delegation contract promises the lead "facts
+        + gaps + the source lines", and ``_sub_digest`` builds exactly
+        that from ``child.facts``/``child.gaps`` -- which only the
+        learnings tool writes.  The judge rides the same gate as the
+        lead's -- a structured tie-break is exactly what a worker
+        without the lead's context needs."""
         from searx.zjsearch.ai.tools import (  # pylint: disable=import-outside-toplevel
             calculator_spec,
             learnings_spec,
@@ -978,120 +1008,102 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             tool_spec,
         )
 
-        cfg = self.cfg
         pages_on = reader.configured()
         browser_on = browser_config.ready()
         judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
-        child_tools = (
+        return (
             [tool_spec(pages_on, browser_on), calculator_spec(), learnings_spec()]
             + ([page_spec()] if pages_on else [])
             + ([web_browser_tool.web_browser_spec()] if browser_on else [])
             + ([system_one_spec()] if judge_on else [])
         )
-        # the child's LEDGER IS its digest: the delegation contract promises
-        # the lead "facts + gaps + the source lines", and ``_sub_digest``
-        # builds exactly that from ``child.facts``/``child.gaps`` -- which
-        # only the learnings tool writes.  A child without it returned a
-        # bare "来源 N 条已入册" and its actual report was lost (the
-        # assignment-batch defect this registration closes).  The judge
-        # rides the same gate as the lead's -- a structured tie-break is
-        # exactly what a worker without the lead's context needs.
-        lang = self.lang or "en"
-        today = time.strftime("%Y-%m-%d")
-        children: dict[int, t.Any] = {}
-        threads: list[threading.Thread] = []
-        queues: dict[int, "queue.Queue[tuple[int, t.Any] | tuple[int, None]]"] = {}
 
-        def drive(job_idx: int, child: t.Any, events: t.Any) -> None:
-            q = queues[job_idx]
-            seq = 0
-            try:
-                for event in events:
-                    seq += 1
-                    q.put((seq, event))
-            finally:
-                # the subagent's browser session dies with its loop (the
-                # lead's lane persists -- the login stages build on it)
-                if child.browser_session_id != "lead":
-                    try:
-                        browser_session.close(child.browser_session_id)
-                    except Exception:  # pylint: disable=broad-except
-                        pass
-                q.put((0, None))
+    def _register_subagent(self, parsed: dict[str, str], lang: str, today: str) -> SubagentHandle:
+        """Mint one delegation's handle: the run's stable key (S1, S2,
+        ...), its own child executor on the SHARED registry, its opener
+        messages and a fresh control plane.  The handle lives in
+        ``self.subagents`` for the whole run -- message_subtask resumes
+        it from there."""
+        self._sub_seq += 1
+        key = f"S{self._sub_seq}"
+        child = type(self).child(
+            self,
+            max_rounds=subtask_tool.SUB_ROUNDS,
+            session_id=f"sub-{id(self):x}-{key}",
+        )
+        child.question_held = parsed["objective"]
+        handle = SubagentHandle(
+            key,
+            self._sub_seq,
+            parsed,
+            subtask_tool.subagent_messages(parsed, lang, today),
+            child,
+            ChildControl(),
+        )
+        self.subagents[key] = handle
+        return handle
 
-        for job_idx, (wire_id, parsed) in enumerate(sub_jobs):
-            if job_idx >= self.SUB_MAX_PARALLEL:
-                # over the batch cap: an honest refusal teaches the model
-                # to merge subtasks instead of fanning out unbounded
-                feeds[wire_id - 1] = (
-                    "error: the delegation batch is full"
-                    f" (max {self.SUB_MAX_PARALLEL} subagents per round) --"
-                    " merge overlapping subtasks and re-delegate."
-                )
-                continue
-            child = type(self).child(
-                self,
-                max_rounds=subtask_tool.SUB_ROUNDS,
-                session_id=f"sub-{id(self):x}-{job_idx}",
-            )
-            child.question_held = parsed["objective"]
-            children[job_idx] = child
-            q: "queue.Queue[tuple[int, t.Any] | tuple[int, None]]" = queue.Queue()
-            queues[job_idx] = q
-            events = engine.run(
-                cfg,
-                subtask_tool.subagent_messages(parsed, lang, today),
-                tools=child_tools,
-                executor=child.execute,
-                max_rounds=subtask_tool.SUB_ROUNDS,
-                round_progress=self._sub_round_progress(child),
-            )
-            threads.append(
-                threading.Thread(target=drive, args=(job_idx, child, events), daemon=True, name=f"zjs-sub-{job_idx}")
-            )
-            threads[-1].start()
-            # the call row settles immediately (the delegation was
-            # accepted); the SUB ROW opens for the live child timeline
-            yield (
-                "call",
-                {
-                    "id": wire_id,
-                    "status": "ok",
-                    "label": parsed["title"],
-                    "ms": 0,
-                    "feed": parsed["objective"][:800],
-                },
-            )
-            yield (
-                "open",
-                {
-                    "id": self.SUB_ENTRY_BASE + job_idx * 64,
-                    "kind": "sub",
-                    "round": 1,
-                    "title": parsed["title"],
-                    "objective": parsed["objective"][:600],
-                },
-            )
+    def _lead_pending_interrupt(self) -> tuple[str, str] | None:
+        """The run's stop/preempt as a NON-destructive observation: the
+        event pump polls it to propagate into running subagents.  The
+        lead's own preempt slot must stay unconsumed (its loop injects
+        the steering), hence peek over read."""
+        ctl = self.run_control
+        if ctl is None:
+            return None
+        try:
+            peek = getattr(ctl, "peek_interrupt", None)
+            if peek is not None:
+                return peek()
+            if ctl.stopped():
+                return ("stop", "")
+        except Exception:  # pylint: disable=broad-except
+            return None
+        return None
 
-        # INTERLEAVE: one event per active queue in round-robin (each
-        # child's own order preserved; cross-child order is stream order)
-        active = {idx: (0, q) for idx, q in queues.items()}
+    def _interleave(
+        self,
+        queues: "dict[int, queue.Queue[t.Any]]",
+        handles: "dict[int, SubagentHandle]",
+        deadline: float | None = None,
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """One event per active child queue in round-robin (each child's
+        own order preserved; cross-child order is stream order), remapped
+        into the sub rows.  POLLS the run's stop between drains: a user
+        stop/preempt stops every still-running child's control plane --
+        the child loops end as interrupted within ~1s (their event-wait
+        slice), their partial events still stream, and the digests note
+        the early end.  Child surfaces for OTHER surfaces (phase/tasks/
+        learnings/decisions/settle) are the LEAD's -- dropped.  With a
+        ``deadline``, still-open children at the deadline are returned
+        (the ``yield from`` value) -- the BACKGROUND promotion's handoff
+        set; the caller settles their delegation rows and hands them to
+        the late lane."""
+        active = {seq: q for seq, q in queues.items()}
         closed: set[int] = set()
+        stop_signalled = False
         while len(closed) < len(queues):
+            if deadline is not None and time.monotonic() >= deadline:
+                open = {seq for seq in queues if seq not in closed}
+                if open:
+                    return open
+            if not stop_signalled and self._lead_pending_interrupt():
+                stop_signalled = True
+                for handle in handles.values():
+                    handle.control.stop()
             progressed = False
-            for job_idx, (_seq, q) in list(active.items()):
-                if job_idx in closed:
+            for seq, q in list(active.items()):
+                if seq in closed:
                     continue
                 try:
-                    got = q.get(timeout=0.05)
+                    event = q.get(timeout=0.05)
                 except queue.Empty:
                     continue
                 progressed = True
-                event_seq, event = got
                 if event is None:
-                    closed.add(job_idx)
+                    closed.add(seq)
                     continue
-                gid = self.SUB_ENTRY_BASE + job_idx * 64
+                gid = handles[seq].gid
                 kind = str(event.get("e") or "")
                 if kind == "open":
                     # the child's per-round open: remapped into the sub row
@@ -1112,43 +1124,396 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     # [n] numbers are ALREADY parent-consistent (the
                     # shared registry minted them)
                     yield ("sources", {"items": event.get("items") or []})
-                # everything else (phase/tasks/learnings/decisions/settle)
-                # is the LEAD's surface -- dropped
-                active[job_idx] = (event_seq, q)
             if not progressed and len(closed) < len(queues):
                 time.sleep(0.05)
+        for handle in handles.values():
+            if handle.control.stopped:
+                handle.stopped = True
+        return set()
 
-        # settle: promote each child's material into the parent's world
-        # and write the compressed digest as the call's tool result
-        promoted_any = False
+    def _run_subagents(  # pylint: disable=too-many-locals, too-many-branches
+        self,
+        rnd: int,
+        sub_jobs: list[tuple[int, dict[str, str]]],
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """One delegation batch: every ``research_subtask`` call mints a
+        REGISTERED subagent (stable key S1, S2, ... -- the digest's tag
+        and the follow-up channel's address) and runs its nested loop on
+        its OWN thread (own context window, own small round budget, the
+        SHARED source registry so overlapping searches settle as
+        duplicates mechanically).  Their wire events interleave into the
+        parent stream under the handle's PERMANENT id slot (kind "sub" --
+        a follow-up's resume re-opens the SAME row).  After each child
+        settles it STAYS in the registry, conversation and all: its
+        material joins the parent's world delta-promoted (a follow-up's
+        second settlement must not double-fold), and the compressed
+        digest becomes that call's tool result."""
+        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+
+        cfg = self.cfg
+        child_tools = self._sub_toolset()
+        lang = self.lang or "en"
+        today = time.strftime("%Y-%m-%d")
+        settled_jobs: list[tuple[int, SubagentHandle]] = []
+        threads: list[threading.Thread] = []
+        queues: "dict[int, queue.Queue[t.Any]]" = {}
+        handles_by_seq: "dict[int, SubagentHandle]" = {}
+        wire_by_seq: "dict[int, int]" = {}
+        auto_background_ms = subagents_auto_background_ms()
+        started_at = time.monotonic()
+
         for job_idx, (wire_id, parsed) in enumerate(sub_jobs):
-            if feeds[wire_id - 1]:
-                continue  # the batch-cap refusal already settled this call
-            child = children.get(job_idx)
-            digest = self._sub_digest(parsed, child)
+            if job_idx >= self.SUB_MAX_PARALLEL:
+                # over the batch cap: an honest refusal teaches the model
+                # to merge subtasks instead of fanning out unbounded
+                feeds[wire_id - 1] = (
+                    "error: the delegation batch is full"
+                    f" (max {self.SUB_MAX_PARALLEL} subagents per round) --"
+                    " merge overlapping subtasks and re-delegate."
+                )
+                continue
+            handle = self._register_subagent(parsed, lang, today)
+            handle.busy = True
+            settled_jobs.append((wire_id, handle))
+            handles_by_seq[handle.seq] = handle
+            wire_by_seq[handle.seq] = wire_id
+            q: "queue.Queue[t.Any]" = queue.Queue()
+            queues[handle.seq] = q
+            events = engine.run(
+                cfg,
+                handle.messages,
+                tools=child_tools,
+                executor=handle.child.execute,
+                max_rounds=subtask_tool.SUB_ROUNDS,
+                round_progress=self._sub_round_progress(handle.child),
+                control=handle.control,
+                compact_state=lambda handle=handle: state_block(handle.child, include_tasks=False),
+            )
+            threads.append(
+                threading.Thread(
+                    target=self._drive_sub, args=(handle, events, q), daemon=True, name=f"zjs-sub-{handle.key}"
+                )
+            )
+            threads[-1].start()
+            # the call row settles immediately (the delegation was
+            # accepted); the SUB ROW opens for the live child timeline.
+            # Rows address by ``call`` (the in-round position) -- the
+            # loop stamps the entry id (an ``id`` here would HIJACK the
+            # entry address and the settlement would never land).
+            yield (
+                "call",
+                {
+                    "call": wire_id,
+                    "status": "ok",
+                    "label": f"{handle.key} · {parsed['title']}",
+                    "ms": 0,
+                    "feed": parsed["objective"][:800],
+                },
+            )
+            yield (
+                "open",
+                {
+                    "id": handle.gid,
+                    "kind": "sub",
+                    "round": 1,
+                    "title": f"{handle.key} · {parsed['title']}",
+                    "objective": parsed["objective"][:600],
+                },
+            )
+
+        deadline = started_at + auto_background_ms / 1000.0 if auto_background_ms else None
+        open_seqs = yield from self._interleave(queues, handles_by_seq, deadline=deadline)
+
+        if open_seqs:
+            # the BACKGROUND promotion (C2): the batch outlived its
+            # foreground deadline -- settle the still-running delegations
+            # NOW (the lead's round completes and it keeps researching)
+            # and hand them to the run's late lane, which keeps pumping
+            # their timelines and delivers the digests as
+            # <task_result> messages at upcoming round boundaries
+            elapsed_ms = int((time.monotonic() - started_at) * 1000)
+            for seq in sorted(open_seqs):
+                handle = handles_by_seq[seq]
+                wire_id = wire_by_seq[seq]
+                background_feed = (
+                    f"still running in the background (subagent {handle.key})"
+                    " -- its digest arrives as a <task_result> message at an"
+                    " upcoming round boundary; keep researching meanwhile."
+                )
+                feeds[wire_id - 1] = background_feed
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "ms": elapsed_ms,
+                        "label": f"{handle.key} · {handle.parsed['title']}",
+                        "feed": background_feed[:800],
+                    },
+                )
+            self._spawn_late_lane(
+                rnd,
+                {seq: queues[seq] for seq in open_seqs},
+                {seq: handles_by_seq[seq] for seq in open_seqs},
+                child_tools,
+            )
+
+        # settle: delta-promote each SETTLED child's material into the
+        # parent's world and write the compressed digest as the call's
+        # tool result (backgrounded children settle in the lane instead)
+        promoted = False
+        for wire_id, handle in settled_jobs:
+            if handle.seq in open_seqs:
+                continue
+            digest = self._sub_digest(handle)
             feeds[wire_id - 1] = digest
-            if child is not None:
-                self._promote_child(rnd, child)
-                promoted_any = True
+            self._promote_child(rnd, handle)
+            handle.busy = False
+            promoted = True
             # the digest is the ROW's receipt too: a second settlement on
             # the same wire id updates the row (the expansion renders it)
             yield (
                 "call",
                 {
-                    "id": wire_id,
+                    "call": wire_id,
                     "status": "ok",
                     "ms": 0,
-                    "label": parsed["title"],
+                    "label": f"{handle.key} · {handle.parsed['title']}",
                     "chars": len(digest),
                     "feed": digest[:800],
                     "result": digest,
                 },
             )
-        if promoted_any:
+        if promoted:
             # the promoted facts/gaps join the ledger: the AUTHORITATIVE
             # snapshot flies so the findings card renders them live (the
             # same event the learnings tool emits)
             yield ("learnings", {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)})
+
+    def _spawn_late_lane(
+        self,
+        rnd: int,
+        queues: "dict[int, queue.Queue[t.Any]]",
+        handles_by_seq: "dict[int, SubagentHandle]",
+        child_tools: list[dict[str, t.Any]],
+    ) -> None:
+        """The BACKGROUND lane thread: keeps draining the promoted
+        children's queues (their timelines stream as late events the loop
+        flushes at every round boundary), and at each settlement promotes
+        the child, queues its digest as a ``<task_result>`` and chains
+        any follow-up messages that were queued while it ran."""
+        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+
+        def lane() -> None:
+            for kind, payload in self._interleave(queues, handles_by_seq):
+                self.late_events.put({"e": kind, **payload})
+            for handle in handles_by_seq.values():
+                if handle.control.stopped:
+                    handle.stopped = True
+                self._settle_background_child(rnd, handle, child_tools, engine)
+
+        thread = threading.Thread(
+            target=lane,
+            daemon=True,
+            name=f"zjs-late-lane-{rnd}-{sorted(handles_by_seq)}",
+        )
+        self.late_lanes.append(thread)
+        thread.start()
+
+    def _settle_background_child(
+        self,
+        rnd: int,
+        handle: SubagentHandle,
+        child_tools: list[dict[str, t.Any]],
+        engine: t.Any,
+    ) -> None:
+        """One backgrounded child's settlement: promote + queue the
+        digest, then chain the follow-ups that were queued while it ran
+        (each a full resume inside the same conversation, still on this
+        lane)."""
+        def settle_pass() -> None:
+            digest = self._sub_digest(handle)
+            self._promote_child(rnd, handle)
+            handle.busy = False
+            with self.pending_lock:
+                self.pending_results.append({"handle": handle.key, "digest": digest})
+
+        settle_pass()
+        while (
+            handle.pending_messages
+            and handle.followups < subtask_tool.FOLLOWUP_MAX
+            and not self._lead_pending_interrupt()
+        ):
+            message = handle.pending_messages.pop(0)
+            handle.control.reset()
+            handle.stopped = False
+            handle.busy = True
+            handle.followups += 1
+            handle.messages.append(
+                {"role": "user", "content": f"<lead_followup>\n{message}\n</lead_followup>"}
+            )
+            q: "queue.Queue[t.Any]" = queue.Queue()
+            events = engine.run(
+                self.cfg,
+                handle.messages,
+                tools=child_tools,
+                executor=handle.child.execute,
+                max_rounds=subtask_tool.SUB_ROUNDS,
+                round_progress=self._sub_round_progress(handle.child),
+                control=handle.control,
+                compact_state=lambda handle=handle: state_block(handle.child, include_tasks=False),
+            )
+            self._drive_sub(handle, events, q)  # synchronous ON the lane
+            for kind, payload in self._interleave({handle.seq: q}, {handle.seq: handle}):
+                self.late_events.put({"e": kind, **payload})
+            settle_pass()
+
+    def _run_followups(  # pylint: disable=too-many-locals, too-many-branches
+        self,
+        rnd: int,
+        followup_jobs: list[tuple[int, dict[str, str]]],
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """The ``message_subtask`` passes, one at a time (the resumed
+        lane is serialized): the registered subagent's OWN conversation
+        gains the lead's message and the SAME loop re-runs on it -- the
+        sources, ledger and reads it built are all still in its context.
+        A fresh digest comes back as the tool result; only the NEW
+        material promotes into the parent's world.  Guards teach the
+        contract: an unknown id names the live ones, a spent budget
+        points at fresh delegation."""
+        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+
+        cfg = self.cfg
+        child_tools = self._sub_toolset()
+        promoted = False
+        for wire_id, parsed in followup_jobs:
+            handle = self.subagents.get(parsed["id"])
+            feed_text = ""
+            if handle is None:
+                live = ", ".join(sorted(self.subagents)) or "none"
+                feed_text = f"error: no subagent 『{parsed['id']}』 -- live ids: {live}."
+            elif not parsed["message"]:
+                feed_text = "error: empty message -- say what the subagent should do next."
+            elif handle.followups >= subtask_tool.FOLLOWUP_MAX:
+                feed_text = (
+                    f"error: subagent {handle.key} has spent its follow-up budget"
+                    f" ({subtask_tool.FOLLOWUP_MAX} messages) -- delegate a fresh"
+                    " research_subtask if the facet is new."
+                )
+            elif handle.busy:
+                # the child is mid-pass (a backgrounded batch): the
+                # message QUEUES and the settling lane chains it
+                handle.pending_messages.append(parsed["message"])
+                feed_text = (
+                    f"queued: subagent {handle.key} is still working -- the"
+                    " message executes when its current pass settles."
+                )
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "ms": 0,
+                        "label": f"{handle.key} · 跟进(排队)",
+                        "feed": feed_text[:800],
+                    },
+                )
+                continue
+            elif self._lead_pending_interrupt():
+                feed_text = "error: the run is stopping -- the follow-up was not delivered."
+            if feed_text:
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "error",
+                        "label": f"{parsed['id']} · 跟进",
+                        "ms": 0,
+                        "feed": feed_text[:800],
+                    },
+                )
+                continue
+            # resume: a previous stop does not bind a new follow-up (the
+            # lead re-engaged the subagent ON PURPOSE), the message joins
+            # the SAME conversation, and the loop re-runs it
+            handle.control.reset()
+            handle.stopped = False
+            handle.busy = True
+            handle.followups += 1
+            handle.messages.append(
+                {"role": "user", "content": f"<lead_followup>\n{parsed['message']}\n</lead_followup>"}
+            )
+            q: "queue.Queue[t.Any]" = queue.Queue()
+            events = engine.run(
+                cfg,
+                handle.messages,
+                tools=child_tools,
+                executor=handle.child.execute,
+                max_rounds=subtask_tool.SUB_ROUNDS,
+                round_progress=self._sub_round_progress(handle.child),
+                control=handle.control,
+                compact_state=lambda handle=handle: state_block(handle.child, include_tasks=False),
+            )
+            resume_thread = threading.Thread(
+                target=self._drive_sub,
+                args=(handle, events, q),
+                daemon=True,
+                name=f"zjs-sub-{handle.key}-f{handle.followups}",
+            )
+            resume_thread.start()
+            # the row settles immediately (the follow-up was accepted);
+            # the child's own open event re-activates its sub row
+            yield (
+                "call",
+                {
+                    "call": wire_id,
+                    "status": "ok",
+                    "label": f"{handle.key} · 跟进",
+                    "ms": 0,
+                    "feed": parsed["message"][:800],
+                },
+            )
+            yield from self._interleave({handle.seq: q}, {handle.seq: handle})
+            handle.busy = False
+            digest = self._sub_digest(handle)
+            feeds[wire_id - 1] = digest
+            self._promote_child(rnd, handle)
+            promoted = True
+            yield (
+                "call",
+                {
+                    "call": wire_id,
+                    "status": "ok",
+                    "ms": 0,
+                    "label": f"{handle.key} · 跟进",
+                    "chars": len(digest),
+                    "feed": digest[:800],
+                    "result": digest,
+                },
+            )
+        if promoted:
+            yield ("learnings", {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)})
+
+    def _drive_sub(self, handle: SubagentHandle, events: t.Any, q: "queue.Queue[t.Any]") -> None:
+        """One subagent lane's pump thread (delegation batch AND follow-up
+        resumes alike): the events into the queue, then the close
+        sentinel; the child's browser session dies with its loop (a
+        follow-up re-opens the SAME keyed session lazily -- the
+        persistent context keeps the cookie store)."""
+        try:
+            for event in events:
+                q.put(event)
+        finally:
+            if handle.child.browser_session_id != "lead":
+                try:
+                    browser_session.close(handle.child.browser_session_id)
+                except Exception:  # pylint: disable=broad-except
+                    pass
+            q.put(None)
 
     def _sub_round_progress(self, child: t.Any) -> t.Callable[[int], str | None]:
         """The subagent's stall detector closure, bound to the CHILD's
@@ -1156,15 +1521,15 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         budget is the delegation's spend cap)."""
         return round_progress(child, subtask_tool.SUB_STALL_ROUNDS, 0)
 
-    def _promote_child(self, rnd: int, child: t.Any) -> None:
-        """A settled subagent's material joins the parent's world: active
-        facts + open gaps into the belief ledger, the [n] feed lines into
-        the writer's feed, the entries into the evidence pool, the chunks
-        into the corpus.  The child's MODEL SPEND joins the run's account
-        (rerank/decision buckets, the judgment ledger, the gate spend) --
-        un-promoted, four subagents' funnels were dark matter on the
-        model-stats card.  The sources themselves were already minted
-        into the SHARED registry as the child searched."""
+    def _promote_child(self, rnd: int, handle: SubagentHandle) -> None:
+        """A settled subagent's material joins the parent's world -- as a
+        DELTA against the handle's marks, because a resumed subagent
+        settles repeatedly (a wholesale re-fold would duplicate feed
+        blocks, judgments and spend).  The facts/gaps re-apply wholesale:
+        the ledger dedupes (near-duplicate merge, gap keys).  The
+        sources themselves were already minted into the SHARED registry
+        as the child searched."""
+        child = handle.child
         ops: dict[str, t.Any] = {"facts": [], "open_gaps": []}
         for fact in child.facts:
             if fact.get("status") == "active":
@@ -1174,28 +1539,40 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 ops["open_gaps"].append({"q": gap.get("q"), "why": gap.get("why")})
         if ops["facts"] or ops["open_gaps"]:
             self.apply_learnings(ops, rnd)
-        if child.feed:
-            block = "【子任务材料】\n" + "\n".join(str(line) for line in child.feed)
+        new_feed = child.feed[handle.feed_mark :]
+        if new_feed:
+            block = f"【子任务材料 · {handle.key}】\n" + "\n".join(str(line) for line in new_feed)
             self.feed.append(block[:6000])
             self.feed_chars += min(len(block), 6000)
+        handle.feed_mark = len(child.feed)
         self.entries.update(child.entries)
         self.head_sources.update(child.head_sources)
-        self.corpus.absorb(child.corpus)
-        for bucket in ("rerank_usage", "decision_usage"):
-            child_spend = getattr(child, bucket, None) or {}
-            if child_spend.get("calls") or child_spend.get("tokens"):
-                own = getattr(self, bucket)
-                own["calls"] = own.get("calls", 0) + int(child_spend.get("calls") or 0)
-                own["tokens"] = own.get("tokens", 0) + int(child_spend.get("tokens") or 0)
-        for judgment in child.judgments or []:
+        self.corpus.absorb_new(child.corpus, handle.corpus_seen)
+        for judgment in child.judgments[handle.judgment_mark :]:
             self.judgments.append({**judgment, "purpose": f"sub:{judgment.get('purpose') or ''}".rstrip(":")})
-        self.gate_usage.extend(getattr(child, "gate_usage", None) or [])
+        handle.judgment_mark = len(child.judgments)
+        child_gates = getattr(child, "gate_usage", None) or []
+        self.gate_usage.extend(child_gates[handle.gate_mark :])
+        handle.gate_mark = len(child_gates)
+        for bucket, snap_name in (("rerank_usage", "rerank_snap"), ("decision_usage", "decision_snap")):
+            child_spend = getattr(child, bucket, None) or {}
+            snap = getattr(handle, snap_name)
+            own = getattr(self, bucket)
+            for field in ("calls", "tokens"):
+                delta = int(child_spend.get(field) or 0) - int(snap.get(field) or 0)
+                if delta > 0:
+                    own[field] = own.get(field, 0) + delta
+            setattr(handle, snap_name, dict(child_spend))
 
-    def _sub_digest(self, parsed: dict[str, str], child: t.Any) -> str:
+    def _sub_digest(self, handle: SubagentHandle) -> str:
         """The compressed report-back: established facts (each [n]-cited),
         the open gaps, the source line count -- the lead aggregates many
-        digests, so this stays under ~2k characters."""
-        lines: list[str] = [f"【子任务】{parsed['title']}"]
+        digests, so this stays under ~2k characters.  The 【子任务 Sn】
+        tag is the subagent's stable id: message_subtask addresses it."""
+        child = handle.child
+        lines: list[str] = [f"【子任务 {handle.key}】{handle.parsed['title']}"]
+        if handle.stopped:
+            lines.append("（已被提前终止 -- 以下仅是终止前确认的材料）")
         if child is None:
             lines.append("the subagent did not report")
             return "\n".join(lines)[:2000]

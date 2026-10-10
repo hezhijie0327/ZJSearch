@@ -38,6 +38,8 @@ from searx.zjsearch.ai.llm import decision, jsongate
 from searx.zjsearch.ai.llm import sdk as sdk_registry
 from searx.zjsearch.ai.runs.search.context import _relevance_order
 from searx.zjsearch.ai.runs.search.executor import Searches
+from searx.zjsearch.ai.runs.search.state import restore_subagents, serialize_subagents, state_block
+from searx.zjsearch.ai.tools import research_subtask as subtask_module
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.runs.report import synth as report_synth
@@ -65,6 +67,7 @@ from searx.zjsearch.ai.tools import (
     learnings_spec,
     page_spec,
     past_research_spec,
+    message_subtask_spec,
     research_subtask_spec,
     system_one_spec,
     task_write_spec,
@@ -106,6 +109,25 @@ def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
     if not questions:
         return None
     return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
+
+
+_LANE_FINAL_WAIT_SECONDS = 120.0
+"""The write boundary's bounded wait for backgrounded subagent lanes -- 
+past it the run settles honestly (their digests already in the feed are
+written, undelivered <task_result> injections are dropped)."""
+
+
+def _late_feed(state: Searches) -> t.Callable[[bool], tuple[list[dict[str, t.Any]], list[dict[str, t.Any]]]]:
+    """The loop's background-lane drain: on the FINAL call (the write
+    boundary) it first gives the lanes their bounded wait, then flushes
+    the remaining events + queued digests."""
+
+    def feed(final: bool) -> tuple[list[dict[str, t.Any]], list[dict[str, t.Any]]]:
+        if final:
+            state.wait_for_lanes(_LANE_FINAL_WAIT_SECONDS)
+        return state.drain_late()
+
+    return feed
 
 
 _RESUME_MAX_CHARS = 2_000_000
@@ -176,9 +198,37 @@ def parse_resume(raw: t.Any, sources_base: int) -> dict[str, t.Any] | None:
             if n < 1 or n > sources_base or not url:
                 continue
             sources.append({"n": n, "url": url[:500], "title": str(item.get("title") or "")[:300]})
+    # the archived SUBAGENT registry (C1): the handles' identities,
+    # briefs, conversations and ledgers -- the follow-up channel survives
+    # a process border.  Each entry re-validates shallowly (shape only;
+    # deep content is the model's own transcript).
+    subagents: dict[str, t.Any] = {}
+    raw_subagents = raw.get("subagents")
+    if isinstance(raw_subagents, dict):
+        for key, item in raw_subagents.items():
+            if key == "dropped" or not isinstance(item, dict):
+                continue
+            if not (str(key).startswith("S") and len(key) <= 8 and isinstance(item.get("messages"), list)):
+                continue
+            archived_messages = [
+                dict(m)
+                for m in item["messages"][:400]
+                if isinstance(m, dict) and str(m.get("role") or "")
+            ]
+            if not archived_messages:
+                continue
+            subagents[str(key)] = {
+                "seq": item.get("seq") if isinstance(item.get("seq"), int) else 0,
+                "followups": item.get("followups") if isinstance(item.get("followups"), int) else 0,
+                "parsed": item.get("parsed") if isinstance(item.get("parsed"), dict) else {},
+                "messages": archived_messages,
+                "facts": item.get("facts") if isinstance(item.get("facts"), list) else [],
+                "gaps": item.get("gaps") if isinstance(item.get("gaps"), list) else [],
+            }
     return {
         "messages": messages,
         "sources": sources,
+        "subagents": subagents,
         "entry_base": _clamped("entry_base", 100_000),
         "round_base": _clamped("round_base", 1000),
         # the interrupted REPORT's stored outline (best-effort -- the
@@ -539,6 +589,20 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 continue
             state.reg.note_url(norm, item["n"])
             state.reg.note_meta(norm, item["title"], "")
+        # the archived SUBAGENT registry re-hydrates: the handles keep
+        # their keys/wire-id slots, the children keep their conversations
+        # and ledgers -- message_subtask still reaches across the process
+        # border
+        if resume.get("subagents"):
+            restore_subagents(
+                state,
+                resume["subagents"],
+                lambda parent, key: Searches.child(
+                    parent,
+                    max_rounds=subtask_module.SUB_ROUNDS,
+                    session_id=f"sub-{id(parent):x}-{key}",
+                ),
+            )
     # the loop-side gates (the entity gate's extraction) append to the SAME
     # list the settle's gates bucket folds
     state.gate_usage = gate_usage
@@ -672,6 +736,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the same run), and a detached run wraps gracefully once its grace
     # window lapses
     handle = run_host.register(budget("detach_grace", mode, run_host.GRACE_DEFAULT))
+    # the subagent pump observes the run's control plane NON-destructively
+    # (peek over read): a user stop/preempt must reach the RUNNING
+    # subagents -- today the delegation batch blocked the stop until every
+    # child burnt its own budget
+    state.run_control = handle.control
 
     if resume is not None:
         # THE CONTINUE REPLAY: the dead attempt's exact conversation (its
@@ -726,7 +795,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         + ([task_write_spec()] if register_tasks else [])
         + ([extract_spec()] if outline is not None else [])
         + (
-            [research_subtask_spec()]
+            [
+                research_subtask_spec(),
+                # the subagents' follow-up channel: only meaningful beside
+                # the delegation tool (the same depth gate mints both)
+                message_subtask_spec(),
+            ]
             if (mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4)
             else []
         )
@@ -756,6 +830,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         control=handle,
         entry_base=resume["entry_base"] if resume else 0,
         round_base=resume["round_base"] if resume else 0,
+        compact_state=lambda: state_block(state),
+        snapshot_extra=lambda: {"subagents": serialize_subagents(state)},
+        late_feed=_late_feed(state),
     )
     # the run host's DRIVER thread pulls the loop into the handle; the
     # settle's usage merges at generation (the executor's usage dicts are

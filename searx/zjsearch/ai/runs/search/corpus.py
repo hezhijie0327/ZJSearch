@@ -96,6 +96,19 @@ class Corpus:
         the merged index stays consistent."""
         self._chunks.extend(other._chunks)  # pylint: disable=protected-access
 
+    def absorb_new(self, other: "Corpus", seen: "set[int]") -> None:
+        """The DELTA absorb (a resumed subagent's follow-up chunks): only
+        chunks whose object identity is not in ``seen`` fold over, and
+        the newly folded ones are added to it.  A positional mark would
+        drift -- the corpus EVICTS oldest chunks at capacity, so indexes
+        shift between two promotions."""
+        for chunk in other._chunks:  # pylint: disable=protected-access
+            mark = id(chunk)
+            if mark in seen:
+                continue
+            seen.add(mark)
+            self._chunks.append(chunk)
+
     def pack(  # pylint: disable=too-many-locals, too-many-branches
         self,
         query: str,

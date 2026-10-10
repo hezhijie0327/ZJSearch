@@ -1180,7 +1180,44 @@ the lead's decision gate; its SPEND joins the run's account
 (`_promote_child` folds the child's rerank/decision buckets, its
 judgments tagged `sub:`, and its gate usage — un-promoted, four
 subagents were dark matter on the model-stats card).  The digest lists
-only ACTIVE facts (superseded ones are history).
+only ACTIVE facts (superseded ones are history).  D: every model
+request passes ONE retry boundary (`llm/retry.py` at `Sdk.pump`): a
+failure BEFORE the attempt's first committed event is retried
+invisible — status/`Retry-After` classified (429/5xx/408/503,
+transport/timeouts, provider "overloaded" text), jittered exponential
+2s×2 capped at 30s, 3 attempts; once the stream was alive the failure
+propagates to the loop's own recovery paths (research blip → writer,
+reactive compact).  A 400-tier rejection is never retried — a context
+overflow is the reactive compact's job.
+
+SUBAGENTS ARE ADDRESSABLE, not one-shot (the compression stays — the
+lead still receives digests only): every delegation mints a
+`SubagentHandle` in `state.subagents` — stable key `S1, S2, …` (the
+digest's 【子任务 Sn】 tag) and a PERMANENT wire id slot (`gid =
+SUB_ENTRY_BASE + (seq-1)*64`; the old per-batch `job_idx` ids reused the
+space every delegation round, merging two different children into one
+UI row).  `message_subtask(id, message)` resumes a settled child: the
+lead's message joins the child's OWN conversation (`handle.messages`
+mutates in place — sources, ledger and reads are all still in its
+context), the same loop re-runs it (fresh `SUB_ROUNDS` budget, the
+per-child `FOLLOWUP_MAX` 4 caps the channel, `ChildControl.reset()`
+unbinds a previous stop), and only the NEW material promotes —
+`_promote_child` folds against the handle's marks (feed/judgment/gate
+positions, spend snapshots, `corpus.absorb_new` by chunk identity
+because the corpus EVICTS and positional marks would drift).  The
+child's browser session closes at settle and the resume re-opens the
+SAME keyed session lazily (the persistent context keeps cookies).
+`<lead_followup>` is the child's taught shape for these turns.
+STOPPING: children carry their own `ChildControl` (the loop's
+RunHandle-shaped duck type); the event pump (`_interleave`) polls the
+LEAD's ControlBox through `peek_interrupt()` (NON-destructive — the
+preempt slot must survive for the lead's loop to consume) every drain,
+so the user's stop/preempt lands in every running child within ~1s —
+the batch settles honestly (「已被提前终止」 digest note) instead of
+holding the run's stop hostage until every child burnt its own budget.
+Delegation rows address settlements by `call:` (the in-round position)
+— the old `id: wire_id` payloads hijacked `_stamp`'s entry address and
+the digest receipt never landed on the row.
 
 GOAL is the LOOP mode: the four depths are budget/decomposition/
 output-shape differences on ONE loop, and goal's contract is "researches
@@ -1425,7 +1462,76 @@ follow-up as before); the 收尾 button (`handle.wrap()`) ends the
 research gracefully into the writer.  Per-subagent flags land on the
 same box in R3.
 usage) AFTER the settle — memory saves persist live, tags park before
-settleRun; everything else post-settle stays dropped.
+settleRun; everything else post-settle stays dropped.  THE BACKGRAOUND
+TAB KEEPAIVE (E): a backgrounded tab's fetch dies to the OS or its
+timers throttle — the grace window now counts from the LAST HEARTBEAT:
+`RunHandle.touch()` restarts the detach clock and `POST
+/zjsearch/ai/run/keepalive {run_key}` beats every 45s from an INLINE
+BLOB WORKER (`lib/keepalive.ts` — a worker's timers are NOT throttled
+by tab visibility, the window's setInterval clamps to ~1/min under
+Chrome's intensive throttling).  A living tab whose fetch the OS
+dropped keeps its run alive; a closed tab stops beating and the grace
+wrap takes over as before.  The client also self-heals on return:
+`visibilitychange→visible` / `online` / Page-Lifecycle `resume` fire a
+debounced extra ATTACH (after_seq = last seen seq — the seq guard
+dedups against a still-live stream), which is what folds a settle that
+happened server-side while the tab was away into the local projections.
+
+## Context compaction (the research conversation's three tiers)
+
+The researcher's `messages` list is the one thing that grows without
+bound (fail-open page reads are its bulk) — `agent/compact.py` ports
+ZCode's compact system at the round boundary (loop's top-of-round hook,
+skipped while a stop/preempt is pending and on the budget's last
+round).  Token counting prefers the PROVIDER's number — the last
+turn's `usage.input` IS the prompt size that request billed — and
+falls back to chars/3; the threshold is `context_window − 21k (output
+reserve) − 13k (buffer)` out of the `zjsearch.compact` settings block
+(`context_window` MUST name the real model limit — it rides cfg, so
+subagent children inherit the policy).  **MICROCOMPACT** (free, no
+model call): old rounds' `web_reader`/`web_browser` result bodies
+beyond the keep-5 window collapse to their citation head (~240 chars —
+the `Opened {url} … source [n]` line) + a sentinel; the sentinel never
+promises a re-read (the read-dedup registry makes re-reads settle as
+duplicates — the ledger is where the facts live).  **AUTO-COMPACT**:
+at/above the threshold, everything before the last round summarizes
+through ONE text-only completion (no tools, ≤4k output, spend joins
+the run's tally; 3 consecutive failures trip the breaker) and
+re-injects as a `<compacted_context>` USER message = model summary +
+the MECHANICAL state block (`compact_state` callback →
+`state_block()`: active facts, open gaps, task card, the `[n]→title`
+source table) + the preserved last round verbatim.  The prefix
+(system + history + opener) never moves — it is the cache-stable zone.
+**REACTIVE**: a provider rejection matching the overflow patterns gets
+ONE forced compaction (min-rounds relaxed) and a turn retry.  The wire
+`compact` event (`{round, trigger: micro|auto|reactive, pre, post,
+summarized, kept}`) renders as a separator line.  A compacted list is
+just messages — `ctx` checkpoints, `parse_resume` and every dialect
+projection need nothing.  The B tier rides the same loop: a
+`finish=length` turn with text and no calls appends its partial
+assistant message + a resume-directly note (cap 3), and the task card
+re-minds every 6 rounds through the note channel (`_append_note`).
+
+## Subagents: persistence + the background lane
+
+C1: the CONTINUE checkpoint's `ctx` payload carries an optional
+`subagents` section (`snapshot_extra` → `serialize_subagents`: key,
+seq, brief, conversation ≤150k chars/child, follow-ups, the child's
+active ledger; ≤600k total, oldest dropped) — `parse_resume`
+re-validates it and `restore_subagents` re-hydrates the registry with
+FRESH child executors (promotion marks restart at zero against them),
+so `message_subtask` reaches across a process border.  C2: a
+delegation batch past `zjsearch.subagents.auto_background_ms` (default
+180s) is PROMOTED: the still-running delegations settle in place
+(「still running in the background」), a daemon lane keeps pumping
+their timelines into `state.late_events`, and the loop drains the lane
+at every round boundary (events) — a settled child promotes + queues
+its digest, which the next boundary injects as a
+`<task_result subagent="Sn">` user message.  `message_subtask` to a
+busy child QUEUES onto `handle.pending_messages`; the settling lane
+chains each queued message as a full resume.  The write boundary waits
+the lanes bounded (120s) — their digests are already in the writer's
+feed via promotion.
 
 ## The human-in-the-loop doctrine (ask_user / clarify)
 

@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The run host's live channels: ``POST /zjsearch/ai/run/attach`` (the
 REATTACH endpoint -- replay a run's event buffer after ``after_seq`` and
-follow the live tail; the SAME run, never a restart) and
-``POST /zjsearch/ai/run/control`` (the inbound control plane -- the stop
-instruction today; steering/preempt/wrap land in v2.1 R2).  Both are
-the stack's client-to-server live channels beside the browser takeover
-input: the run's NDJSON stays one-way server-to-client, these are the
-upstream lanes.
+follow the live tail; the SAME run, never a restart), ``POST
+/zjsearch/ai/run/control`` (the inbound control plane -- stop /
+steer / preempt / wrap / template) and ``POST /zjsearch/ai/run/keepalive``
+(the backgrounded tab's heartbeat -- the detach grace counts from the
+last beat, so a living tab whose fetch the OS dropped keeps its run
+alive).  These are the stack's client-to-server live channels beside
+the browser takeover input: the run's NDJSON stays one-way
+server-to-client, these are the upstream lanes.
 
 The ``attach`` stream ends when the driver finishes -- the settle AND
 the late tail (related/memory/usage) flow through, so a reattaching
@@ -88,6 +90,20 @@ def _control_view() -> t.Any:
     return flask.jsonify({"ok": True})
 
 
+def _keepalive_view() -> t.Any:
+    """The backgrounded tab's heartbeat (the worker beats even when the
+    window's timers are throttled): the detach clock restarts, so a run
+    whose fetch the OS dropped in a LIVING tab keeps streaming to its
+    buffer until the user returns -- a closed tab stops beating and the
+    grace wrap takes over as before."""
+    payload = http.token_payload(gate=_gate())
+    handle = run_host.get(str(payload.get("run_key") or ""))
+    if handle is None:
+        return flask.jsonify({"ok": False, "error": "unknown run"}), 404
+    alive = handle.touch()
+    return flask.jsonify({"ok": True, "alive": alive})
+
+
 def install(app: flask.Flask) -> None:
     """Register the run host's channels; silent unless AI search itself
     is enabled and fully configured (the same gate as the search route --
@@ -96,3 +112,4 @@ def install(app: flask.Flask) -> None:
         return
     app.add_url_rule("/zjsearch/ai/run/attach", "zjsearch_ai_run_attach", _attach_view, methods=["POST"])
     app.add_url_rule("/zjsearch/ai/run/control", "zjsearch_ai_run_control", _control_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ai/run/keepalive", "zjsearch_ai_run_keepalive", _keepalive_view, methods=["POST"])

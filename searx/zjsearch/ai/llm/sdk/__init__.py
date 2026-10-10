@@ -14,18 +14,38 @@ The ``zjsearch.llm.sdk`` values (canonical after ``config.SDK_ALIASES``):
 :py:func:`resolve`.
 """
 
+import logging
 import queue
 import typing as t
 
 from .. import config
+from .. import retry as retry_policy
 from .anthropic import AnthropicSdk, factory as anthropic_factory
 from .dashscope import DashscopeSdk, factory as dashscope_factory
 from .gemini import GeminiSdk, factory as gemini_factory
 from .openai import OpenaiSdk, factory as openai_factory
 
+logger = logging.getLogger(__name__)
+
 SDK_PACKAGES = config.SDK_PACKAGES
 """Re-exported: the import name each canonical kind needs (the install
 gates' ``sdk_missing`` check)."""
+
+
+class _CountingQueue:
+    """The commit boundary's counter: every event the pump hands over
+    counts as committed -- a failure AFTER the first event means the
+    stream was alive and never retries (the consumer already saw it)."""
+
+    __slots__ = ("_sink", "committed")
+
+    def __init__(self, sink: "queue.Queue[t.Any]") -> None:
+        self._sink = sink
+        self.committed = 0
+
+    def put(self, item: t.Any) -> None:
+        self.committed += 1
+        self._sink.put(item)
 
 
 class Sdk:
@@ -61,7 +81,23 @@ class Sdk:
         relay_reasoning: bool = False,
         tools: list[dict[str, t.Any]] | None = None,
     ) -> None:
-        await self._impl.pump(messages, events, relay_reasoning, tools)
+        """The family pump behind ONE retry boundary: a request failure
+        BEFORE its first committed event is retried invisibly (status /
+        Retry-After classified, jittered exponential backoff); once the
+        stream was alive the failure propagates to the loop's own
+        recovery paths."""
+
+        bridge = _CountingQueue(events)
+
+        async def run() -> None:
+            bridge.committed = 0  # the boundary is PER ATTEMPT
+            await self._impl.pump(messages, bridge, relay_reasoning, tools)
+
+        await retry_policy.with_retry(
+            run,
+            committed=lambda: bridge.committed,
+            label=f"{self.kind} stream",
+        )
 
     async def json_completion(
         self,

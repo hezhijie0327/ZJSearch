@@ -35,6 +35,7 @@ import logging
 import typing as t
 
 from searx.network.client import get_loop
+from searx.zjsearch.ai.agent import compact
 from searx.zjsearch.ai.llm.streaming import LlmStream
 
 from . import echo, fences, wire
@@ -77,19 +78,50 @@ within about a second mid-turn, and the per-event idle budgets keep
 their exact semantics via the waited accumulator."""
 
 
-def _ctx_snapshot(messages: list[dict[str, t.Any]], rounds: int) -> dict[str, t.Any]:
+def _ctx_snapshot(
+    messages: list[dict[str, t.Any]],
+    rounds: int,
+    extra: t.Callable[[], dict[str, t.Any]] | None = None,
+) -> dict[str, t.Any]:
     """The resume checkpoint's payload (the ``ctx`` wire event): the
     researcher's EXACT message list at the round boundary.  The copy is
     a JSON round-trip on purpose -- it freezes the list against the
     loop's later mutations AND proves the payload survives the wire;
     the client persists it out-of-log and a continued run replays it
     verbatim as the next request's conversation (the stateless
-    server's only conversation storage is the browser's)."""
-    return {
+    server's only conversation storage is the browser's).  ``extra``
+    (evaluated lazily at snapshot time) rides optional storage-only
+    sections beside the messages -- the subagent registry's serialized
+    handles (``snapshot_extra``)."""
+    payload: dict[str, t.Any] = {
         "e": "ctx",
         "round": rounds,
         "messages": json.loads(json.dumps(messages, ensure_ascii=False, default=str)),
     }
+    if extra is not None:
+        try:
+            sections = extra()
+            if isinstance(sections, dict):
+                payload.update(sections)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch loop: ctx snapshot extra failed: %s", exc)
+    return payload
+
+
+def _pending_interrupt(control: t.Any) -> tuple[str, str] | None:
+    """The NON-destructive stop/preempt observation (the compaction hook
+    skips itself while the user is stopping/steering -- a summary call
+    must never delay either)."""
+    if control is None:
+        return None
+    box = getattr(control, "control", control)
+    peek = getattr(box, "peek_interrupt", None)
+    if peek is None:
+        return None
+    try:
+        return peek()
+    except Exception:  # pylint: disable=broad-except
+        return None
 
 
 class _Tally:
@@ -264,6 +296,7 @@ class _Run:
         if kind == "error":
             logger.warning("zjsearch loop: turn stream failed: %s", payload)
             outcome = "died"
+            meta["error"] = str(payload or "")
         return (turn_text, turn_reasoning, calls, meta, outcome)
 
 
@@ -290,6 +323,9 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     control: t.Any = None,
     entry_base: int = 0,
     round_base: int = 0,
+    compact_state: t.Callable[[], str] | None = None,
+    snapshot_extra: t.Callable[[], dict[str, t.Any]] | None = None,
+    late_feed: t.Callable[[bool], tuple[list[dict[str, t.Any]], list[dict[str, t.Any]]]] | None = None,
 ) -> t.Iterator[dict[str, t.Any]]:
     """Drive one run, yielding wire events.  See the module docstring for
     the phase machine; the parameters:
@@ -328,6 +364,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       dead attempt's entry-id and round counts, so the resumed stream's
       timeline ids never collide with the stored ones and the stall
       detector's accounting carries over.
+    - ``compact_state``: renders the AUTHORITATIVE state block (findings
+      ledger / task card / source table) that rides every compaction
+      summary injection -- the summary model's prose is support, never
+      the record.
+    - ``snapshot_extra``: optional STORAGE-ONLY sections beside the ctx
+      checkpoint's messages (the serialized subagent registry).
+    - ``late_feed(final)``: the BACKGROUND lane's drain -- ``(wire events,
+      user messages to inject)`` gathered by detached work (the
+      subagents that went background) since the last boundary; called at
+      every round boundary and once with ``final=True`` before the write
+      phase opens.
     """
     run_state = _Run(
         cfg,
@@ -343,6 +390,8 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     carried_error: str | None = None
     refusals = 0
     stop_requested = False
+    length_continues = 0
+    compactor = compact.Compactor(cfg, compact_state=compact_state, tally=run_state.tally) if researching else None
 
     def poll_control() -> str | None:
         """Fold the host's boundary directives into the loop's state;
@@ -387,11 +436,31 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         # the FIRST resume checkpoint: the seeded conversation is the only
         # copy of itself -- a process death before the first round
         # completes must still be continuable
-        yield _ctx_snapshot(messages, rounds)
+        yield _ctx_snapshot(messages, rounds, extra=snapshot_extra)
         while rounds < max_rounds and halt_message is None:
+            if late_feed is not None:
+                # the BACKGROUND lane's flush: detached work's timeline
+                # events, then its settled results as user messages the
+                # model reads before the next turn composes
+                try:
+                    lane_events, lane_messages = late_feed(False)
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("zjsearch loop: late feed failed: %r", exc)
+                    lane_events, lane_messages = [], []
+                for lane_event in lane_events:
+                    yield lane_event
+                if lane_messages:
+                    messages.extend(lane_messages)
+            if compactor is not None and _pending_interrupt(control) is None:
+                # the round boundary is the compaction hook: micro first
+                # (free), then the auto summary at/above the threshold --
+                # never while a stop/preempt is pending
+                yield from compactor.maybe_compact(messages, next_round=rounds + 1)
             entry = run_state.next_entry()
             yield {"e": "open", "id": entry, "kind": _RESEARCH, "round": rounds + 1}
             turn_text, turn_reasoning, calls, meta, outcome = yield from run_state.stream_turn(entry, messages, True)
+            if compactor is not None:
+                compactor.observe(meta)
             if outcome == "interrupted":
                 # the interrupt fired mid-turn: a deliberate end, never an
                 # error -- a STOP closes the research without the writer;
@@ -406,6 +475,23 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 stop_requested = True
                 break
             if outcome == "died":
+                # a provider CONTEXT-OVERFLOW rejection gets one forced
+                # compaction and a turn retry (the reactive tier) before
+                # the run gives up
+                if (
+                    compactor is not None
+                    and not compactor.reactive_used
+                    and compact.looks_like_overflow(str((meta or {}).get("error") or ""))
+                ):
+                    compactor.reactive_used = True
+                    compacted = False
+                    for compact_event in compactor.maybe_compact(messages, next_round=rounds + 1, force=True):
+                        compacted = True
+                        yield compact_event
+                    if compacted:
+                        logger.warning("zjsearch loop: context overflow -- compacted, retrying the turn")
+                        yield {"e": "close", "id": entry}
+                        continue
                 # a research turn died mid-stream: the transport blip must
                 # not throw away the whole run -- the writer still answers
                 # from the sources gathered so far
@@ -438,6 +524,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     # and the run keeps researching on it
                     yield {"e": "steer", "text": steer_text, "delivery": "guide", "status": "drained"}
                     inject_steering(steer_text)
+                    continue
+                if str((meta or {}).get("finish") or "") == "length" and turn_text and length_continues < 3:
+                    # the reply was truncated by the OUTPUT cap: keep the
+                    # partial text and ask for a direct continuation --
+                    # saner than letting the ledger-closure contract read
+                    # a cut-off turn as "stopped researching" (capped at
+                    # three so a runaway output loop still ends)
+                    length_continues += 1
+                    yield {"e": "close", "id": entry}
+                    messages.append({"role": "assistant", "content": turn_text})
+                    messages.append({"role": "user", "content": compact.LENGTH_RESUME_NOTE})
                     continue
                 # the model stopped researching: the phase is over --
                 # UNLESS the ledger-closure contract says otherwise (the
@@ -498,7 +595,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             # the round-boundary resume checkpoint: the conversation is
             # COMPLETE through this round's tool results -- exactly the
             # state a continued run replays
-            yield _ctx_snapshot(messages, rounds)
+            yield _ctx_snapshot(messages, rounds, extra=snapshot_extra)
             yield {"e": "close", "id": entry}
             if round_progress is not None:
                 # the progress verdict lands AFTER the round's results are in
@@ -533,6 +630,20 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 leftovers = []
             for text in leftovers:
                 yield {"e": "steer", "text": text, "delivery": "guide", "status": "discarded"}
+        if late_feed is not None:
+            # the write phase's bounded lane wait (final=True): detached
+            # background work gets its last chance to settle and flush --
+            # the digests are already in the writer's feed via promotion,
+            # this drains the remaining timeline events into the wire
+            try:
+                lane_events, lane_messages = late_feed(True)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("zjsearch loop: final late feed failed: %r", exc)
+                lane_events, lane_messages = [], []
+            for lane_event in lane_events:
+                yield lane_event
+            if lane_messages:
+                messages.extend(lane_messages)
 
         if synthesizer is not None or writer is not None:
             # the PRE-WRITE verification pass (核验): runs under its own

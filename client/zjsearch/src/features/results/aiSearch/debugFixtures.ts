@@ -1259,7 +1259,7 @@ const SUB_STAGE: DebugScenario = {
       call: 1,
       status: "ok",
       ms: 120,
-      label: "头部厂商产能与市占率",
+      label: "S1 · 头部厂商产能与市占率",
       feed: "建立 2024-2025 头部电池厂商的产能与市占率矩阵",
     },
     {
@@ -1267,7 +1267,7 @@ const SUB_STAGE: DebugScenario = {
       id: 10000,
       kind: "sub",
       round: 1,
-      title: "头部厂商产能与市占率",
+      title: "S1 · 头部厂商产能与市占率",
       objective: "建立 2024-2025 头部电池厂商的产能与市占率矩阵(宁德时代/LG/比亚迪为最小集合)",
     },
     { e: "think", id: 10000, t: "子代理:先宽后窄,先全球格局再单厂产能。" },
@@ -1294,21 +1294,75 @@ const SUB_STAGE: DebugScenario = {
     // the child's round re-open: MUST NOT duplicate the sub row
     { e: "open", id: 10000, kind: "sub", round: 2, title: "" },
     { e: "close", id: 10000 },
-    // the digest rides the delegation row's second settlement
+    // the digest rides the delegation row's second settlement (the
+    // 【子任务 Sn】 tag is the subagent's id for the rest of the run)
     {
       e: "call",
       id: 1,
       call: 1,
       status: "ok",
       ms: 0,
-      label: "头部厂商产能与市占率",
+      label: "S1 · 头部厂商产能与市占率",
       chars: 320,
-      feed: "【子任务】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
+      feed: "【子任务 S1】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
       result:
-        "【子任务】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
+        "【子任务 S1】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
     },
     { e: "learnings", round: 2, items: [], gaps: [] },
     { e: "close", id: 1 },
+    // the context compaction separator (microcompact pass at a boundary)
+    { e: "compact", round: 2, trigger: "micro", pre: 148_000, post: 121_000, summarized: 0, kept: 0 },
+    // the lead's FOLLOW-UP (message_subtask): the next research round
+    // addresses the REGISTERED subagent, whose stream re-opens the SAME
+    // sub row (id 10000 -- stable across batches, never duplicates)
+    { e: "open", id: 3, kind: "research", round: 2 },
+    {
+      e: "calls",
+      id: 3,
+      items: [
+        {
+          id: 1,
+          tool: "message_subtask",
+          q: "S1 · LG 新增产能口径未决,补一个带数字的口径对比",
+          status: "pending",
+          args: { id: "S1", message: "LG 新增产能口径未决:补一个带数字的口径对比" },
+        },
+      ],
+    },
+    {
+      e: "call",
+      id: 3,
+      call: 1,
+      status: "ok",
+      ms: 0,
+      label: "S1 · 跟进",
+      feed: "LG 新增产能口径未决:补一个带数字的口径对比",
+    },
+    // the resumed child re-opens its row (same id, back to active)
+    { e: "open", id: 10000, kind: "sub", round: 1, title: "" },
+    { e: "think", id: 10000, t: "跟进收到:在已入册的产能矩阵上补 LG 口径,不重开调研。" },
+    {
+      e: "call",
+      id: 10000,
+      call: 1,
+      status: "ok",
+      n: 3,
+      ms: 1220,
+      feed: "LG 新增产能口径 2025 (GWh/年) [4]",
+    },
+    {
+      e: "call",
+      id: 3,
+      call: 1,
+      status: "ok",
+      ms: 0,
+      label: "S1 · 跟进",
+      chars: 180,
+      feed: "【子任务 S1】头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
+      result: "【子任务 S1】头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
+    },
+    { e: "learnings", round: 3, items: [], gaps: [] },
+    { e: "close", id: 3 },
     { e: "open", id: 2, kind: "write", round: 0 },
     { e: "phase", name: "write" },
     {

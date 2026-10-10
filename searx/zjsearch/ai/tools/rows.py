@@ -21,7 +21,7 @@ from searx.zjsearch.ai.tools.memory import USER_MEMORY_TOOL
 from searx.zjsearch.ai.tools.past_research import PAST_RESEARCH_TOOL
 from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call
 from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
-from searx.zjsearch.ai.tools.research_subtask import RESEARCH_SUBTASK_TOOL
+from searx.zjsearch.ai.tools.research_subtask import MESSAGE_SUBTASK_TOOL, RESEARCH_SUBTASK_TOOL
 from searx.zjsearch.ai.tools.web_reader import PAGE_TOOL, parse_page_call
 from searx.zjsearch.ai.tools.web_search import TOOL_NAME, parse_call
 
@@ -78,6 +78,20 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "tool": RESEARCH_SUBTASK_TOOL,
             "q": str(sub_args.get("title") or "")[:80],
             "args": sub_args,
+        }
+    if call_name == MESSAGE_SUBTASK_TOOL:
+        # the follow-up row: the resumed subagent's id + the message head
+        # are the label; the resumed child's timeline RE-OPENS the same
+        # kind:"sub" row beside it
+        try:
+            follow_args = raw_args(call)
+        except Exception:  # pylint: disable=broad-except
+            follow_args = {}
+        return {
+            "id": idx,
+            "tool": MESSAGE_SUBTASK_TOOL,
+            "q": f"{str(follow_args.get('id') or '')} · {str(follow_args.get('message') or '')[:80]}",
+            "args": follow_args,
         }
     if call_name == PAST_RESEARCH_TOOL:
         try:

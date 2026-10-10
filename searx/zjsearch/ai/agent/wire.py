@@ -71,6 +71,15 @@ bug and :py:func:`encode` refuses it):
                         the browser's store).  The client persists it
                         out-of-log (one upserted row, never appended to
                         the evt log) and never renders it.
+``compact``             the research conversation was COMPACTED at the
+                        round boundary: ``{round, trigger: micro|auto|
+                        reactive, pre, post, summarized, kept}`` (token
+                        estimates before/after, rounds summarized /
+                        preserved verbatim).  micro clears old page-read
+                        bodies locally; auto/reactive re-inject a
+                        ``<compacted_context>`` user message (summary +
+                        the authoritative state block).  Renders as a
+                        separator line.
 ``settle``              the terminal state: ``{status: done|awaiting|
                         error, finish, usage, model, halt}``.  After it,
                         only ``related`` / ``memory`` may follow (the

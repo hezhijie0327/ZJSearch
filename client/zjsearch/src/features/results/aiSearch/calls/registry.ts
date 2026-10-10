@@ -8,6 +8,7 @@ import { judgeView } from "@/features/results/aiSearch/calls/views/judge.tsx";
 import { learningsView } from "@/features/results/aiSearch/calls/views/learnings.tsx";
 import { mcpView } from "@/features/results/aiSearch/calls/views/mcp.ts";
 import { memoryView } from "@/features/results/aiSearch/calls/views/memory.tsx";
+import { messageSubtaskView } from "@/features/results/aiSearch/calls/views/messageSubtask.ts";
 import { pastResearchView } from "@/features/results/aiSearch/calls/views/pastResearch.ts";
 import { researchSubtaskView } from "@/features/results/aiSearch/calls/views/researchSubtask.ts";
 import { tasksView } from "@/features/results/aiSearch/calls/views/tasks.tsx";
@@ -38,4 +39,5 @@ export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
   extract_table: extractTableView,
   view_image: viewImageView,
   research_subtask: researchSubtaskView,
+  message_subtask: messageSubtaskView,
 };

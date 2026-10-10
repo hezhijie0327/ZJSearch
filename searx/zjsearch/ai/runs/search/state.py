@@ -13,6 +13,10 @@ composes them into :class:`Searches`.
 """
 
 import logging
+import json
+import logging
+import queue
+import threading
 import time
 import typing as t
 
@@ -23,6 +27,276 @@ from searx.zjsearch.ai.runs.search.coverage import Coverage
 from searx.zjsearch.ai.runs.search.registry import SourcesRegistry
 
 logger = logging.getLogger(__name__)
+
+SUB_ENTRY_BASE = 10_000
+"""The subagents' wire entry-id space (the lead's counter never reaches
+it): client groups a sub's think/call events under the `open kind:"sub"`
+row by id.  One 64-slot stride per subagent, allocated from the run's
+REGISTRY sequence -- stable across delegation batches, so a follow-up's
+resumed stream re-opens the SAME row instead of colliding into another
+batch's (the old per-batch ``job_idx`` ids reused the space every
+delegation round)."""
+
+SUB_SERIALIZE_CHILD_MAX = 150_000
+"""Serialized conversation chars kept for ONE archived subagent (the
+CONTINUE checkpoint's per-child budget; older messages drop first)."""
+
+SUB_SERIALIZE_TOTAL_MAX = 600_000
+"""The registry's total serialization budget (oldest children beyond it
+are listed under ``dropped`` instead of archived)."""
+
+
+class ChildControl:
+    """One subagent's inbound control plane: the stop flag the event
+    pump sets when the RUN's stop/preempt fires, read by the agent loop
+    through the same duck-typed surface as the run host's ControlBox
+    (``directives`` / ``interrupt`` / ``poll_steer`` / ``drain_steers``).
+    A resume RESETS the flag -- a follow-up re-engages the subagent even
+    if a previous batch was stopped early."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._stop = False
+
+    def stop(self) -> None:
+        with self._lock:
+            self._stop = True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._stop = False
+
+    @property
+    def stopped(self) -> bool:
+        with self._lock:
+            return self._stop
+
+    def directives(self) -> list[dict[str, str]]:
+        return [{"action": "stop"}] if self.stopped else []
+
+    def interrupt(self) -> tuple[str, str] | None:
+        return ("stop", "") if self.stopped else None
+
+    def poll_steer(self) -> str | None:
+        return None
+
+    def drain_steers(self) -> list[str]:
+        return []
+
+
+class SubagentHandle:
+    """One delegation's LIVE record in the run's registry: the stable
+    identity (``key`` = the digest's 【子任务 Sn】 tag, the wire id space
+    slot ``seq``), the child's OWN conversation (``messages`` mutates in
+    place as the loop runs -- a follow-up appends and re-runs it), its
+    control plane, and the PROMOTION MARKS that keep the parent-side
+    fold delta-only across repeated settlements."""
+
+    def __init__(
+        self,
+        key: str,
+        seq: int,
+        parsed: dict[str, str],
+        messages: list[dict[str, t.Any]],
+        child: t.Any,
+        control: ChildControl,
+    ) -> None:
+        self.key = key
+        self.seq = seq
+        self.parsed = parsed
+        self.messages = messages
+        self.child = child
+        self.control = control
+        self.followups = 0
+        self.stopped = False
+        # the BACKGROUND promotion (C2): True while a loop is running for
+        # this handle (foreground batch OR a late-lane resume);
+        # message_subtask queues onto ``pending_messages`` instead of
+        # refusing, and the settling lane chains them
+        self.busy = False
+        self.pending_messages: list[str] = []
+        # the parent-fold bookkeeping: feed/judgment/gate positions, the
+        # spend snapshots and the absorbed corpus-chunk identities -- all
+        # read AFTER each settlement, so a resume promotes only the new
+        # material
+        self.feed_mark = 0
+        self.judgment_mark = 0
+        self.gate_mark = 0
+        self.rerank_snap: dict[str, int] = {}
+        self.decision_snap: dict[str, int] = {}
+        self.corpus_seen: set[int] = set()
+
+    @property
+    def gid(self) -> int:
+        return SUB_ENTRY_BASE + (self.seq - 1) * 64
+
+
+def state_block(
+    core: "SearchesCore",
+    *,
+    include_tasks: bool = True,
+    source_limit: int = 60,
+) -> str:
+    """The AUTHORITATIVE state block rendered for compaction summary
+    injections (and future resumes): the belief ledger, the open gaps,
+    the task card and the ``[n]`` source table -- mechanically rendered
+    from the run state, never from the summary model's prose (a fact the
+    summary drops still reaches the next turn through here)."""
+    lines: list[str] = ["<authoritative_state>"]
+    facts = [f for f in core.facts if f.get("status") == "active"]
+    if facts:
+        lines.append("<findings>")
+        for fact in facts[:40]:
+            refs = ",".join(str(n) for n in (fact.get("refs") or [])[:6])
+            mark = f" [{refs}]" if refs else ""
+            lines.append(f"- {str(fact.get('text') or '')[:400]}{mark}")
+        lines.append("</findings>")
+    gaps = [g for g in core.gaps if g.get("status") == "open"]
+    if gaps:
+        lines.append("<open_gaps>")
+        for gap in gaps[:12]:
+            lines.append(f"- {str(gap.get('q') or '')[:200]}")
+        lines.append("</open_gaps>")
+    tasks = getattr(core.coverage, "task_list", None) if include_tasks else None
+    if tasks:
+        done = sum(1 for item in tasks if item.get("status") == "done")
+        lines.append(f'<plan completed="{done}/{len(tasks)}">')
+        for item in tasks[:12]:
+            lines.append(f"- [{item.get('status')}] {str(item.get('title') or '')[:200]}")
+        lines.append("</plan>")
+    entries = getattr(core, "entries", None) or {}
+    if entries:
+        lines.append(f'<sources total="{len(entries)}">')
+        for n in sorted(entries)[-source_limit:]:
+            entry = entries[n]
+            lines.append(f"[{n}] {str(entry.get('title') or '')[:100]}")
+        lines.append("</sources>")
+    lines.append("</authoritative_state>")
+    return "\n".join(lines)
+
+
+def serialize_subagents(core: "SearchesCore") -> dict[str, t.Any]:
+    """The registry's CONTINUE-checkpoint form: per child the identity,
+    the brief, the conversation (JSON-safe), the follow-up count and its
+    ledger -- everything a resumed run needs to keep addressing the SAME
+    subagent with message_subtask.  The promotion marks do NOT travel
+    (they must restart at zero against the fresh child).  Oversized
+    children drop their oldest messages; children beyond the total
+    budget are listed under ``dropped``."""
+    handles = getattr(core, "subagents", None)
+    if not handles:
+        return {}
+    out: dict[str, t.Any] = {}
+    total = 0
+    dropped: list[str] = []
+    for key in sorted(handles, key=lambda k: handles[k].seq):
+        handle = handles[key]
+        if total >= SUB_SERIALIZE_TOTAL_MAX:
+            dropped.append(key)
+            continue
+        messages = json.loads(json.dumps(handle.messages, ensure_ascii=False, default=str))
+        trimmed = False
+        while len(json.dumps(messages, ensure_ascii=False)) > SUB_SERIALIZE_CHILD_MAX and len(messages) > 2:
+            del messages[1 if (messages[0].get("role") == "system") else 0]
+            trimmed = True
+        blob = json.dumps(messages, ensure_ascii=False)
+        total += len(blob)
+        out[key] = {
+            "key": handle.key,
+            "seq": handle.seq,
+            "followups": handle.followups,
+            "parsed": dict(handle.parsed),
+            "messages": messages,
+            "trimmed": trimmed,
+            "facts": [
+                {"text": f.get("text"), "refs": f.get("refs") or []}
+                for f in handle.child.facts
+                if f.get("status") == "active"
+            ][:40],
+            "gaps": [
+                {"q": g.get("q"), "why": g.get("why")}
+                for g in handle.child.gaps
+                if g.get("status") != "closed"
+            ][:20],
+        }
+    if dropped:
+        out["dropped"] = dropped
+    return out
+
+
+def restore_subagents(
+    core: "SearchesCore",
+    archived: dict[str, t.Any],
+    child_factory: t.Callable[["SearchesCore", str], t.Any],
+) -> None:
+    """Re-hydrate the serialized registry after a CONTINUE: each handle
+    gets a FRESH child executor (its own ledger/facts are restored from
+    the archive; its corpus/feed start empty -- the parent already
+    folded those, and the promotion marks restart at zero against the
+    fresh child).  ``child_factory(parent, key)`` builds the child."""
+    if not isinstance(archived, dict):
+        return
+    top_seq = getattr(core, "_sub_seq", 0) or 0
+    for key, data in archived.items():
+        if key == "dropped" or not isinstance(data, dict):
+            continue
+        if not str(key).startswith("S") or core.subagents.get(key) is not None:
+            continue
+        messages = data.get("messages")
+        if not isinstance(messages, list) or not messages:
+            continue
+        parsed = data.get("parsed") if isinstance(data.get("parsed"), dict) else {
+            "title": key,
+            "objective": "",
+            "output_format": "",
+            "tool_guidance": "",
+            "boundaries": "",
+        }
+        try:
+            seq = int(data.get("seq") or 0)
+        except (TypeError, ValueError):
+            seq = 0
+        child = child_factory(core, str(key))
+        for index, fact in enumerate(data.get("facts") or []):
+            if isinstance(fact, dict) and fact.get("text"):
+                child.facts.append(
+                    {
+                        "id": index + 1,
+                        "text": str(fact.get("text")),
+                        "refs": fact.get("refs") or [],
+                        "status": "active",
+                        "round": 0,
+                    }
+                )
+        for index, gap in enumerate(data.get("gaps") or []):
+            if isinstance(gap, dict) and gap.get("q"):
+                child.gaps.append(
+                    {
+                        "id": 10_000 + index,
+                        "q": str(gap.get("q")),
+                        "why": str(gap.get("why") or ""),
+                        "status": "open",
+                        "close_as": "",
+                        "round": 0,
+                    }
+                )
+        handle = SubagentHandle(
+            str(key),
+            seq,
+            {field: str(parsed.get(field) or "")[:600] for field in
+             ("title", "objective", "output_format", "tool_guidance", "boundaries")},
+            messages,
+            child,
+            ChildControl(),
+        )
+        try:
+            handle.followups = max(0, min(int(data.get("followups") or 0), 99))
+        except (TypeError, ValueError):
+            pass
+        core.subagents[str(key)] = handle
+        top_seq = max(top_seq, seq)
+    core._sub_seq = max(getattr(core, "_sub_seq", 0) or 0, top_seq)
+
 
 MAX_PARALLEL = 6
 """Worker threads per parallel batch -- uncapped per-round call counts
@@ -184,6 +458,28 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # or a subagent's own keyed page (v2.1 R3B -- separate tabs in
         # the mirror, one persistent context)
         self.browser_session_id: str = "lead"
+        # THE SUBAGENT REGISTRY (the follow-up channel's backbone): every
+        # delegation mints one SubagentHandle -- stable key (S1, S2, ...)
+        # and wire id slot for the whole run -- and a settled subagent
+        # STAYS here, conversation and all, so message_subtask can resume
+        # it.  Children (nested runs) carry their own empty registry.
+        self.subagents: dict[str, SubagentHandle] = {}
+        self._sub_seq = 0
+        # the LEAD's inbound control plane (the run host's ControlBox;
+        # the route assigns it): the event pump polls it non-destructively
+        # so a user stop/preempt reaches the running subagents.  A child
+        # stays None (it observes nothing above its own box).
+        self.run_control: t.Any = None
+        # the BACKGROUND lane (C2): backgrounded subagents' remapped wire
+        # events and their settled digests queue here between the round
+        # boundaries -- the loop drains both at the top of every round
+        # (``drain_late``) and once more before the write phase opens
+        self.late_events: "queue.Queue[dict[str, t.Any]]" = queue.Queue()
+        self.pending_results: list[dict[str, str]] = []
+        self.pending_lock = threading.Lock()
+        self.late_lanes: list[threading.Thread] = []
+        # the task-card cadence reminder's last round (B2)
+        self.last_plan_reminder_round = 0
         # the search's request-context TEMPLATE (app, environ, request),
         # captured NOW on the request thread: the run executes on the run
         # host's driver thread, and the search path needs a flask request
@@ -209,6 +505,38 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
             self._search_ctx = None
             self._flask_app = None
 
+    def drain_late(self) -> tuple[list[dict[str, t.Any]], list[dict[str, t.Any]]]:
+        """The loop's round-boundary flush: the late lane's queued wire
+        events (yielded verbatim -- sub rows carry their own ids), then
+        the settled digests as ``<task_result>`` user messages the model
+        reads before the next turn composes."""
+        events: list[dict[str, t.Any]] = []
+        while True:
+            try:
+                events.append(self.late_events.get_nowait())
+            except queue.Empty:
+                break
+        with self.pending_lock:
+            results, self.pending_results = self.pending_results, []
+        messages = [
+            {
+                "role": "user",
+                "content": f"<task_result subagent=\"{result['handle']}\">\n{result['digest']}\n</task_result>",
+            }
+            for result in results
+        ]
+        return events, messages
+
+    def wait_for_lanes(self, timeout: float) -> None:
+        """The write boundary's bounded wait for backgrounded lanes."""
+        deadline = time.monotonic() + max(0.0, timeout)
+        for thread in list(self.late_lanes):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if thread.is_alive():
+                thread.join(timeout=remaining)
+
     def drain_image_injections(self) -> list[dict[str, t.Any]]:
         """view_image's fetched pictures, drained into the next model turn
         as user messages (the loop consults this after each executor batch)."""
@@ -231,13 +559,16 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         ``(facts_written, gaps_opened, gaps_closed)`` for the row's feed
         echo.  Superseding/retracting RETIRES the old fact (status flips,
         history stays -- the wire snapshot carries the full ledger).  A
-        new fact that only REPHRASES an active one (embedding
-        nearest-neighbour, the memory-dedup floor) merges its refs into
-        the survivor instead of appending -- the small-model pathology
-        where one fact lands three ways stops at the ledger."""
+        new fact that REPEATS an active one lands on two floors: the
+        EXACT text merges its refs into the survivor (the resume
+        channel's wholesale re-apply -- a follow-up's second promotion
+        must not re-append the child's whole ledger), and the embedding
+        nearest-neighbour (the small-model pathology where one fact
+        lands three ways) merges the same way; both fail safe."""
         written = 0
         by_id = {fact["id"]: fact for fact in self.facts}
         active = [fact for fact in self.facts if fact["status"] == "active"]
+        exact_texts = {str(fact.get("text") or "").strip().lower(): fact for fact in active}
         for op in ops.get("facts") or []:
             self._ledger_seq += 1
             fact = {
@@ -251,15 +582,21 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
                 target = by_id.get(op.get(key))
                 if target is not None and target["status"] == "active":
                     target["status"] = "superseded" if key == "supersedes" else "retracted"
-            dup = audit.near_duplicate(fact["text"], [item["text"] for item in active])
-            if dup is not None:
-                survivor = active[dup]
+            survivor: dict[str, t.Any] | None = None
+            if fact["text"] and fact["text"].strip().lower() in exact_texts:
+                survivor = exact_texts[fact["text"].strip().lower()]
+            else:
+                dup = audit.near_duplicate(fact["text"], [item["text"] for item in active])
+                if dup is not None:
+                    survivor = active[dup]
+            if survivor is not None:
                 old_refs = survivor.get("refs") or []
                 survivor["refs"] = list(dict.fromkeys([*old_refs, *fact["refs"]]))[:8]
                 continue
             self.facts.append(fact)
             by_id[fact["id"]] = fact
             active.append(fact)
+            exact_texts[fact["text"].strip().lower()] = fact
             self.corpus.add(fact["text"], ref_n=int((fact.get("refs") or [0])[0] or 0), kind="fact")
             written += 1
         opened = 0

@@ -16,6 +16,7 @@ import {
   settle,
 } from "@/features/results/aiSearch/timeline.ts";
 import { fetchEventStream, fetchJson } from "@/lib/http.ts";
+import { startRunKeepalive, type RunKeepalive } from "@/lib/keepalive.ts";
 import { loadThreadAttachments, saveAttachments } from "@/lib/kb/attachments.ts";
 import {
   appendRunEvents,
@@ -347,9 +348,52 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           return applyEvent(prev, event, LIVE_FX, refCounts);
         });
       };
+      let stopHeartbeat: RunKeepalive | null = null;
+      let detachKick: (() => void) | null = null;
+      // the BACKGROUND-TAB self-heal (visibility/online/page-lifecycle
+      // resume): a frozen or dropped fetch can sit half-dead for the
+      // whole run -- on return to the foreground an extra ATTACH streams
+      // the missed tail (the seq guard dedups against a live stream)
+      let kickTimer: ReturnType<typeof setTimeout> | null = null;
+      const kick = () => {
+        if (settled || signal.aborted || !runKeyRef.current || document.visibilityState !== "visible") {
+          return;
+        }
+        if (kickTimer) clearTimeout(kickTimer);
+        kickTimer = setTimeout(() => {
+          kickTimer = null;
+          if (settled || signal.aborted) return;
+          fetchEventStream(
+            "/zjsearch/ai/run/attach",
+            { tk: capability.tk, run_key: runKeyRef.current, after_seq: lastSeq },
+            apply,
+            signal,
+          ).catch(() => {});
+        }, 1500);
+      };
+      const onVisible = () => {
+        if (document.visibilityState === "visible") kick();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("online", kick);
+      document.addEventListener("resume", kick);
+      detachKick = () => {
+        document.removeEventListener("visibilitychange", onVisible);
+        window.removeEventListener("online", kick);
+        document.removeEventListener("resume", kick);
+        if (kickTimer) clearTimeout(kickTimer);
+      };
       try {
         await fetchEventStream("/zjsearch/ai/search", body, apply, signal, (response) => {
           runKeyRef.current = response.headers.get("X-Zjs-Run-Id") ?? "";
+          // the run host counts the grace from the LAST heartbeat: the
+          // worker beats even while this tab's timers are throttled
+          if (runKeyRef.current) {
+            stopHeartbeat = startRunKeepalive(runKeyRef.current, {
+              tk: capability.tk,
+              run_key: runKeyRef.current,
+            });
+          }
         });
         // the run HOST keeps the run alive across a dropped connection:
         // reattach from the server's buffer (after the last SEEN seq)
@@ -395,6 +439,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         }
         const message = error instanceof Error ? error.message : String(error);
         setCore((prev) => settle(prev, { error: message }, false));
+      } finally {
+        // the assignment happens inside the response callback -- TS's
+        // flow analysis can't see it, hence the assertion
+        (stopHeartbeat as RunKeepalive | null)?.stop();
+        detachKick?.();
       }
     })();
   };

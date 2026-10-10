@@ -37,6 +37,7 @@ EVENTS: frozenset[str] = frozenset(
         "tags",
         "usage",
         "settle",
+        "compact",
     }
 )
 
