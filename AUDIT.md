@@ -870,3 +870,33 @@ upgrade the inspector had been waiting for.
   print-probe (window.print no-op patch → `#zjs-print-view-root`
   inspection → tokens-to-initial color check → manual `afterprint`)
   passed unchanged against the new document renderer.
+
+## 7.7 Round record — 2026-10 (the print round: the paper is the view)
+
+User report: clicking 📄 (打印/保存 PDF) "did nothing". Root cause chain,
+verified with an event timeline in the in-app browser:
+
+- The embedded browser's webview CANNOT open the print dialog -- and it
+  has TWO shapes: a silent no-op and a PHANTOM afterprint whose timing
+  varies run-to-run (measured ~1s and ~9s after `window.print()`). The
+  paper lived hidden on screen by design (`#zjs-print-view-root {
+  display: none }`, shown only `@media print`), so every shape produced
+  zero visible change: the click read as dead.
+- A wait-then-fallback (reveal the paper if no afterprint within N ms)
+  LOSES the race whenever the phantom fires early. The fix removes the
+  race: THE PAPER IS THE VIEW -- the sheet mounts visible immediately
+  (`.zjs-print-preview`: fixed white ground, the 210mm paper measure,
+  scroll, a close chip, Escape), `window.print()` rides right after the
+  mount, a real browser's dialog simply opens OVER the paper, afterprint
+  retires itself without tearing down, and dismissal is the chip /
+  Escape / the host component's cleanup. Contract change recorded in
+  AGENTS.md: after saving/cancelling the dialog, the paper stays until
+  dismissed (one extra close in a real browser; the webview gets the
+  document it could not print).
+- Audit-methodology additions: event-timeline instrumentation (wrap
+  `window.print` + listen for `afterprint` with timestamps) is the
+  probe that names this webview's behavior -- a mounted-check alone
+  reads as "the feature is broken" when the pipeline is actually
+  working and the ENVIRONMENT is the limitation; and long multi-step
+  browser cells jam the IAB pipeline (§5) -- split verification into
+  one-action cells with fresh tab recovery.
