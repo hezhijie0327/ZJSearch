@@ -296,3 +296,78 @@
 .zjs-print-sheet pre {
   break-inside: auto;
 }
+
+/* ── the webview preview: embedded browsers silently no-op window.print()
+   (no dialog, no afterprint), so printDocument flips the root to a
+   readable on-screen preview after a short wait — the same light paper,
+   scrollable, capped to the paper measure, with a close chip (Escape
+   works too).  The light force mirrors the @media print block above,
+   scoped to the sheet (keep the two lists in sync). ── */
+#zjs-print-view-root.zjs-print-preview {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  padding: 48px 40px 72px;
+}
+#zjs-print-view-root.zjs-print-preview > * {
+  max-width: 210mm;
+  margin-inline: auto;
+}
+.dark #zjs-print-view-root.zjs-print-preview,
+.black #zjs-print-view-root.zjs-print-preview {
+  --bg: #ffffff;
+  --surface: initial;
+  --surface-2: initial;
+  --line: initial;
+  --ink: initial;
+  --ink-2: initial;
+  --ink-3: initial;
+  --accent: initial;
+  --accent-hover: initial;
+  --accent-strong: initial;
+  --accent-strong-hover: initial;
+  --accent-soft: initial;
+  --accent-contrast: initial;
+  --highlight-bg: initial;
+  --danger: initial;
+  --warning: initial;
+  --ok: initial;
+  --shadow-card: initial;
+  --shadow-pop: initial;
+  color-scheme: light;
+}
+#zjs-print-view-root .zjs-print-close {
+  position: fixed;
+  top: 14px;
+  inset-inline-end: 14px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: #ffffff;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 150ms;
+}
+#zjs-print-view-root .zjs-print-close:hover {
+  color: var(--ink);
+}
+@media print {
+  /* the preview furniture never prints */
+  #zjs-print-view-root.zjs-print-preview {
+    position: static;
+    overflow: visible;
+    padding: 0;
+  }
+  #zjs-print-view-root .zjs-print-close {
+    display: none !important;
+  }
+}

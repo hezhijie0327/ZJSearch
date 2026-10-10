@@ -112,18 +112,58 @@ export function printDocument(options: PrintOptions): () => void {
     document.body.appendChild(root);
   };
 
-  const done = (): void => {
+  let cancelled = false;
+  const timers: number[] = [];
+  // THE PAPER IS THE VIEW: embedded browsers cannot open the print
+  // dialog -- the observed webview shapes are a silent no-op AND a
+  // PHANTOM afterprint whose timing varies (measured ~1s and ~9s), so
+  // racing it is unwinnable and the on-screen-hidden paper made the
+  // click read as dead.  The sheet is therefore the visible view from
+  // the start (print.css's .zjs-print-preview face: white paper, the
+  // paper measure, a close chip, Escape); window.print() rides right
+  // after the mount -- a real browser's dialog simply opens OVER the
+  // paper, and afterprint is retired without tearing anything down
+  // (the user dismisses the paper with the chip or Escape; the host
+  // component's cleanup always can).
+  const teardown = (): void => {
+    cancelled = true;
+    timers.forEach((id) => {
+      window.clearTimeout(id);
+      window.cancelAnimationFrame(id);
+    });
+    window.removeEventListener("afterprint", onAfterPrint);
+    window.removeEventListener("keydown", onPreviewKey);
     root.remove();
     document.body.classList.remove("zjs-print-view");
     document.title = prevTitle;
   };
+  const onPreviewKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      teardown();
+    }
+  };
+  const onAfterPrint = (): void => {
+    // the dialog finished (saved or cancelled) -- the paper stays until
+    // the user dismisses it
+    window.removeEventListener("afterprint", onAfterPrint);
+  };
+  window.addEventListener("afterprint", onAfterPrint);
 
-  window.addEventListener("afterprint", done, { once: true });
-
-  let cancelled = false;
-  const timers: number[] = [];
+  const revealSheet = (): void => {
+    root.classList.add("zjs-print-preview");
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "zjs-print-close zjs-print-hide";
+    chip.setAttribute("aria-label", "Close");
+    chip.textContent = "✕";
+    chip.addEventListener("click", () => {
+      teardown();
+    });
+    root.appendChild(chip);
+    window.addEventListener("keydown", onPreviewKey);
+  };
   const openDialog = (): void => {
-    // give the injected document a frame to lay out before the dialog
+    // give the injected document a frame to lay out before the call
     timers.push(
       window.requestAnimationFrame(() => {
         timers.push(
@@ -137,19 +177,10 @@ export function printDocument(options: PrintOptions): () => void {
     );
   };
 
-  const dispose = (): void => {
-    cancelled = true;
-    timers.forEach((id) => {
-      window.clearTimeout(id);
-      window.cancelAnimationFrame(id);
-    });
-    window.removeEventListener("afterprint", done);
-    root.remove();
-    document.body.classList.remove("zjs-print-view");
-    document.title = prevTitle;
-  };
+  const dispose = teardown;
   if (!darkDiagrams) {
     build(new Map());
+    revealSheet();
     openDialog();
   } else {
     // dark mermaid: render light copies off-screen first — a bounded
@@ -157,6 +188,7 @@ export function printDocument(options: PrintOptions): () => void {
     void renderLightDiagrams(source).then((lightDiagrams) => {
       if (!cancelled) {
         build(lightDiagrams);
+        revealSheet();
         openDialog();
       }
     });
