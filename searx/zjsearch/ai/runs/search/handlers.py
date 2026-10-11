@@ -553,7 +553,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     cells = list(row["cells"]) + [""] * (len(artifact["columns"]) - len(row["cells"]))
                     cite = (" [" + ",".join(str(r) for r in row["refs"]) + "]") if row["refs"] else ""
                     lines.append("| " + " | ".join(cells) + cite + " |")
-                self.corpus.add("\n".join(lines), n=0, title=artifact["title"], kind="table")
+                self.corpus.add("\n".join(lines), ref_n=0, title=artifact["title"], kind="table")
                 feed_text = (
                     f"table {artifact['id']} recorded: {artifact['title']}"
                     f" ({len(artifact['rows'])} rows x {len(artifact['columns'])} columns)."
