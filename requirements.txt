@@ -15,3 +15,44 @@ typer==0.27.2
 isodate==0.7.2
 whitenoise==6.12.0
 typing-extensions==4.16.0
+
+# ── zjsearch theme: the AI SDK transports ──────────────────────────────
+# one family per SDK, registered in searx/zjsearch/ai/infra/sdk/__init__.py:
+#   openai            the openai family (2 chat wire shapes + embeddings)
+#   anthropic         the anthropic Messages family
+#   google-genai      the gemini family (chat + embed_content)
+#   dashscope         the alibaba native family (qwen chat /
+#                     TextEmbedding / TextReRank consumers ride it too)
+#   typesafe-sdk      the SystemOne decision-model surface
+# consumers: infra/sdk/*.py, infra/embed.py, infra/decision.py,
+# runtime/rank.py
+openai==3.29.0
+anthropic==1.13.0
+google-genai==2.30.0
+dashscope==1.27.7
+typesafe-sdk==0.7.4
+
+# zjsearch theme: the BM25 result reranker (searx/plugins/bm25_reranker.py)
+# -- Apache-2.0, numpy is its only runtime dependency
+bm25s==0.3.13
+
+# zjsearch theme: the AI stack's unified document converter
+# (searx/zjsearch/ai/core/convert.py -- the page reader's HTML -> Markdown
+# pass AND the file surface: PDF / Word / PPT / Excel -> Markdown) -- MIT;
+# the extras pull pdfminer-six + pdfplumber, mammoth, python-pptx and
+# openpyxl + pandas beside the bs4/markdownify/magika core
+markitdown[pdf,docx,pptx,xlsx]==0.1.8
+
+# zjsearch theme: the MCP tool-server bridge (searx/zjsearch/ai/capabilities/mcp.py)
+# -- MIT; streamable-HTTP client over the shared network loop; without it the
+# mcp config degrades to silence
+mcp==2.3.0
+
+# zjsearch theme: the page reader's render engine (searx/zjsearch/ai/browser/)
+# -- MIT python package driving the Camoufox anti-detect Firefox build (uBlock
+# Origin rides along as a default addon = the adblock).  The PACKAGE is
+# optional at run time (an absent install leaves the reader -- and with it the
+# web_reader tool -- unregistered); the browser BUNDLE downloads at build time
+# via `python -m searx.zjsearch.ai.browser.install` (the Docker recipe lives in
+# AGENTS.md's render-contract section)
+camoufox[geoip]==0.5.8

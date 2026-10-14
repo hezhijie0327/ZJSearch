@@ -1,0 +1,237 @@
+// SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+
+import { LoaderCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Tape } from "@/components/Tape.tsx";
+import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
+import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
+import { buildCitationMap, citedOrder, citedSourceRows, citeToLinks } from "@/lib/citations.ts";
+import { useT } from "@/lib/i18n.ts";
+import { scrollIntoViewAnimated } from "@/lib/motion.ts";
+
+/**
+ * The REPORT document renderer: the run's outline becomes the document
+ * (title + subtitle + a TOC + one rendered section per outline entry),
+ * streamed section-by-section -- each section's markdown rides the same
+ * `MarkdownAnswer` pipeline as the single-write answer (GFM tables,
+ * mermaid, KaTeX, citation chips), so a report is the answer contract,
+ * typographically elevated.  A section still writing carries the live
+ * spinner in the TOC and at its heading; the TOC row scrolls to its
+ * section (the animated scroll -- rAF is not a safe primitive).  A settled
+ * document carries the family postmark at its tail (DESIGN.md §7
+ * `.paper-postmark`, the LockScreen stamp's real-meta cousin): the
+ * filing date + label, mono, deterministic 12° tilt, in flow.
+ */
+
+export function DocumentView({
+  run,
+  meta,
+  onCite,
+  settled,
+  stamp,
+}: {
+  run: {
+    runNo: number;
+    outline: NonNullable<{
+      title: string;
+      subtitle?: string;
+      sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" }>;
+    }>;
+    sections?: Record<string, string>;
+    galleries: AiSearchGallery[][];
+  };
+  meta: AiSourceMeta[];
+  onCite: (n: number) => void;
+  settled: boolean;
+  /** the run's settle client-clock (ms) — the tail postmark's filing date;
+      absent/0 renders no stamp */
+  stamp?: number | null;
+}) {
+  const t = useT();
+  const outline = run.outline;
+  // THE DOCUMENT-LOCAL CITATION MAP: the stored sections carry the run's
+  // global registry numbers ([792] in a deep run); the document reads
+  // [1..N] in first-citation order and its meta slice/click translation
+  // follow the SAME map -- body chips, hover previews and a tail list
+  // (print/export) all agree.  Streaming appends only (first-citation
+  // slots are stable); the citation gate's section rewrite can re-number
+  // the affected tail -- a one-shot shift, meta rebuilds with it.
+  const citationMap = useMemo(() => {
+    const texts = outline.sections.map((section) => run.sections?.[section.id] ?? "").filter(Boolean);
+    const knownNs = new Set(meta.map((source) => source.n).filter((n): n is number => Number.isInteger(n)));
+    return buildCitationMap(texts, knownNs.size > 0 ? knownNs : undefined);
+  }, [outline.sections, run.sections, meta]);
+  const citedMeta = useMemo(() => citedSourceRows(citationMap, meta), [citationMap, meta]);
+  const order = citedOrder(citationMap);
+  // the document's chips click in LOCAL space; the rail's cards live in
+  // the run's global registry -- one lambda is the whole translation
+  const onCiteLocal = (local: number) => {
+    const globalN = order[local - 1];
+    if (globalN != null) {
+      onCite(globalN);
+    }
+  };
+  // the anchor prefix is a STABLE string per run (the effect below reads it
+  // directly -- a fresh anchorId closure would re-run the observer every render)
+  const anchorPrefix = `zjs-report-${run.runNo}-`;
+  const anchorId = (id: string) => `${anchorPrefix}${id}`;
+  const doneCount = useMemo(() => outline.sections.filter((s) => s.status === "done").length, [outline.sections]);
+  // scroll-spy: the TOC row of the section nearest the viewport top gets
+  // the active accent (IntersectionObserver -- rootMargin picks whichever
+  // section crosses the upper third of the document pane)
+  const [activeId, setActiveId] = useState<string | null>(null);
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const id = (entry.target as HTMLElement).id.replace(anchorPrefix, "");
+            setActiveId(id);
+          }
+        }
+      },
+      { rootMargin: "-15% 0px -70% 0px" },
+    );
+    for (const section of outline.sections) {
+      const el = document.getElementById(`${anchorPrefix}${section.id}`);
+      if (el) {
+        io.observe(el);
+      }
+    }
+    return () => {
+      io.disconnect();
+    };
+  }, [outline.sections, anchorPrefix]);
+  const jump = (id: string) => {
+    document.getElementById(anchorId(id)) &&
+      scrollIntoViewAnimated(document.getElementById(anchorId(id)) as HTMLElement);
+  };
+  // the postmark's filing date: an ABSOLUTE local YYYY-MM-DD (a stamp is
+  // bureaucratic, never relative) — deterministic per settle clock
+  const stampDate = (() => {
+    if (!stamp) {
+      return null;
+    }
+    const d = new Date(stamp);
+    if (Number.isNaN(d.getTime())) {
+      return null;
+    }
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  return (
+    // the long-form reading scale (DESIGN.md §4, the blog's .prose 17px/1.8
+    // -- 中文衬线长文, headings/tables ride em so they follow the root)
+    <div className="zjs-answer-body text-[17px] font-serif leading-[1.8] text-ink">
+      {/* the document header: title + subtitle (the report cover's text
+          half -- the classification chip and meta window are the outline's
+          own data, not invented chrome).  The title takes the blog's
+          page-H1 prescription (§4). */}
+      <header className="mb-4 border-b border-line pb-4">
+        <h1 className="font-serif text-3xl font-black leading-tight tracking-tight text-ink sm:text-4xl" dir="auto">
+          {outline.title}
+        </h1>
+        {outline.subtitle ? (
+          <p className="mt-1 text-[13px] text-ink-3" dir="auto">
+            {outline.subtitle}
+          </p>
+        ) : null}
+      </header>
+      {/* the TOC: the outline IS the progress surface -- pending hollow,
+          writing spinner, done clean; clicking jumps (animated, reduced-
+          motion aware).  The family paper ground (DESIGN.md §7): a torn
+          note with one tape corner -- the report's own quick-reference
+          slip, tape a SIBLING of the clipped note */}
+      <div className="relative mb-5">
+        <Tape className="-top-2.5 left-8 w-16 -rotate-6 bg-accent-soft/80" />
+        <nav aria-label={t("ai_report_toc")} className="paper-note px-4 py-3">
+          <ol className="space-y-1">
+            {outline.sections.map((section, index) => (
+              <li key={section.id}>
+                <button
+                  className={`group flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-start text-[13px] transition-colors hover:bg-surface-2/70 ${
+                    activeId === section.id ? "bg-surface-2/70 font-medium text-accent" : "text-ink-2 hover:text-ink"
+                  }`}
+                  onClick={() => {
+                    jump(section.id);
+                  }}
+                  type="button"
+                >
+                  <span className="w-4 shrink-0 text-end font-mono text-xs tabular-nums text-ink-3">{index + 1}</span>
+                  <span className="min-w-0 flex-1 truncate" dir="auto">
+                    {section.title}
+                  </span>
+                  {section.status === "writing" ? (
+                    <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin text-accent" />
+                  ) : section.status === "pending" ? (
+                    <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full border border-ink-3/50" />
+                  ) : null}
+                </button>
+              </li>
+            ))}
+          </ol>
+          {doneCount < outline.sections.length ? (
+            <p className="mt-1 px-1.5 text-xs text-ink-3">
+              {t("ai_report_progress", { done: String(doneCount), total: String(outline.sections.length) })}
+            </p>
+          ) : null}
+        </nav>
+      </div>
+      {outline.sections.map((section) => {
+        const text = run.sections?.[section.id] ?? "";
+        // a PENDING section renders NOTHING in the document body -- its
+        // existence is the TOC's hollow dot; a bare heading column would
+        // read as empty chapters while the report streams
+        if (section.status === "pending" && !text) {
+          return null;
+        }
+        return (
+          <section className="scroll-mt-20" id={anchorId(section.id)} key={section.id}>
+            <h2
+              className="mt-6 flex items-center gap-2 text-[1.5em] font-semibold tracking-tight text-ink first:mt-0"
+              dir="auto"
+            >
+              {section.status === "writing" ? (
+                <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-accent" />
+              ) : null}
+              {section.title}
+            </h2>
+            {text ? (
+              <MarkdownAnswer
+                figureLightbox
+                galleries={run.galleries}
+                markdown={citeToLinks(text, citationMap)}
+                meta={citedMeta}
+                onCite={onCiteLocal}
+                settled={settled}
+              />
+            ) : section.status === "writing" ? (
+              <div aria-hidden="true" className="mt-2 space-y-2">
+                <div className="h-3 w-full animate-pulse rounded bg-surface-2/70" />
+                <div className="h-3 w-4/5 animate-pulse rounded bg-surface-2/70" />
+                <div className="h-3 w-3/5 animate-pulse rounded bg-surface-2/70" />
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
+      {/* the filing postmark (DESIGN.md §7 .paper-postmark): the report is
+          a delivered document — date + label, real meta (not aria-hidden),
+          in flow so it never overlaps text at any width and prints with
+          the paper (export/print contract) */}
+      {settled && stampDate ? (
+        <p className="paper-postmark mt-10 ms-auto size-24 rotate-12 text-ink-3">
+          {/* 负右距抵消 tracking 尾隙，戳文在圆环里光学居中（blog SEALED 同款） */}
+          <span className="-me-[0.14em] font-mono text-[10px] leading-none tracking-[0.14em] tabular-nums">
+            {stampDate}
+          </span>
+          <span className="-me-[0.22em] font-mono text-[8px] leading-none tracking-[0.22em] uppercase">
+            {t("ai_report_stamp_label")}
+          </span>
+        </p>
+      ) : null}
+    </div>
+  );
+}

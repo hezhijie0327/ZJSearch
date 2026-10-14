@@ -67,8 +67,9 @@ _NOTSET = _NotSetClass()
 
 
 def searxng_useragent() -> str:
-    """Return the SearXNG User Agent"""
-    return f"SearXNG/{VERSION_TAG} {settings['outgoing']['useragent_suffix']}".strip()
+    """Return the ZJSearch User Agent (the fork's brand; VERSION_TAG is the
+    fork's own semver from searx/version_frozen.py)"""
+    return f"ZJSearch/{VERSION_TAG} {settings['outgoing']['useragent_suffix']}".strip()
 
 
 def gen_useragent(os_string: str | None = None) -> str:

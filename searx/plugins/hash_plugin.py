@@ -62,6 +62,11 @@ class SXNGPlugin(Plugin):
         f.update(string.encode("utf-8").strip())
         answer = function + " " + gettext("hash digest") + ": " + f.hexdigest()
 
-        results.add(results.types.Answer(answer=answer))
+        results.add(
+            results.types.Answer(
+                answer=answer,
+                data={"kind": "hash", "algo": function, "digest": f.hexdigest()},
+            )
+        )
 
         return results

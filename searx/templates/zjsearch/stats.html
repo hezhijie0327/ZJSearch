@@ -1,0 +1,6 @@
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_stats with context %}
+{% from "zjsearch/noscript.html" import ns_stats with context %}
+{% block title %}Engine stats - {% endblock %}
+{% block page_data %}{{ page_stats(sort_order, selected_engine_name, engine_stats, engine_reliabilities) }}{% endblock %}
+{% block noscript %}{{ ns_stats(engine_stats, engine_reliabilities) }}{% endblock %}

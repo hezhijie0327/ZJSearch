@@ -59,7 +59,12 @@ class SXNGAnswerer(Answerer):
                 res = func(args)
                 res = babel.numbers.format_decimal(res, locale=ui_locale)
                 f_str = ', '.join(babel.numbers.format_decimal(arg, locale=ui_locale) for arg in args)
-                results.append(Answer(answer=f"[{ui_locale}] {k}({f_str}) = {res} "))
+                results.append(
+                    Answer(
+                        answer=f"[{ui_locale}] {k}({f_str}) = {res} ",
+                        data={"kind": "stats", "func": k, "args": f_str, "result": res},
+                    )
+                )
                 break
 
         return results

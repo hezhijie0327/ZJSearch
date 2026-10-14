@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet href="{{ url_for('rss_xsl') }}" type="text/xsl"?>
+<rss version="2.0"
+     xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/"
+     xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <instance_name>{{ instance_name }}</instance_name>
+    <title>{{ instance_name }} search: {{ q|e }}</title>
+    <link>{{ url_for('search', _external=True) }}?q={{ q|urlencode }}</link>
+    <description>Search results for "{{ q|e }}" - {{ instance_name }}</description>
+    <opensearch:startIndex>1</opensearch:startIndex>
+    <atom:link rel="search" type="application/opensearchdescription+xml" href="{{ opensearch_url }}"/>
+    <opensearch:Query role="request" searchTerms="{{ q|e }}" startPage="1" />
+    {% if error_message %}
+    <item>
+      <title>Error</title>
+      <description>{{ error_message|e }}</description>
+    </item>
+    {% endif %}
+    {% for r in results %}
+    {% set rtype = (r.template or '')|replace('.html', '') %}
+    <item>
+      <title>{{ r.title|e }}</title>
+      <type>result</type>
+      <link>{{ r.url|e }}</link>
+      {%- if rtype == 'torrent' %}
+      <description>{{ (r.content or '')|e }}{% if r.filesize %} [{{ r.filesize }}]{% endif %}{% if r.seed %} seeds {{ r.seed }}, leech {{ r.leech }}{% endif %}{% if r.files %}, {{ r.files }} files{% endif %}{% if r.magnetlink %} | magnet: {{ r.magnetlink|e }}{% endif %}</description>
+      {%- else %}
+      <description>{{ (r.content or '')|e }}{% if rtype == 'videos' and r.length %} [{{ r.length }}]{% endif %}{% if r.author %} — {{ r.author|e }}{% endif %}{% if rtype == 'images' and r.resolution %} [{{ r.resolution }}]{% endif %}</description>
+      {%- endif %}
+      {%- if r.thumbnail_src or r.img_src %}
+      {%- set media = r.thumbnail_src or r.img_src %}
+      {%- set ext = media.split('?')[0].rsplit('.', 1)[-1]|lower %}
+      <enclosure length="0" type="image/{{ 'png' if ext == 'png' else ('webp' if ext == 'webp' else ('gif' if ext == 'gif' else 'jpeg')) }}" url="{{ media|e }}"/>
+      {%- endif %}
+      {% if r.publishedDate %}<pubDate>{{ r.publishedDate.strftime('%a, %d %b %Y %H:%M:%S') }} {{ r.publishedDate.strftime('%z') or '+0000' }}</pubDate>{% endif %}
+    </item>
+    {% endfor %}
+  </channel>
+</rss>

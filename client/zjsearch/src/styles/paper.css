@@ -1,0 +1,192 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* The family paper language (DESIGN.md §7): torn-edge note paper and strip
+   buttons.  Pure CSS — a jagged clip-path polygon on a background layer,
+   drop-shadow instead of box-shadow (clip-path cuts the box).  Decorations
+   follow the §7 physics: whitespace only, aria-hidden + pointer-events-none,
+   deterministic micro-tilts (never random — SSR/hydration must agree). */
+
+@layer components {
+  /* Torn-edge note paper: ruled-line texture over --surface.  The clip-path
+     is on the element itself, so tape and other overlap decorations must be
+     SIBLING nodes positioned over it, never children (they would be cut). */
+  .paper-note {
+    background:
+      repeating-linear-gradient(transparent 0 30px, color-mix(in oklab, var(--line) 60%, transparent) 30px 31px),
+      var(--surface);
+    clip-path: polygon(
+      1% 2%,
+      7% 0.5%,
+      16% 1.8%,
+      29% 0%,
+      42% 1.8%,
+      56% 0.4%,
+      69% 1.8%,
+      83% 0%,
+      94% 1.6%,
+      99.2% 3%,
+      100% 13%,
+      99.4% 28%,
+      100% 44%,
+      99% 61%,
+      100% 77%,
+      99.3% 91%,
+      97.2% 100%,
+      86% 99%,
+      71% 100%,
+      56% 98.6%,
+      41% 100%,
+      27% 99.2%,
+      13% 100%,
+      3.2% 98.6%,
+      0% 91%,
+      1.4% 75%,
+      0% 59%,
+      1.8% 43%,
+      0.4% 27%,
+      1% 13%
+    );
+    filter: drop-shadow(0 10px 18px color-mix(in oklab, var(--ink) 14%, transparent));
+  }
+
+  /* Blank variant of the note ground: the same torn edge and drop-shadow,
+     NO ruled lines.  The ruled ground only works for STATIC lists — an
+     interactive note whose middle scrolls (the clarify gate's question
+     rows) would drift text across fixed lines, so it pins on the blank
+     slip instead. */
+  .paper-note--blank {
+    background: var(--surface);
+  }
+
+  /* Torn-edge strip button: the paper is a ::before layer so the element's
+     own focus ring stays intact; the shadow rides a filter to follow the
+     torn outline.  Paper colour comes in via --strip (fallback --surface). */
+  .paper-strip {
+    position: relative;
+    isolation: isolate;
+    filter: drop-shadow(1px 2px 0 color-mix(in oklab, var(--ink) 10%, transparent));
+  }
+
+  .paper-strip::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: var(--strip, var(--surface));
+    clip-path: polygon(
+      0 7%,
+      8% 1%,
+      19% 5%,
+      32% 0,
+      46% 4%,
+      62% 1%,
+      77% 5%,
+      91% 0,
+      100% 5%,
+      98% 31%,
+      100% 55%,
+      98% 77%,
+      100% 95%,
+      87% 100%,
+      72% 96%,
+      57% 100%,
+      43% 95%,
+      29% 100%,
+      15% 96%,
+      1% 100%,
+      2% 74%,
+      0 50%,
+      2% 27%
+    );
+  }
+
+  .paper-strip:hover {
+    filter: drop-shadow(2px 4px 0 color-mix(in oklab, var(--ink) 14%, transparent));
+  }
+
+  /* Marker highlight behind a headline keyword: a torn gold strip sweeping
+     the lower half of the text.  In the physical world a hand-pressed tape
+     never sits parallel to the baseline, hence the -0.5° tilt.  Position it
+     as the first child of a `relative inline-block` span; the text itself
+     goes in a following `relative` span. */
+  .marker-strip {
+    clip-path: polygon(
+      0 14%,
+      6% 4%,
+      15% 10%,
+      28% 2%,
+      42% 11%,
+      57% 5%,
+      72% 11%,
+      88% 3%,
+      100% 9%,
+      97% 36%,
+      100% 61%,
+      98% 83%,
+      93% 100%,
+      79% 92%,
+      63% 100%,
+      46% 93%,
+      30% 100%,
+      14% 93%,
+      2% 100%,
+      0 70%,
+      3% 40%
+    );
+    transform: rotate(-0.5deg);
+  }
+
+  /* Hand-drawn section divider (the journal-page separator between homepage
+     sections in the blog): a 1px line, slightly rotated, above every chapter
+     EXCEPT the first (the `+` sibling selector skips it). */
+  .paper-chapter {
+    position: relative;
+  }
+
+  .paper-chapter + .paper-chapter::before {
+    content: "";
+    position: absolute;
+    inset-inline: 1rem;
+    top: 0;
+    height: 1px;
+    background: var(--line);
+    transform: rotate(-0.4deg);
+    opacity: 0.7;
+  }
+
+  /* Hollow outline text (the blog PostList's ghost date watermark): fill
+     transparent, stroke in the soft accent.  Pure decoration — the consumer
+     MUST aria-hidden it and keep it behind positioned content. */
+  .hollow-text {
+    color: transparent;
+    -webkit-text-stroke: 1px var(--hollow-stroke, var(--accent-soft));
+  }
+
+  /* Round postmark (the blog LockScreen's SEALED stamp, registered in
+     DESIGN.md §7 — the recipe syncs both sides): a double ring, dashed
+     outside and solid inside, for a stamp that carries REAL meta text
+     (a settle date, a label) — unlike the decorations above it is not
+     aria-hidden.  Size and the deterministic rotation stay caller-side;
+     the inner ring rides ::before so the markup is a single element. */
+  .paper-postmark {
+    position: relative;
+    display: grid;
+    place-content: center;
+    /* 条目在轨道内也要居中：place-content 只居中轨道组，图标会在最宽
+       子项（戳文）的轨道里 start 对齐，看起来整体偏歪（§17 两侧同配方） */
+    place-items: center;
+    gap: 0.125rem;
+    border-radius: 9999px;
+    border: 1px dashed color-mix(in oklab, var(--ink-3) 60%, transparent);
+  }
+
+  .paper-postmark::before {
+    content: "";
+    position: absolute;
+    inset: 0.625rem;
+    border-radius: 9999px;
+    border: 1px solid color-mix(in oklab, var(--ink-3) 50%, transparent);
+    pointer-events: none;
+  }
+}

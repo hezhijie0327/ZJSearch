@@ -1,0 +1,361 @@
+/* Marpit 主题「zjsearch」：deck 幻灯片的运行时主题（src/lib/deck/compile.ts
+ * 经 themeSet.add 注册为默认主题）。ZJBlog tools/deckTheme.css 的孪生文件
+ * （DESIGN.md §5.2 家族契约——主题改动两侧同步）；token 名两站完全一致，
+ * 差异只有两处：zjsearch 无 shiki（代码块走本站 ink 色），引用锚点
+ * （citeToLinks 产出的 #ref-n 链接）在此获得 chip 外观。颜色/字体一律引用
+ * 站点 token 变量（src/styles/tokens.css），deck 自动跟随站点明暗主题交叉
+ * 淡化。
+ *
+ * 注意 marpit 会把本文件的选择器 scoping 到 `div.marpit > section` 下
+ * （实测产物），因此这里只写「亮态默认值」；依赖 html.dark 祖先的选择器
+ * 会被 scoping 改写破坏，一律放 DeckView 的宿主 CSS。字号用 px（画布
+ * 1280×720 固定，整体由播放器 transform 缩放）。
+ * 选择器按特异性升序排列（biome noDescendingSpecificity）：.lead 覆盖放最后。 */
+
+/* @theme zjsearch */
+
+section {
+  width: 1280px;
+  height: 720px;
+  padding: 72px 88px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 28px;
+  line-height: 1.65;
+}
+
+/* 页题层级说明：deck.ts 构建期把标题整体降一级（h1 让给文章题），因此
+ * `#` 页题渲染为 h2、`##` 子标题渲染为 h3——主题按降级后的真实层级配置
+ * 字号（60/44/32），不要按源码层级思维调这里。 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+h1,
+h2 {
+  font-size: 60px;
+  margin: 0 0 28px;
+}
+
+h3 {
+  font-size: 44px;
+  margin: 0 0 24px;
+}
+
+h4 {
+  font-size: 32px;
+  margin: 0 0 18px;
+}
+
+h5 {
+  font-size: 26px;
+  margin: 0 0 16px;
+}
+
+p {
+  margin: 0 0 0.8em;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+ul,
+ol {
+  margin: 0 0 0.8em;
+  padding-left: 1.4em;
+}
+
+li {
+  margin-block: 0.35em;
+}
+
+li::marker {
+  color: var(--accent-strong);
+}
+
+blockquote {
+  margin: 0 0 0.8em;
+  padding: 14px 28px;
+  border-left: 5px solid var(--accent-strong);
+  border-radius: 0 12px 12px 0;
+  background: var(--accent-soft);
+  color: var(--ink-2);
+}
+
+blockquote p {
+  margin: 0;
+}
+
+hr {
+  height: 3px;
+  border: none;
+  border-radius: 2px;
+  background: var(--line);
+  margin: 1em 0;
+}
+
+/* 行内代码 */
+section code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.08em 0.35em;
+}
+
+/* 键位芯片（raw HTML <kbd>） */
+section kbd {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 8px;
+  padding: 0.1em 0.5em;
+}
+
+/* mermaid 图表（站内同款占位容器，DeckViewer 挂 MermaidRenderer 惰性渲染）：
+   保持 block（flex 会外层 shrink-to-fit，svg 的 width:100% 循环依赖回落
+   300px 默认宽）+ 撑满版心，限高 430px 防顶碎 720px 定高幻灯片 */
+section .mermaid-placeholder {
+  margin: 0 auto 0.8em;
+}
+
+section .mermaid-placeholder svg {
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: 430px !important;
+}
+
+/* Callouts（deckCallouts 移植，类别配色对齐 prose.css 的 token 映射） */
+section .callout {
+  --callout-color: var(--accent-strong);
+  margin: 0 0 0.8em;
+  padding: 16px 22px;
+  border-left: 3px solid var(--callout-color);
+  border-radius: 0 12px 12px 0;
+  background: color-mix(in oklab, var(--callout-color) 7%, var(--surface));
+  font-size: 0.82em;
+}
+
+section .callout > :last-child {
+  margin-bottom: 0;
+}
+
+section .callout-title {
+  font-weight: 600;
+  color: color-mix(in oklab, var(--callout-color) 45%, var(--ink));
+}
+
+section details.callout > .callout-title {
+  cursor: pointer;
+}
+
+section .callout-info,
+section .callout-todo {
+  --callout-color: var(--accent);
+}
+
+section .callout-tip,
+section .callout-success {
+  --callout-color: var(--ok);
+}
+
+section .callout-question,
+section .callout-warning {
+  --callout-color: var(--warning);
+}
+
+section .callout-danger {
+  --callout-color: var(--danger);
+}
+
+section .callout-example {
+  --callout-color: var(--accent-strong);
+}
+
+section .callout-quote {
+  --callout-color: var(--ink-3);
+}
+
+/* KaTeX：块级公式居中限宽，防止溢出画布 */
+section .katex-display {
+  margin: 0.4em 0 0.8em;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* 定义列表 */
+section dl {
+  margin: 0 0 0.8em;
+}
+
+section dt {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+section dd {
+  margin: 0 0 0.6em;
+  padding-inline-start: 1.2em;
+  color: var(--ink-2);
+}
+
+/* 任务清单：复选框为纯装饰（构建期 aria-hidden），隐藏原生列表标记 */
+section li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-inline-start: -1.1em;
+}
+
+/* 行内标签（raw HTML）：<mark>/<u>/<del>/<sup>/<sub> */
+section mark {
+  background: var(--highlight-bg);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 0 0.15em;
+}
+
+section u {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-strong);
+  text-underline-offset: 4px;
+}
+
+section del {
+  color: var(--ink-3);
+}
+
+section sup,
+section sub {
+  font-size: 0.7em;
+}
+
+/* raw <hr>（markdown 层的 ---/*** 全是分页符，分隔线只能显式写 HTML） */
+section hr {
+  height: 3px;
+  border: none;
+  border-radius: 2px;
+  background: var(--line);
+  margin: 1em 0;
+}
+
+/* 代码块（zjsearch 无 shiki：转义代码块走本站代码底色；暗态由 token 自身
+ * 翻转，无需宿主切换） */
+section pre {
+  margin: 0 0 0.8em;
+  padding: 20px 26px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--code-bg);
+  color: var(--ink);
+  font-size: 21px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+section pre code {
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+section pre span {
+  color: var(--ink);
+}
+
+/* 引用 chip（citeToLinks 把 [n] 重写成 #ref-n 链接，DeckView 以委托点击接
+ * 引用定位链）——幻灯片上的小号 accent 方片 */
+section a[href^="#ref-"] {
+  display: inline-block;
+  transform: translateY(-0.2em);
+  margin: 0 0.15em;
+  padding: 0 0.45em;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 600;
+  line-height: 1.7;
+  text-decoration: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86em;
+  margin: 0 0 0.8em;
+}
+
+th,
+td {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+th {
+  border-bottom: 2px solid var(--ink-3);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+td {
+  color: var(--ink-2);
+}
+
+img {
+  max-width: 100%;
+  /* 幻灯片画布定高：图片不许把内容顶出 720px（超出部分会被裁掉） */
+  max-height: 480px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+/* 页码：marpit 归一化已给 section::after 定位（右下、padding: inherit），
+ * 主题只负责外观；指令默认关闭，deck 里写 <!-- paginate: true --> 开启 */
+section::after {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  color: var(--ink-3);
+}
+
+/* 标题页变体：<!-- _class: lead -->（放最后，覆盖上面的元素默认值） */
+section.lead {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+
+section.lead h1,
+section.lead h2 {
+  font-size: 76px;
+}
+
+section.lead p {
+  color: var(--ink-2);
+}

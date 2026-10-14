@@ -24,6 +24,9 @@ class SXNGPlugin(Plugin):
 
     id: str = "time_zone"
     keywords: list[str] = ["time", "timezone", "now", "clock", "timezones"]
+    # filler words that carry no location ("time in tokyo") -- without this,
+    # the leftover "in" makes the geolocation miss and the answer goes silent
+    fillers: list[str] = ["in"]
 
     def __init__(self, plg_cfg: "PluginCfg"):
         super().__init__(plg_cfg)
@@ -46,24 +49,41 @@ class SXNGPlugin(Plugin):
         if search.search_query.pageno > 1:
             return results
 
-        # remove keywords from the query
+        # remove keywords and filler words from the query
         query = search.search_query.query
-        query_parts = filter(lambda part: part.lower() not in self.keywords, query.split(" "))
+        skip = self.keywords + self.fillers
+        query_parts = filter(lambda part: part.lower() not in skip, query.split(" "))
         search_term = " ".join(query_parts).strip()
 
         if not search_term:
             date_time = DateTime(datetime.datetime.now())
-            results.add(results.types.Answer(answer=date_time.l10n()))
-            return results
-
-        geo = GeoLocation.by_query(search_term=search_term)
-        if geo:
-            date_time = DateTime(datetime.datetime.now(tz=geo.zoneinfo))
-            tz_name = geo.timezone.replace('_', ' ')
             results.add(
                 results.types.Answer(
-                    answer=(f"{tz_name}:" f" {date_time.l10n()} ({date_time.datetime.strftime('%Z')})")
+                    answer=date_time.l10n(),
+                    data={"kind": "time", "time": date_time.l10n()},
                 )
             )
+            return results
+
+        # GeoLocation.by_query raises ValueError for unknown locations
+        # (e.g. "time what is it") -- a miss means no answer, not an error
+        try:
+            geo = GeoLocation.by_query(search_term=search_term)
+        except ValueError:
+            return results
+
+        date_time = DateTime(datetime.datetime.now(tz=geo.zoneinfo))
+        tz_name = geo.timezone.replace('_', ' ')
+        results.add(
+            results.types.Answer(
+                answer=(f"{tz_name}:" f" {date_time.l10n()} ({date_time.datetime.strftime('%Z')})"),
+                data={
+                    "kind": "time",
+                    "zone": tz_name,
+                    "time": date_time.l10n(),
+                    "abbr": date_time.datetime.strftime("%Z"),
+                },
+            )
+        )
 
         return results

@@ -1,0 +1,104 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* Document-level behaviors: the native details height animation, the global
+   reduced-motion guard, the results-width morph, the palette cross-fade with
+   its stand-down window, and the hero scroll lock.  These rules are
+   unlayered on purpose — keep this file after the layered partials. */
+
+/* Native <details> disclosures (sidebar boxes, dictionary definitions, help
+   sections) get the same height animation as the JS Collapse component where
+   the browser supports it (Chromium 131+; elsewhere the chevron rotation
+   alone marks the toggle — graceful degradation). */
+@supports selector(details::details-content) {
+  /* let block-size interpolate to `auto` (the details-open height) */
+  :root {
+    interpolate-size: allow-keywords;
+  }
+  details::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition:
+      block-size 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+      content-visibility 0.3s allow-discrete;
+  }
+  details[open]::details-content {
+    block-size: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  details::details-content {
+    transition-duration: 0.01ms !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* results width: wide by default (capped for readability), narrow + centered
+   when the center_alignment preference is on; the preference toggle morphs
+   the width instead of snapping (the global reduced-motion guard silences
+   the transition) */
+.zjs-results-main,
+.zjs-results-header-row {
+  max-width: var(--results-max, 90rem);
+  transition: max-width 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* palette cross-fade: the tokens registered above are <color> custom
+   properties, so flipping .dark / .black animates the variables on <html>
+   and the entire page follows with exactly one transition.  (An earlier
+   attempt put a transition window on every element — the per-frame
+   full-document recalc stuttered in patches on heavy pages.)  Browsers
+   without @property snap instantly; the global reduced-motion guard
+   (0.01ms !important on *) collapses the fade. */
+html {
+  transition:
+    --bg 0.3s ease,
+    --surface 0.3s ease,
+    --surface-2 0.3s ease,
+    --line 0.3s ease,
+    --ink 0.3s ease,
+    --ink-2 0.3s ease,
+    --ink-3 0.3s ease,
+    --accent 0.3s ease,
+    --accent-hover 0.3s ease,
+    --accent-strong 0.3s ease,
+    --accent-strong-hover 0.3s ease,
+    --accent-soft 0.3s ease,
+    --accent-contrast 0.3s ease,
+    --highlight-bg 0.3s ease,
+    --danger 0.3s ease,
+    --warning 0.3s ease,
+    --ok 0.3s ease;
+}
+
+/* stand-down window while the flip runs (applyThemeStyle adds the class for
+   ~350ms around a real palette change): elements with their own
+   transition-colors — chips, pills, switches — would chase the interpolating
+   tokens on their private 150ms timer and visibly lag the page (the
+   score/engine pills read out of sync).  With their transitions stood down
+   they track the variables directly, like everything else. */
+html.zjs-palette-anim *:not(html),
+html.zjs-palette-anim :not(html)::before,
+html.zjs-palette-anim :not(html)::after {
+  transition: none !important;
+}
+
+html.centered {
+  --results-max: 72rem;
+}
+
+/* hero shell (home page) owns its scrolling: the document never scrolls or
+   rubber-bands (iOS Safari would otherwise push the whole layout around);
+   all overflow lives in the shell's inner scroll container */
+.zjs-hero-lock {
+  overflow: hidden;
+  overscroll-behavior: none;
+}

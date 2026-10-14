@@ -1,0 +1,462 @@
+# zjsearch theme dev instance settings (tracked; carries LAN-specific values
+# such as the outgoing proxy).
+# Run with:
+#   SEARXNG_SETTINGS_PATH=client/zjsearch/dev-settings.yml ./manage webapp.run
+use_default_settings: true
+
+general:
+  instance_name: ZJSearch
+  debug: false
+  # instance URLs exercised by the info page (links card)
+  privacypolicy_url: https://example.com/privacy
+  donation_url: https://example.com/donate
+  contact_url: mailto:contact@example.com
+
+search:
+  formats:
+    - html
+    - csv
+    - json
+    - rss
+  # upstream default is "" (favicons off) -- with a resolver set, the
+  # favicon field populates across the theme (card URL rows, grid tiles,
+  # AI overview citation panels)
+  favicon_resolver: duckduckgo
+
+ui:
+  default_theme: zjsearch
+  # result "cached" pill prefix — defaults to https://web.archive.org/web/
+  # cache_url: "https://webcache.googleusercontent.com/search?q=cache:"
+
+# preference locks — locked rows vanish from the preferences UI
+# (server also ignores their posted values). Lockable keys: categories,
+# language, autocomplete, favicon_resolver, safesearch, doi_resolver,
+# locale, theme, simple_style, center_alignment, results_on_new_tab,
+# search_on_category_select, method, image_proxy, query_in_title.
+# NOTE: hotkeys / url_formatting are NOT lockable server-side.
+# preferences:
+#   lock: [simple_style, safesearch, image_proxy]
+preferences:
+  lock: []
+
+# dev instance shows the full default tab set plus the stock images
+# specialization (upstream ships it commented out) — keep the new category
+# one click away for theme QA.  Overriding REPLACES the default tab set.
+categories_as_tabs:
+  general:
+  images:
+  stock images:
+  videos:
+  news:
+  map:
+  music:
+  it:
+  science:
+  files:
+  social media:
+
+# public instances link + custom links for the info page links card
+brand:
+  public_instances: https://searx.space
+  custom:
+    links:
+      Uptime: https://uptime.searxng.org/history/darmarit-org
+      Blog: https://example.com/blog
+
+server:
+  secret_key: "zjsearch-local-dev-secret-key"
+  limiter: false
+  image_proxy: true
+
+# proxy so region-blocked engines are reachable from this network
+# (LAN-specific: uncomment and set your own proxy when needed)
+outgoing:
+  request_timeout: 5.0
+  proxies:
+    all://:
+      - http://10.192.7.1:7890
+
+# tor_check plugin: fetches check.torproject.org through the outgoing proxy
+# above (reachable that way on this network).  NOTE: a `plugins:` override
+# REPLACES the default set (settings_loader.update_settings), so every shipped
+# plugin is listed here explicitly (all active, alphabetized).
+plugins:
+  searx.plugins.advanced_search_syntax.SXNGPlugin:
+    active: true
+  searx.plugins.ahmia_filter.SXNGPlugin:
+    active: true
+  searx.plugins.bm25_reranker.SXNGPlugin:
+    active: true
+  searx.plugins.calculator.SXNGPlugin:
+    active: true
+  searx.plugins.currency_convert.SXNGPlugin:
+    active: true
+  searx.plugins.hash_plugin.SXNGPlugin:
+    active: true
+  searx.plugins.hostnames.SXNGPlugin:
+    active: true
+  searx.plugins.infinite_scroll.SXNGPlugin:
+    active: true
+  searx.plugins.oa_doi_rewrite.SXNGPlugin:
+    active: true
+  searx.plugins.self_info.SXNGPlugin:
+    active: true
+  searx.plugins.stock_quote.SXNGPlugin:
+    active: true
+  searx.plugins.time_zone.SXNGPlugin:
+    active: true
+  searx.plugins.tor_check.SXNGPlugin:
+    active: true
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: true
+  searx.plugins.unit_converter.SXNGPlugin:
+    active: true
+
+# movie engines for the !movies poster wall (both disabled upstream)
+engines:
+  - name: tmdb
+    disabled: false
+  - name: imdb
+    disabled: false
+  # offline UI fixtures: the engine stays silent unless the query contains
+  # the "zjaudit" token, so ordinary searches are not polluted — e.g.
+  # /search?q=zjaudit+images&categories=images renders a deterministic
+  # image masonry without touching the network (same data as npm run audit)
+  - name: zjaudit
+    engine: zjsearch_fixtures
+    shortcut: zja
+    disabled: false
+
+# ── the LLM transport (zjsearch.llm) ─────────────────────────────────────
+# One transport serves BOTH AI features: the whole-page AI Overview
+# (features/results/AiSummary.tsx) and AI Search (features/results/aiSearch/).
+# Dev points at the local LM Studio; the key travels via the ZJSEARCH_AI_KEY
+# env so it stays out of the repository.  base_url goes to the SDK exactly as
+# written (each SDK appends its own method paths):
+#   openai (Responses API, the latest) / openai.chat_completions
+#     -> https://api.openai.com/v1
+#   anthropic -> https://api.anthropic.com                     (no /v1)
+#   gemini    -> https://generativelanguage.googleapis.com     (gateway
+#                prefixes like https://gw.example.com/gemini work too)
+# Aggregators (aihubmix, openrouter, inferera, ...) expose OpenAI-compatible
+# routes for every model -- the openai dialects cover them all.  The
+# pre-rename dotted-less names (openai_chat_completions / openai_responses)
+# still work as aliases.
+zjsearch:
+  llm:
+    enabled: true
+
+    # ── transport (pick ONE dialect; complete examples per SDK below) ─
+    # DEV: the inferera gateway speaks the native Gemini protocol under
+    # the /gemini prefix (the SDK appends /v1beta/... itself).
+    sdk: anthropic
+    base_url: "https://api.deepseek.com/anthropic"
+    # api_key: "" = the ZJSEARCH_AI_KEY env (the key stays out of the
+    # repository).
+    api_key: ""
+    model: "deepseek-flash"
+
+    # ── params: the chosen SDK's create() kwargs, VERBATIM ────────────
+    # every entry passes through under its SDK name -- no translation
+    # (output cap: max_tokens on anthropic, max_output_tokens on
+    # openai / gemini; anthropic fills a 4096 default when
+    # unset).  The THINKING knob is the SDK's own name and surfaces the
+    # chain-of-thought in the UI's collapsible thinking block:
+    #   gemini -> thinking_config: {thinking_budget: N}
+    #     (includeThoughts folds in natively on 2.5+ models)
+    # params:
+    #   thinking_config:
+    #     thinking_budget: 4096
+
+    # ── DashScope native family (sdk: dashscope) ───────────────────────
+    # The alibaba native Generation API (qwen thinking/plugins): rides the
+    # PUBLIC endpoint by default (base_url omitted) or a DEDICATED
+    # workspace base VERBATIM (including its own /api/v1).  This workspace
+    # proxies the native text-generation path for its deployed models
+    # (qwen-plus / qwen-flash / qwen-turbo / qwen-max probed live) plus
+    # the native embedding + rerank paths.
+    # The qwen3.8/3.7 plus/flash models are MULTIMODAL-NATIVE: even
+    # text-only turns serve on the multimodal-generation endpoint (the
+    # text-generation path answers them with a 400 "url error") -- point
+    # the family at that surface with `surface: multimodal`.
+    # sdk: dashscope
+    # base_url: "https://dashscope.aliyuncs.com/api/v1"
+    # api_key: ""                       # or ZJSEARCH_AI_KEY
+    # model: "qwen-plus"
+    # surface: multimodal               # mm-native models (qwen3.8/3.7
+    #                                   # plus/flash) need this even for
+    #                                   # text-only chat
+    # reasoning echo-back (interleaved thinking; kimi/minimax/mimo 等
+    # 家族拒绝没有回传思考的工具循环):
+    # reasoning_passback: true
+
+    # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
+    # inferera's attribution header (discount eligibility rides on it):
+    extra_headers:
+      APP-Code: "LobeHub"
+    # extra_headers ride EVERY LLM call -- e.g. a discount / attribution
+    # header a provider or gateway asks for:
+    # extra_headers:
+    #   APP-Code: "some_content"
+    # extra_body carries raw JSON body fields the SDK has no typed kwarg
+    # for (LM Studio / vLLM only -- drop it for online providers):
+    # extra_body:
+    #   chat_template_kwargs:
+    #     enable_thinking: false     # mutually exclusive with
+    #                                # reasoning_effort above
+    # reasoning echo-back (interleaved thinking; kimi/minimax/mimo 等
+    # 家族拒绝没有回传思考的工具循环):
+    # reasoning_passback: true
+    # prompt caching needs no config: prompt_cache_key rides every
+    # openai-dialect request; anthropic marks cache_control breakpoints
+    # by default (cache_control: false opts out -- an ai-LEVEL toggle,
+    # NOT a params entry).
+
+    # ═══ per-SDK examples: uncomment ONE block and swap it over the ═══
+    # ═══ active sdk/base_url/api_key/model AND params above          ═══
+
+    # openai.chat_completions -- the Chat Completions API (official:
+    # https://api.openai.com/v1) AND every OpenAI-compatible server (LM
+    # Studio, vLLM; the aggregators openrouter / aihubmix / inferera speak
+    # this route for every model):
+    # sdk: openai.chat_completions
+    # base_url: "https://api.inferera.com/v1"
+    # api_key: "sk-..."
+    # model: "gpt-6-luna"
+    # params:
+    #   temperature: 0.7
+    #   max_tokens: 8192
+    #   reasoning_effort: "medium"
+    # extra_headers:                 # openrouter attribution, or a
+    #   HTTP-Referer: "https://search.example.com"   # discount gateway's
+    #   X-Title: "zjsearch"                          # APP-Code header
+
+    # openai / openai.responses -- the Responses API, OpenAI's LATEST
+    # (bare `openai` points here; official: https://api.openai.com/v1;
+    # some aggregators expose the protocol too; summary streams into the UI
+    # think block -- only reasoning models accept the parameter):
+    # sdk: openai
+    # base_url: "https://api.inferera.com/v1"
+    # api_key: "sk-..."
+    # model: "gpt-6.1-sol"
+    # params:
+    #   max_output_tokens: 8192
+    #   reasoning: {effort: "medium", summary: "auto"}
+
+    # anthropic -- the Messages API (official: https://api.anthropic.com,
+    # no /v1; aggregators expose the protocol off the bare origin too).
+    # Extended thinking is ON by default (budget 2048): OMIT thinking for
+    # the native default or set it; a user-set temperature suppresses the
+    # default (the API rejects the pairing; a gateway that rejects the
+    # parameter gets one automatic thinking-free retry):
+    # sdk: anthropic
+    # base_url: "https://api.inferera.com"
+    # api_key: "sk-..."
+    # model: "claude-sonnet-5-5"
+    # params:
+    #   max_tokens: 16384
+    #   thinking: {type: "enabled", budget_tokens: 4096}
+    # cache_control: false           # only for a gateway that rejects
+    #                                # the default cache breakpoints
+
+    # gemini -- the google-genai SDK (a gateway prefix that already
+    # includes the API name works as base_url too).  Thought parts
+    # surface natively on 2.5+ models -- includeThoughts folds in
+    # automatically, thinking_config only sizes the budget:
+    # sdk: gemini
+    # base_url: "https://api.inferera.com/gemini"
+    # api_key: "AIza..."
+    # model: "gemini-3.8-flash"
+    # params:
+    #   max_output_tokens: 8192
+    #   thinking_config: {thinking_budget: 1024}
+
+  # ── AI feature switches (default true; false = endpoint 404 AND the
+  #    client hides the entry point) ─────────────────────────────────
+  feature:
+    ai_overview:
+      enabled: true
+    ai_search:
+      enabled: true
+      # history_search: hybrid    # the history drawer's default search mode:
+      #                           # keyword (BM25, free/offline) | semantic
+      #                           # (pgvector, needs zjsearch.embedding) |
+      #                           # hybrid (weighted RRF over both, default)
+      # (the round budgets -- max_rounds / stall_rounds / detach_grace --
+      # are deliberately NOT deployment knobs: the depth probe's ladder
+      # personalizes them per question)
+
+  # ── the page reader's cap (AI Search's web_reader tool) ────────────
+  # enabled: true               # the tool never registers when false
+  # max_chars: 8000             # per-page extraction cap; UNSET = no cap
+  # ── the thread-embedding model (the history drawer's semantic search):
+  #    the key may travel via the ZJSEARCH_EMBEDDING_KEY env.
+  #    Unconfigured = history search off.
+  embedding:
+    enabled: true
+    # sdk: openai (default -- ANY OpenAI-compatible /embeddings route)
+    #   | gemini (google-genai embed_content; base_url may stay empty
+    #   for the google default endpoint, or a gateway prefix that
+    #   already includes the API name)
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""                    # or the ZJSEARCH_EMBEDDING_KEY env
+    model: "embedding-3"
+    params:
+      dimensions: 1024             # the pgvector column width
+    # params / extra_headers / extra_body ride EVERY request verbatim
+    # under the CHOSEN sdk's own names (openai: embeddings.create
+    # kwargs; gemini: EmbedContentConfig fields) -- the keys are
+    # per-sdk, do NOT mix them.  openai extras:
+    # params:
+    #   encoding_format: float
+    # extra_headers:
+    #   X-Some-Header: "1"
+    # extra_body:
+    #   user: zjs-search
+    #
+    # dashscope example (the native TextEmbedding path; a dedicated MaaS
+    # workspace proxies it under /api/v1/services/embeddings/...):
+    # sdk: dashscope
+    # base_url: "https://llm-xxx.cn-beijing.maas.aliyuncs.com/api/v1"
+    # model: "qwen3.7-text-embedding-flash"
+    # params:
+    #   dimension: 1024                 # DashScope's own width key
+    #   text_type: document             # query|document (asymmetric search)
+    #   output_type: dense              # dense|sparse|dense&sparse
+    # Multimodal-Embedding models (tongyi-embedding-vision-*) ride
+    # surface: multimodal -- input items become {"text": ...} parts and
+    # the results key on `index`; there the dimension kwarg goes out only
+    # when params set one (tongyi-embedding-vision-plus fixes 1152 and
+    # rejects the parameter).
+
+    # sdk: gemini
+    # base_url: "https://api.inferera.com/gemini"   # empty = google default
+    # api_key: "AIza..."
+    # model: "gemini-embedding-2"
+    # params:
+    #   task_type: RETRIEVAL_DOCUMENT    # RETRIEVAL_QUERY for the searches
+    #   output_dimensionality: 768       # the pgvector column width
+    #   # auto_truncate: true            # Vertex only
+  # ── the rerank model (AI search's feed ranking cascade, stage 2):
+  #    the Cohere-shaped /rerank endpoint (bigmodel / Jina / SiliconFlow
+  #    all speak it) re-scores each search's top-20 against the query.
+  #    Unconfigured or disabled = the cascade stops at BM25.  The key may
+  #    travel via the ZJSEARCH_RERANK_KEY env.
+  rerank:
+    enabled: true
+    # sdk: openai (default -- the OpenAI SDK's generic client.post: the
+    #   DEFAULT_PATH is /rerank, the industry convention -- bigmodel /
+    #   Jina / SiliconFlow / Cohere; the dashscope compatible-api's
+    #   /reranks is the outlier, override with path: /reranks; base_url =
+    #   the gateway base) | dashscope (the native TextReRank SDK;
+    #   base_url = the workspace base with its /api/v1 when dedicated)
+    sdk: dashscope
+    base_url: "https://llm-5e15apfxtagh13cv.cn-beijing.maas.aliyuncs.com/api/v1"
+    api_key: ""                    # or the ZJSEARCH_RERANK_KEY env (the
+                                   # key stays out of the repository)
+    model: "qwen3.7-text-rerank"
+    # extra_headers / extra_body ride EVERY rerank request 1:1 (a gateway
+    # header, a provider-private field like return_documents):
+    # extra_body:
+    #   return_documents: false
+
+  # ── the decision model (SystemOne class): ONE forward pass answers
+  # named questions about a state -- choice / score / noul, each with its
+  # probability distribution -- no text generation.  Triage, review,
+  # routing, verification.  Unconfigured = the route stays off.  The key
+  # travels via ZJSEARCH_DECISION_KEY.
+  decision:
+    enabled: true
+    sdk: typesafe                   # the first decision family (the
+                                   # registry pre-embeds the selection)
+    base_url: "https://llm-5e15apfxtagh13cv.cn-beijing.maas.aliyuncs.com/compatible-mode"
+    api_key: ""
+    model: "decision-model-preview"
+  # ── MCP tool servers (streamable HTTP only) -- the model's tools gain
+  #    everything these servers expose, namespaced mcp_<server>_<tool>.
+  #    header carries whatever auth the server wants.  KEYS LIVE HERE AND
+  #    NEVER TRAVEL VIA ENV -- do not commit a real key.
+  mcp:
+    - amap-maps:
+        # the real key stays local: this checked-in example carries a
+        # placeholder -- swap yours in here (and never commit it)
+        url: "https://mcp.amap.com/mcp?key=YOUR_AMAP_KEY"
+  browser:
+    # -- the page reader's render engine: Camoufox (anti-detect Firefox)
+    # -- in a persistent profile (the cookie store survives runs -- the
+    # -- login stages build on it).  This is the ONE reader backend; a
+    # -- deployment without it (enabled: false or the package missing)
+    # -- simply has no web_reader tool.  One-time browser install:
+    # --   ./local/py3/bin/python -m searx.zjsearch.ai.browser.install
+    enabled: true
+
+    # -- identity & runtime ------------------------------------------------
+    # mode: headless           # = camoufox `headless`: headless (default,
+    #                          # everywhere) | virtual (camoufox Xvfb,
+    #                          # display-less Linux servers -- needs the
+    #                          # SYSTEM xvfb binary, e.g. apt-get install
+    #                          # xvfb) | headed (a real window on desktops
+    #                          # -- the strongest tier, and the login
+    #                          # stage's interaction surface)
+    # profile: ~/.cache/zjsearch-browser  # the cookie store -- a Docker
+    #                          # deployment points this into its data volume
+    proxy:                    # = camoufox `proxy` -- the browser does NOT
+      server: "http://10.192.7.1:7890"  # inherit the shell's proxy env
+    geoip: true               # = camoufox `geoip` -- align the fingerprint's
+    #                          # locale/timezone with the proxy exit
+    #                          # (camoufox warns without it; needs the
+    #                          # camoufox[geoip] extra)
+
+    # -- content & gates ---------------------------------------------------
+    # adblock: true             # = camoufox `exclude_addons`: uBlock Origin
+    #                          # rides along as a default addon (default
+    #                          # ON); false excludes it (the offline audit
+    #                          # sets this)
+    # allow_hosts: []          # hosts the SSRF gates let through anyway
+    #                          # (intranet targets; the audit's loopback
+    #                          # fixtures) -- exact hostnames/IPs
+
+    # -- budgets -----------------------------------------------------------
+    # max_pages: 2             # concurrent pages, 1-4
+    # goto_timeout_ms: 30000   # one navigation's budget, 5000-60000
+    # settle_ms: 1200          # post-load hydration wait, 0-5000
+
+    # -- native passthrough --------------------------------------------------
+    # -- params: pass-through 1:1 into the camoufox launch (its own
+    # -- launch_options kwargs), merged over the code-built fields LAST.
+    # -- The keys with a semantic knob above (headless via mode / proxy /
+    # -- geoip / exclude_addons via adblock) plus the identity pins
+    # -- (os / block_webrtc / humanize) and the engine's runtime shape
+    # -- (persistent_context / user_data_dir) are CODE-OWNED -- a params
+    # -- key for one warns once and is dropped.  Everything else camoufox
+    # -- natively accepts flows through verbatim (defaults per the docs):
+    #   args: ["-wait-for-browser"]  # extra Firefox launch args
+    #   block_images: false          # kill image requests browser-wide
+    #   block_webgl: false           # disable WebGL entirely (a signal in
+    #                                # itself -- prefer leaving off)
+    #   disable_coop: false          # relax cross-origin opener policy
+    #   webgl_config: ["Intel", "Intel(R) UHD Graphics"]   # pin the exact
+    #                                # GPU vendor/renderer pair
+    #   geoip_db: /path/to.mmdb      # local GeoIP database (else downloaded)
+    #   locale: ["zh-CN", "en"]      # claimed locales (geoip wins when on)
+    #   addons:                      # EXTRA addon paths -- uBlock rides
+    #     - /path/to/extension       # along already; login helpers land here
+    #   fonts: ["Arial", "Tahoma"]   # font families the identity claims
+    #   custom_fonts_only: false     # claim ONLY the fonts list above
+    #   allow_addon_new_tab: false   # let addons open tabs
+    #   main_world_eval: true        # page.evaluate("mw: ...") runs in the
+    #                                # page's main world
+    #   executable_path: /path/to/camoufox   # a custom browser build
+    #   firefox_user_prefs:          # raw about:config prefs
+    #     privacy.resistFingerprinting: false
+    #   enable_cache: true           # the browser's http cache
+    #   env: {MOZ_LOG: "..." }       # browser process env
+    #   debug: true                  # camoufox debug logging
+    #   pin_cpu_cores: true          # pin the driver to the identity's
+    #                                # reported core count (real CPU cost)
+    #   fingerprint: {}              # a full custom identity (advanced;
+    #                                # login-stage identity persistence
+    #                                # will land here)
+    #   i_know_what_im_doing: true   # unlock the unsafe knobs
+    # params:
+    #   locale: ["zh-CN", "en"]

@@ -1,0 +1,12 @@
+{#- zjsearch: the knowledge-base page.  The library lives entirely in the
+    browser's PGlite store -- the server payload carries the globals (page
+    identity + fresh capability tokens) and nothing else (see
+    KnowledgePage / knowledgeStore).  The results feature tree rides along
+    (modulepreload): the page reuses the AI run's timeline renderers for
+    replay and the family skeleton covers the boot. -#}
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_knowledge with context %}
+{% block title %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{{ url_for('static', filename='chunk/zjs-results.min.js') }}">{% endblock %}
+{% block app_skeleton %}{% include "zjsearch/skeleton.html" %}{% endblock %}
+{% block page_data %}{{ page_knowledge() }}{% endblock %}

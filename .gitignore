@@ -23,7 +23,52 @@ gh-pages/
 
 .idea/
 
-searx/version_frozen.py
+# upstream treats version_frozen.py as a generated artifact; the fork tracks
+# it as its own version source (major version + git URL/branch, the Docker
+# build swaps the sha placeholder in)
+!searx/version_frozen.py
 .dir-locals.el
 
 .python-version
+
+.zcode
+searx/static/themes/zjsearch/
+Makefile
+utils/lib_sxng_themes.sh
+utils/lib_sxng_vite.sh
+
+# local zjsearch patch export
+/zjsearch-theme.patch
+
+# windows local-verification links (hardlinks + junctions into themes/zjsearch)
+/searx/static/zjsearch.min.js
+/searx/static/zjsearch.min.css
+/searx/static/zjsearch2.min.css
+/searx/static/zjsearch3.min.css
+/searx/static/pg.worker-*.js
+/searx/static/pglite-*.wasm
+/searx/static/pglite-*.data
+/searx/static/initdb-*.wasm
+/searx/static/vector.tar-*.gz
+/searx/static/pg_trgm.tar-*.gz
+/searx/static/pg_textsearch.tar-*.gz
+/searx/static/assets/
+/searx/static/chunk/
+/searx/static/img/
+
+# lighthouse gate archives (raw LHR reports + scores, compared across commits)
+client/zjsearch/.lighthouse-archive/
+
+# local dev instance settings carrying REAL KEYS (the tracked dev-settings.yml
+# carries empty api_key fields + placeholders only -- keys never enter git)
+client/zjsearch/dev-settings.local.yml
+
+# lighthouse gate materialised no-JS page (transient)
+/searx/static/audit-nojs.html
+gui-test-screenshots/
+
+# zjsearch: local-only settings with real keys -- never enter git
+client/zjsearch/*.local.yml
+
+# local e2e scripts (transient)
+*.local.sh

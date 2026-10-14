@@ -1,0 +1,190 @@
+// SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+
+import { Compass } from "lucide-react";
+import { Suspense, useEffect } from "react";
+import { Link, Shell } from "@/components/Shell.tsx";
+import { Tape } from "@/components/Tape.tsx";
+import { OverlayProvider } from "@/features/overlay/OverlayProvider.tsx";
+import { setDateFormatLocale } from "@/lib/format.ts";
+import { I18nContext, themeLocaleTag, useT } from "@/lib/i18n.ts";
+import { RouterProvider, useRouter } from "@/lib/router.tsx";
+import type { ClientSettings } from "@/lib/settings.ts";
+import { SettingsContext } from "@/lib/settings.ts";
+import { PAPER_STRIP } from "@/lib/styles.ts";
+import type { AnyPageData } from "@/lib/types.ts";
+import {
+  isAiThreadPageData,
+  isInfoPageData,
+  isKnowledgePageData,
+  isPreferencesPageData,
+  isSearchPageData,
+  isStatsPageData,
+} from "@/lib/types.ts";
+import { IndexPage } from "@/pages/IndexPage.tsx";
+import { AiThreadPage, InfoPage, KnowledgePage, PreferencesPage, ResultsPage, StatsPage } from "@/pages/lazyPages.ts";
+
+function Pages() {
+  const { data, error } = useRouter();
+  const t = useT();
+
+  if (!data) {
+    return (
+      <div className="grid min-h-dvh place-items-center">
+        <p className="text-sm text-ink-2">{error ?? "…"}</p>
+      </div>
+    );
+  }
+
+  const globals = data.globals;
+
+  if (isSearchPageData(data)) {
+    // the chunk is pre-warmed on results boots (streamed shell inline import)
+    // and by hero-search intent; the fallback only shows on a cold SPA nav
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <ResultsPage data={data} />
+      </Suspense>
+    );
+  }
+
+  if (isPreferencesPageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <PreferencesPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isStatsPageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <StatsPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isInfoPageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <InfoPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isAiThreadPageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <AiThreadPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isKnowledgePageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <KnowledgePage data={data} />
+      </Suspense>
+    );
+  }
+  switch (globals.page) {
+    case "index":
+      return <IndexPage data={data} />;
+    default:
+      // no top nav on the 404 shell: its links (engine stats, info, instance
+      // URLs) are instance details a prober shouldn't get served for free
+      return (
+        <Shell globals={globals} hideTopNav>
+          <main className="mx-auto flex w-full max-w-xl flex-1 flex-col items-center justify-center px-4 pb-24 animate-fade-up">
+            {/* same composition as the results empty state — icon disc,
+                heading, muted line, one action — on the family paper ground
+                (torn note + two tape corners, tape as SIBLING of the clipped
+                note; the micro-tilt is fixed, never random) */}
+            <div className="relative w-full max-w-md -rotate-[0.35deg]">
+              <Tape className="-top-2.5 left-10 w-24 -rotate-6 bg-accent-soft/80" />
+              <Tape className="-top-2.5 right-10 w-20 rotate-[5deg] bg-accent-soft/60" />
+              <div className="paper-note px-6 py-10 text-center">
+                <span className="mx-auto grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
+                  <Compass aria-hidden="true" className="size-7" />
+                </span>
+                <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink">404</h1>
+                <p className="mt-1.5 text-sm text-ink-2">{t("page_not_found")}</p>
+                <Link
+                  className={`${PAPER_STRIP} mt-5 -rotate-1 px-4 py-2 text-accent-contrast [--strip:var(--accent-strong)] hover:[--strip:var(--accent-strong-hover)]`}
+                  href="/"
+                >
+                  {t("back_to_search")}
+                </Link>
+              </div>
+            </div>
+          </main>
+        </Shell>
+      );
+  }
+}
+
+/** The lazy pages' load ghost: the lazy chunks (results / preferences /
+    stats / info) render NOTHING around them -- Shell included -- so a cold
+    chunk fetch read as a blank viewport with a spinner.  The ghost echoes
+    the family page scaffold instead: a top bar (brand + action circles)
+    and a reading column with a heading and prose rows.  Generic on
+    purpose: one static ghost serves every lazy page without pulling any
+    page chunk into the eager graph. */
+function PageFallback() {
+  return (
+    <div aria-busy="true">
+      <div className="flex items-center justify-between px-4 py-3 sm:px-6">
+        <span className="zjs-skeleton h-6 w-28" />
+        <span className="flex items-center gap-2">
+          <span className="zjs-skeleton size-9 rounded-full" />
+          <span className="zjs-skeleton size-9 rounded-full" />
+          <span className="zjs-skeleton size-9 rounded-full" />
+        </span>
+      </div>
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16 pt-6 sm:px-6">
+        <span className="zjs-skeleton block h-8 w-64 max-w-full" />
+        <div className="mt-6 space-y-3.5">
+          <span className="zjs-skeleton block h-4 w-full" />
+          <span className="zjs-skeleton block h-4 w-[92%]" />
+          <span className="zjs-skeleton block h-4 w-[96%]" />
+          <span className="zjs-skeleton block h-4 w-[85%]" />
+          <span className="zjs-skeleton block h-4 w-2/3" />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+/** Which payloads can open as a drawer panel (URL unchanged). Panel chrome
+    and plumbing live in features/overlay; the page selection stays here
+    where the routing lives. Returns null for non-panel-able pages. */
+function renderOverlayPanel(data: AnyPageData, hint?: string) {
+  if (isPreferencesPageData(data)) {
+    return <PreferencesPage data={data} embedded />;
+  }
+  if (isStatsPageData(data)) {
+    return <StatsPage data={data} embedded />;
+  }
+  if (isInfoPageData(data)) {
+    return <InfoPage data={data} embedded initialPagename={hint} />;
+  }
+  if (isKnowledgePageData(data)) {
+    return <KnowledgePage data={data} embedded />;
+  }
+  return null;
+}
+
+export function App({ initialData, settings }: { initialData: AnyPageData | null; settings: ClientSettings }) {
+  const locale = initialData?.globals.locale ?? "en";
+  // the dates speak the UI's language (formatDate's formatters rebuild
+  // once per change)
+  useEffect(() => {
+    setDateFormatLocale(themeLocaleTag(locale));
+  }, [locale]);
+  return (
+    <SettingsContext.Provider value={settings}>
+      <I18nContext.Provider value={locale}>
+        <RouterProvider initialData={initialData}>
+          <OverlayProvider panels={{ renderPage: renderOverlayPanel }}>
+            <Pages />
+          </OverlayProvider>
+        </RouterProvider>
+      </I18nContext.Provider>
+    </SettingsContext.Provider>
+  );
+}

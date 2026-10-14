@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+
+import { createRoot } from "react-dom/client";
+import { App } from "@/app.tsx";
+import { configureEmbeddings } from "@/lib/embed.ts";
+import "@/lib/kb/debug.ts";
+import { configureBrowserInput } from "@/lib/browserInput.ts";
+import { configureDecision } from "@/lib/decision.ts";
+import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/kb/shared.ts";
+import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
+import { initPwaInstall } from "@/lib/pwa.ts";
+import { configureRerank } from "@/lib/rerank.ts";
+import { watchSystemTheme } from "@/lib/theme.ts";
+import { type AnyPageData, isErrorPageData, isPendingSearchData, isRedirectPageData } from "@/lib/types.ts";
+import "./styles/global.css";
+
+/**
+ * Prod: parse the payload embedded by the server shell — #page-data for
+ * finished documents, #boot-data for streamed search pages (engines still
+ * running, the real payload is pushed later through #page-data).
+ * Dev (vite dev server): fetch it through the dev proxy.
+ */
+async function bootData(): Promise<AnyPageData | null> {
+  const embedded = parseEmbeddedPageData() ?? parseBootData();
+  if (embedded) {
+    return embedded;
+  }
+  if (import.meta.env.DEV) {
+    try {
+      const resp = await fetch(window.location.href, { headers: { Accept: "text/html" } });
+      return extractPageData(await resp.text());
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Minimal error screen for the streamed search page: the HTTP status was
+    already out when the engines failed, so the failure arrives as a boot
+    payload (never rendered inside the router). */
+function renderBootError(container: HTMLElement, message: string, instanceName: string): void {
+  const box = document.createElement("div");
+  box.className = "zjs-boot-error";
+  const p = document.createElement("p");
+  p.textContent = message;
+  const a = document.createElement("a");
+  a.href = "/";
+  a.textContent = instanceName;
+  box.append(p, a);
+  container.append(box);
+}
+
+async function bootstrap(): Promise<void> {
+  const container = document.getElementById("app");
+  if (!container) {
+    return;
+  }
+  watchSystemTheme();
+  const initialData = await bootData();
+
+  // the thread-embedding capability rides the page-data globals: handed to
+  // the thread store once, here at boot (absent = the history search hides)
+  const embeddingCap = initialData?.globals.embedding;
+  configureEmbeddings(embeddingCap ? { token: embeddingCap.tk, dimensions: embeddingCap.dimensions } : null);
+  if (embeddingCap?.dimensions) {
+    configureEmbeddingDimensions(embeddingCap.dimensions);
+  }
+  // the recall's rerank capability (absent = the recall keeps its fused order)
+  const rerankCap = initialData?.globals.rerank;
+  configureRerank(rerankCap ? { token: rerankCap.tk } : null);
+  // the SystemOne judgment capability (absent = the browser's decisions lens is off)
+  const decisionCap = initialData?.globals.decision;
+  configureDecision(decisionCap ? { token: decisionCap.tk } : null);
+  // the knowledge store's AI routes (tag normalization) + the embed-model
+  // name recorded on every embedded row
+  const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;
+  configureKnowledge({ aiToken: aiCap?.tk, embedModel: embeddingCap?.model });
+  configureBrowserInput(aiCap?.tk);
+  // boot payloads of the streamed search page: handled before the app takes
+  // over (the static boot skeleton is still on screen until this point)
+  if (initialData && isRedirectPageData(initialData)) {
+    window.location.replace(initialData.url);
+    return;
+  }
+  if (initialData && isErrorPageData(initialData)) {
+    renderBootError(container, initialData.message, initialData.globals.instance_name);
+    return;
+  }
+  // results boot: pull the (stream-pre-warmed) results chunk before React
+  // takes over — the static boot skeleton stays on screen and the first
+  // commit already renders the real pending state, keeping the three-way
+  // swap static → pending → results gapless
+  if (initialData?.globals.page === "results") {
+    await import("@/pages/ResultsPage.tsx");
+  }
+  // A non-pending boot already consumed the document's #page-data payload
+  // (a fast stream may have settled before the module even ran) — drop the
+  // script so no later pending window (an SPA search's boot payload
+  // applying) can mistake this STALE element for its own late chunk and
+  // re-apply the boot page over the fresh navigation. A pending boot keeps
+  // the element: the streaming late chunk completes it.
+  if (initialData && !isPendingSearchData(initialData)) {
+    document.getElementById("page-data")?.remove();
+  }
+  const settings = parseClientSettings();
+  createRoot(container).render(<App initialData={initialData} settings={settings} />);
+}
+
+void bootstrap();
+
+/* PWA: the pass-through service worker (offline fallback for navigations,
+   cache-free by design) makes the manifest installable.  Registered after
+   load -- it never gates the boot. */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
+/* PWA: capture beforeinstallprompt for the header's install action */
+initPwaInstall();

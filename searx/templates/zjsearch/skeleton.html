@@ -1,0 +1,107 @@
+{#- zjsearch: static boot skeleton, streamed by the server before the search
+    finishes (see zjsearch_search_stream).  It is wiped when React boots with
+    the pending page payload and hidden entirely when JavaScript is disabled
+    (the noscript results replace it).  Geometry mirrors the real results page
+    chrome — header row (brand, query box, action buttons) and then, per mode:
+
+    - classic: category tabs, filter row, text-card list, reserved-empty
+      right rail (ResultsPage / ResultSkeleton);
+    - AI takeover (ai=1): the run title, the OPEN research box and the
+      sources rail (AiSearchRunSection's boot state) — the takeover never
+      renders tabs/filters/card lists, so neither does its skeleton.
+
+    Keep in sync with ResultsPage / AiSearchRunSection / boot.css. -#}
+<div aria-busy="true" class="zjs-boot">
+  <div class="zjs-boot-top">
+    <div class="zjs-boot-brand">{{ instance_name }}<span>.</span></div>
+    <div class="zjs-boot-q">
+      <span class="zjs-boot-q-text">{{ q|e }}</span>
+      <span aria-hidden="true" class="zjs-boot-submit">
+        <svg fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+      </span>
+    </div>
+    <div aria-hidden="true" class="zjs-boot-actions">
+      <span class="zjs-skeleton zjs-boot-action"></span>
+      <span class="zjs-skeleton zjs-boot-action"></span>
+      <span class="zjs-skeleton zjs-boot-action"></span>
+    </div>
+  </div>
+  <div class="zjs-boot-body{% if ai_mode %} is-ai{% endif %}">
+    <div class="zjs-boot-main">
+      {%- if ai_mode -%}
+      {#- the agent page boots into its own shape: the run title (the real
+          query — the same string the takeover renders), the research
+          header (icon + label + timer ghosts) and the OPEN research box
+          with the planning-note ghost; no tabs, no filters, no cards -#}
+      <div class="zjs-boot-ai-title">{{ q|e }}</div>
+      <div aria-hidden="true" class="zjs-boot-ai-process">
+        <span class="zjs-skeleton zjs-boot-ai-glyph"></span>
+        <span class="zjs-skeleton zjs-boot-ai-label"></span>
+        <span class="zjs-skeleton zjs-boot-ai-count"></span>
+      </div>
+      {#- the phase strip's ghost: four dot+bar segments at the exact
+          height of the real strip's text-xs row (the labels are
+          locale-owned, the geometry is not) -#}
+      <div aria-hidden="true" class="zjs-boot-ai-phases">
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+        <span class="zjs-boot-ai-phase"><span class="zjs-boot-ai-phase-dot"></span><span class="zjs-skeleton zjs-boot-ai-phase-bar"></span></span>
+      </div>
+      <div aria-hidden="true" class="zjs-boot-ai-box">
+        <div class="zjs-skeleton zjs-boot-ai-note"></div>
+        <div class="zjs-skeleton zjs-boot-ai-row"></div>
+        <div class="zjs-skeleton zjs-boot-ai-row is-short"></div>
+      </div>
+      {%- else -%}
+      <div aria-hidden="true" class="zjs-boot-tabs">
+        <span class="zjs-skeleton zjs-boot-tab is-selected"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+        <span class="zjs-skeleton zjs-boot-tab"></span>
+      </div>
+      <div aria-hidden="true" class="zjs-boot-filters">
+        <span class="zjs-skeleton zjs-boot-filter"></span>
+        <span class="zjs-skeleton zjs-boot-filter"></span>
+        <span class="zjs-skeleton zjs-boot-filter"></span>
+      </div>
+      <div aria-hidden="true" class="zjs-boot-cards">
+        {%- for _ in range(5) -%}
+        <div class="zjs-boot-card">
+          <div class="zjs-skeleton zjs-boot-w40"></div>
+          <div class="zjs-skeleton zjs-boot-title"></div>
+          <div class="zjs-skeleton zjs-boot-line"></div>
+          <div class="zjs-skeleton zjs-boot-line2"></div>
+          <div class="zjs-skeleton zjs-boot-pill"></div>
+        </div>
+        {%- endfor -%}
+      </div>
+      {%- endif -%}
+    </div>
+    {%- if ai_mode -%}
+    {#- the run's sources rail: header ghost + the four pulse cards of
+        AiSearchSourcesSkeleton — two grid columns below lg (the stacked
+        aside), one fixed-width column from lg (lg:w-80 xl:w-96) -#}
+    <div aria-hidden="true" class="zjs-boot-ai-side">
+      <div class="zjs-boot-ai-src-head">
+        <span class="zjs-skeleton zjs-boot-ai-glyph"></span>
+        <span class="zjs-skeleton zjs-boot-ai-src-title"></span>
+      </div>
+      {%- for _ in range(4) -%}
+      <div class="zjs-skeleton zjs-boot-ai-src"></div>
+      {%- endfor -%}
+    </div>
+    {%- else -%}
+    {#- the real page reserves the right rail even when it stays empty
+        (ResultsPage renders it for the infobox) — reserve the width only -#}
+    <div aria-hidden="true" class="zjs-boot-side"></div>
+    {%- endif -%}
+  </div>
+  <noscript>
+    <style>.zjs-boot { display: none !important; }</style>
+  </noscript>
+</div>

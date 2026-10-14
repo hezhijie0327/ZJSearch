@@ -1,0 +1,374 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/** The print / Save-as-PDF face of the theme (the AI report's engine is
+    the browser's own dialog — no jsPDF, no CJK font embedding): the
+    design language on paper.  PAPER IS ALWAYS THE LIGHT THEME — a white
+    ground and the warm light palette — but every value stays the theme's
+    own: the color tokens are @property-registered <color>s whose
+    registered initial-value IS the light palette, so neutralizing the
+    dark/black overrides with `initial` restores them from the one source
+    of truth (tokens.css) with no hex duplication to drift (a browser
+    without @property prints plain black-on-white instead — readable,
+    just unaccented).  Interactive chrome disappears, clamped content
+    expands, Collapse panels print open, and the wordmark stays.  A
+    `.zjs-print-hide` hook marks the components that must never print
+    (floating pills, overlays, export chips); the structural selectors
+    below cover the rest. */
+
+@media print {
+  /* ── palette: paper is always the LIGHT theme ─────────────────────
+     the dark/black token overrides neutralize on paper: `initial` on a
+     registered custom property computes to its registered initial-value,
+     which tokens.css pins to the light palette.  The one deliberate
+     exception is --bg: the PAPER GROUND is pure white (the app's light
+     --bg is a warm off-white that reads as a smudge against the white
+     @page margins); every surface tier above it stays tokened. */
+  .dark,
+  .black {
+    --bg: #ffffff;
+    --surface: initial;
+    --surface-2: initial;
+    --line: initial;
+    --ink: initial;
+    --ink-2: initial;
+    --ink-3: initial;
+    --accent: initial;
+    --accent-hover: initial;
+    --accent-strong: initial;
+    --accent-strong-hover: initial;
+    --accent-soft: initial;
+    --accent-contrast: initial;
+    --highlight-bg: initial;
+    --danger: initial;
+    --warning: initial;
+    --ok: initial;
+    --shadow-card: initial;
+    --shadow-pop: initial;
+    color-scheme: light;
+  }
+
+  * {
+    print-color-adjust: exact;
+  }
+
+  /* the palette cross-fade must never bleed into a print snapshot: the
+     light force applies ATOMICALLY on paper */
+  html {
+    transition: none !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* the hero shell locks document scrolling — printing needs it back */
+  .zjs-hero-lock,
+  .zjs-hero-lock body {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  /* ── chrome: gone on paper ──────────────────────────────────────── */
+  .zjs-print-hide,
+  .zjs-appbar,
+  /* header action circles, drawers, floating pills, export chips,
+     back-to-top, follow-up composer, autocomplete, toasts */
+  [data-dialog-close],
+  .zjs-boot,
+  aside[data-zjs-rail] {
+    display: none !important;
+  }
+
+  /* position-fixed furniture (sticky follow-up pill, BackToTop, the
+     progress bar) either vanishes or breaks the page flow */
+  .fixed,
+  .sticky {
+    position: static !important;
+  }
+
+  /* ── content: fully revealed ────────────────────────────────────── */
+  /* clamps expand: snippets, infobox abstracts, AI overviews */
+  .line-clamp-1,
+  .line-clamp-2,
+  .line-clamp-3 {
+    -webkit-line-clamp: unset !important;
+    line-clamp: unset !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Collapse panels print open (the research timeline is part of the
+     record); the inline 0fr loses to !important */
+  [style*="grid-template-rows"] {
+    grid-template-rows: 1fr !important;
+  }
+
+  /* entrance animations must not start from opacity 0 on paper */
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+
+  /* reading measures widen to the paper (the lg:max-w-3xl columns) */
+  .lg\:max-w-3xl,
+  .lg\:max-w-prose {
+    max-width: none !important;
+  }
+
+  /* links show their target — a printout needs the url, the chips do
+     not repeat it */
+  .zjs-results-main a[href^="http"]:not(:empty)::after {
+    content: " (" attr(href) ")";
+    font-size: 0.75rem;
+    color: var(--ink-3);
+    word-break: break-all;
+  }
+
+  /* citations keep their number styling but lose the click affordance */
+  a[href^="#ref-"]::after {
+    content: none !important;
+  }
+
+  /* avoid a card splitting across pages */
+  .rounded-lg,
+  .rounded-xl,
+  .rounded-2xl {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}
+
+/* ── the dedicated print view: while body.zjs-print-view is set, ONLY the
+   report sheet prints — the app underneath disappears.  Paper is always
+   LIGHT and the sheet's GROUND is always PURE WHITE (never the light
+   theme's warm off-white --bg: against the white @page margins it reads
+   as a yellow smudge; that warm tone is why the dark force above pins
+   --bg to #ffffff too).  Token-driven components recolor through their
+   variables; the mermaid diagrams — the one component family with colors
+   BAKED into the DOM — re-render light via the same body-class marker,
+   see PrintView/MermaidBlock.  The sheet's own face is the
+   .zjs-print-sheet report theme below. ── */
+#zjs-print-view-root {
+  display: none;
+}
+
+@media print {
+  body.zjs-print-view > *:not(#zjs-print-view-root) {
+    display: none !important;
+  }
+
+  #zjs-print-view-root {
+    display: block !important;
+    background: #ffffff !important;
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 40px;
+  }
+}
+
+/* ── the report sheet: the print document carries the SCREEN's editorial
+   scale — the clone keeps its §4 long-form classes (17px/1.8 root, the MD
+   six-step heading chain, 0.875em tables/code) and prints as the screen
+   reads it: paper is the view.  The sheet itself only states rhythm and
+   the furniture (wordmark / injected heading / sources tail) sizes itself
+   inline or via its own class — nothing here re-states a body size or a
+   palette value. ── */
+@page {
+  size: a4;
+  margin: 16mm 14mm;
+}
+
+.zjs-print-sheet {
+  line-height: 1.8;
+  color: var(--ink);
+}
+
+.zjs-print-sheet p {
+  margin: 0 0 12px;
+}
+
+.zjs-print-sheet ul,
+.zjs-print-sheet ol {
+  margin: 0 0 12px;
+  padding-inline-start: 18px;
+}
+
+.zjs-print-sheet li {
+  margin-bottom: 6px;
+}
+
+.zjs-print-sheet blockquote {
+  margin: 0 0 10px;
+  padding: 2px 12px;
+  border-inline-start: 3px solid var(--line);
+  color: var(--ink-2);
+}
+
+.zjs-print-sheet img {
+  max-width: 100%;
+  height: auto;
+}
+
+.zjs-print-sheet hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 16px 0;
+}
+
+/* the screen-time horizontal scrollers become full-width on paper */
+.zjs-print-sheet .zjs-md-table {
+  overflow-x: visible;
+}
+
+.zjs-print-sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+}
+
+.zjs-print-sheet th,
+.zjs-print-sheet td {
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+  text-align: start;
+  vertical-align: top;
+}
+
+.zjs-print-sheet th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+
+.zjs-print-sheet code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.zjs-print-sheet pre {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: hidden;
+  white-space: pre-wrap;
+  break-inside: avoid;
+}
+
+.zjs-print-sheet h2,
+.zjs-print-sheet h3 {
+  break-after: avoid;
+}
+
+.zjs-print-sheet table,
+.zjs-print-sheet pre {
+  break-inside: auto;
+}
+
+/* ── the webview preview: embedded browsers silently no-op window.print()
+   (no dialog, no afterprint), so printDocument flips the root to a
+   readable on-screen preview after a short wait — the same light paper,
+   scrollable, capped to the paper measure, with a close chip (Escape
+   works too).  The light force mirrors the @media print block above,
+   scoped to the sheet (keep the two lists in sync). ── */
+#zjs-print-view-root.zjs-print-preview {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #ffffff;
+  padding: 48px 40px 72px;
+}
+
+.zjs-print-view .zjs-print-hint,
+#zjs-print-view-root .zjs-print-hint {
+  position: fixed;
+  top: 16px;
+  inset-inline-end: 64px;
+  z-index: 95;
+  max-width: 340px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  text-align: end;
+}
+#zjs-print-view-root.zjs-print-preview > * {
+  max-width: 210mm;
+  margin-inline: auto;
+}
+/* the DECK paper: 16:9 landscape sheets -- the preview face shows the
+   slides at the marpit canvas width (the stage's cqw scale follows), not
+   the 210mm portrait measure */
+#zjs-print-view-root.zjs-print-deck.zjs-print-preview {
+  padding: 32px 24px 64px;
+}
+#zjs-print-view-root.zjs-print-deck.zjs-print-preview > * {
+  max-width: 1280px;
+}
+.dark #zjs-print-view-root.zjs-print-preview,
+.black #zjs-print-view-root.zjs-print-preview {
+  --bg: #ffffff;
+  --surface: initial;
+  --surface-2: initial;
+  --line: initial;
+  --ink: initial;
+  --ink-2: initial;
+  --ink-3: initial;
+  --accent: initial;
+  --accent-hover: initial;
+  --accent-strong: initial;
+  --accent-strong-hover: initial;
+  --accent-soft: initial;
+  --accent-contrast: initial;
+  --highlight-bg: initial;
+  --danger: initial;
+  --warning: initial;
+  --ok: initial;
+  --shadow-card: initial;
+  --shadow-pop: initial;
+  color-scheme: light;
+}
+#zjs-print-view-root .zjs-print-close {
+  position: fixed;
+  top: 14px;
+  inset-inline-end: 14px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  background: #ffffff;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 150ms;
+}
+#zjs-print-view-root .zjs-print-close:hover {
+  color: var(--ink);
+}
+@media print {
+  /* the preview furniture never prints */
+  #zjs-print-view-root.zjs-print-preview {
+    position: static;
+    overflow: visible;
+    padding: 0;
+  }
+  #zjs-print-view-root .zjs-print-close {
+    display: none !important;
+  }
+}

@@ -1,0 +1,124 @@
+# zjsearch Lighthouse audit instance settings — used by `npm run audit`
+# (scripts/audit.mjs boots a throwaway granian on :8907 with this file).
+#
+# Fully OFFLINE on purpose: remote engines make the audited pages
+# variance-sensitive (timeouts, captchas, dead image URLs change the page
+# between runs).  The engine list is reduced to `zjsearch_fixtures`, a
+# deterministic offline engine that answers instantly with fixed result
+# sets — one fixture kind per query token (zjaudit general/images/videos/
+# music/files/science/apps, see searx/engines/zjsearch_fixtures.py).
+# The instance also presents an indexable X-Robots-Tag: the upstream
+# default noindex would cap the SEO category no matter what the theme does.
+use_default_settings:
+  engines:
+    keep_only:
+      - zjaudit
+
+general:
+  instance_name: ZJSearch
+  debug: false
+  privacypolicy_url: https://example.com/privacy
+  donation_url: https://example.com/donate
+  contact_url: mailto:contact@example.com
+
+search:
+  formats:
+    - html
+    - json
+  # no remote autocompleter calls during audits
+  autocomplete: ""
+
+ui:
+  default_theme: zjsearch
+
+preferences:
+  lock: []
+
+brand:
+  public_instances: https://searx.space
+  custom:
+    links:
+      Uptime: https://uptime.searxng.org/history/darmarit-org
+      Blog: https://example.com/blog
+
+server:
+  secret_key: "zjsearch-local-dev-secret-key"
+  limiter: false
+  # raw local fixture image URLs (no image-proxy round trip)
+  image_proxy: false
+  default_http_headers:
+    X-Content-Type-Options: nosniff
+    X-Download-Options: noopen
+    # the upstream default is "noindex, nofollow" — an audit instance wants
+    # to be indexable or the SEO category can never reach its threshold.
+    # (public_instance: true would force the Valkey-backed limiter on, so we
+    # override just the header instead.)
+    X-Robots-Tag: "index, follow"
+    Referrer-Policy: no-referrer
+
+# offline fixture engine only — one engine, every result presentation
+engines:
+  - name: zjaudit
+    engine: zjsearch_fixtures
+    shortcut: zja
+    disabled: false
+
+# the AI surfaces (AI Search `ai=1`, AI Overview `ai_overview=1`) are
+# audited against the deterministic mock transport — scripts/ai-mock.mjs,
+# spawned by the gate on :8909.  It is the AI counterpart of the zjaudit
+# fixture engine: fixed completions keyed by request shape, zero model
+# variance (the transport contract lives in the searx/zjsearch/ai/llm/ package).
+zjsearch:
+  llm:
+    enabled: true
+    sdk: openai.chat_completions
+    base_url: "http://127.0.0.1:8909/v1"
+    api_key: "zjaudit"
+    model: "zjaudit-mock"
+  # the AI features on (the audited pages exercise both surfaces)
+  feature:
+    ai_overview:
+      enabled: true
+    ai_search:
+      enabled: true
+  # the same mock server answers the page reader's POST /content with a
+  # fixture document, so the web_reader call row, the reading pane and
+  # the read-in-full badge are audited offline too
+  # ── the thread-embedding model (the history drawer's semantic search):
+  #    an OpenAI-compatible /embeddings route; the key may travel via the
+  #    ZJSEARCH_EMBEDDING_KEY env.  Unconfigured = history search off.
+  embedding:
+    # e2e probe: ON with the REAL BigModel embeddings (512 via params) --
+    # the mock transport produces the runs, the embeddings are real
+    enabled: true
+    base_url: "https://open.bigmodel.cn/api/paas/v4"
+    api_key: ""                    # or the ZJSEARCH_EMBEDDING_KEY env
+    model: "embedding-3"
+    params:
+      encoding_format: float
+      dimensions: 512              # the pgvector column width
+    extra_headers:
+      X-ZJS-Test: "1"
+    extra_body:
+      user: zjs-audit
+  # the decision model rides the SAME mock server (the /systemone
+  # fixture above): every framework gate exercises its PASS path offline
+  decision:
+    enabled: true
+    sdk: typesafe
+    base_url: "http://127.0.0.1:8909"
+    api_key: "zjaudit"
+    model: "zjaudit-decision"
+  # the reader's render engine IS the built-in browser now: the mock's
+  # fixture page (http://127.0.0.1:8909/read-fixture) is reachable only
+  # because allow_hosts exempts the loopback host from the SSRF gates
+  # (the audit runs fully offline; the browser rejects every other
+  # private address as usual).  adblock: false keeps the launch
+  # deterministic offline -- a first launch would otherwise try to
+  # download uBlock Origin from addons.mozilla.org (it fails open, but
+  # the audit wants zero network attempts)
+  browser:
+    enabled: true
+    adblock: false
+    allow_hosts:
+      - 127.0.0.1

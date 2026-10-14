@@ -1,0 +1,201 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* Element defaults plus .highlight — the query-highlight span the server-side
+   highlighter injects into result markup, global because any text renderer
+   can receive it. */
+
+@layer base {
+  html {
+    height: 100%;
+    /* pages scroll vertically ONLY — every page (the AI search surface
+        renders arbitrary model output) is locked against horizontal panning.
+        `clip` clips without creating a scroll container, so position:sticky
+        keeps working; browsers without it keep the `hidden` fallback. */
+    overflow-x: hidden;
+  }
+
+  @supports (overflow: clip) {
+    html {
+      overflow-x: clip;
+    }
+
+    /* body-level clip is the strong form: unlike the root value (which the
+        spec demotes to `hidden` on the viewport — programmatically
+        scrollable), body clip makes overflow unreachable in EVERY way and
+        still is not a scroll container, so sticky keeps working. */
+    body {
+      overflow-x: clip;
+    }
+  }
+
+  body {
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 26%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  button,
+  input,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Tailwind v4 preflight no longer gives buttons the pointer cursor */
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+}
+
+@layer components {
+  /* query highlight spans inserted by the server side highlighter */
+  .highlight {
+    background: var(--highlight-bg);
+    color: var(--ink);
+    border-radius: 3px;
+    padding: 0 1px;
+    box-decoration-break: clone;
+  }
+
+  /* "selected by the AI" marks around result rows reached through Quick
+      Answer citations: the dashed accent frame PERSISTS (an accumulating
+      set of the results the AI cited); the locate tint flashes once per
+      jump.  nothing else in the app emits <mark> -- the themed restyle is
+      global on purpose (DESIGN.md §5.1 shared vocabulary). */
+  [data-ai-cited] {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+  }
+
+  /* ==highlight== in AI-generated markdown (the Pandoc/Typora mark, the
+      browser default's yellow reads as a browser bug on every palette) */
+  mark {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    color: var(--ink);
+    border-radius: 3px;
+    padding: 0 1px;
+    box-decoration-break: clone;
+  }
+
+  /* Obsidian-style callouts in AI-generated markdown (remarkCallouts,
+      lib/markdownParts.ts): one accent rail + tinted ground per category,
+      all token-driven so the palette flip and print light-force carry.
+      Categories are the family canon's ten (ZJBlog tools/callouts.ts). */
+  .callout {
+    --callout-rail: var(--accent-strong);
+    margin: 0.5rem 0;
+    border: 1px solid var(--line);
+    border-inline-start: 3px solid var(--callout-rail);
+    border-radius: 0.75rem;
+    background: color-mix(in oklab, var(--callout-rail) 7%, var(--surface));
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+  .callout > summary {
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .callout > summary::marker {
+    color: var(--callout-rail);
+  }
+  .callout .callout-title {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .callout > :last-child {
+    margin-bottom: 0;
+  }
+  .callout-success,
+  .callout-tip {
+    --callout-rail: var(--ok);
+  }
+  .callout-question {
+    --callout-rail: var(--accent-strong);
+  }
+  .callout-warning {
+    --callout-rail: var(--warning);
+  }
+  .callout-danger {
+    --callout-rail: var(--danger);
+  }
+  .callout-note,
+  .callout-info,
+  .callout-todo,
+  .callout-example,
+  .callout-quote {
+    --callout-rail: var(--ink-3);
+  }
+
+  [data-ai-flash] {
+    animation: zjs-ai-flash 1.9s ease-out both;
+  }
+}
+
+@keyframes zjs-ai-flash {
+  0%,
+  45% {
+    background-color: var(--accent-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+/* ── PWA standalone adaptation ────────────────────────────────────────
+   viewport-fit=cover exposes the notched-corner insets; the sticky app
+   bar lifts below the status bar and page bottoms keep clear of the
+   home indicator. */
+
+.zjs-appbar {
+  padding-top: env(safe-area-inset-top);
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* the citation / hotkey jumps land their target below the sticky app
+   bar (scrollIntoViewAnimated reads the target's scroll-margin-top) */
+[data-hotkey-index],
+[data-ai-n],
+[data-ai-cited] {
+  scroll-margin-top: 4.5rem;
+}
+
+/* standalone PWA: iOS zooms a focused input whose font-size sits under
+   16px -- touch devices keep every editable control at the iOS floor
+   (desktop keeps the designed sizes) */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* the debug stage's event-timeline scrubber: accent thumb on a hairline
+   track, sized to the 24px interactive floor */
+.zjs-range {
+  accent-color: var(--accent-strong);
+  height: 1rem;
+  cursor: pointer;
+}

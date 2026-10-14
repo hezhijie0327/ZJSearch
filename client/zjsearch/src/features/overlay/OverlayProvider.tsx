@@ -1,0 +1,302 @@
+// SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+
+/**
+ * Slide-in overlay panel: About / Stats / Preferences open as a right-side
+ * drawer on top of the current page (URL unchanged, search state kept).
+ * The panel fetches the target URL; which page component renders which
+ * payload is decided by the `renderPage` callback the app injects — this
+ * module only knows the panel chrome and the data plumbing, never the
+ * pages themselves.
+ */
+
+import { X } from "lucide-react";
+import {
+  createContext,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useDialogFocus } from "@/lib/dialogFocus.ts";
+import { fetchText } from "@/lib/http.ts";
+import { useT } from "@/lib/i18n.ts";
+import { isModifiedClick } from "@/lib/link.ts";
+import { extractPageData } from "@/lib/pageData.ts";
+import { ICON_BTN } from "@/lib/styles.ts";
+import type { AnyPageData } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
+
+/** Panels the app can render inside the drawer. Returning null means "this
+    payload is not panel-able" and shows the fallback with an escape link. */
+interface OverlayPanels {
+  renderPage: (data: AnyPageData, hint?: string) => ReactNode;
+}
+
+interface OverlayState {
+  url: string;
+  title: string;
+  /** "document" panels fetch plain text (LICENSE.txt); "page" panels fetch page-data */
+  mode: "page" | "document";
+  data: AnyPageData | null;
+  text: string | null;
+  loading: boolean;
+  error: string | null;
+  /** free-form render hint forwarded to renderPage (e.g. the info tab to open) */
+  hint?: string;
+}
+
+interface OverlayContextValue {
+  openOverlay: (url: string, title: string, hint?: string) => void;
+  /** open a plain-text document (LICENSE.txt ...) rendered inside the panel */
+  openDocument: (title: string, url: string) => void;
+  closeOverlay: () => void;
+}
+
+const OverlayContext = createContext<OverlayContextValue | null>(null);
+
+export function useOverlay(): OverlayContextValue {
+  const ctx = useContext(OverlayContext);
+  if (!ctx) {
+    throw new Error("useOverlay outside of OverlayProvider");
+  }
+  return ctx;
+}
+
+export function OverlayProvider({ panels, children }: { panels: OverlayPanels; children: ReactNode }) {
+  const t = useT();
+  const [state, setState] = useState<OverlayState | null>(null);
+  // the drawer plays its slide-out/fade-out window after closeOverlay; the
+  // last state is kept so the panel still has content to fade
+  const { render: renderDrawer, closing: drawerClosing } = useExitPresence(state !== null, 260);
+  const lastState = useRef<OverlayState | null>(null);
+  if (state) {
+    lastState.current = state;
+  }
+  const view = state ?? lastState.current;
+  // the drawer element is rendered by this always-mounted provider: pass the
+  // open flag so the focus effect runs when the dialog actually appears —
+  // and returns to the trigger the moment closing starts, not at unmount
+  const dialogRef = useDialogFocus<HTMLDivElement>(state !== null);
+
+  const closeOverlay = useCallback(() => {
+    setState(null);
+  }, []);
+
+  const openOverlay = useCallback((url: string, title: string, hint?: string) => {
+    setState({ url, title, mode: "page", data: null, text: null, loading: true, error: null, hint });
+  }, []);
+
+  const openDocument = useCallback((title: string, url: string) => {
+    setState({ url, title, mode: "document", data: null, text: null, loading: true, error: null });
+  }, []);
+
+  // navigate the panel to another URL, keeping it open
+  const openPanel = useCallback((url: string, title: string) => {
+    setState((prev) => ({
+      url,
+      title: title || prev?.title || "",
+      mode: "page",
+      data: null,
+      text: null,
+      loading: true,
+      error: null,
+    }));
+  }, []);
+
+  // fetch the payload when a panel is requested
+  useEffect(() => {
+    if (!state?.loading) {
+      return;
+    }
+    const controller = new AbortController();
+    const isDocument = state.mode === "document";
+    void fetchText(state.url, {
+      headers: { Accept: isDocument ? "text/plain" : "text/html" },
+      signal: controller.signal,
+    })
+      .then(async (body) => {
+        if (isDocument) {
+          setState((prev) => (prev && prev.url === state.url ? { ...prev, text: body, loading: false } : prev));
+          return;
+        }
+        const data = extractPageData(body);
+        setState((prev) => (prev && prev.url === state.url ? { ...prev, data, loading: false } : prev));
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        // not an app page (e.g. a static file) — fall back to a full load
+        if (!isDocument && String(err).includes("page-data missing")) {
+          window.location.assign(state.url);
+          return;
+        }
+        setState((prev) => (prev && prev.url === state.url ? { ...prev, loading: false, error: String(err) } : prev));
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [state]);
+
+  const onKeyDown = useCallback(
+    (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      // a nested dialog (the knowledge panel's inspector / admin / confirm)
+      // owns this Escape: useDialogFocus parked the focus inside it, its own
+      // handler closes it and the drawer stays
+      const active = document.activeElement;
+      if (active instanceof Element) {
+        const owner = active.closest('[role="dialog"]');
+        if (owner && owner !== dialogRef.current) {
+          return;
+        }
+      }
+      setState(null);
+    },
+    [dialogRef],
+  );
+
+  useEffect(() => {
+    if (!state) {
+      return;
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [state, onKeyDown]);
+
+  // stable context value: the callbacks are useCallback'd, and without the
+  // useMemo every open/close would re-render every useOverlay() consumer
+  // (Shell header actions, footer, DebugPanels) even while idle
+  const contextValue = useMemo(
+    () => ({ openOverlay, openDocument, closeOverlay }),
+    [openOverlay, openDocument, closeOverlay],
+  );
+
+  return (
+    <OverlayContext.Provider value={contextValue}>
+      {children}
+      {renderDrawer && view ? (
+        <div
+          aria-label={view.title}
+          aria-modal="true"
+          className="fixed inset-0 z-50"
+          inert={drawerClosing || undefined}
+          ref={dialogRef}
+          role="dialog"
+          tabIndex={-1}
+        >
+          <button
+            aria-label={t("close")}
+            className={`absolute inset-0 cursor-default bg-black/60 ${drawerClosing ? "animate-fade-out" : "animate-fade-in"}`}
+            onClick={closeOverlay}
+            type="button"
+          />
+          {/* data-zjs-overlay-panel: flashToast hosts floating feedback here
+              so pills center in the drawer instead of the viewport (the
+              entrance animation's residual transform contains `fixed`) */}
+          <div
+            className={`absolute inset-y-0 end-0 flex w-full max-w-3xl flex-col bg-bg shadow-pop ${
+              drawerClosing ? "animate-slide-out-right" : "animate-slide-in-right"
+            }`}
+            data-zjs-overlay-panel=""
+          >
+            <div className="flex items-center justify-between border-b border-line px-5 py-3">
+              <h2 className="text-lg font-semibold text-ink">{view.title}</h2>
+              <button
+                aria-label={t("close")}
+                className={ICON_BTN}
+                data-dialog-close=""
+                onClick={closeOverlay}
+                type="button"
+              >
+                <X className="size-4.5" />
+              </button>
+            </div>
+            <div
+              className="min-h-0 flex-1 overflow-y-auto pt-4"
+              onClickCapture={(event) => {
+                const anchor = (event.target as HTMLElement).closest("a");
+                const href = anchor?.getAttribute("href");
+                if (
+                  !anchor ||
+                  !href?.startsWith("/") ||
+                  anchor.target === "_blank" ||
+                  anchor.hasAttribute("download") ||
+                  // /static/ holds files (LICENSE.txt...), not SPA pages
+                  href.startsWith("/static/") ||
+                  isModifiedClick(event)
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                openPanel(href, view.title);
+              }}
+            >
+              {view.loading ? (
+                <PanelSkeleton />
+              ) : view.error ? (
+                <p className="p-6 text-sm text-danger">{view.error}</p>
+              ) : view.mode === "document" ? (
+                <article className="px-5 pb-8">
+                  <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-ink-2">
+                    {view.text}
+                  </pre>
+                </article>
+              ) : view.data ? (
+                <Suspense fallback={<PanelSkeleton />}>
+                  {panels.renderPage(view.data, view.hint) ?? <PanelFallback data={view.data} />}
+                </Suspense>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </OverlayContext.Provider>
+  );
+}
+
+/** The overlay panels' load ghost (preferences / about / stats / knowledge
+    share one shape): heading, section-tab pills, then setting rows of a
+    label + a control -- panel chrome, not six anonymous bars.  Generic on
+    purpose: one fallback serves every panel payload and the lazy page
+    chunks. */
+const PanelSkeleton = () => (
+  <div aria-busy="true" className="space-y-5 p-6">
+    <span className="zjs-skeleton block h-6 w-44" />
+    <div className="flex items-center gap-2">
+      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
+      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
+      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
+    </div>
+    <div className="space-y-4">
+      {Array.from({ length: 5 }, (_, i) => (
+        <div className="flex items-center justify-between gap-4" key={i}>
+          <span className="zjs-skeleton h-4 w-1/3" />
+          <span className="zjs-skeleton h-9 w-24 rounded-lg" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+function PanelFallback({ data }: { data: AnyPageData }) {
+  const t = useT();
+  return (
+    <p className="p-6 text-sm text-ink-2">
+      {t("panel_unavailable")}{" "}
+      <a className="text-accent" href={data.globals.about_url || "/"}>
+        {t("open_here")}
+      </a>
+      .
+    </p>
+  );
+}

@@ -1,0 +1,135 @@
+{#- zjsearch theme: server-rendered <noscript> fallbacks.
+
+    The React application needs JavaScript; these macros render the same
+    search context as plain HTML inside <noscript>, so a visitor without
+    JavaScript can still search, read results and paginate.
+
+    Strings are English-only by design: the no-JS surface is the
+    rarely-used basic mode and Jinja templates have no i18n mechanism —
+    adding a UI language touches ONLY client/zjsearch/src/lib/i18n/,
+    never these templates.  Visual language mirrors rss.xsl: a
+    self-contained document style with its own light/dark palette
+    (.zjs-noscript in styles/noscript.css). -#}
+
+{% macro ns_brand() -%}
+<div class="zjs-ns-brand"><span class="zjs-ns-wordmark">{{ instance_name }}<span class="dot">.</span></span></div>
+{%- endmacro %}
+
+{% macro ns_form(q) -%}
+<form class="zjs-ns-form" action="{{ url_for('search') }}" method="get">
+  <input type="text" name="q" value="{{ q or '' }}" aria-label="Search query" autofocus>
+  <button type="submit">Search</button>
+</form>
+{%- endmacro %}
+
+{% macro ns_links() -%}
+<p class="zjs-ns-links">Basic no-JavaScript mode.</p>
+{%- endmacro %}
+
+{% macro ns_home() -%}
+<p><a href="{{ url_for('index') }}">&laquo; Back to search</a></p>
+{%- endmacro %}
+
+{% macro ns_results(results, q, pageno, paging, answers, corrections, suggestions) -%}
+<div class="zjs-noscript">
+  <div class="zjs-ns-wrap">
+    {{ ns_brand() }}
+    {{ ns_form(q) }}
+    {%- for a in answers %}<p class="zjs-ns-answer">{{ a.answer }}</p>{% endfor %}
+    {%- if corrections %}
+    <p class="zjs-ns-note">Did you mean:
+      {%- for c in corrections %} <a href="{{ c.url }}">{{ c.title }}</a>{% if not loop.last %},{% endif %}{% endfor %}?
+    </p>
+    {%- endif %}
+    <p class="zjs-ns-meta"><span class="count">{{ results|length }}</span> results</p>
+    {%- for result in results %}
+    {%- set rtype = (result.template or '')|replace('.html', '') %}
+    <article class="zjs-ns-article">
+      <div class="zjs-ns-host">{{ result.pretty_url or result.url }}</div>
+      {%- if rtype == 'images' and (result.thumbnail_src or result.img_src) %}
+      <a aria-label="Open image" class="zjs-ns-thumb" href="{{ result.img_src or result.thumbnail_src }}"><img alt="" width="80" height="60" loading="lazy" src="{{ result.thumbnail_src or result.img_src }}"></a>
+      {%- endif %}
+      <h3><a class="zjs-ns-title-link" href="{{ result.url }}" rel="noreferrer">{% if result.title %}{{ result.title|safe }}{% else %}{{ result.url }}{% endif %}</a></h3>
+      {%- if result.content %}<p>{{ result.content|safe }}</p>{% endif %}
+      {%- if rtype == 'torrent' %}
+      <p class="zjs-ns-meta2">
+        {%- if result.filesize %}<span>{{ result.filesize }}</span>{% endif %}
+        {%- if result.seed is defined %}<span>&uarr; {{ result.seed }} &middot; &darr; {{ result.leech }}</span>{% endif %}
+        {%- if result.files %}<span>{{ result.files }} files</span>{% endif %}
+        {%- if result.magnetlink %}<a href="{{ result.magnetlink }}" rel="noreferrer">Magnet link</a>{% endif %}
+      </p>
+      {%- endif %}
+      {%- if rtype == 'videos' and (result.length or result.author or result.views) %}
+      <p class="zjs-ns-meta2">
+        {%- if result.length %}<span>{{ result.length }}</span>{% endif %}
+        {%- if result.author %}<span>{{ result.author }}</span>{% endif %}
+        {%- if result.views %}<span>{{ result.views }} views</span>{% endif %}
+      </p>
+      {%- endif %}
+      {%- if rtype == 'images' and result.resolution %}
+      <p class="zjs-ns-meta2"><span>{{ result.resolution }}</span></p>
+      {%- endif %}
+      {%- if result.publishedDate %}<time>{{ result.publishedDate.strftime('%Y-%m-%d') }}</time>{% endif %}
+    </article>
+    {%- endfor %}
+    {%- if not results %}<p class="zjs-ns-note">No results.</p>{% endif %}
+    {%- if suggestions %}
+    <p class="zjs-ns-note">Suggestions:
+      {%- for s in suggestions %} <a href="{{ s.url }}">{{ s.title }}</a>{% if not loop.last %},{% endif %}{% endfor %}
+    </p>
+    {%- endif %}
+    {%- if (pageno and pageno > 1) or paging %}
+    <p class="zjs-ns-paging">
+      {%- if pageno and pageno > 1 %}<a href="{{ url_for('search', q=q, pageno=pageno - 1) }}">&laquo; Previous</a>{% endif %}
+      {%- if paging %}{% if pageno and pageno > 1 %} &middot; {% endif %}<a href="{{ url_for('search', q=q, pageno=pageno + 1) }}">Next &raquo;</a>{% endif %}
+    </p>
+    {%- endif %}
+    {{ ns_links() }}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro ns_404() -%}
+<div class="zjs-noscript">
+  <div class="zjs-ns-wrap">
+    {{ ns_brand() }}
+    <h1>Page not found</h1>
+    <p class="zjs-ns-note">The page does not exist.</p>
+    {{ ns_home() }}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro ns_prefs() -%}
+<div class="zjs-noscript">
+  <div class="zjs-ns-wrap">
+    {{ ns_brand() }}
+    <h1>Preferences</h1>
+    <p class="zjs-ns-note">Changing preferences needs JavaScript.</p>
+    {{ ns_home() }}
+    {{ ns_links() }}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro ns_stats(engine_stats, engine_reliabilities) -%}
+<div class="zjs-noscript">
+  <div class="zjs-ns-wrap">
+    {{ ns_brand() }}
+    <h1>Engine stats</h1>
+    <table class="zjs-ns-table">
+      <tr><th>Engine</th><th>Total (s)</th><th>Results</th><th>Reliability (%)</th></tr>
+      {%- for s in engine_stats.get('time', []) %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ '%.2f'|format(s.total) if s.total is not none else '&ndash;' }}</td>
+        <td>{{ s.result_count if s.result_count is not none else '&ndash;' }}</td>
+        <td>{{ engine_reliabilities.get(s.name, {}).get('reliability', '&ndash;') }}</td>
+      </tr>
+      {%- endfor %}
+    </table>
+    {{ ns_home() }}
+    {{ ns_links() }}
+  </div>
+</div>
+{%- endmacro %}
