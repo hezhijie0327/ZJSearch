@@ -15,6 +15,7 @@ settles as an error BEFORE any content event becomes the plain-text 502
 import json
 import logging
 import re
+import sqlite3
 import threading
 import time
 import typing as t
@@ -838,8 +839,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     if thread:
         # the reload matcher: the thread uuid becomes a server-side index
         # for the run -- a reloaded page whose LOCAL store came up empty
-        # can still find its run by the uuid in the url
-        run_journal.journal().index_run(thread, handle.key, research_q, mode)
+        # can still find its run by the uuid in the url.  FAIL-OPEN: the
+        # journal is a durable shadow -- a broken one degrades the reload
+        # matcher, it must never 500 the run itself.
+        try:
+            run_journal.journal().index_run(thread, handle.key, research_q, mode)
+        except sqlite3.Error:
+            logger.warning("zjsearch ai search: journal index failed -- reload matcher degraded", exc_info=True)
     # the subagent pump observes the run's control plane NON-destructively
     # (peek over read): a user stop/preempt must reach the RUNNING
     # subagents -- today the delegation batch blocked the stop until every

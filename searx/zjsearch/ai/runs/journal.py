@@ -46,6 +46,18 @@ _MAX_RUNS = 512
 dropped with their rows regardless of age (an abandoned run's key never
 comes back once its TTL lapses -- old keys are dead weight)."""
 
+_DB_NAME = "sxng_zjs_run_journal.db"
+"""The journal file in the temp dir; rebuild generation ``N > 0`` lives at
+the ``.N``-suffixed sibling (see ``_open_or_rebuild``)."""
+
+_GEN = 0
+"""The journal file's generation: bumped by every stale-schema rebuild."""
+
+
+def _db_path(gen: int) -> str:
+    name = _DB_NAME if gen == 0 else _DB_NAME.replace(".db", f".{gen}.db")
+    return tempfile.gettempdir() + os.sep + name
+
 
 class RunJournal(SQLiteAppl):
     """The journal table: one wire line per row, (key, seq) primary."""
@@ -81,7 +93,7 @@ DELETE FROM run_journal WHERE key IN (
   SELECT key FROM run_journal GROUP BY key ORDER BY max(seq) DESC LIMIT -1 OFFSET ?)"""
 
     def __init__(self) -> None:
-        super().__init__(tempfile.gettempdir() + os.sep + "sxng_zjs_run_journal.db")
+        super().__init__(_db_path(_GEN))
         self._lock = threading.Lock()
 
     def index_run(self, thread_id: str, run_key: str, q: str, mode: str) -> None:
@@ -127,22 +139,37 @@ _JOURNAL_LOCK = threading.Lock()
 _SWEPT = False
 
 
+def _unlink_db(path: str) -> None:
+    for suffix in ("", "-wal", "-shm"):
+        try:
+            os.remove(path + suffix)
+        except OSError:
+            pass
+
+
 def _open_or_rebuild() -> RunJournal:
     """Open the journal; a pre-bump schema file (SQLiteAppl raises on the
-    version mismatch) is deleted and recreated empty -- the journal is a
-    durable SHADOW (the source of truth lives in the client's store), so
-    losing the old rows beats wedging every run registration on a stale
-    file."""
+    version mismatch) is deleted and the journal REOPENS AT THE NEXT
+    GENERATION -- the journal is a durable SHADOW (the source of truth
+    lives in the client's store), so losing the old rows beats wedging
+    every run registration on a stale file.  The GENERATION MOVE (not a
+    same-path delete) is load-bearing: SQLiteAppl hands out THREAD-LOCAL
+    connections cached by db url, so after the delete every thread that
+    already touched the journal holds a live session on the ORPHANED
+    inode -- a rebuilt instance on the same path would answer through
+    exactly such a session (stale properties re-read, ``init`` poisoned
+    by its set-first-then-verify flag, ``no such table: run_index``
+    forever).  A new path forces every thread to reconnect; the fresh
+    file's first connect creates the full schema."""
+    global _GEN
     candidate = RunJournal()
     try:
         candidate.DB.execute("SELECT 1 FROM run_index LIMIT 1").fetchone()
         return candidate
     except sqlite3.DatabaseError:
-        logger.warning("zjsearch run journal: stale schema -- rebuilding the journal file")
-        try:
-            os.remove(tempfile.gettempdir() + os.sep + "sxng_zjs_run_journal.db")
-        except OSError:
-            pass
+        logger.warning("zjsearch run journal: stale schema -- rebuilding at generation %s", _GEN + 1)
+        _unlink_db(_db_path(_GEN))
+        _GEN += 1
         return RunJournal()
 
 

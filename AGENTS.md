@@ -744,7 +744,20 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   `%TEMP%/sxng_zjs_run_journal.db`, 72h TTL + a newest-512-runs rank
   sweep) — the durable answer to "the run settled while nobody was
   attached", serving windows the in-memory buffers cannot (past the 1h
-  terminal TTL, across process restarts).  `POST
+  terminal TTL, across process restarts).  THE REBUILD MOVES GENERATION
+  (live-500 lesson, same day): a schema bump's stale file is not merely
+  deleted and reopened at the same path — SQLiteAppl's connections are
+  THREAD-LOCAL caches keyed by db url, so the probe that raised the
+  version mismatch leaves every touched thread a live session on the
+  ORPHANED inode, and a same-path rebuild answers through exactly such
+  a session (stale properties re-read, `init`'s set-before-verify flag
+  poisoned, `no such table: run_index` 500s for the process's whole
+  life).  `_open_or_rebuild` therefore reopens at a `.N`-suffixed
+  generation path, forcing every thread to reconnect to the fresh file
+  (its first connect creates the full schema), and every journal
+  consumer FAILS OPEN — the submission route's `index_run` only degrades
+  the reload matcher, the replay route answers 404 — a broken shadow
+  must never 500 the run itself.  `POST
   /zjsearch/ai/run/journal {tk, run_key, after_seq}` replays the stored
   lines as NDJSON (the settle rides inside).  THE RELOAD RECOVERY:
   `resume()` detects an unfinished last run, and — the run key is

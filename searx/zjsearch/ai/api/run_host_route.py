@@ -23,6 +23,7 @@ settle rides inside them.
 
 import json
 import logging
+import sqlite3
 import typing as t
 
 import flask
@@ -174,7 +175,13 @@ def _journal_view() -> t.Any:
         thread = str(payload.get("thread") or "").strip()[:64]
         if not thread:
             flask.abort(404)
-        found = run_journal.journal().latest_for_thread(thread)
+        # FAIL-OPEN: a broken journal IS the unknown journal -- 404, the
+        # client keeps its local interrupted state and the continue path.
+        try:
+            found = run_journal.journal().latest_for_thread(thread)
+        except sqlite3.Error:
+            logger.warning("zjsearch run host: journal thread lookup failed", exc_info=True)
+            found = None
         if found is None:
             flask.abort(404)
         run_key, q, mode = found
@@ -183,7 +190,11 @@ def _journal_view() -> t.Any:
         after_seq = min(abs(int(payload.get("after_seq"))), 1_000_000)
     except (TypeError, ValueError):
         after_seq = 0
-    lines = run_journal.journal().tail(run_key, after_seq)
+    try:
+        lines = run_journal.journal().tail(run_key, after_seq)
+    except sqlite3.Error:
+        logger.warning("zjsearch run host: journal replay failed", exc_info=True)
+        lines = []
     if not lines:
         flask.abort(404)
     if meta is not None:
