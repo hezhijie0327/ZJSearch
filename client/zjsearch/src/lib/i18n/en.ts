@@ -416,6 +416,9 @@ export const EN = {
   attach_files: "Attach images or files",
   ai_attach_section: "Attachments",
   ai_browser_tab_lead: "Lead session",
+  ai_browser_tab_bg: "Background",
+  ai_browser_bg_readonly:
+    "Background sessions are read-only snapshots -- clicks and typing act on the lead session only",
   ai_browser_live: "Browser",
   ai_browser_wait: "{s}s",
   ai_browser_wait_hint: "time left in this operation window",

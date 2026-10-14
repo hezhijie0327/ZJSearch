@@ -10,7 +10,7 @@
     behind a rail card would stall the run silently.  The frames ride
     the run's ``browser`` wire events; the bytes never persist. */
 
-import { Check, ExternalLink, Minimize2 } from "lucide-react";
+import { Bot, Check, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
@@ -24,6 +24,18 @@ type MirrorView = NonNullable<AiSearchRun["browser"]>;
 
 const VIEWPORT_W = 1280;
 const VIEWPORT_H = 800;
+
+/** The address bar's compact form: host + path (the browser-chrome anchor
+    the mirror was missing -- the bare page title read as a caption, not
+    an address). */
+function addressOf(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname === "/" ? "" : parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
 
 /** Map a click on the DISPLAYED frame to the session's viewport space. */
 function frameCoords(event: {
@@ -50,19 +62,94 @@ function LivePulse() {
   );
 }
 
+/** The session tabs' shared anatomy (the rail card AND the takeover):
+    browser chrome at rail scale -- an identity glyph per tab (the lead's
+    agent mark, a hostname letter disc for the frozen ones), the active
+    tab's page title merging into the surface below (the attached-tab
+    seam), background tabs as hostnames. */
+function SessionTabs({
+  activeId,
+  entries,
+  onPick,
+}: {
+  activeId: string;
+  entries: [string, MirrorView][];
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className={`flex items-end gap-1 bg-surface-2/60 px-1.5 pt-1.5 ${SCROLLBAR_NONE} overflow-x-auto`}>
+      {entries.map(([sid, item]) => {
+        const active = sid === activeId || entries.length === 1;
+        const isLead = sid === "lead";
+        const host = hostnameOf(item.url);
+        return (
+          <button
+            aria-label={item.title || sid}
+            aria-pressed={active}
+            className={`flex min-w-0 max-w-44 shrink-0 items-center gap-1.5 rounded-t-lg px-2.5 py-1.5 text-[13px] transition-colors ${
+              active ? "bg-surface font-medium text-ink" : "text-ink-3 hover:bg-surface/60 hover:text-ink-2"
+            }`}
+            key={sid}
+            onClick={() => {
+              onPick(sid);
+            }}
+            title={item.title || item.url}
+            type="button"
+          >
+            {isLead ? (
+              <Bot aria-hidden="true" className="size-3.5 shrink-0 text-accent" />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="grid size-3.5 shrink-0 place-items-center rounded-[4px] border border-line bg-surface text-[9px] font-bold leading-none text-ink-2"
+              >
+                {(host.charAt(0) || "?").toUpperCase()}
+              </span>
+            )}
+            <span className="truncate">{active ? item.title || host : host}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** The takeover: the live page at full size, the user's clicks/wheel/keys
     forwarded to the session.  Mobile-safe: the stage keeps the frame
-    contain-fit, the keyboard bar wraps its two actions. */
-function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorView }) {
+    contain-fit, the keyboard bar wraps its two actions.  The session tabs
+    ride along (switch context without leaving the takeover), but a
+    BACKGROUND tab is a READ-ONLY snapshot there: the input channel is
+    bound to the lead's serialized session, so forwarding a click onto a
+    frozen frame would operate a page the frame does not show. */
+function BrowserLightbox({
+  onClose,
+  sessions,
+  tab,
+  onTab,
+  view,
+}: {
+  onClose: () => void;
+  sessions?: Record<string, MirrorView>;
+  tab: string;
+  onTab: (id: string) => void;
+  view: MirrorView;
+}) {
   const t = useT();
   const dialogRef = useDialogFocus<HTMLDivElement>();
   const [draft, setDraft] = useState("");
   const wheelLock = useRef(0);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const entries = Object.entries(sessions ?? {}).filter(([, item]) => item.img);
+  const multi = entries.length > 1;
+  const activeView = (multi ? sessions?.[tab] : undefined) ?? view;
+  const isLead = !multi || tab === "lead";
+  const leadRef = useRef(isLead);
+  leadRef.current = isLead;
 
   // React's synthetic onWheel is passive -- the takeover must STOP the
   // page behind the fixed overlay from scrolling, so the wheel listener
-  // attaches natively (non-passive) once
+  // attaches natively (non-passive) once.  On a background tab the wheel
+  // only scrolls the overlay's own stage -- nothing to forward.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) {
@@ -70,6 +157,9 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
     }
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      if (!leadRef.current) {
+        return;
+      }
       const now = Date.now();
       if (now - wheelLock.current < 250) {
         return;
@@ -90,8 +180,12 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
   // for IME/Chinese composition, which cannot forward key-by-key).
   // Interactive targets are EXEMPT -- their keys stay client-side, or a
   // keyboard user could never activate the close/done buttons (and Tab
-  // must keep traversing the dialog's own controls).
+  // must keep traversing the dialog's own controls).  A background tab
+  // forwards nothing.
   const onDialogKeyDown = (event: React.KeyboardEvent) => {
+    if (!isLead) {
+      return;
+    }
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, select, button, a")) {
       return; // the takeover's own controls compose/activate locally
@@ -127,22 +221,23 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
         role="dialog"
         tabIndex={-1}
       >
+        {multi ? <SessionTabs activeId={tab} entries={entries} onPick={onTab} /> : null}
         <div className="flex min-h-9 items-center gap-2 pb-2">
           <LivePulse />
-          <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2" title={view.url}>
-            {view.title || view.url}
+          <span className="min-w-0 flex-1 truncate text-[13px] text-ink-2" title={activeView.url}>
+            {addressOf(activeView.url)}
           </span>
           <a
             aria-label={t("open_source")}
             className="hidden shrink-0 text-ink-3 transition-colors hover:text-accent sm:block"
-            href={view.url}
+            href={activeView.url}
             rel="noreferrer"
             target="_blank"
-            title={view.url}
+            title={activeView.url}
           >
             <ExternalLink aria-hidden="true" className="size-4" />
           </a>
-          {view.waitLeft !== undefined ? (
+          {isLead && view.waitLeft !== undefined ? (
             <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
               {t("ai_browser_wait", { s: String(view.waitLeft) })}
             </span>
@@ -151,10 +246,13 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
             <Minimize2 aria-hidden="true" className="size-4" />
           </button>
         </div>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the takeover stage -- clicks forward as viewport coordinates; keyboard users type via the bar or direct typing */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: the takeover stage -- clicks forward as viewport coordinates (LEAD ONLY); keyboard users type via the bar or direct typing */}
         <div
-          className="flex min-h-0 cursor-crosshair items-start justify-center overflow-hidden rounded-xl border border-line bg-ink/5 landscape:flex-1 landscape:items-center"
+          className={`flex min-h-0 items-start justify-center overflow-hidden rounded-xl border border-line bg-ink/5 landscape:flex-1 landscape:items-center ${isLead ? "cursor-crosshair" : ""}`}
           onClick={(event) => {
+            if (!isLead) {
+              return;
+            }
             const target = event.currentTarget;
             if (event.target === target) {
               const { x, y } = frameCoords({ ...event, currentTarget: target });
@@ -168,9 +266,12 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
               IS the interaction surface -- the click forwards as a viewport
               coordinate; keyboard users use the bar below */}
           <img
-            alt={view.title || view.url}
-            className="w-full cursor-crosshair landscape:h-auto landscape:max-h-full landscape:w-auto"
+            alt={activeView.title || activeView.url}
+            className={`w-full landscape:h-auto landscape:max-h-full landscape:w-auto ${isLead ? "cursor-crosshair" : ""}`}
             onClick={(event) => {
+              if (!isLead) {
+                return;
+              }
               event.stopPropagation();
               const rect = event.currentTarget.getBoundingClientRect();
               send({
@@ -183,51 +284,57 @@ function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorV
               dialogRef.current?.focus();
             }}
             role="presentation"
-            src={`data:image/jpeg;base64,${view.img}`}
+            src={`data:image/jpeg;base64,${activeView.img}`}
           />
         </div>
-        {/* the keyboard bar: click a field in the page, type here, Enter
-            sends to the session; Done hands the page back to the model */}
-        <div className="mt-2 flex items-center gap-1.5">
-          <form
-            className="flex min-w-0 flex-1 items-center gap-1.5"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (draft.trim()) {
-                send({ type: "type", text: draft });
-                setDraft("");
-              }
-            }}
-          >
-            <input
-              className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-accent"
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={t("ai_browser_type_hint")}
-              value={draft}
-            />
-            <button
-              aria-label={t("ai_browser_kb_esc")}
-              className="min-h-9 shrink-0 rounded-lg border border-line px-2.5 text-[13px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
-              onClick={() => {
-                send({ type: "key", key: "Escape" });
+        {isLead ? (
+          /* the keyboard bar: click a field in the page, type here, Enter
+              sends to the session; Done hands the page back to the model */
+          <div className="mt-2 flex items-center gap-1.5">
+            <form
+              className="flex min-w-0 flex-1 items-center gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (draft.trim()) {
+                  send({ type: "type", text: draft });
+                  setDraft("");
+                }
               }}
-              title={t("ai_browser_kb_esc")}
+            >
+              <input
+                className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-accent"
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={t("ai_browser_type_hint")}
+                value={draft}
+              />
+              <button
+                aria-label={t("ai_browser_kb_esc")}
+                className="min-h-9 shrink-0 rounded-lg border border-line px-2.5 text-[13px] text-ink-2 transition-colors hover:border-accent hover:text-accent"
+                onClick={() => {
+                  send({ type: "key", key: "Escape" });
+                }}
+                title={t("ai_browser_kb_esc")}
+                type="button"
+              >
+                Esc
+              </button>
+            </form>
+            <div className="h-5 w-px shrink-0 bg-line" />
+            <button
+              className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong"
+              onClick={finishAndClose}
+              title={t("ai_browser_done_hint")}
               type="button"
             >
-              Esc
+              <Check aria-hidden="true" className="size-4" />
+              {t("ai_browser_done")}
             </button>
-          </form>
-          <div className="h-5 w-px shrink-0 bg-line" />
-          <button
-            className="flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong"
-            onClick={finishAndClose}
-            title={t("ai_browser_done_hint")}
-            type="button"
-          >
-            <Check aria-hidden="true" className="size-4" />
-            {t("ai_browser_done")}
-          </button>
-        </div>
+          </div>
+        ) : (
+          <div className="mt-2 flex min-h-9 items-center justify-center rounded-lg border border-line bg-surface-2/40 px-3 text-center text-xs leading-snug text-ink-3">
+            {t("ai_browser_bg_readonly")}
+          </div>
+        )}
       </div>
     </div>,
     document.body,
@@ -276,37 +383,37 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
         ) : null}
       </div>
       <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
-        {multi ? (
-          // the session tabs: BROWSER anatomy -- rounded-top tabs on a
-          // dimmed track, the ACTIVE tab shares the title bar's surface
-          // and merges into it (Chrome's attached-tab look); no scrollbar
-          <div className={`flex items-end gap-1 bg-surface-2/60 px-1.5 pt-1.5 ${SCROLLBAR_NONE} overflow-x-auto`}>
-            {entries.map(([sid, item]) => {
-              const active = sid === tab;
-              const isLead = sid === "lead";
-              return (
-                <button
-                  aria-label={item.title || sid}
-                  className={`flex min-w-0 max-w-44 shrink-0 items-center gap-1.5 rounded-t-lg px-3 py-1.5 text-[13px] transition-colors ${
-                    active ? "bg-surface font-medium text-ink" : "text-ink-3 hover:bg-surface/60 hover:text-ink-2"
-                  }`}
-                  key={sid}
-                  onClick={() => {
-                    setTab(sid);
-                  }}
-                  title={item.title || item.url}
-                  type="button"
-                >
-                  <span className="truncate">{isLead ? t("ai_browser_tab_lead") : hostnameOf(item.url)}</span>
-                </button>
-              );
-            })}
-          </div>
+        {entries.length > 0 ? (
+          // the session tabs: ALWAYS at least the lead's own tab (a browser
+          // never hides its only tab -- and the page title lives on the
+          // tab, not the address row); shared anatomy with the takeover
+          <SessionTabs activeId={tab} entries={entries} onPick={setTab} />
         ) : null}
-        <div className="flex min-w-0 items-center gap-1.5 border-b border-line bg-surface px-2.5 py-1.5">
+        {/* the ADDRESS ROW: the browser's identity bar -- live pulse, the
+            session's current address, and (lead only) the takeover
+            affordance / the background freeze badge */}
+        <div className="flex min-w-0 items-center gap-2 border-b border-line bg-surface px-2.5 py-1.5">
+          <LivePulse />
           <span className="min-w-0 flex-1 truncate text-xs text-ink-2" title={activeView.url}>
-            {activeView.title || activeView.url}
+            {addressOf(activeView.url)}
           </span>
+          {leadActive ? (
+            <button
+              aria-label={t("ai_browser_full")}
+              className="grid size-6 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/60 hover:text-ink"
+              onClick={() => {
+                setFull(true);
+              }}
+              title={t("ai_browser_full")}
+              type="button"
+            >
+              <Maximize2 aria-hidden="true" className="size-3.5" />
+            </button>
+          ) : (
+            <span className="shrink-0 rounded-full bg-surface-2/80 px-2 py-0.5 text-xs leading-none text-ink-3">
+              {t("ai_browser_tab_bg")}
+            </span>
+          )}
         </div>
         {leadActive ? (
           <button
@@ -352,7 +459,20 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
             document.body,
           )
         : null}
-      {full && leadActive ? <BrowserLightbox onClose={() => setFull(false)} view={activeView} /> : null}
+      {full ? (
+        // the takeover opens from the LEAD's affordances only, but stays
+        // open across the session tabs (a background tab inside it is the
+        // read-only snapshot view)
+        <BrowserLightbox
+          onClose={() => {
+            setFull(false);
+          }}
+          onTab={setTab}
+          sessions={sessions}
+          tab={tab}
+          view={activeView}
+        />
+      ) : null}
     </section>
   );
 }

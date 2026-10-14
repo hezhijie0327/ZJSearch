@@ -416,6 +416,8 @@ export const ZH_CN: Record<StringKey, string> = {
   attach_files: "添加图片或文件",
   ai_attach_section: "附件",
   ai_browser_tab_lead: "主会话",
+  ai_browser_tab_bg: "后台",
+  ai_browser_bg_readonly: "后台会话为只读快照，点击与输入仅在主会话生效",
   ai_browser_live: "浏览器",
   ai_browser_wait: "{s} 秒",
   ai_browser_wait_hint: "本操作窗口的剩余时间",
