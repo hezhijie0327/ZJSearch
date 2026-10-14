@@ -36,8 +36,9 @@ _DEPTH_SHAPE: dict[str, str] = {
     " definitions, mechanics, comparisons, recent developments -- citing"
     " every major claim.  Real matrices (companies x metrics, options x"
     " tradeoffs) go into markdown tables with a citation on every"
-    " load-bearing cell; a short bold-lead paragraph opens the answer"
-    " before the first heading.  Be thorough, not exhaustive: cut any"
+    " load-bearing cell; NEVER open with a heading -- a short bold-lead"
+    " paragraph comes first, the headings follow.  Be thorough, not"
+    " exhaustive: cut any"
     " section that merely restates the question; when two candidate"
     " depths exist, write the shorter.",
 }
@@ -61,30 +62,43 @@ _FOLLOWUPS_BLOCK = (
 )
 
 
-def _answer_images_block() -> str:
+def _answer_images_block(proxied: bool) -> str:
     """The inline-gallery contract: the writer may embed image groups
     (Morphic's spec-image idea, our own tiny fence) -- URLs must be copied
     VERBATIM from the feed's ``img=`` entries and are validated against
     the run's registry server-side: anything else is dropped before it
-    reaches the client."""
+    reaches the client.  The example rides the deployment's ACTUAL image
+    shape: ``image_proxify`` emits same-origin ``/image_proxy`` links only
+    when the request's preference enables it, raw URLs otherwise -- a
+    model taught the wrong shape copies the wrong shape (the whitelist
+    compares verbatim: a hallucinated proxy prefix on a raw-url
+    deployment is a silently dropped group)."""
+    sample = (
+        "img=/image_proxy?url=...&h=..."
+        if proxied
+        else "img=https://upload.wikimedia.org/wikipedia/commons/...jpg"
+    )
     return (
         "<answer_images>\n"
-        "Some source lines below carry image URLs as img=... .  Visual"
-        " context communicates faster than prose: DEFAULT TO including one"
-        " image group whenever img= lines exist and images could help the"
-        " reader -- multi-part answers may use a second group right where"
-        " it illustrates the text.  Each group is a fenced block of a JSON"
+        "Some source lines below carry image URLs as img=... .  An image"
+        " earns its place only when the section is about something the"
+        " reader should SEE -- a product, a person, a place, a device, a"
+        " chart, an event: judge by the source line's title, which names"
+        " what the image belongs to.  When the text is about an abstract"
+        " subject (a platform, a policy, a market, a comparison), the"
+        " images behind those sources are usually decorative cover art --"
+        " noise on the page: skip the group and keep the prose.  When"
+        " images do earn a place, each group is a fenced block of a JSON"
         " array of 1-4 URLs, placed on its own lines inside the markdown"
         " body:\n"
         "```zjs-images\n"
         '["<url>", "<url>"]\n'
         "```\n"
-        "A feed line looks like: \"[12] upload.wikimedia.org: Mount Fuji -"
-        ' ... img=/image_proxy?url=...\' -- copy the value after "img="'
+        f"A feed line looks like: \"[12] upload.wikimedia.org: Mount Fuji -"
+        f" ... {sample}' -- copy the value after \"img=\""
         " character for character.  NEVER invent, modify or guess a URL"
         " (unlisted URLs are dropped server-side and the group renders"
-        " empty).  Skip images only for genuinely abstract or text-only"
-        " topics; at most two groups per answer.\n</answer_images>"
+        " empty).  At most two groups per answer.\n</answer_images>"
     )
 
 
@@ -99,6 +113,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     sources_base: int,
     direct: bool = False,
     galleries_on: bool = False,
+    images_proxied: bool = False,
     past_sources: list[dict[str, t.Any]] | None = None,
     relevance: list[int] | None = None,
     learnings: list[dict[str, t.Any]] | None = None,
@@ -173,7 +188,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         )
     lines.append(_FOLLOWUPS_BLOCK)
     if galleries_on:
-        lines.append(_answer_images_block())
+        lines.append(_answer_images_block(images_proxied))
     if halt:
         lines.append(f"<research_note>\n{halt}\n</research_note>")
     elif budget_truncated:

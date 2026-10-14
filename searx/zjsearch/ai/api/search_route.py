@@ -792,6 +792,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             state.round_no >= max_rounds,
             sources_base,
             galleries_on=bool(state.reg.gallery_pool),
+            # the images example must match what image_proxify actually
+            # emitted into this request's feed (same preference check):
+            # a proxied-shape example on a raw-url deployment teaches the
+            # model to copy a prefix the whitelist will reject
+            images_proxied=bool(sxng_request.preferences.get_value("image_proxy")),
             past_sources=assign_past_sources(),
             relevance=await _relevance_order(research_q, state.feed, usage=state.rerank_usage),
             learnings=state.facts,
