@@ -101,7 +101,8 @@ def tool_spec(with_browser: bool = False) -> dict[str, t.Any]:
                     "description": (
                         "Bare domains to RESTRICT the search to (at most 3),"
                         " only when the user signals a source preference:"
-                        ' "search reddit", "在 GitHub 上找" -> ["github.com"];'
+                        ' "search reddit", "search only GitHub" ->'
+                        ' ["github.com"];'
                         ' "official sources" -> the relevant authoritative'
                         " domains.  Prefer this over stuffing the site name"
                         " into the keywords -- the filter is enforced exactly,"

@@ -1409,7 +1409,8 @@ git — dev-settings.yml carries them locally only.
 ## Task decomposition (quality/goal) and the GOAL LOOP
 
 quality/goal decompose: the model writes a LIVING task list
-(`task_write` — 2-4 subtasks with pending/active/done statuses; the
+(`task_write` — as many subtasks as the question needs, no hard cap,
+with pending/active/done statuses; the
 client renders it as the TASK CARD above the timeline: three-state rows
 + a done/total counter; `Coverage` marks a subtask done only when real
 source titles matched — a subtask that never gathered a source is NOT

@@ -53,7 +53,8 @@ def past_research_spec() -> dict[str, t.Any]:
             " matches return their identity -- re-read one with your page"
             " reader before relying on its details.  Use it when a past page"
             " plausibly holds the missing detail (the user references"
-            ' "之前查过的/上次看的", or a prior topic recurs), or when the'
+            ' "what we found last time" / "the page I saw earlier", or a'
+            " prior topic recurs), or when the"
             " question should be judged against a framework or document the"
             " user uploaded before.  Past content"
             " may be OUTDATED -- it supplements, never replaces, live"
@@ -68,7 +69,8 @@ def past_research_spec() -> dict[str, t.Any]:
                 "query": {
                     "type": "string",
                     "description": (
-                        "Keywords for the past page's topic" ' (e.g. "高铁 门票价格", "camera sensor review").'
+                        "Keywords for the past page's topic"
+                        ' (e.g. "shinkansen ticket prices", "camera sensor review").'
                     ),
                 },
             },

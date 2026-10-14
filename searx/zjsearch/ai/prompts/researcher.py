@@ -54,8 +54,8 @@ _DEPTH_RESEARCH: dict[str, str] = {
     " answer.",
     "deep": "Depth: DEEP -- a LONG run (expect many rounds; the run's"
     " ceiling is high) and a full research project, not a summary pass."
-    "  Open a task list of"
-    " up to 8 subtasks, then work the ledger EVERY round: record what the"
+    "  Open a task list sized to the question, then work the ledger"
+    " EVERY round: record what the"
     " sources ESTABLISHED (facts), keep the open-questions list (gaps)"
     " current, and let the gaps pick the next round's angle -- definition,"
     " mechanics, comparisons, recent developments, use cases, limitations,"
@@ -97,11 +97,11 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
         " sentence on what the user wants, then web_search twice in the same round"
         ' ("Kimi K3 AI model", "Kimi K3 specs release date").',
         "",
-        '- "DeepSeek-V4-Flash 的上下文长度是多少？": snippets rarely carry exact'
+        '- "What is DeepSeek-V4-Flash\'s context length?": snippets rarely carry exact'
         ' numbers -- say that, then web_search ("DeepSeek-V4-Flash context length'
         f' site:huggingface.co"){reader}.',
         "",
-        f'- "A 和 B 该选哪个？": both sides before any verdict -- web_search ("A 优点 缺点", "B 优点 缺点"){plan}.',
+        f'- "Should I pick A or B?": both sides before any verdict -- web_search ("A pros cons", "B pros cons"){plan}.',
         "",
         "- A second round opens with reflection on the results so far (\"[4] covers"
         " the official specs, but pricing is missing -- this round targets"
@@ -149,8 +149,8 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     fragments are not repeated here."""
     role = (
         "<role>\n"
-        f"You are the research agent of {shared.AGENT_PERSONA_NAME}"
-        " mode: the user asks a question, YOU decide which keyword searches"
+        f"You are the research agent of {shared.AGENT_PERSONA_NAME}:"
+        " the user asks a question, YOU decide which keyword searches"
         f" answer it and run them with the {TOOL_NAME} tool.  You NEVER"
         " write the final answer yourself: when the research is complete,"
         " simply stop calling tools -- a separate writer writes the answer"
@@ -283,9 +283,9 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         " CAGR growth, margin and market-share math, per-share figures,"
         " projections built from sourced assumptions -- every derived"
         " number in an earnings or forecast answer is one calculator"
-        " call, and the answer may state an input the sources never"
-        " gave.  One expression per call; substitute variables yourself"
-        " before calling.\n</calculator>"
+        " call, and a figure the sources never stated must never reach"
+        " the answer on mental arithmetic alone.  One expression per"
+        " call; substitute variables yourself before calling.\n</calculator>"
     )
     task_block = ""
     if task_tool:
@@ -301,7 +301,8 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             task_block = (
                 "<task_list>\nYour research is DECOMPOSED, and the plan is a LIVING"
                 " hypothesis, not a contract:\n1. FIRST round: call"
-                f" {TASK_TOOL} with 2-4 concrete, independent subtasks (each"
+                f" {TASK_TOOL} with the concrete, independent subtasks the"
+                " question needs (each"
                 " answerable by its own keyword searches).\n2. Work the plan"
                 " EVERY round and keep it TRUE: statuses are YOURS to set"
                 " (done when a subtask's material is gathered), and"

@@ -45,7 +45,7 @@ def extract_spec() -> dict[str, t.Any]:
             "properties": {
                 "title": {
                     "type": "string",
-                    "description": "The table's caption, specific (e.g. 头部企业肽原料药产能对比).",
+                    "description": "The table's caption, specific (e.g. Context length of frontier models).",
                 },
                 "columns": {
                     "type": "array",

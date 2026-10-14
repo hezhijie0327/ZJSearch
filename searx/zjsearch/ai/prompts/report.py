@@ -90,7 +90,8 @@ TEMPLATE_ADAPT_SYSTEM = (
     " section the template marks non-optional, in the template's order"
     " (drop one ONLY when it is marked optional AND truly irrelevant to"
     " the question), write each section title with the question's ACTUAL"
-    " entity names (a placeholder like \"公司\" / \"{company}\" becomes the"
+    " entity names (a placeholder like \"{company}\" or \"the target"
+    " company\" becomes the"
     " concrete name), and sharpen every brief + key_questions so the"
     " section's evidence answers THIS question.  ALSO list the"
     " deliverable_entities: up to 6 named entities the FINAL deliverable"
@@ -120,11 +121,13 @@ SECTION_SYSTEM = (
 
 SUMMARY_SYSTEM = (
     "You write the EXECUTIVE SUMMARY of a finished research report: 3-5"
-    " bold-led findings (\"**基线判断.** ...\"), each 1-3 sentences, each"
-    " carrying its [n] citations, followed by a short 核心逻辑 paragraph"
-    " that ties them together.  Synthesize -- do not retell section by"
-    " section; the reader has not read them yet.  Ground every statement in"
-    " the sections' own citations."
+    ' bold-led findings ("**Bottom line.** ..." -- a BOLD short label, a'
+    " period, then the finding), each 1-3 sentences, each carrying its [n]"
+    " citations, followed by one short synthesis paragraph that names the"
+    " core logic tying the findings together.  Synthesize -- do not retell"
+    " section by section; the reader has not read them yet.  Ground every"
+    " statement in the sections' own citations, and write every label in"
+    " the report's language."
 )
 
 SUMMARY_USER = (

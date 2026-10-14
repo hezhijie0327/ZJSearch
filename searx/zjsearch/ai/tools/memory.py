@@ -41,11 +41,11 @@ def user_memory_spec() -> dict[str, t.Any]:
             " (action=search).  Save ONLY lasting facts -- the user's"
             " city, occupation, standing preferences (answer style,"
             ' source preferences) -- e.g. {"action": "save", "content":'
-            ' "用户常住杭州"} -- NEVER one-off conversation details.  The'
-            " facts the user already has stored are listed in the"
-            " <user_memory> context block: search is for checking before"
-            " a save that might duplicate, not for re-reading what you"
-            " can already see."
+            ' "User lives in Shanghai"} -- NEVER one-off conversation'
+            " details.  The facts the user already has stored are listed"
+            " in the <user_memory> context block: search is for checking"
+            " before a save that might duplicate, not for re-reading what"
+            " you can already see."
         ),
         "parameters": {
             "type": "object",
@@ -63,7 +63,8 @@ def user_memory_spec() -> dict[str, t.Any]:
                     "type": "string",
                     "description": (
                         "save: ONE self-contained fact in the user's language"
-                        ' (e.g. "用户常住杭州, 关注本地房产政策").'
+                        ' (e.g. "User lives in Shanghai, follows the local'
+                        ' housing policy").'
                     ),
                 },
             },

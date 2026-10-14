@@ -27,8 +27,9 @@ def task_write_spec() -> dict[str, t.Any]:
             " the ONLY way the plan or its statuses ever change, and the"
             " plan is a LIVING hypothesis: revise it whenever the evidence"
             " disagrees with it.  First round: decompose the request into"
-            " 2-4 concrete, independent subtasks (each answerable by its"
-            " own focused research).  EVERY round afterwards: keep the list"
+            " concrete, independent subtasks -- as many as the question"
+            " genuinely needs (each answerable by its own focused"
+            " research).  EVERY round afterwards: keep the list"
             ' TRUE -- set a subtask to {"status": "done"} the moment its'
             ' sources are gathered, "active" while researching it, and'
             " RESHAPE it as the findings demand: append an important facet"
@@ -59,7 +60,7 @@ def task_write_spec() -> dict[str, t.Any]:
                         },
                         "required": ["title", "status"],
                     },
-                    "description": "The COMPLETE list (2-8 items) -- not a diff; the newest call REPLACES the card.",
+                    "description": "The COMPLETE list, sized to the question (a handful for a simple one, more when the facets demand it) -- not a diff; the newest call REPLACES the card.",
                 },
             },
             "required": ["items"],
@@ -68,11 +69,13 @@ def task_write_spec() -> dict[str, t.Any]:
 
 
 def parse_task_call(call: dict[str, t.Any]) -> list[dict[str, str]]:
-    """The sanitized task list out of a ``task_write`` call."""
+    """The sanitized task list out of a ``task_write`` call.  No item cap:
+    the plan is the model's -- it sizes the list to the question (the
+    title/status caps are the only sanitation)."""
     args = raw_args(call)
     items = args.get("items")
     out: list[dict[str, str]] = []
-    for item in (items if isinstance(items, list) else [])[:8]:
+    for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
         title = str(item.get("title") or "").strip()[:200]

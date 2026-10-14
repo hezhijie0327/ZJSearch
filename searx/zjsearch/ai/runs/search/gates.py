@@ -181,8 +181,9 @@ def clarify_gate(
                 " investment, purchase, health or legal question -- where"
                 " the user's situation (timeline, risk appetite, existing"
                 " holdings) is unknowable from the question alone.  Broad"
-                " informational topics (\"searxng\", \"how do solar panels"
-                " work\") do NOT need clarification -- cover their facets"
+                ' informational topics ("how do solar panels work",'
+                ' "history of jazz") do NOT need clarification -- cover'
+                " their facets"
                 " instead.  Ask at most 3 questions; each carries 2-4 short"
                 " options (\"single\" = pick one, \"multi\" = pick any) and"
                 " the user can always add free text.  Output ONLY a JSON"
@@ -227,8 +228,8 @@ def generate_title(
                 " no markdown, no code fences:"
                 ' {"title": "<title>"} -- ONE short noun phrase (8-20'
                 " characters) in the question's language, specific to the"
-                " subject: not generic (\"研究报告\"/\"调研\"), not a question,"
-                " no quotes, no trailing punctuation."
+                ' subject: not generic ("research report", "survey"), not a'
+                " question, no quotes, no trailing punctuation."
             ),
         },
         {

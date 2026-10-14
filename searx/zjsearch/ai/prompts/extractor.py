@@ -13,7 +13,8 @@ USER_MEMORY_EXTRACT_SYSTEM = (
     " language; no one-off details (today's weather is NOT"
     " a fact); 0-3 of them.  tags: 2-8 CONCEPT tags naming"
     " the exchange's topics -- short noun phrases in the"
-    " user's language (e.g. 支付网关费率, 跨境收款), no"
+    " user's language (e.g. payment gateway fees,"
+    " cross-border settlement), no"
     " host names, no product versions, no verbatim query"
     " echoes.  Respond with ONLY:"
     ' {"facts": ["...", ...], "tags": ["...", ...]}'
@@ -28,7 +29,8 @@ TAGS_NORMALIZE_SYSTEM = (
     " ABOUT: short noun phrases, merge the languages the"
     " set mixes (a Chinese document about Stripe fees gets"
     " Chinese tags), drop host names, product versions,"
-    " single generic words (对比/攻略/2025) and noise.  Do"
+    " single generic words (compare, guide, 2026) and"
+    " noise.  Do"
     " not invent topics the raw tags do not hint at.  Keep"
     " the item order.  Respond with ONLY a JSON object:"
     ' {"items": [{"tags": ["...", ...]}, ...]}'
