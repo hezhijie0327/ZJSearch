@@ -384,9 +384,13 @@ export function buildAnswerMarkdown(
 ): string {
   const map = buildCitationMap([markdown], new Set(sources.map((source) => source.n)));
   const lines: string[] = [`# ${title}`, "", `_zjsearch · ${new Date().toLocaleString()}_`, ""];
-  lines.push(renumberCitations(markdown, map).trim(), "");
+  // the tail heading doubles as the body cites' anchor target: [1](#引用来源)
+  // jumps to the source list in every renderer that slugs headings
+  const sourcesLabel = labels?.sources || "Sources";
+  const sourcesAnchor = sourcesLabel.trim().toLowerCase().replace(/\s+/g, "-");
+  lines.push(renumberCitations(markdown, map, sourcesAnchor).trim(), "");
   if (map.size > 0) {
-    lines.push(`**${labels?.sources || "Sources"}**`, "");
+    lines.push(`## ${sourcesLabel}`, "");
     for (const source of citedSourceRows(map, sources)) {
       lines.push(`- [${source.local}] [${source.title || source.url}](${source.url})`);
     }
@@ -419,11 +423,15 @@ export function buildReportMarkdown(
     lines.push(`_${input.subtitle}_`, "");
   }
   lines.push(`_zjsearch · ${new Date().toLocaleString()}_`, "");
+  // the tail heading doubles as the body cites' anchor target (see
+  // buildAnswerMarkdown)
+  const sourcesLabel = labels?.sources || "Sources";
+  const sourcesAnchor = sourcesLabel.trim().toLowerCase().replace(/\s+/g, "-");
   for (const section of input.sections) {
-    lines.push(`## ${section.title}`, "", renumberCitations(section.text, map).trim(), "");
+    lines.push(`## ${section.title}`, "", renumberCitations(section.text, map, sourcesAnchor).trim(), "");
   }
   if (map.size > 0) {
-    lines.push(`**${labels?.sources || "Sources"}**`, "");
+    lines.push(`## ${sourcesLabel}`, "");
     for (const source of citedSourceRows(map, input.sources)) {
       lines.push(`- [${source.local}] [${source.title || source.url}](${source.url})`);
     }

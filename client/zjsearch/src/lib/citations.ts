@@ -188,8 +188,12 @@ export function citeToLinks(text: string, map?: CitationMap): string {
 
 /** The plain-text renumbering for exports whose body must read the same
     numbers as its tail (the markdown copy keeps the raw [n] shape, no
-    links).  Unmapped numbers pass through. */
-export function renumberCitations(text: string, map: CitationMap): string {
+    links).  With ``linkAnchor`` the renumbered tokens become links to
+    that anchor (the tail heading's slug) -- a body cite jumps to the
+    source list in any markdown renderer that generates heading anchors
+    (GitHub, VS Code, Typora); renderers without anchors still render
+    the plain [n] label.  Unmapped numbers pass through. */
+export function renumberCitations(text: string, map: CitationMap, linkAnchor?: string): string {
   let inFence = false;
   return text
     .split("\n")
@@ -214,7 +218,10 @@ export function renumberCitations(text: string, map: CitationMap): string {
                   .split(/\s*[,，]\s*/)
                   .map((n: string) => {
                     const local = map.get(Number.parseInt(n, 10));
-                    return local ? `[${local}]` : `[${n}]`;
+                    if (!local) {
+                      return `[${n}]`;
+                    }
+                    return linkAnchor ? `[${local}](#${linkAnchor})` : `[${local}]`;
                   })
                   .join("");
               }),
@@ -222,4 +229,52 @@ export function renumberCitations(text: string, map: CitationMap): string {
         .join("");
     })
     .join("\n");
+}
+
+/** Rewrite a CLONE's citation chips into their document-local labels: the
+    paper is a self-contained document (the reader has no rail to match
+    against), so its body reads [1..N] in first-citation order exactly
+    like the tail underneath it -- the screen's global chips map back
+    through the document-local map (global -> local).  A chip whose
+    global n has no local slot (a phantom) stays untouched.  Run on the
+    PRINT CLONE only -- the live screen keeps its global chips.  The live
+    chip shapes are matched by their TEXT ([n] and nothing else): the
+    thread's chips are `[${n}]`-labeled BUTTONS (AiSummary, aria-label
+    "open_source {n}"), the run section's locator chips carry
+    `data-cite-n`, the deck's marpit slides render `a[href^="#ref-"]`
+    anchors. */
+export function applyLocalCiteNumbers(root: HTMLElement, map: CitationMap): void {
+  for (const chip of root.querySelectorAll<HTMLElement>("button, a")) {
+    const match = /^\[(\d+)\]$/.exec((chip.textContent ?? "").trim());
+    if (!match) {
+      continue;
+    }
+    const globalN = Number.parseInt(match[1] ?? "", 10);
+    const local = map.get(globalN);
+    if (!local) {
+      continue;
+    }
+    // the paper's chips become REAL ANCHORS: the browser's print-to-PDF
+    // preserves same-document fragment links as internal PDF jumps, so a
+    // [n] on the paper jumps straight to its tail row
+    if (chip.tagName === "BUTTON") {
+      const link = root.ownerDocument.createElement("a");
+      link.href = `#ref-${local}`;
+      link.className = chip.className;
+      link.textContent = `[${local}]`;
+      chip.replaceWith(link);
+      continue;
+    }
+    if (chip.hasAttribute("data-cite-n")) {
+      chip.setAttribute("data-cite-n", String(local));
+    }
+    if (chip.hasAttribute("href")) {
+      chip.setAttribute("href", `#ref-${local}`);
+    }
+    if (chip.hasAttribute("aria-label")) {
+      const label = chip.getAttribute("aria-label") ?? "";
+      chip.setAttribute("aria-label", label.replace(/\d+/, String(local)));
+    }
+    chip.textContent = `[${local}]`;
+  }
 }

@@ -1270,23 +1270,35 @@ pattern: `Copy` glyph swapping to `Check` for 1.6s as the feedback — no
 toast — and the `Printer` glyph; there is NO markdown FILE download
 anywhere, the `download*Markdown` exporters are gone).  The builders stay:
 `buildAnswerMarkdown`/`buildReportMarkdown`/`buildDeckMarkdown` build ONE
-document shape each, consumed by the copy.  THE DOCUMENT-LOCAL CITATION
-RENUMBERING (2026-10-13, the [792]-vs-[1-30] confusion): stored answer/
-section text carries the run's GLOBAL registry numbers (a deep run mints
-hundreds), which is plumbing no reader should see -- every DOCUMENT
-surface renumbers its citations [1..N] in FIRST-CITATION order at
-render time (`lib/citations.ts`: `buildCitationMap` over the
-reading-ordered texts gated to the run's registry, `citeToLinks(text,
-map)` emitting local labels/anchors, `renumberCitations` for the plain-
-markdown exports, `citedSourceRows` for the tail).  Body chips, hover
-previews, the run page's answer, DocumentView/DeckView, the 🖨 print
-tail (printDocument now prints EXACTLY the rows it is handed -- the old
-`slice(0, 30)` of the GATHERED list is what read as [1-30] against a
-body citing [792]), the markdown exports and the inspector's 来源 card
-all share one map per document, so body and 引用来源 always agree; the
-stored event log keeps global numbers (replays/continue unaffected) and
-the rail's #n cards stay global -- the local→global translation is the
-call site's one lambda (`citedOrder(map)[local - 1]`).  Framework rule
+document shape each, consumed by the copy.  THE CITATION NUMBERING SPLIT
+(2026-10-14, revised from the 2026-10-13 document-local renumbering):
+the RUN PAGE's surfaces (the answer, DocumentView, DeckView) now speak
+GLOBAL -- the rail's #n source cards sit right beside them, and a body
+chip that reads [6] against a rail card #38 was the mismatch users
+can't reconcile; the chips render the run's registry numbers 1:1 via an
+IDENTITY map over the known sources (empty map == the old undefined:
+verbatim global chips, no tail rows; phantom [n]s stay unlinked;
+streaming can never renumber chips mid-read), the click hands the rail
+its registry number directly.  The 🖨 PRINT of a run page is
+SELF-CONTAINED: the clone's chips renumber to [1..N] in first-citation
+order (`applyLocalCiteNumbers` over `buildCitationMap` of the
+document's own texts) and the tail rows follow the SAME document-local
+map -- the paper reads [1]..[N] top-to-bottom exactly like a human
+report, decoupled from the screen's global chips.  The
+document-local [1..N] FIRST-CITATION renumbering (`buildCitationMap` +
+`citeToLinks(text, map)` + `renumberCitations` + `citedSourceRows`)
+stays with the SELF-CONTAINED surfaces -- the knowledge inspector's
+stored answers, the markdown exports, and the run page's paper --
+where the reader has no rail to match against.  The exported markdown
+LINKS its cites: `renumberCitations(text, map, anchor)` emits
+`[n](#引用来源)`-style jumps to the tail's `## ` heading (every renderer
+that slugs headings follows; thread exports keep plain per-run
+renumbering -- repeated headings would slug unpredictably).  The
+paper's chips become REAL ANCHORS and the tail rows carry
+`id="ref-N"` -- the browser's print-to-PDF preserves same-document
+fragment links as internal PDF jumps (a [n] on the paper jumps to its
+tail row).  The stored event log
+keeps global numbers (replays/continue unaffected).  Framework rule
 IDs ([META-04], the attachment frameworks' binding markers) render as
 inline-code badges -- deliberate marks, not broken citations; they join
 no tail and take no click.  PDF is
@@ -1559,7 +1571,22 @@ ACTION's result — the screenshot shows its shot (click zooms), open/
 snapshot render the session's interactive-element outline, click/type/
 press/scroll render the location line, read/wait_user render the
 reading pane; the screenshot's shot persists (shot-marked), the mirror
-frames are volatile — replays keep the trail, not their bytes).
+frames are volatile — replays keep the trail, not their bytes).  THE
+TAKEOVER'S OWN CHROME (2026-10-14): the address row grew the user's
+history actions (`back`/`forward`/`reload` -- Playwright's native
+go_back/go_forward/reload in `session_input`, the SSRF gate already
+shared) and the input route returns the POST-ACTION frame with every
+forwarded input (between the model's settlements the takeover stared at
+the stale prior frame -- fatally so for a navigation, whose whole
+effect IS the new page; the client overlays the frame locally until the
+next wire frame supersedes it).  The MODEL POINTER rides the wire
+frames: `click`/`type_text` track their target element's bounding-box
+center (`_track_pointer`, best-effort) and `frame()` carries
+`px/py/pk` -- the client draws a synthetic cursor at the landing point
+(viewport screenshots never contain one) with a one-shot click ripple,
+so the user can follow the model's hands between snapshots; the user's
+own forwarded inputs never move it (the synthetic cursor is the
+MODEL's).
 
 THE READER'S RENDER CONTRACT (the built-in browser): the reader has
 exactly ONE render backend — the local Camoufox anti-detect Firefox

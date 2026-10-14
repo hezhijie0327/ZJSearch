@@ -126,7 +126,10 @@ export function printDocument(options: PrintOptions): () => void {
     const sourceRows = sources
       .map((item) => {
         const n = item.n;
-        return `<div style="font-size:11.5px;color:var(--ink-2);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[${n}] ${escapeHtml(
+        // the row carries the chip's anchor target: the browser's
+        // print-to-PDF preserves same-document fragment links, so a [n]
+        // on the paper jumps straight to this row in the saved PDF
+        return `<div id="ref-${n}" style="font-size:11.5px;color:var(--ink-2);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">[${n}] ${escapeHtml(
           item.title,
         )} — ${escapeHtml(item.netloc)}</div>`;
       })

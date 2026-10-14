@@ -65,9 +65,16 @@ import type {
   AiSearchStep,
 } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
-import { buildCitationMap, citedOrder, citedSourceNumbers, citedSourceRows, citeToLinks } from "@/lib/citations.ts";
+import {
+  applyLocalCiteNumbers,
+  buildCitationMap,
+  citedSourceNumbers,
+  citedSourceRows,
+  citeToLinks,
+} from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
+import { buildAnswerMarkdown, buildReportMarkdown } from "@/lib/exporters.ts";
 import { formatDuration } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { listTemplates } from "@/lib/kb/templates.ts";
@@ -1378,17 +1385,22 @@ function AiSearchRunSectionImpl({
   const [viewFile, setViewFile] = useState<number | null>(null);
   /** the rendered answer document (the 🖨 print action's clone source) */
   const answerBodyRef = useRef<HTMLDivElement | null>(null);
-  // THE ANSWER DOCUMENT's citation map (DocumentView/DeckView build their
-  // own over the same inputs): body chips read [1..N] in first-citation
-  // order instead of the run's global registry numbers ([792] in a deep
-  // run), and the 🖨 tail reuses THIS map so the paper matches the page.
+  // THE RUN PAGE SPEAKS GLOBAL: the rail's #n source cards sit right
+  // beside the answer document, so body chips render the run's registry
+  // numbers 1:1 -- an IDENTITY map over the known sources (phantom [n]s
+  // stay unlinked verbatim; a chip's number IS the rail card's number).
+  // The document-local [1..N] first-citation renumbering stays with the
+  // SELF-CONTAINED surfaces (knowledge inspector, markdown exports).
   const citationMap = useMemo(() => {
-    const texts = run.outline
-      ? run.outline.sections.map((section) => run.sections?.[section.id] ?? "").filter(Boolean)
-      : [run.answer];
     const knownNs = new Set(sourceMeta.map((source) => source.n).filter((n): n is number => Number.isInteger(n)));
-    return buildCitationMap(texts, knownNs.size > 0 ? knownNs : undefined);
-  }, [run.outline, run.sections, run.answer, sourceMeta]);
+    // possibly EMPTY == the old undefined: citeToLinks renders the same
+    // verbatim global chips, citedSourceRows just yields no rows
+    const map = new Map<number, number>();
+    for (const n of [...knownNs].sort((a, b) => a - b)) {
+      map.set(n, n);
+    }
+    return map;
+  }, [sourceMeta]);
   const handleCite = (n: number) => {
     // a cited [n] this run never gathered (a past-research recall, a
     // previous run's numbering) has no rail card -- the page-level
@@ -1750,10 +1762,8 @@ function AiSearchRunSectionImpl({
                   markdown={citeToLinks(run.answer, citationMap)}
                   meta={citedSourceRows(citationMap, sourceMeta)}
                   onCite={(local) => {
-                    const globalN = citedOrder(citationMap)[local - 1];
-                    if (globalN != null) {
-                      handleCite(globalN);
-                    }
+                    // the identity map: a chip's number IS the rail card's
+                    handleCite(local);
                   }}
                   settled={!streaming}
                 />
@@ -1781,7 +1791,32 @@ function AiSearchRunSectionImpl({
                 aria-label={t("copy")}
                 className={CHIP_BTN}
                 onClick={() => {
-                  copyToast(run.answer);
+                  // THE COPY IS THE SELF-CONTAINED EXPORT: the raw stored
+                  // answer carries the run's global registry numbers --
+                  // exactly the litter the export exists to strip.  The
+                  // builders renumber the body [1..N] in first-citation
+                  // order and append the matching source tail (the same
+                  // document the knowledge page exports).
+                  const exportSources = run.sources
+                    .filter((source) => Number.isInteger(source.n))
+                    .map((source) => ({ n: source.n as number, title: source.title || source.url, url: source.url }));
+                  const md = run.outline
+                    ? buildReportMarkdown(
+                        {
+                          title: run.outline.title,
+                          subtitle: run.outline.subtitle,
+                          sections: run.outline.sections.map((section) => ({
+                            title: section.title,
+                            text: run.sections?.[section.id] ?? "",
+                          })),
+                          sources: exportSources,
+                        },
+                        { sources: t("knowledge_inspector_sources") },
+                      )
+                    : buildAnswerMarkdown(run.q.slice(0, 120), run.answer, exportSources, {
+                        sources: t("knowledge_inspector_sources"),
+                      });
+                  copyToast(md);
                 }}
                 title={t("copy")}
                 type="button"
@@ -1796,6 +1831,21 @@ function AiSearchRunSectionImpl({
                   if (!el) {
                     return;
                   }
+                  // THE PAPER IS SELF-CONTAINED: the screen's chips speak
+                  // global (the rail matches), but the paper renumbers its
+                  // body to [1..N] in first-citation order and the tail
+                  // follows the SAME document-local map -- [1] up top is
+                  // exactly the tail's first row.  The rewrite runs on the
+                  // CLONE (the live screen keeps its global chips).
+                  const texts = run.outline
+                    ? run.outline.sections.map((section) => run.sections?.[section.id] ?? "").filter(Boolean)
+                    : [run.answer];
+                  const knownNs = new Set(
+                    sourceMeta.map((source) => source.n).filter((n): n is number => Number.isInteger(n)),
+                  );
+                  const printMap = buildCitationMap(texts, knownNs.size > 0 ? knownNs : undefined);
+                  const clone = el.cloneNode(true) as HTMLElement;
+                  applyLocalCiteNumbers(clone, printMap);
                   printDocument({
                     // a report carries its own H1 (the injected heading
                     // would print it twice); a single-write answer takes
@@ -1803,18 +1853,13 @@ function AiSearchRunSectionImpl({
                     heading: run.outline ? null : run.q.slice(0, 120),
                     hint: t("print_hint_webview"),
                     closeLabel: t("print_close"),
-                    // the tail is the CITED set in first-citation order
-                    // with the document's OWN local numbers -- the paper
-                    // reads [1..N] exactly like the body above it (the
-                    // old first-30-gathered slice is what read as [1-30]
-                    // against a body citing [792])
-                    sources: citedSourceRows(citationMap, run.sources).map((source) => ({
+                    sources: citedSourceRows(printMap, run.sources).map((source) => ({
                       n: source.local,
                       title: source.title || source.url,
                       netloc: source.netloc,
                     })),
                     sourcesLabel: t("knowledge_inspector_sources"),
-                    source: el,
+                    source: clone,
                     title: run.outline?.title || run.q,
                   });
                 }}

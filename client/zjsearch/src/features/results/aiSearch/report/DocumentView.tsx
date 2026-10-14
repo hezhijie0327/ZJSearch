@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Tape } from "@/components/Tape.tsx";
 import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
 import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
-import { buildCitationMap, citedOrder, citedSourceRows, citeToLinks } from "@/lib/citations.ts";
+import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 
@@ -49,27 +49,27 @@ export function DocumentView({
 }) {
   const t = useT();
   const outline = run.outline;
-  // THE DOCUMENT-LOCAL CITATION MAP: the stored sections carry the run's
-  // global registry numbers ([792] in a deep run); the document reads
-  // [1..N] in first-citation order and its meta slice/click translation
-  // follow the SAME map -- body chips, hover previews and a tail list
-  // (print/export) all agree.  Streaming appends only (first-citation
-  // slots are stable); the citation gate's section rewrite can re-number
-  // the affected tail -- a one-shot shift, meta rebuilds with it.
+  // THE RUN PAGE SPEAKS GLOBAL: the rail's #n source cards sit right
+  // beside the document, so body chips render the run's registry numbers
+  // 1:1 -- an IDENTITY map over the known sources (phantom [n]s stay
+  // unlinked verbatim; streaming can never renumber chips mid-read).  The
+  // document-local [1..N] first-citation renumbering stays with the
+  // SELF-CONTAINED surfaces (knowledge inspector, markdown exports):
+  // there the reader has no rail to match against.
   const citationMap = useMemo(() => {
-    const texts = outline.sections.map((section) => run.sections?.[section.id] ?? "").filter(Boolean);
     const knownNs = new Set(meta.map((source) => source.n).filter((n): n is number => Number.isInteger(n)));
-    return buildCitationMap(texts, knownNs.size > 0 ? knownNs : undefined);
-  }, [outline.sections, run.sections, meta]);
-  const citedMeta = useMemo(() => citedSourceRows(citationMap, meta), [citationMap, meta]);
-  const order = citedOrder(citationMap);
-  // the document's chips click in LOCAL space; the rail's cards live in
-  // the run's global registry -- one lambda is the whole translation
-  const onCiteLocal = (local: number) => {
-    const globalN = order[local - 1];
-    if (globalN != null) {
-      onCite(globalN);
+    // possibly EMPTY == the old undefined: verbatim global chips, no rows
+    const map = new Map<number, number>();
+    for (const n of [...knownNs].sort((a, b) => a - b)) {
+      map.set(n, n);
     }
+    return map;
+  }, [meta]);
+  const citedMeta = useMemo(() => citedSourceRows(citationMap, meta), [citationMap, meta]);
+  // the chips carry global numbers now -- a click hands the rail its
+  // registry number directly
+  const onCiteLocal = (local: number) => {
+    onCite(local);
   };
   // the anchor prefix is a STABLE string per run (the effect below reads it
   // directly -- a fresh anchorId closure would re-run the observer every render)
