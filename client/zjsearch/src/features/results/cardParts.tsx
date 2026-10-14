@@ -24,23 +24,22 @@ import { newTabLinkProps } from "@/lib/link.ts";
 import { CHIP, CHIP_HOVER, META_ROW, META_TOGGLE, PILL, TILE_BADGE } from "@/lib/styles.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
+import { useGraceThumb } from "@/lib/useGraceThumb.ts";
 
 // ------------------------------------------------------------- shared parts
 
 export function ResultLink({
   result,
   globals,
-  href,
   className,
   children,
 }: {
   result: ResultItem;
   globals: GlobalData;
-  href?: string;
   className?: string;
   children: ReactNode;
 }) {
-  const url = href ?? result.url;
+  const url = result.url;
   return (
     <a className={className} href={url} {...newTabLinkProps(globals.results_on_new_tab)}>
       {children}
@@ -98,7 +97,6 @@ export function Title({ result, globals }: { result: ResultItem; globals: Global
 }
 
 export function MetaLine({ result }: { result: ResultItem }) {
-  const t = useT();
   const bits: ReactNode[] = [];
   if (result.published_date) {
     bits.push(
@@ -144,7 +142,6 @@ export function MetaLine({ result }: { result: ResultItem }) {
           {result.metadata}
         </span>
       ) : null}
-      <span className="sr-only">{t("response_time")}</span>
     </div>
   );
 }
@@ -247,8 +244,9 @@ export function Thumb({
   lengthDisplay?: string | null;
   eager?: boolean;
 }) {
-  const [failed, setFailed] = useState(!src);
-  const [loaded, setLoaded] = useState(false);
+  // the shared 12s grace: a hung thumbnail degrades to the placeholder
+  // exactly like the grid tiles (the old local state waited forever)
+  const { failed, loaded, setFailed, setLoaded } = useGraceThumb(src || undefined);
   if (failed) {
     return (
       <span className={`flex items-center justify-center rounded-xl bg-surface-2 text-ink-3 ${className ?? ""}`}>
@@ -372,10 +370,6 @@ export interface CardProps {
   /** first results load their thumbnail eagerly (LCP) */
   eager?: boolean;
 }
-/** Placeholder of a text card, in the loaded card's exact slot rhythm
-    (url / mt-1 title / mt-1.5 snippet ×2 / mt-2 engines pill) so the swap to
-    the real cards does not shift heights.  The streamed server skeleton
-    (skeleton.html) mirrors these bars — keep both in sync. */
 /** Collapsed snippet preview: 2 lines of text-sm/leading-relaxed (22.75px
     each) — 46px is the exact rendered height, so the ease lands without a
     final snap when the clamp takes over. */
@@ -492,6 +486,10 @@ export function Snippet({
   );
 }
 
+/** Placeholder of a text card, in the loaded card's exact slot rhythm
+    (url / mt-1 title / mt-1.5 snippet ×2 / mt-2 engines pill) so the swap to
+    the real cards does not shift heights.  The streamed server skeleton
+    (skeleton.html) mirrors these bars — keep both in sync. */
 export function ResultSkeleton() {
   return (
     <div className="rounded-2xl p-4">

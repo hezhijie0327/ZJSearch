@@ -37,7 +37,7 @@ function ViewImageBody({ url }: { url: string }) {
 export const viewImageView: ToolView = {
   Icon: Eye,
   label: ({ call, t }) => call.q || (call.args?.url ? String(call.args.url).slice(0, 80) : t("attach_files")),
-  metric: ({ call }) => (call.status === "pending" ? null : null),
+  metric: () => null,
   Content: ({ call }) => (call.args?.url ? <ViewImageBody url={String(call.args.url)} /> : null),
   expandable: ({ call }) => Boolean(call.args?.url),
 };

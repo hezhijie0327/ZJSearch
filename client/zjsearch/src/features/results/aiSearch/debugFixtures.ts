@@ -567,7 +567,13 @@ const FULL_STAGE: DebugScenario = {
           purpose: "citation_gate",
           question: "Spot check: are the sampled citations supported by their sources?",
           target: "全球竞争格局与头部玩家",
-          answer: { verdicts: [{ claim: "中国 CDMO 产能占全球 28%[4]", p: 0.87 }], passed: true },
+          answer: { c_4: "noul" },
+          record_questions: [
+            {
+              name: "citation_gate",
+              instructions: "Spot check: are the sampled citations supported by their sources?",
+            },
+          ],
           ms: 640,
         },
       ],
@@ -1715,10 +1721,15 @@ const PANORAMA_STAGE: DebugScenario = {
       e: "learnings",
       items: [
         {
-          facts: ["全景场景覆盖答案尾部的全部晚期事件 [1]"],
-          gaps: [],
+          id: 9,
+          text: "全景场景覆盖答案尾部的全部晚期事件 [1]。",
+          refs: [1],
+          tags: ["答案尾部"],
+          status: "active",
+          round: 2,
         },
       ],
+      gaps: [],
     },
     {
       e: "tasks",

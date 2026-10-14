@@ -89,7 +89,7 @@ export function SearchBox({
   onQueryChange?: (q: string) => void;
   /** bare: no pill chrome and no submit circle -- for compositions that
       wrap the box in their own card and submit externally (morphic card) */
-  variant?: "hero" | "compact" | "bare";
+  variant?: "compact" | "bare";
   onSubmitQuery: (q: string) => void;
   /** override the input's placeholder (the AI hero asks instead of searches) */
   placeholder?: string;
@@ -291,11 +291,7 @@ export function SearchBox({
             ? // fixed height: the clear button appearing on first keystroke
               // must not grow the row (the ask-card would jump)
               "flex h-9 w-full items-center gap-1"
-            : `flex w-full items-center gap-1 rounded-full border border-line bg-surface transition-shadow ${
-                variant === "hero"
-                  ? "h-14 ps-6 pe-2.5 shadow-card focus-within:border-ink-3/40 focus-within:shadow-pop"
-                  : "h-12 ps-5 pe-2 shadow-card focus-within:border-ink-3/40"
-              }`
+            : "flex h-12 w-full items-center gap-1 rounded-full border border-line bg-surface ps-5 pe-2 shadow-card transition-shadow focus-within:border-ink-3/40"
         }
         onSubmit={onSubmit}
         role="search"

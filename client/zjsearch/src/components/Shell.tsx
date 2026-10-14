@@ -21,17 +21,15 @@ export function Link({
   className,
   ariaLabel,
   title,
-  external,
 }: {
   href: string;
   children: ReactNode;
   className?: string;
   ariaLabel?: string;
   title?: string;
-  external?: boolean;
 }) {
   const { navigate } = useRouter();
-  const internal = href.startsWith("/") && !external;
+  const internal = href.startsWith("/");
 
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!internal || isModifiedClick(event)) {
@@ -48,7 +46,7 @@ export function Link({
       onClick={onClick}
       {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
       {...(title ? { title } : {})}
-      {...newTabLinkProps(external)}
+      {...newTabLinkProps(undefined)}
     >
       {children}
     </a>

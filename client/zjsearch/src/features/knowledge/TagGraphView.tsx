@@ -534,7 +534,7 @@ export function TagGraphView({
           node.y = point.y;
           node.vx = 0;
           node.vy = 0;
-          node.pinned = drag.moved > 12; // a real drag pins the tag in place
+          node.pinned = drag.moved > 12; // a real drag pins the node for the rest of the gesture
         }
       }
     };

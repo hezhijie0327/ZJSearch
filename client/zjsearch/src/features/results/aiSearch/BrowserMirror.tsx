@@ -53,7 +53,7 @@ function LivePulse() {
 /** The takeover: the live page at full size, the user's clicks/wheel/keys
     forwarded to the session.  Mobile-safe: the stage keeps the frame
     contain-fit, the keyboard bar wraps its two actions. */
-export function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorView }) {
+function BrowserLightbox({ onClose, view }: { onClose: () => void; view: MirrorView }) {
   const t = useT();
   const dialogRef = useDialogFocus<HTMLDivElement>();
   const [draft, setDraft] = useState("");

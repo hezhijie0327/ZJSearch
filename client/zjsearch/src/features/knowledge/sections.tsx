@@ -59,8 +59,7 @@ import { useExitPresence } from "@/lib/useExitPresence.ts";
     stats (the lib CHIP_OUTLINE is the 13px CLICKABLE control tier -- a
     same-name divergent token here once invited drift; this reads as its
     own tier now). */
-export const META_CHIP =
-  "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
+const META_CHIP = "inline-flex min-h-6 items-center gap-1 rounded-full border border-line px-2 text-xs text-ink-3";
 
 /** The in-panel views' back row: focus lands here on view swap (the
     imperative focus-on-mount pattern -- no autoFocus attribute). */
@@ -452,9 +451,6 @@ export function MemorySection({
 }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
-  if (memories === null) {
-    return null;
-  }
   // group by day for the timeline view (LobeHub's GroupedVirtuoso shape,
   // minus the virtualization -- browser-local scale is hundreds of rows)
   const groups = new Map<string, MemoryRow[]>();
@@ -958,11 +954,7 @@ export function InspectorView({
           </h2>
           <div className="text-[13px] leading-relaxed text-ink-2">
             {item.kind === "answer" ? (
-              body ? (
-                <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={body} />
-              ) : (
-                <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={item.body} />
-              )
+              <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={body ?? item.body} />
             ) : item.kind === "run" && reportDoc && reportDoc.deck ? (
               // THE SAME slide view the research page used -- the stored
               // slide-markdown chapters re-render through the family compile

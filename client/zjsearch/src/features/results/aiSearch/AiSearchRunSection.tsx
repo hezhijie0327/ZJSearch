@@ -46,7 +46,7 @@ import { ToolRow } from "@/features/results/aiSearch/calls/ToolRow.tsx";
 import { DecisionsCard } from "@/features/results/aiSearch/DecisionsCard.tsx";
 import { DeckView } from "@/features/results/aiSearch/deck/DeckView.tsx";
 import { haltText } from "@/features/results/aiSearch/halts.ts";
-import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
+import { type LedgerFact, type LedgerGap, parseClarifyPairs } from "@/features/results/aiSearch/ledger.ts";
 import { PhaseStrip } from "@/features/results/aiSearch/PhaseStrip.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import { DocumentView } from "@/features/results/aiSearch/report/DocumentView.tsx";
@@ -850,29 +850,19 @@ function AskCard({
     muted) -- newest first, capped at four. */
 function AskArchiveCard({ clarify }: { clarify: string }) {
   const t = useT();
-  // parse "1. Question：Answer" lines into confirmed-context pairs; the
-  // trailing free-text note (no separator) rides as its own item
+  // the shared clarify grammar (ledger.parseClarifyPairs); a trailing
+  // free-text note (no separator) parses as a label-less pair and renders
+  // under its own label line
   const text = clarify.trim();
-  const pairs: Array<{ q: string; a: string }> = [];
-  let note = "";
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-    const match = /^(?:\d+[.、]\s*)?(.+?)[：:]\s*(.+)$/.exec(trimmed);
-    if (match?.[1] && match[2]) {
-      pairs.push({ q: match[1].trim(), a: match[2].trim() });
-    } else {
-      note = (note ? `${note} ` : "") + trimmed;
-    }
-  }
   if (!text) {
     return null;
   }
-  const items: Array<{ q: string; a: string }> = [...pairs];
-  if (note) {
-    items.push({ q: t("ai_clarify_more"), a: note });
+  const parsed = parseClarifyPairs(text);
+  const items: Array<{ q: string; a: string }> = [...parsed];
+  // the grammar's trailing label-less pair IS the free-text note
+  const notePair = parsed.length > 0 ? parsed[parsed.length - 1] : undefined;
+  if (notePair && notePair.q === "") {
+    items.splice(items.length - 1, 1, { q: t("ai_clarify_more"), a: notePair.a });
   }
   const view = [...items].reverse().slice(0, 4);
   return (

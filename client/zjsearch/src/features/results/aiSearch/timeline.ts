@@ -346,7 +346,7 @@ export interface AiSearchRun {
 /** The REPORT mode's outline snapshot (the wire's ``outline`` event): the
     document's TOC -- the server synthesizes the summary/method sections,
     their status rides the same snapshot. */
-export interface AiSearchOutlineSection {
+interface AiSearchOutlineSection {
   id: string;
   title: string;
   brief?: string;
@@ -367,7 +367,7 @@ export interface AiSearchOutline {
 /** One recorded data table (the ``extract_table`` tool's ``artifact``
     event, snapshot-replace per id): the researcher's structured
     evidence with per-row [n] refs resolved against the run's sources. */
-export interface AiSearchArtifact {
+interface AiSearchArtifact {
   id: number;
   title: string;
   columns: string[];
@@ -383,7 +383,6 @@ export interface AiDecision {
   question?: string;
   target?: string;
   answer?: unknown;
-  raw?: unknown[];
   ms?: number;
   /** the wire entry verbatim (structured renderers read purpose-specific
       fields off it -- verdicts/citations/counts) */
@@ -807,97 +806,81 @@ export function applyEvent(
       return { ...core, runs };
     }
     case "call": {
-      // ONE call settled (the entry id + in-round position address the row)
+      // ONE call settled (the entry id + in-round position address the row).
+      // ONE settlement shape for the lead AND the subagent timelines: the
+      // old copy had drifted (the sub path dropped result/answers/text/
+      // dupes/preview/action and the corpus archive -- a subagent's
+      // calculator verdicts and reading panes silently vanished).
       const callId = Number(event.call) || 0;
+      const settled = (call: AiSearchCall): AiSearchCall =>
+        call.id === callId
+          ? {
+              ...call,
+              status: (event.status as AiSearchCall["status"]) ?? "error",
+              ...(event.n !== undefined ? { n: Number(event.n) || 0 } : {}),
+              ...(event.ms !== undefined ? { ms: Number(event.ms) || 0 } : {}),
+              ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
+              ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
+              ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
+              ...(event.answers !== undefined && event.answers !== null
+                ? { answers: event.answers as Record<string, unknown> }
+                : {}),
+              ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
+              ...(event.dupes !== undefined
+                ? {
+                    dupes: (Array.isArray(event.dupes) ? event.dupes : [])
+                      .map((n) => Number(n) || 0)
+                      .filter((n) => n > 0),
+                  }
+                : {}),
+              ...(event.preview !== undefined ? { text: String(event.preview ?? "") || undefined } : {}),
+              ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
+              ...(event.action !== undefined ? { name: String(event.action ?? "") } : {}),
+              // web_browser settlements: the page state, the volatile frame
+              // jpeg and the fresh outline (img stripped from the persisted
+              // copy by the stream consumer)
+              ...(event.page !== undefined && event.page !== null
+                ? {
+                    page: {
+                      url: String((event.page as Record<string, unknown>).url ?? ""),
+                      title: String((event.page as Record<string, unknown>).title ?? ""),
+                    },
+                  }
+                : {}),
+              ...(event.img !== undefined ? { img: String(event.img ?? "") || undefined } : {}),
+              ...(event.snapshot !== undefined ? { snapshot: String(event.snapshot ?? "") || undefined } : {}),
+            }
+          : call;
+      // a page read's extracted text persists as a document row (the
+      // url-identity full-text store the recall pages from)
+      const text = typeof event.text === "string" ? event.text : "";
+      const archive = () => {
+        if (text) {
+          const url = String(event.url ?? "");
+          fx.archive(url, run.sources.find((source) => source.url === url)?.title ?? "", text);
+        }
+      };
       if (inSub) {
-        return patchSub((sub) => ({
+        const next = patchSub((sub) => ({
           ...sub,
           inner: sub.inner.map((step) => {
             if (step.kind !== "calls" || step.entry !== entryId) {
               return step;
             }
-            const settleOne = (call: AiSearchCall): AiSearchCall =>
-              call.id === callId
-                ? {
-                    ...call,
-                    status: (event.status as AiSearchCall["status"]) ?? "error",
-                    ...(event.n !== undefined ? { n: Number(event.n) || 0 } : {}),
-                    ...(event.ms !== undefined ? { ms: Number(event.ms) || 0 } : {}),
-                    ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
-                    ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
-                    ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
-                    ...(event.page !== undefined && event.page !== null
-                      ? {
-                          page: {
-                            url: String((event.page as Record<string, unknown>).url ?? ""),
-                            title: String((event.page as Record<string, unknown>).title ?? ""),
-                          },
-                        }
-                      : {}),
-                    ...(event.img !== undefined ? { img: String(event.img ?? "") || undefined } : {}),
-                    ...(event.snapshot !== undefined ? { snapshot: String(event.snapshot ?? "") || undefined } : {}),
-                  }
-                : call;
-            return { ...step, calls: step.calls.map(settleOne) };
+            return { ...step, calls: step.calls.map(settled) };
           }),
         }));
+        archive();
+        return next;
       }
       const steps = run.steps.map((step) => {
         if (step.kind !== "calls" || step.entry !== entryId) {
           return step;
         }
-        return {
-          ...step,
-          calls: step.calls.map((call) =>
-            call.id === callId
-              ? {
-                  ...call,
-                  status: (event.status as AiSearchCall["status"]) ?? "error",
-                  ...(event.n !== undefined ? { n: Number(event.n) || 0 } : {}),
-                  ...(event.ms !== undefined ? { ms: Number(event.ms) || 0 } : {}),
-                  ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
-                  ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
-                  ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
-                  ...(event.answers !== undefined && event.answers !== null
-                    ? { answers: event.answers as Record<string, unknown> }
-                    : {}),
-                  ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
-                  ...(event.dupes !== undefined
-                    ? {
-                        dupes: (Array.isArray(event.dupes) ? event.dupes : [])
-                          .map((n) => Number(n) || 0)
-                          .filter((n) => n > 0),
-                      }
-                    : {}),
-                  ...(event.preview !== undefined ? { text: String(event.preview ?? "") || undefined } : {}),
-                  ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
-                  ...(event.action !== undefined ? { name: String(event.action ?? "") } : {}),
-                  // web_browser settlements: the page state, the volatile
-                  // frame jpeg and the fresh outline (img stripped from
-                  // the persisted copy by the stream consumer)
-                  ...(event.page !== undefined && event.page !== null
-                    ? {
-                        page: {
-                          url: String((event.page as Record<string, unknown>).url ?? ""),
-                          title: String((event.page as Record<string, unknown>).title ?? ""),
-                        },
-                      }
-                    : {}),
-                  ...(event.img !== undefined ? { img: String(event.img ?? "") || undefined } : {}),
-                  ...(event.snapshot !== undefined ? { snapshot: String(event.snapshot ?? "") || undefined } : {}),
-                }
-              : call,
-          ),
-        };
+        return { ...step, calls: step.calls.map(settled) };
       });
       runs[lastIdx] = { ...run, steps };
-      // a page read's extracted text persists as a document row (the
-      // url-identity full-text store the recall pages from)
-      const text = typeof event.text === "string" ? event.text : "";
-      if (text) {
-        const url = String(event.url ?? "");
-        fx.archive(url, run.sources.find((source) => source.url === url)?.title ?? "", text);
-      }
+      archive();
       return { ...core, runs };
     }
     case "browser": {
@@ -943,7 +926,7 @@ export function applyEvent(
           question: typeof record.question === "string" ? record.question : undefined,
           target: typeof record.target === "string" ? record.target : undefined,
           // judge 工具的裁决键是 verdicts(其余是 answers)
-          answer: record.answer ?? record.answers ?? record.verdicts ?? record.raw ?? undefined,
+          answer: record.answer ?? record.answers ?? undefined,
           // record_questions(name→题文)并入 record,通用渲染器的
           // 标签解析链由此读取
           ...(Array.isArray(record.record_questions)

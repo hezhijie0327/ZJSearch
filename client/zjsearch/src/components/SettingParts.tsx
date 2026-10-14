@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
     setting rows.  One source of truth -- tuning a radius or a hover tint
     here retunes every panel at once. */
 
-export function IconTile({ children }: { children: ReactNode }) {
+function IconTile({ children }: { children: ReactNode }) {
   return (
     <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent">{children}</span>
   );

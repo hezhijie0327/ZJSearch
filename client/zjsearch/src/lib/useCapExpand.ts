@@ -16,8 +16,6 @@ export function useCapExpand(total: number, cap: number) {
     toggle: () => {
       setExpanded((value) => !value);
     },
-    /** items to render before expanding */
-    shown: expanded ? total : cap,
     hidden: Math.max(0, total - cap),
   };
 }

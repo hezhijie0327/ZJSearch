@@ -31,7 +31,7 @@ interface IndexData extends BasicPageData {
  * page-data carries the `ai_search` capability; the choice rides along
  * with every search as the `ai` URL/body flag.
  */
-export function AiModeSwitch({ ai, onChange }: { ai: boolean; onChange: (ai: boolean) => void }) {
+function AiModeSwitch({ ai, onChange }: { ai: boolean; onChange: (ai: boolean) => void }) {
   const t = useT();
   const option = (label: string, active: boolean, onSelect: () => void, icon: ReactNode) => (
     <button

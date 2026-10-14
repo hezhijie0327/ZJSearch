@@ -163,11 +163,11 @@ const STREAM_IDLE_FALLBACK_MS = 300_000;
     beat verdict to prove the network is up) -- longer, to ride out
     legitimately silent wait_user windows on the plain-silence signal. */
 const REATTACH_WINDOW_MS = 300_000;
-/** The auto-reattach ladder's total budget -- covers the run host's full
-    detach grace (90s + the 45s beat phase) with room to spare, so a
-    network blip up to ~5 minutes recovers IN PLACE instead of settling
-    locally while the server is still writing.  A 404 (handle gone)
-    breaks out immediately; the failure box is for genuinely dead runs. */
+/** The auto-reattach ladder's total budget -- ride out transient network
+    blips up to ~5 minutes IN PLACE instead of settling locally: the host
+    outlives the connection (every run lingers), so a recovered stream
+    still carries the run's live tail.  A 404 (handle gone) breaks out
+    immediately; the failure box is for genuinely dead runs. */
 const REATTACH_PROBE_MS = 6_000;
 /** The continue-path attach probe's ladder budget -- the user just
     clicked, the network presumably works; two quick attempts, then the
@@ -1039,19 +1039,33 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setCore((prev) => ({ ...prev, phase: "streaming", runs: [...prev.runs, emptyRun(runNo, last.q, mode)] }));
   };
 
+  /** The run host's ONE control plane call (stop / steer / preempt /
+      wrap / template / shape): every inbound lane posts through here --
+      the action payload varies, the transport never does.  Resolves to
+      the endpoint's `ok` (false when no live handle answers). */
+  const control = async (action: string, extra: Record<string, unknown> = {}): Promise<boolean> => {
+    const runKey = runKeyRef.current;
+    if (!runKey || !capability) {
+      return false;
+    }
+    try {
+      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
+        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action, ...extra }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      return Boolean(out.ok);
+    } catch {
+      return false;
+    }
+  };
+
   const stop = () => {
     // the run host keeps runs alive past the connection: stopping is an
     // INSTRUCTION now, not a broken pipe (fire-and-forget -- the local
     // abort below stays the UI's own cutoff either way; the hosted run
     // sees the flag at its next event slice / round boundary)
-    const runKey = runKeyRef.current;
-    if (runKey && capability) {
-      void fetchJson("/zjsearch/ai/run/control", {
-        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "stop" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }).catch(() => {});
-    }
+    void control("stop");
     abortRef.current?.abort();
     const last = core.runs[core.runs.length - 1];
     if (last && threadIdRef.current) {
@@ -1060,81 +1074,23 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setCore((prev) => applyEvent(prev, { e: "client.stop" }, LIVE_FX));
   };
 
-  const steer = async (text: string, preempt = false): Promise<boolean> => {
-    const runKey = runKeyRef.current;
+  const steer = (text: string, preempt = false): Promise<boolean> => {
     const value = text.trim();
-    if (!runKey || !capability || !value) {
-      return false;
+    if (!value) {
+      return Promise.resolve(false);
     }
-    try {
-      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
-        body: JSON.stringify({
-          tk: capability.tk,
-          run_key: runKey,
-          action: preempt ? "preempt" : "steer",
-          text: value,
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      return Boolean(out.ok);
-    } catch {
-      return false;
-    }
+    return control(preempt ? "preempt" : "steer", { text: value });
   };
 
-  const setTemplate = async (template: ReportTemplate): Promise<boolean> => {
-    const runKey = runKeyRef.current;
-    if (!runKey || !capability) {
-      return false;
-    }
-    try {
-      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
-        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "template", template }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      return Boolean(out.ok);
-    } catch {
-      return false;
-    }
-  };
+  const setTemplate = (template: ReportTemplate): Promise<boolean> => control("template", { template });
 
-  const setShape = async (shape: TemplateShape): Promise<boolean> => {
-    const runKey = runKeyRef.current;
-    if (!runKey || !capability) {
-      return false;
-    }
-    try {
-      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
-        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "shape", shape, lang: langRef.current }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      return Boolean(out.ok);
-    } catch {
-      return false;
-    }
-  };
+  const setShape = (shape: TemplateShape): Promise<boolean> => control("shape", { shape, lang: langRef.current });
 
-  const clearTemplate = async (): Promise<boolean> => {
+  const clearTemplate = (): Promise<boolean> => {
     // the unified picker's free options: withdraw a previously-picked
     // template (the write boundary consumes nothing -- the free outline
     // stands)
-    const runKey = runKeyRef.current;
-    if (!runKey || !capability) {
-      return false;
-    }
-    try {
-      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
-        body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "template" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      return Boolean(out.ok);
-    } catch {
-      return false;
-    }
+    return control("template");
   };
 
   const deleteRun = (runNo: number) => {
@@ -1145,15 +1101,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   };
 
   const wrap = () => {
-    const runKey = runKeyRef.current;
-    if (!runKey || !capability) {
-      return;
-    }
-    void fetchJson("/zjsearch/ai/run/control", {
-      body: JSON.stringify({ tk: capability.tk, run_key: runKey, action: "wrap" }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    }).catch(() => {});
+    void control("wrap");
   };
 
   const reset = () => {

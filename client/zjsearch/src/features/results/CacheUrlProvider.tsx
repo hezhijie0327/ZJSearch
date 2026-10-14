@@ -11,8 +11,7 @@ export function CacheUrlProvider({ cacheUrl, children }: { cacheUrl?: string; ch
   return <CacheUrlContext.Provider value={cacheUrl}>{children}</CacheUrlContext.Provider>;
 }
 
-/** Renderers that build their own chip row outside EnginesLine read the
-    prefix directly. */
+/** EnginesLine's cached-chip prefix (the one consumer). */
 export function useCacheUrl(): string | undefined {
   return useContext(CacheUrlContext);
 }

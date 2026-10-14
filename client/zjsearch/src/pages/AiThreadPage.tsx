@@ -33,10 +33,6 @@ const AiDebugStage = lazy(() =>
     server endpoint stays stateless) and follow-ups append to it.  A missing
     store entry (another browser, quota eviction) renders the empty state. */
 
-/** The thread page's resume ghost (page-private): while the async resume
-    reads the store (the per-tab mirror may miss; PGlite is the fallback)
-    the main column rendered BLANK -- a shared thread link read as dead.
-    The ghost mirrors AiSearchRunSection's zero-event state. */
 /** The page entry: `?aidebug` diverts to the AI debug stage (the UI's
     own audit surface -- fixture wire-event scripts through the real fold
     + renderers, no server surface, no tokens).  The flag lives on a
@@ -67,6 +63,10 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
   return <AiThreadPageImpl data={data} />;
 }
 
+/** The thread page's resume ghost (page-private): while the async resume
+    reads the store (the per-tab mirror may miss; PGlite is the fallback)
+    the main column rendered BLANK -- a shared thread link read as dead.
+    The ghost mirrors AiSearchRunSection's zero-event state. */
 function ThreadGhost() {
   return (
     <div aria-busy="true" className="mt-4 animate-fade-up space-y-5">
@@ -299,11 +299,6 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                     value={followupQuery}
                   />
                   <SteerChips chips={steer.chips} onRetract={steer.retract} />
-                  {followupAttachments.length ? (
-                    <div className="mt-3">
-                      <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />
-                    </div>
-                  ) : null}
                   <div className={`mt-3 flex items-center gap-2 ${steering ? "justify-end" : "justify-between"}`}>
                     {steering ? null : (
                       <DepthControls

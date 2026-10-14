@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType } from "react";
 
 /**
  * The AI run rail's ONE section language: icon + title + count header
@@ -26,26 +26,5 @@ export function RailHeader({
         <span className="shrink-0 text-xs tabular-nums text-ink-3">{count}</span>
       ) : null}
     </div>
-  );
-}
-
-export function RailSection({
-  icon,
-  title,
-  count,
-  label,
-  children,
-}: {
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
-  title: string;
-  count?: string | number;
-  label?: string;
-  children: ReactNode;
-}) {
-  return (
-    <section aria-label={label} className="mb-5">
-      <RailHeader count={count} icon={icon} title={title} />
-      <div className="mt-3">{children}</div>
-    </section>
   );
 }

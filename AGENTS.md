@@ -641,7 +641,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
 - All HTTP calls go through `lib/http.ts` (`fetchText`/`fetchJson` with the
   uniform `HTTP <status>` error); don't hand-roll `resp.ok` guards.
   Recurring Tailwind mega-strings live as constants in `lib/styles.ts`
-  (`SCROLLBAR_NONE`, `SWIPE_ROW`, `META_ROW`, `CHIP`, `ICON_BTN`) — import,
+  (`SCROLLBAR_NONE`, `META_ROW`, `CHIP`, `ICON_BTN`) — import,
   don't re-type. One-shot floating feedback (copy/save confirmations) goes
   through `flashToast()` in `lib/toast.ts` (tone: accent/ok/danger) — never
   render such confirmations in flow (layout shift); from React use
@@ -1017,7 +1017,7 @@ Shared style & logic tokens (import, never re-type):
   `CHIP_HOVER` (`hover:text-ink`), `CODE_CHIP` (square code token),
   `SEGMENT` / `SEGMENT_ACTIVE` / `SEGMENT_IDLE` (segmented-control rows:
   preference tabs, info tabs, theme-style picker), plus the existing
-  `ICON_BTN`, `META_ROW`, `SWIPE_ROW`, `TILE_BADGE`, `DISABLED`.
+  `ICON_BTN`, `META_ROW`, `TILE_BADGE`, `DISABLED`.
 - The FAMILY PAPER LANGUAGE (DESIGN.md §7, shared with ZJBlog) lives in
   `styles/paper.css` (`.paper-note` torn note ground, `.paper-strip` torn
   button ground, `.marker-strip` keyword marker, `.paper-chapter` hand-drawn

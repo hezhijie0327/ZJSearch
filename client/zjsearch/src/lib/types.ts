@@ -120,8 +120,6 @@ export interface ResultItem {
   thumbnail?: string;
   iframe_src?: string;
   audio_src?: string;
-  open_group?: boolean;
-  close_group?: boolean;
 
   // images.html
   thumbnail_src?: string;
@@ -159,7 +157,6 @@ export interface ResultItem {
   // paper.html
   comments?: string;
   tags?: string[];
-  paper_type?: string;
   authors?: string[];
   editor?: string;
   publisher?: string;

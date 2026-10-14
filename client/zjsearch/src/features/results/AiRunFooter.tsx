@@ -20,7 +20,7 @@ import { SCROLLBAR_NONE } from "@/lib/styles.ts";
 /** The run's consolidated token usage -- the shape every dialect's usage
     capture produces (AI Search's finish wire event and the AI Overview's
     trailing meta sentinel both carry it). */
-export interface AiUsagePhase {
+interface AiUsagePhase {
   input: number;
   output: number;
   thoughts?: number;

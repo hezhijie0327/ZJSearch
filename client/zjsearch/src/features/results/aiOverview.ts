@@ -82,7 +82,7 @@ export interface AiSearchGallery {
     only the segment splitter and the renderer here consume it. */
 const GALLERY_MARK = /\{\{zjs-gallery:(\d+)\}\}/g;
 
-export type GallerySegment = { kind: "md"; text: string } | { kind: "gallery"; index: number };
+type GallerySegment = { kind: "md"; text: string } | { kind: "gallery"; index: number };
 
 /** Split an answer into markdown and gallery-marker segments, in order --
     the markers arrive as whole deltas (the server emits them atomically),

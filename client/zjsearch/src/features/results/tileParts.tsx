@@ -2,10 +2,11 @@
 
 import { Calendar, Eye, Globe, type LucideIcon, User, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { EnginesLine, ResultLink } from "@/features/results/cardParts.tsx";
 import { TILE_BADGE } from "@/lib/styles.ts";
 import type { GlobalData, ResultItem } from "@/lib/types.ts";
+import { useGraceThumb } from "@/lib/useGraceThumb.ts";
 
 /** Corner badge on a media tile — duration, filesize (dark pill, bottom-right). */
 export function TileBadge({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -40,22 +41,6 @@ export function TileFavicon({ src }: { src: string }) {
     stays on one line. */
 export function TileEngines({ result }: { result: ResultItem }) {
   return <EnginesLine compact result={result} />;
-}
-
-/** Thumbnail load state with a 12s hung-request grace timer: `failed`
-    covers missing, broken AND stalled sources (the caller renders its
-    placeholder).  Shared by the grid tiles and the image masonry. */
-export function useGraceThumb(src: string | undefined) {
-  const [failed, setFailed] = useState(!src);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    if (loaded || failed) {
-      return;
-    }
-    const timer = window.setTimeout(() => setFailed(true), 12000);
-    return () => window.clearTimeout(timer);
-  }, [failed, loaded]);
-  return { failed, loaded, setFailed, setLoaded };
 }
 
 /** Tile thumbnail with graceful failure: a missing/broken/hung thumbnail

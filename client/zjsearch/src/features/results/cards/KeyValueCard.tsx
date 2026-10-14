@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+
 import { type CardProps, EnginesLine, ResultArticle } from "@/features/results/cardParts.tsx";
 
 /** Key/value table card (keyvalue.html): a captioned two-column table for

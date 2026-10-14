@@ -73,9 +73,9 @@ async function mermaidFor(dark: boolean) {
  * which the card renders under its failed label.
  */
 
-export type AiAnswerPhase = "idle" | "streaming" | "done" | "error";
+type AiAnswerPhase = "idle" | "streaming" | "done" | "error";
 
-export interface AiAnswerState {
+interface AiAnswerState {
   phase: AiAnswerPhase;
   /** the asked question (the MD/PDF exports' title + filename base) */
   query: string;

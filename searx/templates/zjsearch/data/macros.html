@@ -121,8 +121,6 @@ pipeline features without any Python changes. -#}
   {%- if result.thumbnail %}"thumbnail": {{ (media_url(result.thumbnail) or '')|tojson }},{% endif %}
   {%- if result.iframe_src %}"iframe_src": {{ result.iframe_src|tojson }},{% endif %}
   {%- if result.audio_src %}"audio_src": {{ result.audio_src|tojson }},{% endif %}
-  {%- if result.open_group %}"open_group": true,{% endif %}
-  {%- if result.close_group %}"close_group": true,{% endif %}
 
   {%- if result.template == 'images.html' %}
   "thumbnail_src": {{ (media_url(result.thumbnail_src) if result.thumbnail_src else '')|tojson }},
@@ -181,7 +179,6 @@ pipeline features without any Python changes. -#}
   {%- elif result.template == 'paper.html' %}
     {%- if result.comments %}"comments": {{ result.comments|tojson }},{% endif %}
     {%- if result.tags %}"tags": {{ result.tags|tojson }},{% endif %}
-    {%- if result.type %}"paper_type": {{ result.type|tojson }},{% endif %}
     {%- if result.authors %}"authors": {{ result.authors|tojson }},{% endif %}
     {%- if result.editor %}"editor": {{ result.editor|tojson }},{% endif %}
     {%- if result.publisher %}"publisher": {{ result.publisher|tojson }},{% endif %}

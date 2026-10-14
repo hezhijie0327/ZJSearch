@@ -10,5 +10,5 @@ import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 export const researchSubtaskView: ToolView = {
   Icon: Waypoints,
   label: ({ call }) => call.label || call.q,
-  metric: ({ call }) => (call.status === "pending" ? null : null),
+  metric: () => null,
 };

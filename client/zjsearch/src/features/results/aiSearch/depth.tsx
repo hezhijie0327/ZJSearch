@@ -24,7 +24,7 @@ export function parseDepthMode(raw: string | null | undefined): AiSearchMode {
 }
 
 /** True when the mode sits in the deep tier (either output shape). */
-export function isDeepMode(mode: AiSearchMode): boolean {
+function isDeepMode(mode: AiSearchMode): boolean {
   return mode === "report" || mode === "deck";
 }
 
@@ -35,7 +35,7 @@ export function isDeepMode(mode: AiSearchMode): boolean {
  * formats).  The labels carry the expectation -- a deep run is a
  * purchase.
  */
-export function depthOptions(t: Translate) {
+function depthOptions(t: Translate) {
   return [
     { value: "speed", label: t("mode_speed"), icon: <Zap className="size-3.5 text-ink-3" /> },
     { value: "balanced", label: t("mode_balanced"), icon: <Gauge className="size-3.5 text-ink-3" /> },

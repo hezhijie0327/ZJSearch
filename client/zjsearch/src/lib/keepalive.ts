@@ -6,10 +6,10 @@
  * WORKER's timers are NOT throttled by tab visibility (the window's
  * setInterval clamps to ~1/min under Chrome's intensive throttling; the
  * worker keeps its own schedule).  While a run streams, a tiny inline
- * Blob worker POSTs a heartbeat every interval -- the run host counts
- * the grace window from the LAST beat, so a living tab whose fetch the
- * OS dropped keeps its run alive, and a closed tab stops beating and
- * takes the normal grace wrap.  The worker is inline on purpose: no
+ * Blob worker POSTs a heartbeat every interval -- the beats double as
+ * the STREAM WATCHDOG's network verdict (a succeeded beat over a fresh
+ * connection proves a silent stream is half-dead, not merely quiet).
+ * The worker is inline on purpose: no
  * static-root publishing contract, no extra request, nothing to cache.
  *
  * The beat's OUTCOME rides back to the page (`onBeat`): every beat opens
@@ -46,8 +46,8 @@ self.onmessage = (event) => {
 `;
 
 export const KEEPALIVE_INTERVAL_MS = 45_000;
-/** Comfortably under the run host's 90s detach grace: one missed beat
-    still leaves a full window before the wrap. */
+/** Comfortably under any server-side quiet bound: one missed beat
+    still leaves the next one plenty of room to prove liveness. */
 
 export interface RunKeepalive {
   stop(): void;

@@ -26,8 +26,13 @@ const IMAGE_VIEWER_HASH = "#image-viewer";
 
 function ProgressiveImage({ thumbnail, full, alt }: { thumbnail: string; full: string; alt: string }) {
   const [src, setSrc] = useState(thumbnail);
+  const [failed, setFailed] = useState(!thumbnail);
   useEffect(() => {
     setSrc(thumbnail);
+    // the failed state is PER-IMAGE: without this reset one broken source
+    // would render the placeholder for every image navigated to afterwards
+    // (the component instance survives the navigation)
+    setFailed(!thumbnail);
     if (!full || full === thumbnail) {
       return;
     }
@@ -47,7 +52,6 @@ function ProgressiveImage({ thumbnail, full, alt }: { thumbnail: string; full: s
       image.onerror = null;
     };
   }, [thumbnail, full]);
-  const [failed, setFailed] = useState(!src);
   if (failed) {
     return (
       <div className="flex h-[60vh] w-full items-center justify-center text-zinc-400">
@@ -352,7 +356,7 @@ export function Lightbox({
       </div>
 
       {/* bottom bar: title block + the fixed action buttons as the right
-          anchor; details live behind the top-bar (i) toggle */}
+          anchor; the image details render as the permanent inline row */}
       <div className="flex items-center gap-x-4 border-t border-white/10 bg-[#1c1c1c]/95 px-5 py-3">
         <div className="min-w-0 flex-1">
           {result.url ? (

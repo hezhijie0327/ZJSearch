@@ -35,13 +35,13 @@ import { useT } from "@/lib/i18n.ts";
 import { type PrintSource, printDocument } from "@/lib/print.ts";
 import { CHIP, ICON_BTN, META_ROW } from "@/lib/styles.ts";
 
-export interface DeckViewOutline {
+interface DeckViewOutline {
   title: string;
   subtitle?: string;
   sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" }>;
 }
 
-export interface DeckViewProps {
+interface DeckViewProps {
   outline: DeckViewOutline;
   /** 逐节 markdown（timeline 的 section 缓冲） */
   sections: Record<string, string>;

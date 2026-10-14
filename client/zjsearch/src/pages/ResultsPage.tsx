@@ -1011,11 +1011,6 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           value={followupQuery}
                         />
                         <SteerChips chips={steer.chips} onRetract={steer.retract} />
-                        {followupAttachments.length ? (
-                          <div className="mt-3">
-                            <AttachmentPicker items={followupAttachments} onChange={setFollowupAttachments} />
-                          </div>
-                        ) : null}
                         <div
                           className={`mt-3 flex flex-wrap items-center gap-2 ${steering ? "justify-end" : "justify-between"}`}
                         >

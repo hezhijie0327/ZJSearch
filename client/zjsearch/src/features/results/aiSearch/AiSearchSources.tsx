@@ -17,10 +17,11 @@ import { useCapExpand } from "@/lib/useCapExpand.ts";
 /**
  * The AI Search sources section (Vane's MessageSources): a compact set of
  * source cards — identity row (favicon + domain + global [n]), title link,
- * clamp-and-reveal snippet, attribution chips.  The list reads
- * NEWEST-FIRST and caps at four cards (cap-and-expand) so a 200-source
- * run leads with what the research just found; a citation click EXPANDS
- * the cap (the parent owns the state) and scrolls the card into view.
+ * clamp-and-reveal snippet, attribution chips.  The list reads NUMBER
+ * order ([1] -> [N]) and caps at four cards (cap-and-expand) so the
+ * rail leads with the run's first-found material; a citation click
+ * EXPANDS the cap (the parent owns the state) and scrolls the card
+ * into view.
  */
 
 /** The uniform favicon frame: every card anchors its left edge with the
@@ -188,7 +189,7 @@ function SourceCard({ cited, source }: { cited: boolean; source: AiSearchSource 
 }
 
 const RAIL_CAP = 4;
-/** The rail list's default footprint: the four newest cards. */
+/** The rail list's default footprint: sources [1] - [4]. */
 
 export function AiSearchSources({
   cited,

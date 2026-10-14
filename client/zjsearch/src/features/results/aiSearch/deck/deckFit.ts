@@ -16,7 +16,7 @@ const MIN_SCALE = 0.5;
 /** 缩放下限：再往下文字已不可读。 */
 
 /** 适配单页：溢出时对 .deck-body 施加 scale + 宽度补偿，返回是否适配了。 */
-export function fitSlide(section: HTMLElement): boolean {
+function fitSlide(section: HTMLElement): boolean {
   const body = section.querySelector<HTMLElement>(":scope > .deck-body");
   if (!body) {
     return false;

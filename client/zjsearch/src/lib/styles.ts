@@ -13,10 +13,6 @@ export const SCROLLBAR_NONE = "[scrollbar-width:none] [&::-webkit-scrollbar]:hid
     `sm:` up (below it the row wraps) — category/filter tab rows. */
 export const SCROLLBAR_NONE_SM = "sm:[scrollbar-width:none] sm:[&::-webkit-scrollbar]:hidden";
 
-/** Single-line swipe row: children never wrap or shrink — overflow swipes
-    horizontally instead, like the mobile category tabs.  Callers add their
-    own gap (e.g. gap-1 / gap-x-2). */
-
 /** Multi-part meta row that swipes horizontally on overflow (same hidden
     scrollbar, children never shrink).  Callers add their own gap and text
     size (e.g. gap-x-3 text-xs text-ink-3). */
@@ -120,10 +116,10 @@ export const CHIP_OUTLINE =
 export const CHIP_OUTLINE_ACTIVE =
   "border-accent-strong bg-accent-soft font-medium text-accent hover:text-accent-hover";
 
-/** Corner badge over media (duration / filesize): the sanctioned 11px badge
-    tier on a fixed-dark scrim, readable over any thumbnail in every palette.
-    Numerals are tabular so durations/sizes align across a grid. */
-export const TILE_BADGE = "absolute rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-white";
+/** Corner badge over media (duration / filesize): the 12px meta floor on a
+    fixed-dark scrim, readable over any thumbnail in every palette.  Numerals
+    are tabular so durations/sizes align across a grid. */
+export const TILE_BADGE = "absolute rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white";
 
 /** Reliability column colour: green >=90, ink >=80, amber >=50, red below,
     muted when unknown — shared by the stats page and the engine tables. */

@@ -15,6 +15,7 @@ const PURPOSE_LABELS: Record<string, string> = {
   plan_review: "ai_dec_plan_review",
   judge: "ai_dec_judge",
   evidence: "ai_dec_evidence_check",
+  citation_gate: "ai_dec_citation_gate",
   coverage: "ai_dec_coverage",
   depth_probe: "ai_dec_depth_probe",
   entity_coverage: "ai_dec_entity_coverage",
