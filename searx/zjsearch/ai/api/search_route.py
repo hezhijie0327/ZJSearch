@@ -818,16 +818,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # driver thread, events publish into the handle and this response
     # degrades into the first SUBSCRIBER -- a dropped connection detaches
     # instead of killing the run (reattach with X-Zjs-Run-Id + after_seq:
-    # the same run), and a detached run wraps gracefully once its grace
-    # window lapses.  A BACKGROUND run (the ask-card's 后台完成 toggle)
-    # skips the grace instead: a closed tab must not wrap it -- it
-    # researches until the ledger closes, and its every event is
-    # journaled so the late collector fetches the true ending across
-    # restarts and beyond the terminal TTL.
-    handle = run_host.register(
-        budget("detach_grace", mode, run_host.GRACE_DEFAULT),
-        linger=bool(payload.get("background")),
-    )
+    # the same run).  EVERY research run LINGERS (the owner's default,
+    # 2026-10-14): a closed tab never wraps it -- the run researches
+    # until the ledger closes (the stall/runaway guards still bound it),
+    # only the explicit stop/收尾 directives end it early, and the
+    # journal keeps the ending for the late collector across restarts
+    # and beyond the terminal TTL.
+    handle = run_host.register(linger=True)
     # every research run journals: the tail a disconnected client missed
     # is exactly what nothing else preserves (the client's evt log stops
     # at its disconnect, the host buffer dies with the process / the

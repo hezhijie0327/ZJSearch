@@ -12,13 +12,15 @@ backlog replay + a live queue.  A disconnect is a DETACH: the driver
 keeps going, and the run can be reattached with
 ``after_seq=N`` (the same run, the same [n] registry -- not a restart).
 
-Detach policy: a run with zero subscribers for longer than the grace
-window is wrapped gracefully at its next round boundary (halt note to
-the writer, real settle) -- every run ends with a REAL terminal state,
-which is what retires the old 2h stale-run sweep for this class.  A
-terminal handle is retained for a short TTL so a late attacher can
-still fetch the true ending; then the sweep drops it (transient by
-design -- the knowledge base stays the only persistent store).
+Detach policy (2026-10-14): EVERY research run LINGERS -- a run with
+zero subscribers is never auto-wrapped; a closed tab means "collect
+later", and the run researches until the ledger closes (the stall and
+runaway guards still bound it) or the user's explicit stop/收尾 lands.
+Only a ``linger=False`` caller (none today) gets the old grace-window
+auto-wrap back.  A terminal handle is retained for a short TTL so a
+late attacher can still fetch the true ending; then the sweep drops it
+(the durable copy is the run journal -- the knowledge base stays the
+client-side persistent store).
 
 The ``ControlBox`` is the run's inbound control plane: the stop flag,
 the steer lane (FIFO, one drain per round boundary) and the preempt
@@ -205,16 +207,15 @@ class RunHandle:
     the control box and the detach accounting.  One lock guards the lot
     -- every critical section is O(subscribers)."""
 
-    def __init__(self, key: str, grace_seconds: float = GRACE_DEFAULT, linger: bool = False) -> None:
+    def __init__(self, key: str, grace_seconds: float = GRACE_DEFAULT, linger: bool = True) -> None:
         self.key = key
         self.control = ControlBox()
         self.grace_seconds = grace_seconds
-        # THE BACKGROUND COMPLETION (fire-and-forget): a linger run ignores
-        # the detach grace entirely -- a closed tab does not wrap it, it
-        # researches until the ledger closes (or the stall/runaway guards
-        # end it).  Only the explicit directives (stop / wrap) end it
-        # early; the settle still lands in the journal for the late
-        # collector.
+        # THE RUN-TO-COMPLETION DEFAULT: a linger run ignores the detach
+        # grace entirely -- a closed tab does not wrap it, it researches
+        # until the ledger closes (or the stall/runaway guards end it).
+        # Only the explicit directives (stop / wrap) end it early; the
+        # settle still lands in the journal for the late collector.
         self.linger = linger
         # the durable shadow (optional): called with ``(seq, line)`` for
         # every published event AFTER the lock -- the replay line (the
@@ -407,7 +408,7 @@ _HOSTS: dict[str, RunHandle] = {}
 _HOSTS_LOCK = threading.Lock()
 
 
-def register(grace_seconds: float = GRACE_DEFAULT, linger: bool = False) -> RunHandle:
+def register(grace_seconds: float = GRACE_DEFAULT, linger: bool = True) -> RunHandle:
     """Mint a run key and admit the handle (the sweep piggybacks here --
     registration is the one moment every run passes through)."""
     sweep()

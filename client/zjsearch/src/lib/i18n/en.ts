@@ -384,8 +384,6 @@ export const EN = {
   ai_dec_coverage: "Coverage referee",
   ai_dec_evidence_check: "Evidence check",
   related: "Related",
-  ai_bg_run: "Background",
-  ai_bg_run_hint: "Keep researching after this tab closes — collect the finished report from the thread later",
   ai_hero_ask: "What to ask about…",
   ai_hero_search: "What to search for…",
   hero_greeting_search_morning: "Good morning — what would you like to search for?",

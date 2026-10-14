@@ -45,9 +45,8 @@ def budget(key: str, mode: str, default: int) -> int:
     ``max_seconds``): ENGINEERING GUARDS calibrated to the mode design,
     deliberately NOT deployment knobs -- ``max_rounds`` is already
     personalized per question by the depth probe's ladder, and exposing
-    the runaway/stall ceilings invites tuning that defeats them
-    (``detach_grace`` stays configurable: that one is genuinely
-    operational).  ``default`` covers an unknown mode."""
+    the runaway/stall ceilings invites tuning that defeats them.
+    ``default`` covers an unknown mode."""
     return _MODE_BUDGETS.get(mode, {}).get(key, default)
 
 

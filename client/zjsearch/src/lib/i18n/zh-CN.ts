@@ -384,8 +384,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_dec_coverage: "覆盖裁判",
   ai_dec_evidence_check: "证据核验",
   related: "相关",
-  ai_bg_run: "后台完成",
-  ai_bg_run_hint: "关闭窗口后调研继续在后台跑完，稍后在会话里收取报告",
   ai_hero_ask: "问点什么…",
   ai_hero_search: "搜点什么…",
   hero_greeting_search_morning: "早上好，想搜点什么？",

@@ -178,24 +178,6 @@ const KICK_DELAY_MS = 1_500;
     proves the network is up, so a silent stream is a dead stream. */
 const BEAT_FRESH_MS = 100_000;
 
-const BG_RUN_PREF = "zjs-ai-bg-run";
-/** The 后台完成 preference (the ask-card's toggle, persisted): a
-    background run ignores the host's detach grace -- a closed tab does
-    not wrap it, it researches until the ledger closes and the journal
-    keeps the ending for the late collector.  Read at POST time (the
-    toggle is instant; continues carry the user's standing choice). */
-const backgroundPref = (): boolean => typeof window !== "undefined" && window.localStorage.getItem(BG_RUN_PREF) === "1";
-
-export function setBackgroundPref(on: boolean): void {
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(BG_RUN_PREF, on ? "1" : "0");
-  }
-}
-
-export function backgroundPrefEnabled(): boolean {
-  return backgroundPref();
-}
-
 /** The CONTINUE replay payload: the dead attempt's ctx checkpoints (its
     exact conversation), its [n] sources (the server's registry reseeds so
     repeat urls reuse their numbers), the entry/round bases (the resumed
@@ -622,10 +604,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         mode: mode === "report" || mode === "deck" ? "deep" : mode,
         report: mode === "report" ? true : undefined,
         deck: mode === "deck" ? true : undefined,
-        // the 后台完成 preference: the host skips the detach grace for
-        // this run -- a closed tab does not wrap it (the journal keeps
-        // the ending for the late collector either way)
-        background: backgroundPref() || undefined,
         template: (mode === "report" || mode === "deck") && template ? template : undefined,
         // the CONTINUE replay: the dead attempt's conversation rides the
         // request body -- the stateless server rebuilds its loop state
