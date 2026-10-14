@@ -46,7 +46,7 @@ export const learningsView: ToolView = {
                   textClass="text-[13px] leading-relaxed text-ink-2"
                 />
                 {tags.length ? (
-                  <span className="mt-1 flex flex-wrap gap-1">
+                  <span className="mt-1 flex flex-wrap gap-1 text-xs text-ink-3">
                     {tags.map((tag) => (
                       <span className={CHIP} key={tag}>
                         {tag}

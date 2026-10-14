@@ -159,22 +159,37 @@ function factHtml(text: string): string {
   });
 }
 
-/** One fact's concept tags (the model's own 1-3 topic names, the
-    learnings tool's tags field): the tag graph's evidence layer made
-    visible -- the settle folds them into the run row's tags, the graph
-    renders the fact-bearing topics. */
-function FactTags({ tags }: { tags?: string[] }) {
-  if (!tags?.length) {
-    return null;
-  }
+/** One fact's meta tail: a retracted/superseded fact's status label, an
+    active fact's CONFLICT FLAG as a warning chip with visible text (the
+    old icon-only badge hid its meaning behind a hover tooltip), then the
+    fact's concept tags (the learnings tool's tags field) — one wrapping
+    meta row at the 12px chip tier, identical in both list partitions. */
+function FactMeta({ fact }: { fact: LedgerFact }) {
+  const t = useT();
+  const conflict = fact.status === "active" && fact.conflict_with != null;
   return (
-    <span className="mt-1 flex flex-wrap gap-1">
-      {tags.map((tag) => (
-        <span className={CHIP} key={tag}>
-          {tag}
+    <>
+      {fact.status !== "active" ? (
+        <span className="ms-1.5 whitespace-nowrap text-xs text-ink-3">
+          {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
         </span>
-      ))}
-    </span>
+      ) : null}
+      {conflict || fact.tags?.length ? (
+        <span className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-3">
+          {conflict ? (
+            <span className={`${CHIP} bg-warning/10 font-medium text-warning`}>
+              <Zap aria-hidden="true" className="size-3" />
+              {t("ai_finding_conflict")}
+            </span>
+          ) : null}
+          {fact.tags?.map((tag) => (
+            <span className={CHIP} key={tag}>
+              {tag}
+            </span>
+          ))}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -253,21 +268,7 @@ function FindingsCard({
                   textClass="text-[13px] leading-relaxed text-ink-2"
                 />
               </div>
-              {fact.status !== "active" ? (
-                <span className="ms-1.5 whitespace-nowrap text-xs text-ink-3">
-                  {fact.status === "retracted" ? t("ai_finding_retracted") : t("ai_finding_superseded")}
-                </span>
-              ) : fact.conflict_with ? (
-                <span
-                  aria-label={t("ai_finding_conflict")}
-                  className="ms-1.5 inline-flex size-4 items-center justify-center rounded-full bg-warning/15 text-warning"
-                  role="img"
-                  title={t("ai_finding_conflict")}
-                >
-                  <Zap aria-hidden="true" className="size-2.5" />
-                </span>
-              ) : null}
-              <FactTags tags={fact.tags} />
+              <FactMeta fact={fact} />
             </div>
           </li>
         ))}
@@ -291,7 +292,7 @@ function FindingsCard({
                     textClass="text-[13px] leading-relaxed text-ink-2"
                   />
                 </div>
-                <FactTags tags={fact.tags} />
+                <FactMeta fact={fact} />
               </div>
             </li>
           ))}
