@@ -24,6 +24,7 @@ import { Lightbox, type LightboxItem } from "@/features/results/aiSearch/Attachm
 import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { cn } from "@/lib/cn.ts";
+import { buildAnswerMarkdown } from "@/lib/exporters.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
@@ -911,7 +912,7 @@ export function AiAnswerCard({
     // print-hidden (the printed answer keeps its box, loses the tape);
     // the scroll target id lives on the wrapper (same geometry)
     <div className="relative" id="ai-answer-card">
-      <Tape className="zjs-print-hide -top-2.5 end-8 w-20 rotate-[5deg] bg-accent-soft/60" />
+      <Tape className="zjs-print-hide w-20 bg-accent-soft/60" seed={q ?? "ai-overview"} />
       <div className="-rotate-[0.35deg] animate-fade-up rounded-2xl border border-line bg-surface p-4">
         <div className="zjs-print-hide flex min-w-0 items-center gap-2">
           <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
@@ -931,7 +932,18 @@ export function AiAnswerCard({
               >
                 <RefreshCw className="size-3.5" />
               </button>
-              {state.phase === "done" && hasAnswer ? <CopyChip value={answer.trim()} /> : null}
+              {state.phase === "done" && hasAnswer ? (
+                <CopyChip
+                  value={buildAnswerMarkdown(
+                    q || t("ai_answer"),
+                    answer.trim(),
+                    sourceMeta
+                      .filter((source) => Number.isInteger(source.n))
+                      .map((source) => ({ n: source.n as number, title: source.t, url: source.u })),
+                    { sources: t("knowledge_inspector_sources") },
+                  )}
+                />
+              ) : null}
               {state.phase === "done" && hasAnswer && q ? (
                 <button
                   aria-label={t("ai_deep_report")}

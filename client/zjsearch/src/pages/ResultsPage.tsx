@@ -1121,7 +1121,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
             null : (
               <>
                 <Corrections data={data} onSearch={submitQuery} />
-                <div className="mt-3 space-y-3">
+                <div className={`mt-3 space-y-3 ${aiAnswer.open ? "pt-3" : ""}`}>
                   {aiAnswer.open ? (
                     <AiAnswerCard onCite={jumpToAiSource} q={data.q} sourceMeta={aiMeta} state={aiAnswer} />
                   ) : null}

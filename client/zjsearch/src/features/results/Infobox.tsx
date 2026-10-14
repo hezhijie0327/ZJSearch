@@ -25,7 +25,7 @@ export function Infobox({
     // card's; the tape is a SIBLING of the card (§7 physics) and
     // print-hidden — the printed paper keeps its box
     <div className="relative">
-      <Tape className="zjs-print-hide -top-2.5 start-8 w-24 -rotate-6 bg-accent-soft/80" />
+      <Tape className="zjs-print-hide w-24 bg-accent-soft/80" seed={infobox.title} />
       <div className="rotate-[0.35deg] rounded-2xl border border-line bg-surface p-3">
         <div className={infobox.img_src ? "flex items-start gap-4" : ""}>
           {infobox.img_src ? (
