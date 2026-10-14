@@ -1012,10 +1012,11 @@ Shared style & logic tokens (import, never re-type):
   `AiThreadPage` consume `PaperEmpty`; the 404 keeps its
   own h1 hand-rolled), the search-failure notice, the knowledge empty
   states, the hero greeting's leading hello (marker strip), the hero's
-  hand-drawn arrow AND the ask-card's pinned-card physics (deterministic
-  micro-tilt + top-edge tape + `focus-within:rotate-0` straighten — the
-  animation stays on the outer wrapper, arrow/tape ride it untilted; the
-  autocomplete dropdown only exists focused, so it never renders tilted),
+  hand-drawn arrow AND the ask-card's pinned-note dress (top-edge tape +
+  arrow on the untilted wrapper — the card itself sits STRAIGHT: the old
+  micro-tilt + `focus-within:rotate-0` straighten read as a glitch on
+  every focus and were removed; focus only warms the border, the card
+  never moves),
   the mixed-search category blocks
   (chapter separators), the clarify archive and the report TOC slip
   (pinned notes in the run), the clarify GATE itself (AskCard: a blank

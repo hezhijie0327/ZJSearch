@@ -186,13 +186,11 @@ export function IndexPage({ data }: { data: IndexData }) {
             fade-up leaves a residual transform (a stacking context) on
             animated siblings, which would let the dropdown paint under
             them. */}
-        {/* The ask-card rides the family PINNED-CARD physics (DESIGN.md §7,
-            the blog ProjectCard/LockScreen precedent): the animation stays
-            on the OUTER wrapper (its residual transform would override the
-            rotate), the card itself carries the deterministic micro-tilt
-            and SITS UP STRAIGHT on focus — the same straighten-on-touch
-            physics as PAPER_STRIP's hover:rotate-0.  The autocomplete
-            dropdown only exists while focused, so it never renders tilted. */}
+        {/* The ask-card keeps the family pinned-note DRESS (top-edge tape,
+            the blog hero's hand-drawn arrow) but sits perfectly straight:
+            the micro-tilt + focus-within straighten read as a glitch on
+            click (the card visibly rocked on every focus), so the card
+            itself never moves — focus only warms the border. */}
         <div
           className="relative z-10 mt-12 w-full animate-fade-up [animation-delay:60ms]"
           onFocusCapture={preloadResultsPage}
@@ -219,7 +217,7 @@ export function IndexPage({ data }: { data: IndexData }) {
           {/* the tape pressing the card's top edge (§9 mobile compaction:
               exits with the arrow below sm) */}
           <Tape className="-top-3 left-8 hidden w-24 -rotate-3 bg-accent-soft/70 sm:block" />
-          <div className="relative rotate-[0.35deg] rounded-2xl border border-line bg-surface p-5 shadow-card transition focus-within:rotate-0 focus-within:border-accent">
+          <div className="relative rounded-2xl border border-line bg-surface p-5 shadow-card transition-colors focus-within:border-accent">
             <SearchBox
               disableAutocomplete={aiMode}
               initialQuery=""
