@@ -34,8 +34,11 @@ def _browser_input_view() -> flask.Response:
     if kind == "done":
         session.finish_wait(session_id)
         return flask.jsonify({"ok": True})
-    if kind not in ("click", "wheel", "type", "key"):
-        return flask.jsonify({"error": "type must be click / wheel / type / key"}), 422
+    if kind not in ("click", "wheel", "type", "key", "back", "forward", "reload"):
+        return (
+            flask.jsonify({"error": "type must be click / wheel / type / key / back / forward / reload"}),
+            422,
+        )
     try:
         session.session_input(
             session_id,
@@ -48,7 +51,17 @@ def _browser_input_view() -> flask.Response:
         )
     except session.SessionError as exc:
         return flask.jsonify({"error": str(exc)}), 502
-    return flask.jsonify({"ok": True})
+    # every forwarded input returns a FRESH frame: between the model's
+    # settlements the takeover would otherwise stare at the stale prior
+    # frame (fatally so for back/forward/reload, whose whole effect IS the
+    # new page) -- the client overlays it locally until the next wire
+    # frame supersedes it.  A failed capture still answers ok (the action
+    # ran; the stale frame stays the truth it was).
+    try:
+        return flask.jsonify({"ok": True, "frame": session.frame(session_id)})
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.warning("zjsearch_browser_input: post-action frame capture failed", exc_info=True)
+        return flask.jsonify({"ok": True})
 
 
 def install(app: flask.Flask) -> None:

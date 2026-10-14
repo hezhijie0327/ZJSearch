@@ -88,12 +88,16 @@ class SessionError(Exception):
 
 
 class _Session:  # pylint: disable=too-few-public-methods
-    """One keyed session: its page, its lock, its wait_user flag."""
+    """One keyed session: its page, its lock, its wait_user flag, and the
+    MODEL POINTER -- the viewport-space landing point of the last
+    ref-targeted action (click / type), so the client can draw a cursor
+    that shows where the model is working."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.page: "Page | None" = None
         self.wait_done = threading.Event()
+        self.pointer: tuple[int, int, str] | None = None
 
 
 _SESSIONS: dict[str, _Session] = {}
@@ -276,6 +280,21 @@ async def _resolve_live(page: "Page", ref: str) -> str:
     return sel
 
 
+async def _track_pointer(sess: "_Session", page: "Page", sel: str, kind: str) -> None:
+    """Best-effort viewport-space landing point of one ref-targeted action:
+    the element's bounding-box center rides the next mirror frame as
+    px/py/pk and the client draws the model's cursor there.  A box that
+    cannot be resolved (detached mid-race, zero-size) just skips the
+    tracking -- the pointer is a visibility aid, never action-critical."""
+    try:
+        box = await page.locator(sel).first.bounding_box(timeout=1_500)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return
+    if not box:
+        return
+    sess.pointer = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2), kind)
+
+
 def click(session_id: str, ref: str) -> dict[str, t.Any]:
     sess = get(session_id)
     with sess.lock:
@@ -284,6 +303,7 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
             sel = await _resolve_live(page, ref)
+            await _track_pointer(sess, page, sel, "click")
             await page.click(sel, timeout=_ACTION_TIMEOUT_MS)
             return await _post_action_state(page, before, 600)
 
@@ -298,6 +318,7 @@ def type_text(session_id: str, ref: str, text: str, submit: bool) -> dict[str, t
             page = await _ensure_page(sess)
             before = str(page.url)
             sel = await _resolve_live(page, ref)
+            await _track_pointer(sess, page, sel, "type")
             await page.fill(sel, str(text), timeout=_ACTION_TIMEOUT_MS)
             if submit:
                 await page.keyboard.press("Enter")
@@ -354,8 +375,14 @@ def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
 
 
 def frame(session_id: str = LEAD) -> dict[str, t.Any]:
-    """The mirror frame: the same capture at mirror quality."""
-    return screenshot_b64(session_id, quality=55)
+    """The mirror frame: the same capture at mirror quality, PLUS the
+    model pointer when one has been tracked (px/py viewport space, pk the
+    action kind -- the client draws the cursor and its click ripple)."""
+    out = screenshot_b64(session_id, quality=55)
+    pointer = getattr(get(session_id), "pointer", None)
+    if pointer:
+        out["px"], out["py"], out["pk"] = pointer
+    return out
 
 
 def extract(session_id: str, max_chars: int | None) -> dict[str, str]:
@@ -414,6 +441,19 @@ def session_input(
                 await page.keyboard.type(str(text))
             elif kind == "key":
                 await page.keyboard.press(str(key))
+            elif kind in ("back", "forward", "reload"):
+                # the takeover's chrome actions: the user navigates the
+                # shared page -- the SSRF gate already guards anything the
+                # fresh page loads, same as the model's own navigations
+                if kind == "back":
+                    await page.go_back(timeout=_ACTION_TIMEOUT_MS)
+                elif kind == "forward":
+                    await page.go_forward(timeout=_ACTION_TIMEOUT_MS)
+                else:
+                    await page.reload(timeout=_ACTION_TIMEOUT_MS)
+                # a wholesale page change: the settle treatment so the
+                # frame the input route returns shows the SETTLED page
+                await _settle_page(page)
             else:
                 raise SessionError(f"unknown input kind: {kind!r}")
 

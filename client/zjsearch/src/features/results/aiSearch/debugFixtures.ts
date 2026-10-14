@@ -1218,6 +1218,10 @@ const BROWSER_STAGE: DebugScenario = {
       img: TINY_JPEG,
       w: 1280,
       h: 800,
+      // the model pointer: the QA surface for the drawn cursor + ripple
+      px: 640,
+      py: 156,
+      pk: "click",
     },
     {
       e: "sources",
@@ -1269,6 +1273,9 @@ const BROWSER_STAGE: DebugScenario = {
       w: 1280,
       h: 800,
       wait_left: 174,
+      px: 912,
+      py: 402,
+      pk: "type",
     },
     {
       e: "browser",
@@ -1295,6 +1302,12 @@ const BROWSER_STAGE: DebugScenario = {
       img: TINY_JPEG,
       w: 1280,
       h: 800,
+      // the settled final frame carries the pointer: the QA surface for
+      // the drawn cursor + ripple (the fold replaces wholesale -- only
+      // the LAST event's coordinates show)
+      px: 640,
+      py: 156,
+      pk: "click",
     },
     {
       e: "sources",

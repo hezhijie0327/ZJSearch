@@ -331,15 +331,38 @@ export interface AiSearchRun {
   artifacts?: Record<number, AiSearchArtifact>;
   /** the interactive session's live mirror (the web_browser call's
       viewport frames -- img stripped before persisting; null = no
-      session or the run replays).  THE LEAD session's frame. */
-  browser: { url: string; title: string; img: string; w: number; h: number; waitLeft?: number } | null;
+      session or the run replays).  THE LEAD session's frame.  px/py/pk
+      = the MODEL POINTER: the viewport-space landing point of the last
+      ref-targeted action and its kind (the drawn cursor + click
+      ripple). */
+  browser: {
+    url: string;
+    title: string;
+    img: string;
+    w: number;
+    h: number;
+    waitLeft?: number;
+    px?: number;
+    py?: number;
+    pk?: string;
+  } | null;
   /** ALL live browser sessions keyed by session id (v2.1 R3B: the lead
       plus one per delegating subagent -- the rail card's tab strip).
       The lead also rides ``browser`` (the takeover's auto-open watch
       and the old render path). */
   browserSessions?: Record<
     string,
-    { url: string; title: string; img: string; w: number; h: number; waitLeft?: number }
+    {
+      url: string;
+      title: string;
+      img: string;
+      w: number;
+      h: number;
+      waitLeft?: number;
+      px?: number;
+      py?: number;
+      pk?: string;
+    }
   >;
 }
 
@@ -896,6 +919,9 @@ export function applyEvent(
         w: Number(event.w) || 1280,
         h: Number(event.h) || 800,
         ...(event.wait_left !== undefined ? { waitLeft: Number(event.wait_left) || 0 } : {}),
+        ...(event.px !== undefined && event.py !== undefined
+          ? { px: Number(event.px), py: Number(event.py), pk: String(event.pk ?? "") }
+          : {}),
       };
       runs[lastIdx] = {
         ...run,

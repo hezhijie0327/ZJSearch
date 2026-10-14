@@ -102,3 +102,21 @@ html.centered {
   overflow: hidden;
   overscroll-behavior: none;
 }
+
+/* the model pointer's click ripple (BrowserMirror): ONE-SHOT by
+   construction -- the span is keyed by the landing point, remounts per
+   click, plays 500ms and holds its faded end (no loop; a settled page
+   carries zero perpetual animations) */
+@keyframes zjs-ripple {
+  from {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.8);
+  }
+}
+.zjs-ripple {
+  animation: zjs-ripple 500ms ease-out forwards;
+}
