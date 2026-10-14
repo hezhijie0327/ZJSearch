@@ -20,7 +20,7 @@ function GalleryTile({ item, onCite }: { item: AiSearchGallery; onCite?: (index:
   return (
     <button
       aria-label={item.title || `[${item.n}]`}
-      className="group relative h-24 w-40 shrink-0 overflow-hidden rounded-lg border border-line bg-surface-2"
+      className="zjs-gallery-tile group relative h-24 w-40 shrink-0 overflow-hidden rounded-lg border border-line bg-surface-2"
       onClick={() => {
         onCite?.(item.n);
       }}

@@ -218,6 +218,17 @@
   height: auto;
 }
 
+/* the answer's inline gallery tiles are FIXED-HEIGHT fills (h-24, the
+   photo covers the tile edge to edge on screen) -- the generic height:
+   auto above would letterbox them onto their bg-surface-2 ground (the
+   framed-box artifact) and the load fade would print a half-faded grey
+   tile; restore the screen geometry on paper */
+.zjs-print-sheet .zjs-gallery-tile img {
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+}
+
 .zjs-print-sheet hr {
   border: none;
   border-top: 1px solid var(--line);
