@@ -45,6 +45,7 @@ from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.runs.report import synth as report_synth
 from searx.zjsearch.ai.runs import attachments as uploads
 from searx.zjsearch.ai.runs import host as run_host
+from searx.zjsearch.ai.runs import journal as run_journal
 from searx.zjsearch.ai.runs.search.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runs.search.gates import (
     clarify_gate,
@@ -818,8 +819,21 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # degrades into the first SUBSCRIBER -- a dropped connection detaches
     # instead of killing the run (reattach with X-Zjs-Run-Id + after_seq:
     # the same run), and a detached run wraps gracefully once its grace
-    # window lapses
-    handle = run_host.register(budget("detach_grace", mode, run_host.GRACE_DEFAULT))
+    # window lapses.  A BACKGROUND run (the ask-card's 后台完成 toggle)
+    # skips the grace instead: a closed tab must not wrap it -- it
+    # researches until the ledger closes, and its every event is
+    # journaled so the late collector fetches the true ending across
+    # restarts and beyond the terminal TTL.
+    handle = run_host.register(
+        budget("detach_grace", mode, run_host.GRACE_DEFAULT),
+        linger=bool(payload.get("background")),
+    )
+    # every research run journals: the tail a disconnected client missed
+    # is exactly what nothing else preserves (the client's evt log stops
+    # at its disconnect, the host buffer dies with the process / the
+    # terminal TTL).  The host's callback carries (seq, line); the run
+    # key closes over here.
+    handle.journal = lambda seq, line, _j=run_journal.journal(), _k=handle.key: _j.append(_k, seq, line)
     # the subagent pump observes the run's control plane NON-destructively
     # (peek over read): a user stop/preempt must reach the RUNNING
     # subagents -- today the delegation batch blocked the stop until every

@@ -302,7 +302,14 @@ async function createSchema(db: Pg): Promise<void> {
   const hadV5 = await db.query<{ present: boolean }>("SELECT to_regclass('run_summary') IS NOT NULL AS present");
   const carried = !(hadV5.rows ?? [])[0]?.present;
   if (carried) {
-    // a v4 database (or a fresh one -- the drops no-op): v4 dies wholesale
+    // a v4 database (or a fresh one -- the drops no-op): v4 dies wholesale.
+    // LOUD on purpose: a store that silently empties reads as a data-loss
+    // bug -- the console line is the only witness the user ever gets.
+    console.warn(
+      "zjsearch pg: pre-v5 store detected (no run_summary marker) -- dropping" +
+        " knowledge/run_event/thread_head WHOLESALE and rebuilding the schema." +
+        " This is the schema-bump policy (the v2 precedent), not a crash.",
+    );
     for (const table of ["knowledge", "run_event", "thread_head"]) {
       await db.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
     }

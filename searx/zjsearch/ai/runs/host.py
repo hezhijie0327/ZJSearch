@@ -205,10 +205,22 @@ class RunHandle:
     the control box and the detach accounting.  One lock guards the lot
     -- every critical section is O(subscribers)."""
 
-    def __init__(self, key: str, grace_seconds: float = GRACE_DEFAULT) -> None:
+    def __init__(self, key: str, grace_seconds: float = GRACE_DEFAULT, linger: bool = False) -> None:
         self.key = key
         self.control = ControlBox()
         self.grace_seconds = grace_seconds
+        # THE BACKGROUND COMPLETION (fire-and-forget): a linger run ignores
+        # the detach grace entirely -- a closed tab does not wrap it, it
+        # researches until the ledger closes (or the stall/runaway guards
+        # end it).  Only the explicit directives (stop / wrap) end it
+        # early; the settle still lands in the journal for the late
+        # collector.
+        self.linger = linger
+        # the durable shadow (optional): called with ``(seq, line)`` for
+        # every published event AFTER the lock -- the replay line (the
+        # browser mirror's img bytes already stripped), so a journal is a
+        # byte-verbatim attach backlog.  Wired by the search route.
+        self.journal: t.Callable[[int, str], None] | None = None
         self._lock = threading.Lock()
         self._lines: list[str] = []
         self._subs: dict[int, "queue.Queue[str]"] = {}
@@ -239,16 +251,27 @@ class RunHandle:
         ``wait_user`` window emits a frame every ~2s for minutes -- a
         reattach replaying hundreds of base64 payloads was pure waste,
         and the client's evt-log persistence drops the bytes for the
-        same reason)."""
+        same reason).  The wired journal receives the slimmed line
+        outside the lock -- a durable shadow of the attach backlog."""
+        seq: int
+        replay: str
         with self._lock:
             self._seq += 1
+            seq = self._seq
             line = wire.encode({**event, "seq": self._seq})
-            self._lines.append(_replay_line(event, line))
+            replay = _replay_line(event, line)
+            self._lines.append(replay)
             if event.get("e") == "settle":
                 self._settled = True
                 self._settled_at = time.monotonic()
             for sub in self._subs.values():
                 sub.put(line)
+        if self.journal is not None:
+            try:
+                self.journal(seq, replay)
+            except Exception:  # pylint: disable=broad-except
+                logger.warning("zjsearch run host: journal append failed for run %s", self.key[:8], exc_info=True)
+                self.journal = None
         return line
 
     def subscribe(self, after_seq: int = 0) -> Subscription:
@@ -350,6 +373,10 @@ class RunHandle:
 
     def grace_expired(self) -> bool:
         with self._lock:
+            if self._linger:
+                # the background-completion contract: a closed tab never
+                # wraps this run -- it researches to the ledger's closure
+                return False
             return (
                 not self._settled
                 and not self._finished
@@ -380,11 +407,11 @@ _HOSTS: dict[str, RunHandle] = {}
 _HOSTS_LOCK = threading.Lock()
 
 
-def register(grace_seconds: float = GRACE_DEFAULT) -> RunHandle:
+def register(grace_seconds: float = GRACE_DEFAULT, linger: bool = False) -> RunHandle:
     """Mint a run key and admit the handle (the sweep piggybacks here --
     registration is the one moment every run passes through)."""
     sweep()
-    handle = RunHandle(secrets.token_urlsafe(16), grace_seconds)
+    handle = RunHandle(secrets.token_urlsafe(16), grace_seconds, linger=linger)
     with _HOSTS_LOCK:
         _HOSTS[handle.key] = handle
     return handle

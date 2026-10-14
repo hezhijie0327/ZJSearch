@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Lightbulb, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { CloudUpload, Lightbulb, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
@@ -12,7 +12,11 @@ import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotk
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { DepthControls, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
-import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
+import {
+  type AiSearchMode,
+  backgroundPrefEnabled,
+  setBackgroundPref,
+} from "@/features/results/aiSearch/useAiSearch.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
@@ -91,6 +95,11 @@ export function IndexPage({ data }: { data: IndexData }) {
   // carry bytes; the takeover picks the hand-off up when it starts the run
   const [heroAttachments, setHeroAttachments] = useState<AiSearchAttachment[]>([]);
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // the 后台完成 toggle (AI runs): a background run ignores the host's
+  // detach grace -- the tab may close, the research runs to the ledger's
+  // closure and the journal keeps the ending.  Persisted: the choice is
+  // a standing one, read at every run's POST.
+  const [bgRun, setBgRun] = useState(() => backgroundPrefEnabled());
 
   const submitSearch = (q: string, categories = selected) => {
     const trimmed = q.trim();
@@ -239,6 +248,26 @@ export function IndexPage({ data }: { data: IndexData }) {
                       setAiDepth(value);
                     }}
                   />
+                ) : null}
+                {aiMode ? (
+                  <button
+                    aria-pressed={bgRun}
+                    className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-[13px] transition-colors ${
+                      bgRun
+                        ? "bg-accent-soft font-medium text-accent"
+                        : "text-ink-3 hover:bg-surface-2/70 hover:text-ink"
+                    }`}
+                    onClick={() => {
+                      const next = !bgRun;
+                      setBgRun(next);
+                      setBackgroundPref(next);
+                    }}
+                    title={t("ai_bg_run_hint")}
+                    type="button"
+                  >
+                    <CloudUpload className="size-3.5" />
+                    {t("ai_bg_run")}
+                  </button>
                 ) : null}
                 {aiMode ? null : (
                   <button

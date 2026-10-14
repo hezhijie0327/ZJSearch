@@ -733,7 +733,26 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   no phase events re-fire on an attach): the handle replays its buffer
   and the run finishes in place (a mid-write death completes the very
   report it was writing); only a 404 (server restart, swept TTL) or a
-  failed probe falls through to the ctx-replay restart.  Two jam
+  failed probe falls through to the ctx-replay restart.  THE BACKGROUND
+  COMPLETION + THE JOURNAL (2026-10-14): a research run posted with
+  `background: true` (the ask-card's 后台完成 toggle, persisted in
+  `zjs-ai-bg-run`) sets the host handle's `linger` — the detach grace
+  NEVER wraps it (a closed tab means "collect later", not "wrap up");
+  it researches to the ledger's closure and only stop/wrap directives
+  end it early.  EVERY research run also journals: `RunHandle.publish`
+  shadows each slimmed replay line into a local SQLite table
+  (`searx/zjsearch/ai/runs/journal.py`, `%TEMP%/sxng_zjs_run_journal.db`,
+  72h TTL + a newest-512-runs rank sweep) — the durable answer to "the
+  run settled while nobody was attached", serving windows the in-memory
+  buffers cannot (past the 1h terminal TTL, across process restarts).
+  `POST /zjsearch/ai/run/journal {tk, run_key, after_seq}` replays the
+  stored lines as NDJSON (the settle rides inside).  THE RELOAD
+  RECOVERY: `resume()` detects an unfinished last run, and — the run key
+  is persisted out-of-log (kind `runhost`) and the evt rows now KEEP the
+  wire `seq` (the dedup watermark) — probes the live host first
+  (attach), falls through to the journal on 404, and only then accepts
+  the interrupted state; pre-2026-10 rows (seq stripped) and awaiting
+  runs (the clarify card never survives a reload) are excluded.  Two jam
   FEEDERS were removed from the theme itself (2026-10-13): the tag
   graph's force loop now SLEEPS at equilibrium (wake on pointer/wheel/
   resize/visibility; parks on document.hidden) instead of stepping +

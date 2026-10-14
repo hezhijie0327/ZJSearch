@@ -3,16 +3,22 @@
 REATTACH endpoint -- replay a run's event buffer after ``after_seq`` and
 follow the live tail; the SAME run, never a restart), ``POST
 /zjsearch/ai/run/control`` (the inbound control plane -- stop /
-steer / preempt / wrap / template) and ``POST /zjsearch/ai/run/keepalive``
+steer / preempt / wrap / template), ``POST /zjsearch/ai/run/keepalive``
 (the backgrounded tab's heartbeat -- the detach grace counts from the
 last beat, so a living tab whose fetch the OS dropped keeps its run
-alive).  These are the stack's client-to-server live channels beside
-the browser takeover input: the run's NDJSON stays one-way
-server-to-client, these are the upstream lanes.
+alive) and ``POST /zjsearch/ai/run/journal`` (the LATE COLLECTOR -- a
+settled run's durable shadow: the journaled wire lines after
+``after_seq``, serving windows the host's memory buffers cannot --
+beyond the terminal TTL and across process restarts).  These are the
+stack's client-to-server live channels beside the browser takeover
+input: the run's NDJSON stays one-way server-to-client, these are the
+upstream lanes.
 
 The ``attach`` stream ends when the driver finishes -- the settle AND
 the late tail (related/memory/usage) flow through, so a reattaching
-client sees exactly what a first-connection client would have.
+client sees exactly what a first-connection client would have.  The
+``journal`` stream ends after its stored lines -- the run is OVER; the
+settle rides inside them.
 """
 
 import logging
@@ -23,6 +29,7 @@ import flask
 from searx.zjsearch.ai.api import http
 from searx.zjsearch.ai.llm import config as llm_config
 from searx.zjsearch.ai.runs import host as run_host
+from searx.zjsearch.ai.runs import journal as run_journal
 from searx.zjsearch.ai.runs.profile import enabled
 
 logger = logging.getLogger(__name__)
@@ -148,6 +155,27 @@ def _keepalive_view() -> t.Any:
     return flask.jsonify({"ok": True, "alive": alive})
 
 
+def _journal_view() -> t.Any:
+    """The late collector: a settled run's JOURNALED wire lines after
+    ``after_seq``, NDJSON, then the stream ends -- the run is over, the
+    settle rides inside the replay.  A background run collected hours
+    later (or after a deploy) reads its true ending here; an unknown or
+    expired journal is the storage question it always was (404 -- the
+    client keeps its local interrupted state and the continue path)."""
+    payload = http.token_payload(gate=_gate())
+    run_key = str(payload.get("run_key") or "")
+    if not run_key:
+        flask.abort(404)
+    try:
+        after_seq = min(abs(int(payload.get("after_seq"))), 1_000_000)
+    except (TypeError, ValueError):
+        after_seq = 0
+    lines = run_journal.journal().tail(run_key, after_seq)
+    if not lines:
+        flask.abort(404)
+    return http.streaming_response(iter(lines), "application/x-ndjson")
+
+
 def install(app: flask.Flask) -> None:
     """Register the run host's channels; silent unless AI search itself
     is enabled and fully configured (the same gate as the search route --
@@ -157,3 +185,4 @@ def install(app: flask.Flask) -> None:
     app.add_url_rule("/zjsearch/ai/run/attach", "zjsearch_ai_run_attach", _attach_view, methods=["POST"])
     app.add_url_rule("/zjsearch/ai/run/control", "zjsearch_ai_run_control", _control_view, methods=["POST"])
     app.add_url_rule("/zjsearch/ai/run/keepalive", "zjsearch_ai_run_keepalive", _keepalive_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ai/run/journal", "zjsearch_ai_run_journal", _journal_view, methods=["POST"])

@@ -22,8 +22,10 @@ import {
   clearRunCtx,
   deleteRunData,
   loadRunCtx,
+  loadRunHost,
   loadThreadEvents,
   saveRunCtx,
+  saveRunHost,
   seedSeqCounter,
   seedSeqCounterFromStore,
 } from "@/lib/kb/events.ts";
@@ -176,6 +178,24 @@ const KICK_DELAY_MS = 1_500;
     proves the network is up, so a silent stream is a dead stream. */
 const BEAT_FRESH_MS = 100_000;
 
+const BG_RUN_PREF = "zjs-ai-bg-run";
+/** The 后台完成 preference (the ask-card's toggle, persisted): a
+    background run ignores the host's detach grace -- a closed tab does
+    not wrap it, it researches until the ledger closes and the journal
+    keeps the ending for the late collector.  Read at POST time (the
+    toggle is instant; continues carry the user's standing choice). */
+const backgroundPref = (): boolean => typeof window !== "undefined" && window.localStorage.getItem(BG_RUN_PREF) === "1";
+
+export function setBackgroundPref(on: boolean): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(BG_RUN_PREF, on ? "1" : "0");
+  }
+}
+
+export function backgroundPrefEnabled(): boolean {
+  return backgroundPref();
+}
+
 /** The CONTINUE replay payload: the dead attempt's ctx checkpoints (its
     exact conversation), its [n] sources (the server's registry reseeds so
     repeat urls reuse their numbers), the entry/round bases (the resumed
@@ -283,9 +303,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         waitWindowRef.current = raw.wait_left !== undefined;
       }
       const event: Record<string, unknown> = { ...raw };
-      if (seq) {
-        delete event.seq;
-      }
+      // the wire seq STAYS on the persisted row: a reloaded page recomputes
+      // the run's server-seq watermark from the stored rows (the reload
+      // recovery's after_seq -- without it a journal/attach replay cannot
+      // dedup against what the pre-reload session already folded)
       if (event.e === "settle") {
         settledRef.current = true;
       }
@@ -601,6 +622,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         mode: mode === "report" || mode === "deck" ? "deep" : mode,
         report: mode === "report" ? true : undefined,
         deck: mode === "deck" ? true : undefined,
+        // the 后台完成 preference: the host skips the detach grace for
+        // this run -- a closed tab does not wrap it (the journal keeps
+        // the ending for the late collector either way)
+        background: backgroundPref() || undefined,
         template: (mode === "report" || mode === "deck") && template ? template : undefined,
         // the CONTINUE replay: the dead attempt's conversation rides the
         // request body -- the stateless server rebuilds its loop state
@@ -642,6 +667,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       try {
         const outcome = await consumeRunStream(threadId, runNo, refCounts, "/zjsearch/ai/search", body, (response) => {
           runKeyRef.current = response.headers.get("X-Zjs-Run-Id") ?? "";
+          if (runKeyRef.current) {
+            // the reload recovery's probe address (the journal fetch and
+            // the live-host attach both key on it) -- out-of-log metadata
+            saveRunHost(`${threadId}:${runNo}`, threadId, runKeyRef.current).catch(() => {});
+          }
         });
         if (signal.aborted) {
           return;
@@ -1204,7 +1234,122 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       })),
     );
     setCore({ ...core, runs, phase: "done", error: null });
+    // THE RELOAD RECOVERY: a run that was IN FLIGHT at the disconnect
+    // gets its true ending back -- probe the host (still live? the
+    // reattach replays the missed tail), fall through to the journal
+    // (the settled tail across restarts / past the terminal TTL), and
+    // only then accept the interrupted state.  Awaiting runs stay
+    // interrupted: their clarify card never survives a reload, and a
+    // recovered ask without its card is a silent wait.
+    const last = core.runs[core.runs.length - 1];
+    if (last && last.status === "streaming") {
+      void recoverAfterReload(threadId, last, events);
+    }
     return true;
+  };
+
+  /** The reload recovery's ladder: the live host first (attach -- a
+      background run may still be researching), then the journal (the
+      run settled unattended).  Both consume through the shared fold, so
+      the interrupted run wakes up live and completes in place; both
+      missing leaves the interrupted state as it was (the 继续 path's
+      business).  Runs whose stored rows predate the wire-seq persistence
+      cannot be recovered -- there is no dedup base for a replay. */
+  const recoverAfterReload = (
+    threadId: string,
+    run: { runNo: number },
+    events: Array<{ runId: string; event: unknown }>,
+  ) => {
+    if (!capability) {
+      return;
+    }
+    const runId = `${threadId}:${run.runNo}`;
+    let afterSeq = 0;
+    let sawUnsequenced = false;
+    for (const entry of events) {
+      if (entry.runId !== runId) {
+        continue;
+      }
+      const evt = entry.event as { seq?: unknown; e?: unknown } | null;
+      if (String(evt?.e ?? "").startsWith("client.")) {
+        continue;
+      }
+      if (typeof evt?.seq === "number") {
+        if (evt.seq > afterSeq) {
+          afterSeq = evt.seq;
+        }
+      } else {
+        // a pre-2026-10 row: the wire seq was stripped -- a replay has
+        // no dedup base against the already-folded rows
+        sawUnsequenced = true;
+      }
+    }
+    void (async () => {
+      const runKey = await loadRunHost(runId).catch(() => null);
+      if (!runKey || sawUnsequenced) {
+        return;
+      }
+      // wake the run up: the fold's phase guard drops events on a done
+      // phase, and the run must render live while the tail streams
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      threadIdRef.current = threadId;
+      runKeyRef.current = runKey;
+      lastSeqRef.current = afterSeq;
+      settledRef.current = false;
+      setCore((prev) => ({
+        ...prev,
+        phase: "streaming",
+        runs: prev.runs.map((item) =>
+          item.runNo === run.runNo && item.status === "done" ? { ...item, status: "streaming" as const } : item,
+        ),
+      }));
+      const giveUp = () => {
+        if (!controller.signal.aborted) {
+          setCore((prev) => ({
+            ...prev,
+            phase: "done",
+            runs: prev.runs.map((item) =>
+              item.runNo === run.runNo && item.status === "streaming" ? { ...item, status: "done" as const } : item,
+            ),
+          }));
+        }
+      };
+      const outcome = await consumeRunStream(
+        threadId,
+        run.runNo,
+        new Map(),
+        "/zjsearch/ai/run/attach",
+        { tk: capability.tk, run_key: runKey, after_seq: afterSeq },
+        undefined,
+        REATTACH_PROBE_MS,
+      ).catch((error: unknown) => ({ settled: false, error, attachError: error as unknown }));
+      if (outcome.settled || controller.signal.aborted) {
+        return;
+      }
+      const probeError = (outcome.attachError ?? outcome.error) as unknown;
+      if (!(probeError instanceof HttpError) || probeError.status !== 404) {
+        // the network failed with the host MAYBE still alive: back to
+        // the interrupted state -- the continue path owns the retry
+        giveUp();
+        return;
+      }
+      // the host is gone (restart / swept TTL): the journal is the last
+      // copy of the true ending
+      const journalled = await consumeRunStream(
+        threadId,
+        run.runNo,
+        new Map(),
+        "/zjsearch/ai/run/journal",
+        { tk: capability.tk, run_key: runKey, after_seq: afterSeq },
+        undefined,
+        REATTACH_PROBE_MS,
+      ).catch(() => ({ settled: false }));
+      if (!journalled.settled) {
+        giveUp();
+      }
+    })();
   };
 
   return {

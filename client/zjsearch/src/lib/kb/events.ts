@@ -199,6 +199,35 @@ export async function clearRunCtx(runId: string): Promise<void> {
   await pgQuery("DELETE FROM knowledge WHERE id = $1 AND kind = 'runctx'", [`runctx:${runId}`]);
 }
 
+// --- the run host's address (the X-Zjs-Run-Id response header) -----------
+//
+// The reattach key lives in a ref for the live session; a RELOADED page
+// needs it back to probe the host (still live?) and the journal (the
+// settled tail).  OUT-OF-LOG like the ctx checkpoint: ONE knowledge row
+// (kind "runhost") upserted when the header arrives, thread_id riding
+// the row so a thread delete sweeps it.  The row is tiny and the settle
+// does not retire it -- the journal stays collectable for its full TTL.
+
+/** Upsert one run's host address (the latest header wins). */
+export async function saveRunHost(runId: string, threadId: string, runKey: string): Promise<void> {
+  await pgQuery(
+    `INSERT INTO knowledge (id, kind, thread_id, run_id, title, body, bytes, created, updated, occurred_at)
+     VALUES ($1, 'runhost', $2, $3, $3, $4, $5, $6, $6, $6)
+     ON CONFLICT (id) DO UPDATE SET body = $4, bytes = $5, updated = $6`,
+    [`runhost:${runId}`, threadId, runId, runKey, runKey.length, Date.now()],
+  );
+}
+
+/** One run's stored host address, or ``null`` (a run that predates the
+    header persistence -- the reload recovery cannot probe for it). */
+export async function loadRunHost(runId: string): Promise<string | null> {
+  const rows = await pgQuery<{ body: string }>("SELECT body FROM knowledge WHERE id = $1 AND kind = 'runhost'", [
+    `runhost:${runId}`,
+  ]);
+  const body = (rows ?? [])[0]?.body;
+  return body ? body : null;
+}
+
 /** Delete ONE run's every stored trace: the evt log, the head row, the
     runctx checkpoint and the knowledge rows tied to the run (the run
     row, its source refs, answers and the attachment blob row).  The
