@@ -88,7 +88,7 @@ def learnings_spec() -> dict[str, t.Any]:
                                 "items": {"type": "string"},
                                 "description": (
                                     "1-3 SHORT concept tags naming the topics this fact belongs to"
-                                    ' (e.g. ["诺诚健华", "BCL-2", "临床管线"]) -- reuse the tags earlier'
+                                    ' (e.g. ["DeepSeek-V4", "context window"]) -- reuse the tags earlier'
                                     " facts used; they place the fact in the knowledge graph."
                                 ),
                             },

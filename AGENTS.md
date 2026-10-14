@@ -1639,7 +1639,14 @@ union them, cap 6; the promotion ops carry them over) — the findings
 card renders them as meta chips, and settleRun folds the active facts'
 tags into the run row's tag set (extractor tags win the base, fact tags
 fill the tail, cap 12), so a graph tag resolves to the runs whose
-established facts carry it.  The writer's `<findings>` block and the
+established facts carry it.  THE TAGS ARE TAUGHT, NOT HOPED FOR
+(2026-10-14): an optional schema field's description alone is a coin
+flip on the model noticing it (a balanced run's 20 facts carried zero)
+— the `<learnings>` block carries the binding sentence (every fact
+tags, reusing earlier facts' exact words), and the examples speak the
+house vocabulary (DeepSeek-V4, the fact example's own natural tags —
+a biopharma test-run leftover was the one outlier in the prompt
+corpus).  The writer's `<findings>` block and the
 thread ledger stay text-only (tags are KB metadata, not writer
 material).
 Ranking (rank.py) is deliberately NOT a tool: ranking fixes the
