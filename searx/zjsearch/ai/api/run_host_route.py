@@ -21,6 +21,7 @@ client sees exactly what a first-connection client would have.  The
 settle rides inside them.
 """
 
+import json
 import logging
 import typing as t
 
@@ -158,14 +159,26 @@ def _keepalive_view() -> t.Any:
 def _journal_view() -> t.Any:
     """The late collector: a settled run's JOURNALED wire lines after
     ``after_seq``, NDJSON, then the stream ends -- the run is over, the
-    settle rides inside the replay.  A background run collected hours
-    later (or after a deploy) reads its true ending here; an unknown or
+    settle rides inside the replay.  Addressed EITHER by ``run_key``
+    (the starting client's reattach handle) OR by ``thread`` -- the uuid
+    in the url -- for a reloaded page whose LOCAL store came up empty:
+    the thread index resolves the run, and the response's FIRST line is
+    the run's metadata (``{"journal": {run_key, q, mode}}``) so the
+    client can seed the timeline it is about to replay.  An unknown or
     expired journal is the storage question it always was (404 -- the
     client keeps its local interrupted state and the continue path)."""
     payload = http.token_payload(gate=_gate())
     run_key = str(payload.get("run_key") or "")
+    meta: dict[str, t.Any] | None = None
     if not run_key:
-        flask.abort(404)
+        thread = str(payload.get("thread") or "").strip()[:64]
+        if not thread:
+            flask.abort(404)
+        found = run_journal.journal().latest_for_thread(thread)
+        if found is None:
+            flask.abort(404)
+        run_key, q, mode = found
+        meta = {"journal": {"run_key": run_key, "thread": thread, "q": q, "mode": mode}}
     try:
         after_seq = min(abs(int(payload.get("after_seq"))), 1_000_000)
     except (TypeError, ValueError):
@@ -173,6 +186,8 @@ def _journal_view() -> t.Any:
     lines = run_journal.journal().tail(run_key, after_seq)
     if not lines:
         flask.abort(404)
+    if meta is not None:
+        lines = [json.dumps(meta, ensure_ascii=False) + "\n", *lines]
     return http.streaming_response(iter(lines), "application/x-ndjson")
 
 

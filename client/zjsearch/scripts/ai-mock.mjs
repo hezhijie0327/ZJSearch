@@ -319,7 +319,15 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
       { tool_calls: [{ index: 0, function: { arguments: args.slice(half) } }] },
       {
         tool_calls: [
-          { index: 1, id: "call-zjaudit-2", type: "function", function: { name: "web_browser", arguments: '{"action":"read","url":"http://127.0.0.1:8908/read-fixture"}' } },
+          {
+            index: 1,
+            id: "call-zjaudit-2",
+            type: "function",
+            function: {
+              name: "web_browser",
+              arguments: '{"action":"read","url":"http://127.0.0.1:8908/read-fixture"}',
+            },
+          },
         ],
       },
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(0, pageHalf) } }] },

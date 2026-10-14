@@ -835,6 +835,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # terminal TTL).  The host's callback carries (seq, line); the run
     # key closes over here.
     handle.journal = lambda seq, line, _j=run_journal.journal(), _k=handle.key: _j.append(_k, seq, line)
+    if thread:
+        # the reload matcher: the thread uuid becomes a server-side index
+        # for the run -- a reloaded page whose LOCAL store came up empty
+        # can still find its run by the uuid in the url
+        run_journal.journal().index_run(thread, handle.key, research_q, mode)
     # the subagent pump observes the run's control plane NON-destructively
     # (peek over read): a user stop/preempt must reach the RUNNING
     # subagents -- today the delegation batch blocked the stop until every

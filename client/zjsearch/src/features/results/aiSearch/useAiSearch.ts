@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { useEffect, useRef, useState } from "react";
+import { parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import { continueBrief } from "@/features/results/aiSearch/ledger.ts";
 import type { ReportTemplate, TemplateShape } from "@/features/results/aiSearch/reportTemplates.ts";
 import {
@@ -1109,12 +1110,66 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setCore(IDLE);
   };
 
+  /** The store-empty fallback of the reload recovery: the browser's copy
+      of the thread is gone (cleared, degraded store, another origin) --
+      but the SERVER knows the thread uuid.  The journal's thread index
+      resolves the run and its whole wire log replays from zero (the
+      leading meta line seeds the timeline the events fold into). */
+  const recoverFromJournal = async (threadId: string): Promise<boolean> => {
+    if (!capability) {
+      return false;
+    }
+    const controller = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = controller;
+    threadIdRef.current = threadId;
+    let seeded = false;
+    let runKey = "";
+    const apply = makeApply(threadId, 1, new Map());
+    const wrapped = (raw: Record<string, unknown>) => {
+      if (!seeded && raw.journal) {
+        const meta = raw.journal as { run_key?: unknown; q?: unknown; mode?: unknown };
+        runKey = String(meta.run_key ?? "");
+        const q = String(meta.q ?? "");
+        const mode = parseDepthMode(meta.mode == null ? null : String(meta.mode));
+        runKeyRef.current = runKey;
+        lastSeqRef.current = 0;
+        entryIndexRef.current = new Map();
+        settledRef.current = false;
+        void saveRunHost(`${threadId}:1`, threadId, runKey).catch(() => {});
+        appendRunEvents(`${threadId}:1`, [{ e: "client.start", q, runNo: 1, mode, startedAt: Date.now() }]);
+        setCore((prev) => {
+          const next = applyEvent(
+            { ...prev, threadId },
+            { e: "client.start", q, runNo: 1, mode, startedAt: Date.now() },
+            LIVE_FX,
+          );
+          return { ...next, phase: "streaming", threadId };
+        });
+        seeded = true;
+        return;
+      }
+      if (seeded) {
+        apply(raw);
+      }
+    };
+    await fetchEventStream(
+      "/zjsearch/ai/run/journal",
+      { tk: capability.tk, thread: threadId, after_seq: 0 },
+      wrapped,
+      controller.signal,
+    ).catch(() => {});
+    return seeded;
+  };
+
   const resume = async (threadId: string): Promise<boolean> => {
     // the replay: the thread's evt log folds through the SAME reducer the
     // live stream used -- a stored run and a live run hit one renderer
     const events = await loadThreadEvents(threadId).catch(() => []);
     if (!events.length) {
-      return false;
+      // the local store has nothing: ask the SERVER -- the journal's
+      // thread index matches the uuid in the url
+      return recoverFromJournal(threadId);
     }
     abortRef.current?.abort();
     threadIdRef.current = threadId;

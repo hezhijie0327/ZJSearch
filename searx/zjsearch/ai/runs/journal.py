@@ -50,7 +50,7 @@ comes back once its TTL lapses -- old keys are dead weight)."""
 class RunJournal(SQLiteAppl):
     """The journal table: one wire line per row, (key, seq) primary."""
 
-    DB_SCHEMA = 1
+    DB_SCHEMA = 2
 
     DDL_CREATE_TABLES = {
         "run_journal": """\
@@ -60,8 +60,18 @@ CREATE TABLE IF NOT EXISTS run_journal (
   line     TEXT,
   created  INTEGER DEFAULT (strftime('%s', 'now')),
   PRIMARY KEY (key, seq))""",  # fmt: skip
+        "run_index": """CREATE TABLE IF NOT EXISTS run_index (
+  thread_id TEXT,
+  run_key   TEXT,
+  q         TEXT,
+  mode      TEXT,
+  created   INTEGER DEFAULT (strftime('%s', 'now')),
+  PRIMARY KEY (run_key))""",  # fmt: skip
     }
 
+    SQL_INDEX = """INSERT INTO run_index (thread_id, run_key, q, mode) VALUES (?, ?, ?, ?)
+ON CONFLICT (run_key) DO UPDATE SET q = excluded.q, mode = excluded.mode"""
+    SQL_LATEST_FOR_THREAD = """SELECT run_key, q, mode FROM run_index WHERE thread_id = ? ORDER BY created DESC, rowid DESC LIMIT 1"""
     SQL_APPEND = "INSERT OR IGNORE INTO run_journal (key, seq, line) VALUES (?, ?, ?)"
     SQL_TAIL = "SELECT line FROM run_journal WHERE key = ? AND seq > ? ORDER BY seq"
     SQL_DROP = "DELETE FROM run_journal WHERE key = ?"
@@ -73,6 +83,19 @@ DELETE FROM run_journal WHERE key IN (
     def __init__(self) -> None:
         super().__init__(tempfile.gettempdir() + os.sep + "sxng_zjs_run_journal.db")
         self._lock = threading.Lock()
+
+    def index_run(self, thread_id: str, run_key: str, q: str, mode: str) -> None:
+        """Match a run to its thread uuid (the reload matcher): called
+        once per run at handle registration."""
+        with self._lock, self.DB as conn:
+            conn.execute(self.SQL_INDEX, (thread_id[:64], run_key, q[:300], mode[:16]))
+
+    def latest_for_thread(self, thread_id: str) -> tuple[str, str, str] | None:
+        """The thread's newest journaled run: ``(run_key, q, mode)``, or
+        ``None`` when this thread has no journaled run."""
+        with self._lock:
+            row = self.DB.execute(self.SQL_LATEST_FOR_THREAD, (thread_id[:64],)).fetchone()
+        return (str(row[0]), str(row[1]), str(row[2])) if row else None
 
     def append(self, key: str, seq: int, line: str) -> None:
         with self._lock, self.DB as conn:
@@ -104,6 +127,25 @@ _JOURNAL_LOCK = threading.Lock()
 _SWEPT = False
 
 
+def _open_or_rebuild() -> RunJournal:
+    """Open the journal; a pre-bump schema file (SQLiteAppl raises on the
+    version mismatch) is deleted and recreated empty -- the journal is a
+    durable SHADOW (the source of truth lives in the client's store), so
+    losing the old rows beats wedging every run registration on a stale
+    file."""
+    candidate = RunJournal()
+    try:
+        candidate.DB.execute("SELECT 1 FROM run_index LIMIT 1").fetchone()
+        return candidate
+    except sqlite3.DatabaseError:
+        logger.warning("zjsearch run journal: stale schema -- rebuilding the journal file")
+        try:
+            os.remove(tempfile.gettempdir() + os.sep + "sxng_zjs_run_journal.db")
+        except OSError:
+            pass
+        return RunJournal()
+
+
 def journal() -> RunJournal:
     """The process-wide journal (lazy -- SQLiteAppl connects on first
     use).  The FIRST caller also sweeps the stale rows: one sweep per
@@ -111,7 +153,7 @@ def journal() -> RunJournal:
     global _JOURNAL, _SWEPT
     with _JOURNAL_LOCK:
         if _JOURNAL is None:
-            _JOURNAL = RunJournal()
+            _JOURNAL = _open_or_rebuild()
         if not _SWEPT:
             _SWEPT = True
             try:
