@@ -17,8 +17,6 @@ import logging
 import re
 import typing as t
 
-from searx.zjsearch.ai.core.ndjson import PrimedStream as _Ndjson
-from searx.zjsearch.ai.core.ndjson import UpstreamDead as _UpstreamDead
 from searx.zjsearch.ai.llm import config as llm_config
 from searx.zjsearch.ai.llm.embed import cosine, run_batch
 from searx.zjsearch.ai.llm import rerank as rerank_service

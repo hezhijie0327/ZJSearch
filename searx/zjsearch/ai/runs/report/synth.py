@@ -377,12 +377,16 @@ def make_synthesizer(
         )
         rewrite = ""
         system = "\n".join([section_system, lang_directive])
+        # the rewrite BUFFERS (it does not stream): its validity is only
+        # known after the gap check, and the verified full text goes out
+        # exactly once -- streaming it live would replace the client's
+        # section on the FIRST delta (reset marks it) even when the check
+        # then fails, and re-sending the whole text doubled the wire
         for event in stream(
             [{"role": "system", "content": system}, {"role": "user", "content": revision}], sec["id"], tally, reset=True
         ):
             if event.get("e") == "section":
                 rewrite += str(event.get("t") or "")
-            yield event
         if rewrite.strip() and gap_text not in rewrite:
             # the replacement marker: the client resets the section buffer
             # on this event's reset flag, then this whole text IS the section

@@ -202,7 +202,7 @@
      never the classic tabs/filters/card list (the takeover never renders
      them).  Mirrors AiSearchRunSection's boot state: title text-3xl
      font-medium, header row icon+label+timer, the rounded-lg bordered box
-     with the planning note, the lg:w-72 xl:w-80 sources rail with
+     with the planning note, the lg:w-80 xl:w-96 sources rail with
      AiSearchSourcesSkeleton's four pulse cards (two grid columns below
      lg, where the aside stacks under the answer). */
   .zjs-boot-body.is-ai {

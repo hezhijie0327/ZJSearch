@@ -101,6 +101,12 @@ def guard_url(url: str) -> str:
     candidate = str(url or "").strip()
     if not candidate or len(candidate) > 2000:
         raise PageReadError("not a usable url")
+    # the SCHEME check runs first (the session lane's lesson): a
+    # file://localhost/... url would otherwise ride the allow_hosts
+    # exemption past the public-url gate, and the request-level gate
+    # never sees a file navigation at all
+    if not candidate.lower().startswith(("http://", "https://")):
+        raise PageReadError("read public http(s) pages only")
     host = (urlsplit(candidate).hostname or "").lower().rstrip(".")
     if host not in browser_config.allow_hosts():
         reason = public_url_rejection(candidate)

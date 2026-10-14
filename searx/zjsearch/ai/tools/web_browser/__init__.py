@@ -6,7 +6,7 @@ gate, anything its reads cannot see through) and the USER completes the
 human part -- the Lightbox takeover shows the live page and forwards
 clicks/keys, a desktop ``headed`` window is directly operable.  The tool
 then hands the resulting page back as reading material.  No heuristics:
-the model decides from ``web_reader``'s content that a page needs a
+the model decides from the read content that a page needs a
 human, and the tool only opens, mirrors, waits and extracts."""
 
 from searx.zjsearch.ai.tools.web_browser.service import (

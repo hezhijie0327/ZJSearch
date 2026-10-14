@@ -20,7 +20,7 @@ import logging
 import time
 import typing as t
 
-from searx.zjsearch.ai.llm import decision, jsongate
+from searx.zjsearch.ai.llm import jsongate
 from searx.zjsearch.ai.runs.search.coverage import Coverage
 
 logger = logging.getLogger(__name__)

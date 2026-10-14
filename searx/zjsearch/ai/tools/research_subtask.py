@@ -169,7 +169,7 @@ def subagent_messages(parsed: dict[str, str], lang: str, today: str) -> list[dic
         "<discipline>\n"
         "- Start WIDE (short broad queries), read the landscape, then"
         " narrow; 3-10 tool calls is a normal subtask.\n"
-        "- READ the pages that carry the key numbers (web_reader), don't"
+        "- READ the pages that carry the key numbers (web_browser read), don't"
         " trust snippets for figures.\n"
         "- Cite every fact with its [n]; never present a number without"
         " one.\n"

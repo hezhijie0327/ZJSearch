@@ -17,7 +17,7 @@
  *   questions.
  * - `tools` present is the researcher: the opener streams a one-line intent
  *   plus TWO calls — a web_search carrying the page's own `zjaudit <kind>`
- *   fixture query AND a web_reader reading the fixture page this same
+ *   fixture query AND a web_browser read of the fixture page this same
  *   server serves at `GET /read-fixture` (the built-in browser renders it
  *   for real -- the SSRF gates let the loopback host through per
  *   audit-settings.yml's zjsearch.browser.allow_hosts -- so the
@@ -319,7 +319,7 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
       { tool_calls: [{ index: 0, function: { arguments: args.slice(half) } }] },
       {
         tool_calls: [
-          { index: 1, id: "call-zjaudit-2", type: "function", function: { name: "web_reader", arguments: "" } },
+          { index: 1, id: "call-zjaudit-2", type: "function", function: { name: "web_browser", arguments: '{"action":"read","url":"http://127.0.0.1:8908/read-fixture"}' } },
         ],
       },
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(0, pageHalf) } }] },

@@ -410,7 +410,7 @@ async function main() {
       let lhr;
       try {
         lhr = await runPage(
-          path.startsWith("/static/audit-nojs") ? `http://127.0.0.1:8908/nojs.html` : `${BASE}${path}`,
+          path.startsWith("/static/audit-nojs") ? `http://127.0.0.1:${NOJS_PORT}/nojs.html` : `${BASE}${path}`,
           ignoreStatusCode,
         );
       } catch (error) {

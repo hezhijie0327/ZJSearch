@@ -108,7 +108,6 @@ class AnthropicSdk:
     """The bound Anthropic family surface."""
 
     json_tiers = JSON_TIERS
-    embeds = False
 
     def __init__(self, cfg: dict[str, t.Any], base: str, family: str):
         self.cfg = cfg

@@ -109,7 +109,7 @@ async def _with_session(name: str, action: t.Callable[[t.Any], t.Any]) -> t.Any:
     ClientSession, streamable_http_client, create_mcp_http_client = sdk
     _, url, headers = next((srv for srv in mcp_cfg() if srv[0] == name), (None, None, None))
     if not url:
-        raise RuntimeError(f"unknown MCP server: {name!r}")  # noqa: F841 -- url IS used below
+        raise RuntimeError(f"unknown MCP server: {name!r}")
 
     async def run() -> t.Any:
         async with create_mcp_http_client(headers=headers or None) as http_client:

@@ -55,7 +55,6 @@ class Sdk:
     - ``kind`` / ``base`` -- the resolved wire kind and endpoint base.
     - ``json_tiers`` -- how many native structured-output attempts
       :py:func:`llm.jsongate.json_completion` should try.
-    - ``embeds`` -- whether the family ships an embeddings API.
     - ``pump(messages, events, relay_reasoning, tools)`` (async) -- drive
       the SDK stream into the queue (the LlmStream contract).
     - ``json_completion(messages, name, schema, strict) -> str`` (async).
@@ -65,14 +64,12 @@ class Sdk:
     kind: str
     base: str
     json_tiers: int
-    embeds: bool
 
     def __init__(self, impl: t.Any, kind: str, base: str):
         self._impl = impl
         self.kind = kind
         self.base = base
         self.json_tiers = int(getattr(impl, "json_tiers", 1))
-        self.embeds = bool(getattr(impl, "embeds", False))
 
     async def pump(
         self,

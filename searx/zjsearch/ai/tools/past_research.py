@@ -8,13 +8,13 @@ half already ran client-side when the index was picked -- carrying TWO
 entry kinds:
 
 - ``page`` entries: reader-cache pages WITH a ~1500-char content head
-  (what a past ``web_reader`` read extracted);
+  (what a past ``web_browser`` read extracted);
 - ``source`` entries: corpus sources the user's past runs touched,
   identity only (title + host -- no text stored).
 
 The tool searches the index on the model's initiative.  A page match
 returns its content head; a source-only match returns the identity plus
-the instruction to re-verify it live through ``web_reader`` -- past
+the instruction to re-verify it live through ``web_browser`` -- past
 material supplements, live sources win.
 
 THE RED LINE (AGENTS.md): this is supplementary, OPT-IN material -- the

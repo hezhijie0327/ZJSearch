@@ -65,7 +65,7 @@ def anthropic_cache_on(cfg: dict[str, t.Any]) -> bool:
     blocks verbatim usually just work; the incremental breakpoints are
     what make the researcher loop cheap -- each turn re-reads the cached
     prefix at 0.1x), forced ON/OFF for any endpoint via the
-    ``zjsearch.ai.cache_control`` setting (a gateway that validates
+    ``zjsearch.llm.cache_control`` setting (a gateway that validates
     strictly needs the off switch)."""
     flag = cfg.get("cache_control")
     if isinstance(flag, bool):

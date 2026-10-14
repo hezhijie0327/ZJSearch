@@ -19,7 +19,7 @@ query token            presentation (layout.ts)
 ``zjaudit music``      music grid
 ``zjaudit files``      torrent/file grid
 ``zjaudit science``    scholarly paper cards
-``zjaudit it``         software package cards
+``zjaudit packages``         software package cards
 ``zjaudit apps``       application grid
 ====================== =========================================
 

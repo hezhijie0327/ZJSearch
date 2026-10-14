@@ -5,7 +5,7 @@ page reads.
 :class:`GatherMixin` runs one round's network jobs on a small thread
 pool: ``web_search`` as the REAL ``SearchWithPlugins`` webapp path
 (plugins, preferences and the site operators included) and
-``web_reader`` through the built-in browser; each settlement compiles
+``web_browser`` read through the built-in browser; each settlement compiles
 the compact ``[n]`` feed block and yields the feature events for the
 wire protocol."""
 
@@ -309,7 +309,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             yield ("sources", {"items": entries})
 
     def _read_one(self, url: str) -> tuple[str, str]:
-        """One ``web_reader`` read -- built-in-browser render + extraction;
+        """One ``web_browser`` read -- built-in-browser render + extraction;
         needs no request context."""
         return reader.read_page(url)
 

@@ -2,7 +2,7 @@
 """The built-in browser's request gate -- the SSRF fence, now at REQUEST
 level.
 
-With the Browserless provider the render happened on the provider's host
+With a remote render provider the render happened on the provider's host
 and the string-level gate of :py:mod:`core.guard` was the whole story.
 A LOCAL browser resolves and connects from THIS host: localhost and the
 intranet are one navigation away, and a page's own subresource and

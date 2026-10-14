@@ -44,14 +44,14 @@ actually ships; markitdown itself knows many more."""
 _DOCUMENT_EXTENSIONS = frozenset({"pdf", "docx", "pptx", "xlsx", "xls"})
 """The BINARY document kinds a browser renders as garbage or a download
 prompt -- URLs carrying one of these extensions are FETCHED AS BYTES and
-converted (the web_reader branch), never handed to the render engine."""
+converted (the reader's document branch), never handed to the render engine."""
 
 _instance: t.Any = None
 
 
 def is_document_extension(extension: str) -> bool:
     """Whether a URL path extension marks a direct-fetch document (the
-    web_reader branch's gate)."""
+    reader document branch's gate)."""
     return str(extension or "").strip().lstrip(".").lower() in _DOCUMENT_EXTENSIONS
 
 

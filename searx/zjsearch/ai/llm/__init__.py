@@ -14,6 +14,6 @@ providers, and nothing about what to say or when.
 - :mod:`.security` / :mod:`.config` / :mod:`.http` -- the HMAC gate,
   the settings surface, the shared route prologue.
 
-The layers above this one: ``framework`` (the provider-agnostic agent
-engine) and ``runtime`` (the concrete tasks -- search and overview).
+The layers above this one: ``agent`` (the provider-agnostic agent
+engine) and ``runs`` (the concrete tasks -- search and overview).
 """

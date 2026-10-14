@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 from searx.zjsearch.ai.core import config as core_config
 from searx.zjsearch.ai.core import security
 
-ENDPOINT_KINDS = ("openai", "openai.chat_completions", "openai.responses", "anthropic", "gemini", "dashscope")
+ENDPOINT_KINDS = ("openai.chat_completions", "openai.responses", "anthropic", "gemini", "dashscope")
 """The canonical ``zjsearch.llm.sdk`` values -- ``SDK_ALIASES`` resolves
 shorthand / legacy inputs into one of these before validation."""
 

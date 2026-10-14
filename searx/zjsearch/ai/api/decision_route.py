@@ -27,7 +27,7 @@ def _decision_view() -> flask.Response:
             flask.jsonify({"error": f"state plus 1..{MAX_QUESTIONS} questions (choice / score / noul) are required"}),
             422,
         )
-    result = decision.judge(state, questions)
+    result = decision.judge(state, questions, timeout=15.0)
     if result is None:
         return flask.jsonify({"error": "decision upstream failed"}), 502
     return flask.jsonify(result)

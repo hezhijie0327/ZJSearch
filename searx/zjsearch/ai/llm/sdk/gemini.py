@@ -148,7 +148,6 @@ class GeminiSdk:
     """The bound Gemini family surface."""
 
     json_tiers = JSON_TIERS
-    embeds = True
 
     def __init__(self, cfg: dict[str, t.Any], base: str, family: str):
         self.cfg = cfg

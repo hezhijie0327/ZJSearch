@@ -722,11 +722,13 @@ def _write_turn(  # pylint: disable=too-many-branches, too-many-statements, too-
         if outcome == "content":
             answered = True
             break
-        if outcome == "failed":
-            # the transport errored: no retry (the settle below surfaces it)
+        if outcome == "failed" or outcome == "reasoning":
+            # the transport errored, or the model misrouted everything into
+            # its reasoning channel -- the identical request would repeat
+            # it (the settle below surfaces both)
             break
         reasoning = True
-        logger.warning("zjsearch loop: the writer produced no content (attempt %d/2)", attempt)
+        logger.warning("zjsearch loop: the writer produced no events (attempt %d/2)", attempt)
     prose, closed = splitter.finish()
     if prose:
         yield {"e": "answer", "t": prose}
@@ -757,6 +759,8 @@ def _write_attempt(  # pylint: disable=too-many-branches
     reasoning channel did), ``"failed"`` (the transport errored)."""
     stream = LlmStream(run_state.cfg, messages, relay_reasoning=True)
     first = True
+    spoke_answer = False
+    spoke_think = False
     try:
         while True:
             wait = _event_wait(first, run_state.first_event_timeout, run_state.idle_timeout)
@@ -765,10 +769,12 @@ def _write_attempt(  # pylint: disable=too-many-branches
             if kind == "delta":
                 prose, closed = splitter.feed(str(payload or ""))
                 if prose:
+                    spoke_answer = True
                     yield {"e": "answer", "t": prose}
                 for fence_kind, body in closed:
                     yield from _fence(fence_kind, body, gallery_validator, run_state)
             elif kind == "think":
+                spoke_think = True
                 yield {"e": "think", "id": entry, "t": str(payload or "")}
             elif kind == "finish":
                 run_state.tally.absorb(payload)
@@ -779,7 +785,12 @@ def _write_attempt(  # pylint: disable=too-many-branches
                 break  # "end" closes the writer
     finally:
         stream.cancel()
-    return "content"
+    # the honest outcome: a stream that closed WITHOUT an answer delta is
+    # not content -- the caller's retry/abort contract depends on telling
+    # a reasoning-only misroute apart from a fully empty stream
+    if spoke_answer:
+        return "content"
+    return "reasoning" if spoke_think else "empty"
 
 
 def _fence(

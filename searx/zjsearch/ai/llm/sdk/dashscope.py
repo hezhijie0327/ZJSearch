@@ -339,7 +339,6 @@ class DashscopeSdk:
     and the TextEmbedding API."""
 
     json_tiers = JSON_TIERS
-    embeds = True
 
     def __init__(self, cfg: dict[str, t.Any], base: str, kind: str, family: str):
         self.cfg = cfg

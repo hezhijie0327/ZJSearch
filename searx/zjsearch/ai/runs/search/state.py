@@ -14,7 +14,6 @@ composes them into :class:`Searches`.
 
 import logging
 import json
-import logging
 import queue
 import threading
 import time
@@ -76,9 +75,6 @@ class ChildControl:
 
     def interrupt(self) -> tuple[str, str] | None:
         return ("stop", "") if self.stopped else None
-
-    def poll_steer(self) -> str | None:
-        return None
 
     def drain_steers(self) -> list[str]:
         return []
@@ -346,7 +342,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the past-research index (reader pages WITH text heads + corpus
         # sources identity-only): the tool's matches get numbered as real
         # history sources -- full-text matches return their content head,
-        # source-only matches point back at web_reader for a live re-read
+        # source-only matches point back at web_browser for a live re-read
         self.past_research_entries = past_research_entries or []
         # the run's source registries (the [n] numbering, the two dedup
         # sets, the gallery whitelist) -- one object, see registry.py;

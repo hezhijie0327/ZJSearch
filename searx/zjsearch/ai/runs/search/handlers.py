@@ -6,7 +6,7 @@ calls turned into tool executions and wire events -- plus the per-call
 plan builders (``_search_plan`` / ``_page_plan``: the dedup key, the
 pool job and the receipt scaffolding) and the SystemOne verdict
 formatting.  Meta tools (calculator, ledger writes, MCP, memory) run
-INLINE; the network jobs (``web_search`` / ``web_reader``) defer to
+INLINE; the network jobs (``web_search`` / ``web_browser`` read) defer to
 :py:mod:`.gather`'s pool."""
 
 import concurrent.futures
@@ -96,7 +96,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         text: str,
     ) -> t.Iterator[tuple[str, t.Any]]:
         """The session's current page joins the [n] registry exactly like a
-        ``web_reader`` settlement: a fresh url mints its number (the
+        ``web_browser`` settlement: a fresh url mints its number (the
         writer can cite what the model drove), a known one re-emits its
         [n] -- with ``crawled`` set when the page's full text was
         actually read (read action / the post-wait snapshot), which also
@@ -315,7 +315,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         self, calls: list[dict[str, t.Any]]
     ) -> t.Iterator[tuple[str, t.Any]]:
         """Run one round of calls in parallel -- ``web_search`` and
-        ``web_reader`` calls share the worker pool; feature events flow to
+        ``web_browser`` calls share the worker pool; feature events flow to
         the client while they complete.  Wire ids are the 1-based position
         of the call within this round.  Exact-duplicate queries and
         already-read pages settle instantly as ``duplicate`` -- they never

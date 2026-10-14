@@ -90,11 +90,9 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
         }
       }
       for (const file of await fs.readdir(PATH.dist)) {
-        if (workerArtifact.test(file)) {
+        if (workerArtifact.test(file) || /^pg\.worker.*\.js$/.test(file)) {
           await fs.copyFile(path.join(PATH.dist, file), path.join(rootStatic, file));
-        } else if (/^pg\.worker.*\.js$/.test(file)) {
-          await fs.copyFile(path.join(PATH.dist, file), path.join(rootStatic, file));
-        }
+        })
       }
       // the CSS chunks' url(...) references (KaTeX woff2/woff/ttf) resolve
       // against the root-level CSS files -> /static/assets/...

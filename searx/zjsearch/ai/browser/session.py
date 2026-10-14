@@ -100,12 +100,6 @@ _SESSIONS: dict[str, _Session] = {}
 _SESSIONS_LOCK = threading.Lock()
 
 
-def session_ids() -> list[str]:
-    """The live session ids (the client's tab strip follows these)."""
-    with _SESSIONS_LOCK:
-        return list(_SESSIONS)
-
-
 def get(session_id: str) -> _Session:
     """The keyed session, created on first touch (capped -- the cap's
     overflow answers the LEAD session, which is always admitted)."""

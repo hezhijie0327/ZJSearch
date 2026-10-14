@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The SystemOne typesafe SDK factory -- the FIRST decision-model family.
 
-The decision-model registry (``infra/decision.py``) pre-embeds the SDK
+The decision-model registry (``llm/decision.py``) pre-embeds the SDK
 selection: future decision families add a sibling module here and a line
 in that registry, mirroring the chat transports' pattern.
 

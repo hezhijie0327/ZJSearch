@@ -22,7 +22,7 @@ def _embed_view() -> flask.Response:
     texts = payload.get("texts")
     if not isinstance(texts, list) or not texts or len(texts) > embed.MAX_BATCH:
         return (
-            flask.jsonify({"error": "texts must be a non-empty list of at most 16 strings"}),
+            flask.jsonify({"error": f"texts must be a non-empty list of at most {embed.MAX_BATCH} strings"}),
             422,
         )
     result = embed.run_batch([str(text) for text in texts], timeout=60.0)

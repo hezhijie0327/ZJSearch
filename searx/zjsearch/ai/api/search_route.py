@@ -246,6 +246,10 @@ def parse_resume(raw: t.Any, sources_base: int) -> dict[str, t.Any] | None:
         # client's snapshot is lossy, key_questions regenerate empty; the
         # TOC the user already saw stays stable, which is the point)
         "outline": raw.get("outline") if isinstance(raw.get("outline"), dict) else None,
+        # the run died INSIDE the writer (the client marks it): the resume
+        # note swaps to write-direct -- no new gathering, straight back
+        # into the write with the transcript's material
+        "write_direct": bool(raw.get("write_direct")),
     }
 
 

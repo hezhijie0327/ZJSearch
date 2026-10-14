@@ -46,8 +46,8 @@ from searx.zjsearch.ai.agent import wire
 logger = logging.getLogger(__name__)
 
 GRACE_DEFAULT = 90.0
-"""Seconds a run may sit with zero subscribers before its next round
-boundary wraps it up gracefully."""
+"""Retired with the auto-wrap: every research run registers ``linger``,
+so the grace never fires (the knob remains for a non-linger caller)."""
 
 TERMINAL_TTL = 3600.0
 """How long a finished handle stays fetchable for a late attach (the
@@ -364,10 +364,6 @@ class RunHandle:
         """The loop's mid-turn observation (see :py:meth:`ControlBox.interrupt`)."""
         return self.control.interrupt()
 
-    def poll_steer(self) -> str | None:
-        """The boundary's one guide-lane drain."""
-        return self.control.poll_steer()
-
     def drain_steers(self) -> list[str]:
         """The guide lane's undelivered leftovers (visible discards)."""
         return self.control.drain_steers()
@@ -387,12 +383,11 @@ class RunHandle:
 
     def touch(self) -> bool:
         """The keepalive heartbeat (the backgrounded tab's proof of life):
-        the detach clock RESTARTS from now, so the grace window counts
-        from the last subscriber OR the last heartbeat, whichever came
-        later -- a backgrounded tab whose fetch the OS dropped keeps the
-        run alive (its worker still beats), a closed tab stops beating
-        and the grace wraps the run as before.  ``False`` when the run
-        already ended (the client stops beating)."""
+        answers whether the run is still live (``False`` ends the
+        client's beating).  Under the linger default the detach clock it
+        restarts is dormant -- the run's life no longer depends on
+        anyone watching; the beats double as the client watchdog's
+        fresh-connection verdicts."""
         with self._lock:
             if self._settled or self._finished:
                 return False

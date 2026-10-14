@@ -90,12 +90,6 @@ class Corpus:
     def __len__(self) -> int:
         return len(self._chunks)
 
-    def absorb(self, other: "Corpus") -> None:
-        """A settled SUBAGENT's chunks join the parent's corpus -- the
-        chunk refs are global [n]s (the shared registry minted them), so
-        the merged index stays consistent."""
-        self._chunks.extend(other._chunks)  # pylint: disable=protected-access
-
     def absorb_new(self, other: "Corpus", seen: "set[int]") -> None:
         """The DELTA absorb (a resumed subagent's follow-up chunks): only
         chunks whose object identity is not in ``seen`` fold over, and

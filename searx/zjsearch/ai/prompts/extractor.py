@@ -2,7 +2,7 @@
 """The post-run extractor prompts: the small json_completions that run
 AFTER a settled answer -- durable-fact/tag extraction for the browser
 knowledge base and concept-tag normalization.  Text lives here; the
-executors (:py:mod:`tools.memory`, :py:mod:`api.routes`) stay logic."""
+executors (:py:mod:`tools.memory`, :py:mod:`api` (the route modules)) stay logic."""
 
 USER_MEMORY_EXTRACT_SYSTEM = (
     "Read this question/answer exchange and return two"
