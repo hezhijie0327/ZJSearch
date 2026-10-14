@@ -1133,7 +1133,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                     AI Overview leads the page (the desktop rail shows it
                     beside the results instead) */}
                 {!showSkeletons && data.infoboxes.length > 0 ? (
-                  <div className="mt-3 flex flex-col gap-3 lg:hidden">
+                  <div className="mt-3 flex flex-col gap-5 lg:hidden">
                     {data.infoboxes.map((infobox) => (
                       <Infobox globals={globals} infobox={infobox} key={infobox.title} onSearch={submitQuery} />
                     ))}

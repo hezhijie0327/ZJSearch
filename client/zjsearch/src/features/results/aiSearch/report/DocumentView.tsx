@@ -145,7 +145,7 @@ export function DocumentView({
           note with one tape corner -- the report's own quick-reference
           slip, tape a SIBLING of the clipped note */}
       <div className="relative mb-5">
-        <Tape className="-top-2.5 left-8 w-16 -rotate-6 bg-accent-soft/80" />
+        <Tape className="w-16 bg-accent-soft/80" corner="start" seed={outline.title} />
         <nav aria-label={t("ai_report_toc")} className="paper-note px-4 py-3">
           <ol className="space-y-1">
             {outline.sections.map((section, index) => (

@@ -260,7 +260,7 @@ export function Thumb({
         alt={alt}
         /* lazy images fade in on load (bg-surface-2 shows through), eager
            ones paint immediately (LCP) */
-        className={`size-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-[1.04] ${eager || loaded ? "opacity-100" : "opacity-0"}`}
+        className={`size-full object-cover transition-opacity duration-300 ${eager || loaded ? "opacity-100" : "opacity-0"}`}
         decoding="async"
         loading={eager ? "eager" : "lazy"}
         onError={() => {

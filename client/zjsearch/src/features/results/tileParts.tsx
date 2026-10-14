@@ -51,7 +51,7 @@ export function TileThumb({
   alt,
   placeholder,
   eager = false,
-  imgClassName = "size-full object-cover group-hover:scale-[1.03]",
+  imgClassName = "size-full object-cover",
 }: {
   src?: string;
   alt: string;

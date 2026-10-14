@@ -96,8 +96,8 @@ function Pages() {
                 (torn note + two tape corners, tape as SIBLING of the clipped
                 note; the micro-tilt is fixed, never random) */}
             <div className="relative w-full max-w-md -rotate-[0.35deg]">
-              <Tape className="-top-2.5 left-10 w-24 -rotate-6 bg-accent-soft/80" />
-              <Tape className="-top-2.5 right-10 w-20 rotate-[5deg] bg-accent-soft/60" />
+              <Tape className="w-24 bg-accent-soft/80" corner="start" seed="setup-a" />
+              <Tape className="w-20 bg-accent-soft/60" corner="end" seed="setup-b" />
               <div className="paper-note px-6 py-10 text-center">
                 <span className="mx-auto grid size-14 place-items-center rounded-full bg-accent-soft text-accent">
                   <Compass aria-hidden="true" className="size-7" />

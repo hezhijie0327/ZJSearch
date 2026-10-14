@@ -41,7 +41,7 @@ export function Sidebar({ data, onSearch }: { data: SearchPageData; onSearch: (q
   return (
     <aside className="flex flex-col gap-3">
       {hasInfobox ? (
-        <section aria-label={t("info")} className="flex flex-col gap-3">
+        <section aria-label={t("info")} className="flex flex-col gap-5">
           {data.infoboxes.map((infobox) => (
             <Infobox globals={globals} infobox={infobox} key={infobox.title} onSearch={onSearch} />
           ))}

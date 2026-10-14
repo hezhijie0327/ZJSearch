@@ -216,7 +216,7 @@ export function IndexPage({ data }: { data: IndexData }) {
           </svg>
           {/* the tape pressing the card's top edge (§9 mobile compaction:
               exits with the arrow below sm) */}
-          <Tape className="-top-3 left-8 hidden w-24 -rotate-3 bg-accent-soft/70 sm:block" />
+          <Tape className="hidden w-24 bg-accent-soft/70 sm:block" corner="start" seed="hero-ask" />
           <div className="relative rounded-2xl border border-line bg-surface p-5 shadow-card transition-colors focus-within:border-accent">
             <SearchBox
               disableAutocomplete={aiMode}

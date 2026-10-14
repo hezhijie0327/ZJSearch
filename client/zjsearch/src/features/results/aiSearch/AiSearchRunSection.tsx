@@ -766,8 +766,8 @@ function AskCard({
     // SIBLINGS of the clipped note (§7 physics) and the dialog semantics
     // (role/ref/focus trap) stay on the note itself.
     <div className="relative w-full -rotate-[0.35deg]">
-      <Tape className="-top-2.5 left-10 w-24 -rotate-6 bg-accent-soft/80" />
-      <Tape className="-top-2.5 right-10 w-20 rotate-[5deg] bg-accent-soft/60" />
+      <Tape className="w-24 bg-accent-soft/80" corner="start" seed="clarify-gate-a" />
+      <Tape className="w-20 bg-accent-soft/60" corner="end" seed="clarify-gate-b" />
       <div
         aria-label={t("ai_clarify_title")}
         aria-modal="true"
@@ -879,8 +879,8 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
           tape corners as SIBLINGS of the clipped note (a child would be cut
           by the torn edge), the micro-tilt is fixed, never random */}
       <div className="relative mt-5 -rotate-[0.35deg]">
-        <Tape className="-top-2.5 left-8 w-16 -rotate-6 bg-accent-soft/80" />
-        <Tape className="-top-2.5 right-8 w-14 rotate-[5deg] bg-accent-soft/60" />
+        <Tape className="w-16 bg-accent-soft/80" corner="start" seed={`${items[0]?.q ?? "archive"}-a`} />
+        <Tape className="w-14 bg-accent-soft/60" corner="end" seed={`${items[0]?.q ?? "archive"}-b`} />
         <ul className="paper-note space-y-1.5 px-4 py-3">
           {view.map((item) => (
             <li className="flex items-start gap-2 text-[13px]" key={`${item.q}-${item.a}`}>
@@ -1909,8 +1909,8 @@ function AiSearchRunSectionImpl({
             // the failure notice on the family paper ground (DESIGN.md §7):
             // a torn note pinned by two tape corners, the actions riding it
             <div className="relative -rotate-[0.35deg]">
-              <Tape className="-top-2.5 left-10 w-20 -rotate-6 bg-accent-soft/80" />
-              <Tape className="-top-2.5 right-10 w-16 rotate-[5deg] bg-accent-soft/60" />
+              <Tape className="w-20 bg-accent-soft/80" corner="start" seed={`failed-${run.runNo}-a`} />
+              <Tape className="w-16 bg-accent-soft/60" corner="end" seed={`failed-${run.runNo}-b`} />
               <div className="paper-note px-4 py-3 text-xs text-danger">
                 <p className="font-medium">{t("ai_search_failed")}</p>
                 {run.error ? (
@@ -2042,11 +2042,7 @@ function AiSearchRunSectionImpl({
                         type="button"
                       >
                         {attachment.data ? (
-                          <img
-                            alt={attachment.name ?? ""}
-                            className="h-16 w-16 object-cover transition-transform group-hover:scale-105"
-                            src={attachment.data}
-                          />
+                          <img alt={attachment.name ?? ""} className="h-16 w-16 object-cover" src={attachment.data} />
                         ) : (
                           <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-xs text-ink-3">
                             {attachment.mime.replace("image/", "")}

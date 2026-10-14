@@ -58,9 +58,7 @@ function ImageTile({
     >
       <img
         alt={imageAlt(result)}
-        className={`w-full object-cover transition-all duration-300 group-hover:scale-[1.02] ${
-          loaded ? "opacity-100" : "h-44 opacity-0"
-        }`}
+        className={`w-full object-cover transition-all duration-300 ${loaded ? "opacity-100" : "h-44 opacity-0"}`}
         decoding="async"
         fetchPriority={index < 4 ? "high" : undefined}
         loading={index < 4 ? "eager" : "lazy"}
