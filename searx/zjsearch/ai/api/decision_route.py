@@ -2,7 +2,7 @@
 """The ``POST /zjsearch/ai/decision`` endpoint: a thin, HMAC-gated browser
 proxy to the decision-model service (:py:mod:`llm.decision` -- the
 engine and its config live there; this module is only the gate +
-validation + the call).  Consumers of the System-One primitive (triage,
+validation + the call).  Consumers of the decision primitive (triage,
 routing, verification) speak the wire question vocabulary -- ``choice`` /
 ``score`` / ``noul`` -- verbatim; the route adds no semantics."""
 

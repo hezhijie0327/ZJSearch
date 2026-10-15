@@ -217,8 +217,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     bigmodel/SiliconFlow; `dashscope` native TextReRank, with the
     compatible-api's `/reranks` reachable via `path: /reranks`; the
     browser's recall proxy is `POST /zjsearch/ai/rerank`, HMAC-gated
-    like the embed one), the decision SERVICE (`decision` — SystemOne
-    named questions in one forward pass, `POST /zjsearch/ai/decision`
+    like the embed one), the decision SERVICE (`decision` — named
+    questions in one forward pass, `POST /zjsearch/ai/decision`
     the browser proxy; the client's helper is `lib/decision.ts`,
     helper-only by design until a consumer lands), the HMAC gate
     (`security`) and the shared route prologue (`http`).  Adding a
@@ -2650,10 +2650,10 @@ real-config deck run at 74 calls died to a routine restart.
   any resolve/fetch failure is silence.  The answer text doubles as the
   no-JS/RSS form of the quote.
 
-## DashScope + SystemOne decision surface (alibaba families)
+## DashScope + typesafe decision surface (alibaba families)
 
 The SDK registry gained the DASHSCOPE family (``zjsearch.llm.sdk:
-dashscope``, `llm/sdk/dashscope.py`) and the TYPEsafe decision family
+dashscope``, `llm/sdk/dashscope.py`) and the typesafe decision family
 (`llm/sdk/typesafe.py`): the native qwen Generation API
 (thinking via ``reasoning_content``, function calling, mm auto-routing --
 a parts message carrying an image turns the call into
@@ -2722,17 +2722,36 @@ legs live in `llm/rerank.py` (the rerank SERVICE: config + wires); the
 cascade POLICY (BM25 fusion, head selection, splice) stays in
 `runs/search/rank.py`.
 
-The SystemOne DECISION capability (`zjsearch.decision`,
+The DECISION capability (`zjsearch.decision`,
 `llm/decision.py` + `api/decision_route.py`: ``POST
 /zjsearch/ai/decision``, HMAC-gated like the embed proxy): one forward
 pass answers NAMED questions about a state -- choice / score / noul,
-each with its probability distribution -- no text generation.  SDK
-selection pre-embedded (`sdk: typesafe`, the registry + package gate are
-the seam for the next family); `judge()` returns JSON-safe answers (the
-SDK's typed models downgrade through model_dump).  The dedicated
-workspace serves it at ``{workspace}/compatible-mode/v1/systemone`` --
-``base_url`` ends at ``.../compatible-mode`` (the SDK appends
-``/v1/systemone``).
+each with its probability distribution -- no text generation.  TWO SDK
+families, pre-embedded selection (`zjsearch.decision.sdk`, the registry
++ package gate are the seam for the next): ``typesafe`` (default; that
+vendor's own API is their "SystemOne" endpoint, ``/v1/systemone``) and
+``openai`` (`llm/sdk/openai.py` -- OpenAI's ``/v1/decisions`` endpoint
+through the typed ``client.decisions.create``, openai >= 3.26).  The
+family surfaces follow the embedding service's ``embed()`` pattern: the
+method is ``decide(state, questions, timeout)`` on each family module's
+class, `judge()` resolves the family and returns JSON-safe answers in
+the SAME canonical shapes whatever the family (the SDKs' typed models
+downgrade through model_dump / the openai wire mapping), so no consumer
+knows which served: noul -> ``predicate`` (the yes probability IS the
+condition probability), choice criteria -> ``choices``, score criteria
+-> ``levels``; back from the wire, choice/score answers carry
+``probabilities`` and score regains its ``legend`` from the per-level
+data, a ``refusal`` keeps its name as ``{"type": "refusal"}`` (the
+consumers' fail-open reads it as no-verdict).  base_url per family
+convention: the typesafe workspace serves
+``{workspace}/compatible-mode/v1/systemone`` -- ``base_url`` ends at
+``.../compatible-mode`` (the SDK appends ``/v1/systemone``); the openai
+family takes the ``.../v1`` root (the SDK appends ``/decisions``,
+absent rides the public endpoint).  A question the Decisions wire
+cannot express (a choice with <2 options, a score with <2 levels) drops
+on the openai family -- its answer stays absent, the consumers'
+fail-open covers it -- because a malformed question would 400 the
+WHOLE request.
 
 ## Python CI (upstream gates for searx/ changes)
 

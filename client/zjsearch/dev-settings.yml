@@ -360,15 +360,18 @@ zjsearch:
     # extra_body:
     #   return_documents: false
 
-  # ── the decision model (SystemOne class): ONE forward pass answers
-  # named questions about a state -- choice / score / noul, each with its
-  # probability distribution -- no text generation.  Triage, review,
-  # routing, verification.  Unconfigured = the route stays off.  The key
-  # travels via ZJSEARCH_DECISION_KEY.
+  # ── the decision model: ONE forward pass answers named questions
+  # about a state -- choice / score / noul, each with its probability
+  # distribution -- no text generation.  Triage, review, routing,
+  # verification.  Unconfigured = the route stays off.  The key travels
+  # via ZJSEARCH_DECISION_KEY.
   decision:
     enabled: true
-    sdk: typesafe                   # the first decision family (the
-                                   # registry pre-embeds the selection)
+    # sdk: typesafe (default, the workspace root -- the SDK appends
+    #                /v1/systemone) | openai (OpenAI's /v1/decisions
+    #                endpoint, openai >= 3.26 -- base_url then takes the
+    #                .../v1 root, absent rides the public endpoint)
+    sdk: typesafe
     base_url: "https://llm-5e15apfxtagh13cv.cn-beijing.maas.aliyuncs.com/compatible-mode"
     api_key: ""
     model: "decision-model-preview"

@@ -17,10 +17,27 @@ registry entry, never an edit to the importers."""
 
 from searx.zjsearch.ai.core.text import raw_args
 from searx.zjsearch.ai.tools.ask_user import ASK_TOOL, ask_user_spec
-from searx.zjsearch.ai.tools.calculator import CALCULATOR_TOOL, calculator_spec, parse_calculator_call
-from searx.zjsearch.ai.tools.extract import EXTRACT_TOOL, extract_spec, parse_extract_call
-from searx.zjsearch.ai.tools.judge import DECISION_TOOL, decision_row, parse_system_one_call, system_one_spec
-from searx.zjsearch.ai.tools.learnings import LEARNINGS_TOOL, learnings_spec, parse_learnings_call
+from searx.zjsearch.ai.tools.calculator import (
+    CALCULATOR_TOOL,
+    calculator_spec,
+    parse_calculator_call,
+)
+from searx.zjsearch.ai.tools.extract import (
+    EXTRACT_TOOL,
+    extract_spec,
+    parse_extract_call,
+)
+from searx.zjsearch.ai.tools.judge import (
+    DECISION_TOOL,
+    decision_row,
+    parse_judge_call,
+    judge_spec,
+)
+from searx.zjsearch.ai.tools.learnings import (
+    LEARNINGS_TOOL,
+    learnings_spec,
+    parse_learnings_call,
+)
 from searx.zjsearch.ai.tools.memory import USER_MEMORY_TOOL, user_memory_spec
 from searx.zjsearch.ai.tools.research_subtask import (
     MESSAGE_SUBTASK_TOOL,
@@ -37,9 +54,22 @@ from searx.zjsearch.ai.tools.past_research import (
 )
 from searx.zjsearch.ai.tools.rows import display_item
 from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call, task_write_spec
-from searx.zjsearch.ai.tools.view_image import VIEW_IMAGE_TOOL, parse_view_image_call, view_image_spec
-from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL, parse_web_browser_call, web_browser_spec
-from searx.zjsearch.ai.tools.web_search import SEARCH_CATEGORIES, TOOL_NAME, parse_call, tool_spec
+from searx.zjsearch.ai.tools.view_image import (
+    VIEW_IMAGE_TOOL,
+    parse_view_image_call,
+    view_image_spec,
+)
+from searx.zjsearch.ai.tools.web_browser import (
+    WEB_BROWSER_TOOL,
+    parse_web_browser_call,
+    web_browser_spec,
+)
+from searx.zjsearch.ai.tools.web_search import (
+    SEARCH_CATEGORIES,
+    TOOL_NAME,
+    parse_call,
+    tool_spec,
+)
 
 __all__ = [
     "ASK_TOOL",
@@ -70,14 +100,14 @@ __all__ = [
     "parse_learnings_call",
     "parse_message_subtask_call",
     "parse_query",
-    "parse_system_one_call",
+    "parse_judge_call",
     "parse_research_subtask_call",
     "parse_task_call",
     "parse_view_image_call",
     "parse_web_browser_call",
     "past_research_spec",
     "raw_args",
-    "system_one_spec",
+    "judge_spec",
     "task_write_spec",
     "view_image_spec",
     "web_browser_spec",

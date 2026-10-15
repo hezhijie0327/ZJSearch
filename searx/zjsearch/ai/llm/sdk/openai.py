@@ -5,21 +5,41 @@ The factory binds deployment config + base_url into an :class:`OpenaiSdk`
 whose surface covers everything the family can do: the two chat wire
 shapes (``openai.chat_completions`` and ``openai.responses`` -- the bare
 ``openai`` sdk value points at the Responses shape), native structured
-output in two tiers, and the embeddings API.  The wire internals port
+output in two tiers, the embeddings API (the embedding service's
+``embed()``), and the Decisions API (the decision service's
+``decide()`` -- OpenAI's ``/v1/decisions`` endpoint, the second
+decision family beside ``sdk/typesafe.py``).  The wire internals port
 from the former dialect modules unchanged -- only the binding moved.
 """
 
+import json
+import logging
 import queue
+import threading
+import time
 import typing as t
 
 from .. import caching, usage
-from ..config import dimensions, embedding_passthrough, extra_body, extra_headers, params, reasoning_passback
+from ..config import (
+    dimensions,
+    embedding_passthrough,
+    extra_body,
+    extra_headers,
+    params,
+    reasoning_passback,
+)
 from . import clients
 from .base import system_of
+
+logger = logging.getLogger(__name__)
 
 CHAT_KIND = "openai.chat_completions"
 RESPONSES_KIND = "openai.responses"
 JSON_TIERS = 2
+
+DECISIONS_INSTRUCTIONS_MAX = 2000
+"""One decision question's instruction cap (the parse layer caps at 400;
+the framework's own gates write longer ones -- still one sentence each)."""
 
 
 def _chat_wire_messages(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
@@ -64,7 +84,10 @@ async def _chat_pump(  # pylint: disable=too-many-branches, too-many-locals
     include_usage per the OpenAI contract -- whatever the endpoint reports
     (cache hits included) is rendered; one that rejects the parameter
     outright still streams -- one retry without it, stats simply absent."""
-    from openai import BadRequestError, UnprocessableEntityError  # pylint: disable=import-outside-toplevel
+    from openai import (
+        BadRequestError,
+        UnprocessableEntityError,
+    )  # pylint: disable=import-outside-toplevel
 
     cfg = sdk.cfg
     client = clients.openai_client(cfg, sdk.base, family=sdk.family)
@@ -120,7 +143,8 @@ async def _chat_pump(  # pylint: disable=too-many-branches, too-many-locals
                 events.put(("delta", str(delta.content)))
             for tc in delta.tool_calls or []:
                 slot = calls.setdefault(
-                    tc.index if tc.index is not None else 0, {"id": "", "name": "", "arguments": ""}
+                    tc.index if tc.index is not None else 0,
+                    {"id": "", "name": "", "arguments": ""},
                 )
                 if tc.id:
                     slot["id"] = tc.id
@@ -131,7 +155,15 @@ async def _chat_pump(  # pylint: disable=too-many-branches, too-many-locals
         if calls:
             events.put(("tool_calls", [calls[index] for index in sorted(calls)]))
         events.put(
-            ("finish", {"finish": finish, "usage": usage_meta, "encrypted_content": encrypted or None, "model": model})
+            (
+                "finish",
+                {
+                    "finish": finish,
+                    "usage": usage_meta,
+                    "encrypted_content": encrypted or None,
+                    "model": model,
+                },
+            )
         )
     finally:
         await stream.close()
@@ -148,7 +180,12 @@ def _responses_message(message: dict[str, t.Any]) -> dict[str, t.Any]:
         if part.get("type") == "text":
             parts.append({"type": "input_text", "text": part.get("text")})
         elif part.get("type") == "image_url":
-            parts.append({"type": "input_image", "image_url": (part.get("image_url") or {}).get("url")})
+            parts.append(
+                {
+                    "type": "input_image",
+                    "image_url": (part.get("image_url") or {}).get("url"),
+                }
+            )
         else:
             parts.append(part)
     return {**message, "content": parts}
@@ -172,7 +209,12 @@ def _responses_input(messages: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]
                     items.append(reasoning_item)
             text = message.get("content")
             if text:
-                items.append({"role": "assistant", "content": [{"type": "output_text", "text": str(text)}]})
+                items.append(
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": str(text)}],
+                    }
+                )
             for tc in calls:
                 fn = tc.get("function") or {}
                 items.append(
@@ -280,11 +322,158 @@ async def _responses_pump(  # pylint: disable=too-many-branches, too-many-locals
         events.put(
             (
                 "finish",
-                {"finish": finish, "usage": usage_meta, "reasoning_items": reasoning_items or None, "model": model},
+                {
+                    "finish": finish,
+                    "usage": usage_meta,
+                    "reasoning_items": reasoning_items or None,
+                    "model": model,
+                },
             )
         )
     finally:
         await stream.close()
+
+
+def _decisions_field(obj: t.Any, key: str, default: t.Any = None) -> t.Any:
+    """One field off a Decisions response: the SDK hands back pydantic
+    models and plain dicts interchangeably -- both read through here."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        value = obj.get(key, default)
+        return default if value is None else value
+    value = getattr(obj, key, default)
+    return default if value is None else value
+
+
+def _decisions_text(value: t.Any) -> str:
+    """One decision criteria value (str | dict | list) as instruction
+    text."""
+    return value.strip() if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+
+
+def _decisions_instructions(question: dict[str, t.Any]) -> str:
+    """The Decisions wire requires ``instructions`` on every question:
+    the wire's own first, then a noul's true/false criteria composed in,
+    then a generic floor."""
+    text = str(question.get("instructions") or "").strip()
+    if text:
+        return text[:DECISIONS_INSTRUCTIONS_MAX]
+    criteria = question.get("criteria")
+    if isinstance(criteria, dict) and criteria:
+        parts = [
+            f"{side}: {_decisions_text(criteria[side])}" for side in ("true", "false") if criteria.get(side) is not None
+        ]
+        if parts:
+            return "; ".join(parts)[:DECISIONS_INSTRUCTIONS_MAX]
+    return "Judge the provided input."
+
+
+def _decisions_question(name: str, question: dict[str, t.Any]) -> dict[str, t.Any] | None:
+    """One wire question in Decisions shape, or ``None`` when the question
+    cannot be expressed there (a choice without >= 2 options, a score
+    without >= 2 levels -- the API would 400 the WHOLE request for one
+    malformed question, so the unusable one drops instead; its answer
+    simply stays absent, the consumers' fail-open)."""
+    kind = str(question.get("type") or "")
+    wire: dict[str, t.Any] = {
+        "type": "predicate" if kind == "noul" else kind,
+        "name": name,
+        "instructions": _decisions_instructions(question),
+    }
+    criteria = question.get("criteria")
+    if kind == "choice":
+        if not isinstance(criteria, dict) or len(criteria) < 2:
+            return None
+        choices: list[dict[str, t.Any]] = []
+        for option, description in criteria.items():
+            choice: dict[str, t.Any] = {"value": str(option)}
+            text = _decisions_text(description)
+            if text:
+                choice["description"] = text
+            choices.append(choice)
+        wire["choices"] = choices
+    elif kind == "score":
+        if not isinstance(criteria, list) or len(criteria) < 2:
+            return None
+        wire["levels"] = [{"label": _decisions_text(level)[:200]} for level in criteria]
+    elif kind != "noul":
+        return None
+    return wire
+
+
+def _decisions_answer(raw: t.Any) -> tuple[str, dict[str, t.Any]] | None:
+    """One Decisions answer downgraded into the canonical named-verdict
+    shape (same JSON-safe dicts the typesafe family's models dump), or
+    ``None`` when unusable (no name, unknown type, malformed fields --
+    one bad answer drops, the rest still land)."""
+    name = str(_decisions_field(raw, "name") or "").strip()
+    kind = _decisions_field(raw, "type")
+    if not name:
+        return None
+    if kind == "predicate":
+        # the yes/no probability IS the condition probability
+        return name, {
+            "type": "noul",
+            "noul": round(float(_decisions_field(raw, "probability", 0.0)), 4),
+        }
+    if kind == "choice":
+        probabilities = {
+            str(_decisions_field(option, "value")): round(float(_decisions_field(option, "probability", 0.0)), 4)
+            for option in _decisions_field(raw, "probabilities") or []
+        }
+        return name, {
+            "type": "choice",
+            "choice": str(_decisions_field(raw, "choice") or ""),
+            "confidence": round(float(_decisions_field(raw, "confidence", 0.0)), 4),
+            "probabilities": probabilities,
+        }
+    if kind == "score":
+        legend: dict[str, str] = {}
+        probabilities = {}
+        for option in _decisions_field(raw, "probabilities") or []:
+            level = str(_decisions_field(option, "value"))
+            legend[level] = str(_decisions_field(option, "label") or level)
+            probabilities[level] = round(float(_decisions_field(option, "probability", 0.0)), 4)
+        return name, {
+            "type": "score",
+            "score": round(float(_decisions_field(raw, "score", 0.0)), 4),
+            "confidence": round(float(_decisions_field(raw, "confidence", 0.0)), 4),
+            "legend": legend,
+            "probabilities": probabilities,
+        }
+    if kind == "refusal":
+        # the model declined THIS question; the consumers' fail-open reads
+        # the marker as no-verdict (noul 0 / empty choice)
+        return name, {"type": "refusal"}
+    return None
+
+
+_decisions_clients: dict[tuple[str, str], t.Any] = {}
+_decisions_lock = threading.Lock()
+"""The sync Decisions clients, cached per (base_url, api_key) -- the same
+pool-reuse discipline as the rerank openai leg (a fresh client per call
+paid a new connection handshake on EVERY judgment).  A SYNC cache beside
+``clients``: the chat/embedding clients are loop-bound async objects,
+the decisions call is a one-shot on the calling thread."""
+
+
+def _decisions_client(cfg: dict[str, t.Any], base: str, api_key: str) -> t.Any:
+    from openai import OpenAI  # pylint: disable=import-outside-toplevel
+
+    key = (base, api_key)
+    with _decisions_lock:
+        client = _decisions_clients.get(key)
+        if client is None:
+            client = OpenAI(
+                api_key=api_key,
+                base_url=base or None,
+                default_headers=extra_headers(cfg) or None,
+                timeout=clients.sdk_timeout(),
+                max_retries=0,
+            )
+            _decisions_clients[key] = client
+    return client
 
 
 class OpenaiSdk:
@@ -343,7 +532,10 @@ class OpenaiSdk:
                 usage_meta = usage.openai_usage(response.usage)
             return str(getattr(response, "output_text", "") or ""), usage_meta
         response_format = (
-            {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}}
+            {
+                "type": "json_schema",
+                "json_schema": {"name": name, "strict": True, "schema": schema},
+            }
             if strict
             else {"type": "json_object"}
         )
@@ -389,10 +581,71 @@ class OpenaiSdk:
         meta = {"input": reported.prompt_tokens} if reported is not None and reported.prompt_tokens else None
         return [item.embedding for item in ordered], meta
 
+    def decide(
+        self,
+        state: t.Any,
+        questions: dict[str, dict[str, t.Any]],
+        timeout: float | None = None,
+    ) -> dict[str, t.Any] | None:
+        """One decision-model judgment over the Decisions wire (the
+        decision service's ``openai`` family -- the ``embed()`` pattern,
+        the family method on the family surface): the named questions map
+        to ``predicate`` / ``choice`` / ``score``, the answers map back
+        into the canonical shapes, and the result reads ``{"answers",
+        "usage", "latency_ms"}`` exactly like the typesafe family's.
+        ``base_url`` follows the openai SDK convention (the ``.../v1``
+        root; absent rides the public endpoint).  A sync one-shot on the
+        calling thread (no loop bridging) on the SDK's own HTTP stack.
+        Raised errors propagate (the service owns the fail-open)."""
+        wire_questions = []
+        for name, question in questions.items():
+            wire = _decisions_question(name, question)
+            if wire is None:
+                logger.debug(
+                    "zjsearch decision openai: question %r not expressible, dropped",
+                    name,
+                )
+                continue
+            wire_questions.append(wire)
+        if not wire_questions:
+            return None
+        client = _decisions_client(self.cfg, self.base, str(self.cfg.get("api_key") or ""))
+        started = time.monotonic()
+        response = client.decisions.create(
+            model=str(self.cfg.get("model")),
+            input=(state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)),
+            questions=wire_questions,
+            timeout=float(timeout) if timeout is not None else clients.sdk_timeout(),
+            extra_headers=extra_headers(self.cfg) or None,
+            extra_body=extra_body(self.cfg) or None,
+        )
+        answers: dict[str, dict[str, t.Any]] = {}
+        for raw in _decisions_field(response, "answers") or []:
+            try:
+                mapped = _decisions_answer(raw)
+            except (TypeError, ValueError):
+                continue
+            if mapped is not None:
+                answers[mapped[0]] = mapped[1]
+        if not answers:
+            return None
+        usage_raw = _decisions_field(response, "usage")
+        usage_meta: dict[str, int] = {}
+        if usage_raw is not None:
+            for key in ("input_tokens", "output_tokens"):
+                usage_meta[key] = int(_decisions_field(usage_raw, key) or 0)
+        return {
+            "answers": answers,
+            "usage": usage_meta,
+            "latency_ms": int((time.monotonic() - started) * 1000),
+        }
+
 
 def factory(cfg: dict[str, t.Any], base: str, kind: str, family: str = "openai") -> OpenaiSdk:
     """The OpenAI family factory: config + base_url + wire kind bound into
     one callable surface.  ``family`` separates the client cache
     namespaces (the chat transport and the embedding feature can share a
-    base_url while carrying DIFFERENT keys)."""
+    base_url while carrying DIFFERENT keys).  The decision registry binds
+    the same factory for its ``openai`` family (``decide`` ignores the
+    chat ``kind``)."""
     return OpenaiSdk(cfg, base, kind, family)

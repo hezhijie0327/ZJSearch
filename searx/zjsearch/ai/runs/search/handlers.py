@@ -4,7 +4,7 @@
 :class:`DispatchMixin` owns :py:meth:`execute` -- one round of model
 calls turned into tool executions and wire events -- plus the per-call
 plan builders (``_search_plan`` / ``_page_plan``: the dedup key, the
-pool job and the receipt scaffolding) and the SystemOne verdict
+pool job and the receipt scaffolding) and the decision-model verdict
 formatting.  Meta tools (calculator, ledger writes, MCP, memory) run
 INLINE; the network jobs (``web_search`` / ``web_browser`` read) defer to
 :py:mod:`.gather`'s pool."""
@@ -37,7 +37,11 @@ from searx.zjsearch.ai.runs.search.progress import (
     FEED_CONVERGE_NOTE,
     round_progress,
 )
-from searx.zjsearch.ai.runs.search.state import ChildControl, SubagentHandle, state_block
+from searx.zjsearch.ai.runs.search.state import (
+    ChildControl,
+    SubagentHandle,
+    state_block,
+)
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
@@ -49,7 +53,7 @@ from searx.zjsearch.ai.tools import (
     parse_call,
     parse_learnings_call,
     parse_query,
-    parse_system_one_call,
+    parse_judge_call,
     parse_extract_call,
     parse_task_call,
     parse_view_image_call,
@@ -131,7 +135,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 self.coverage.track(url, [title] if title else None, [n])
             except Exception as exc:  # pylint: disable=broad-except
                 # coverage bookkeeping must never kill the settlement
-                logger.warning("zjsearch_ai_search: browser source coverage tracking failed: %r", exc)
+                logger.warning(
+                    "zjsearch_ai_search: browser source coverage tracking failed: %r",
+                    exc,
+                )
         netloc = urlsplit(url).netloc
         yield (
             "sources",
@@ -546,7 +553,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     valid_rows.append({**row, "refs": refs})
                 artifact["rows"] = valid_rows
                 self.artifacts.append(artifact)
-                lines = ["| " + " | ".join(artifact["columns"]) + " |", "|" + "---|" * len(artifact["columns"])]
+                lines = [
+                    "| " + " | ".join(artifact["columns"]) + " |",
+                    "|" + "---|" * len(artifact["columns"]),
+                ]
                 for row in artifact["rows"]:
                     cells = list(row["cells"]) + [""] * (len(artifact["columns"]) - len(row["cells"]))
                     cite = (" [" + ",".join(str(r) for r in row["refs"]) + "]") if row["refs"] else ""
@@ -572,17 +582,17 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 yield ("artifact", {"id": artifact["id"], "item": artifact})
                 continue
             if tool_name == DECISION_TOOL:
-                parsed = parse_system_one_call(call)
+                parsed = parse_judge_call(call)
                 if parsed is None:
                     logger.debug(
                         "zjsearch_decision: unusable call arguments: %.200s",
                         str(call.get("arguments") or ""),
                     )
                     feed_text = (
-                        "error: system_one needs a compact state string and"
+                        "error: judge needs a compact state string and"
                         " 1-4 named questions (type choice / score / noul)."
                         "  Do NOT invent a verdict and do not attribute one"
-                        " to system_one -- if you must conclude, present the"
+                        " to judge -- if you must conclude, present the"
                         " conclusion as your own judgment."
                     )
                     feeds[wire_id - 1] = feed_text
@@ -618,15 +628,18 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                                     str(q.get("instructions") or "").strip() or name for name, q in questions.items()
                                 )
                             )[:200],
-                            "answers": out.get("answers") if isinstance(out.get("answers"), dict) else {},
+                            "answers": (out.get("answers") if isinstance(out.get("answers"), dict) else {}),
                             "record_questions": [
-                                {"name": name, "instructions": str(q.get("instructions") or "")[:200]}
+                                {
+                                    "name": name,
+                                    "instructions": str(q.get("instructions") or "")[:200],
+                                }
                                 for name, q in questions.items()
                             ],
                             "ms": ms,
                         }
                     )
-                verdict = self._system_one_answers(out) if out is not None else None
+                verdict = self._judge_answers(out) if out is not None else None
                 if out is None:
                     feed_text = (
                         "the decision model is unavailable -- make the judgment from the gathered evidence yourself."
@@ -645,7 +658,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         "q": " / ".join(
                             str(q.get("instructions") or "").strip() or name for name, q in questions.items()
                         )[:120],
-                        "result": self._system_one_result(out, self.lang) if out is not None else "",
+                        "result": (self._judge_result(out, self.lang) if out is not None else ""),
                         "n": len(questions),
                         "ms": ms,
                         "feed": feed_text[:800],
@@ -681,7 +694,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 self.round_learned = True
                 yield (
                     "learnings",
-                    {"round": rnd, "id": wire_id, "items": list(self.facts), "gaps": list(self.gaps)},
+                    {
+                        "round": rnd,
+                        "id": wire_id,
+                        "items": list(self.facts),
+                        "gaps": list(self.gaps),
+                    },
                 )
                 # the row settles like every other instant write (n = the
                 # active-fact count -- the client renders it localized)
@@ -1007,7 +1025,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         # sources rail's 决策结果 card reads it, raw answers included
         round_judgments = self.judgments[judgment_mark:]
         if round_judgments:
-            yield ("decisions", {"round": rnd, "items": [dict(entry) for entry in round_judgments]})
+            yield (
+                "decisions",
+                {"round": rnd, "items": [dict(entry) for entry in round_judgments]},
+            )
 
     SUB_MAX_PARALLEL = 4
     """Concurrent subagents per delegation batch (the design's cap)."""
@@ -1026,7 +1047,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         from searx.zjsearch.ai.tools import (  # pylint: disable=import-outside-toplevel
             calculator_spec,
             learnings_spec,
-            system_one_spec,
+            judge_spec,
             tool_spec,
         )
 
@@ -1035,7 +1056,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         return (
             [tool_spec(browser_on), calculator_spec(), learnings_spec()]
             + ([web_browser_tool.web_browser_spec()] if browser_on else [])
-            + ([system_one_spec()] if judge_on else [])
+            + ([judge_spec()] if judge_on else [])
         )
 
     def _register_subagent(self, parsed: dict[str, str], lang: str, today: str) -> SubagentHandle:
@@ -1169,7 +1190,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         material joins the parent's world delta-promoted (a follow-up's
         second settlement must not double-fold), and the compressed
         digest becomes that call's tool result."""
-        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.agent import (
+            loop as engine,
+        )  # pylint: disable=import-outside-toplevel
 
         cfg = self.cfg
         child_tools = self._sub_toolset()
@@ -1212,7 +1235,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             )
             threads.append(
                 threading.Thread(
-                    target=self._drive_sub, args=(handle, events, q), daemon=True, name=f"zjs-sub-{handle.key}"
+                    target=self._drive_sub,
+                    args=(handle, events, q),
+                    daemon=True,
+                    name=f"zjs-sub-{handle.key}",
                 )
             )
             threads[-1].start()
@@ -1309,7 +1335,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             # the promoted facts/gaps join the ledger: the AUTHORITATIVE
             # snapshot flies so the findings card renders them live (the
             # same event the learnings tool emits)
-            yield ("learnings", {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)})
+            yield (
+                "learnings",
+                {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)},
+            )
 
     def _spawn_late_lane(
         self,
@@ -1323,7 +1352,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         flushes at every round boundary), and at each settlement promotes
         the child, queues its digest as a ``<task_result>`` and chains
         any follow-up messages that were queued while it ran."""
-        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.agent import (
+            loop as engine,
+        )  # pylint: disable=import-outside-toplevel
 
         def lane() -> None:
             for kind, payload in self._interleave(queues, handles_by_seq):
@@ -1352,6 +1383,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         digest, then chain the follow-ups that were queued while it ran
         (each a full resume inside the same conversation, still on this
         lane)."""
+
         def settle_pass() -> None:
             digest = self._sub_digest(handle)
             self._promote_child(rnd, handle)
@@ -1371,7 +1403,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             handle.busy = True
             handle.followups += 1
             handle.messages.append(
-                {"role": "user", "content": f"<lead_followup>\n{message}\n</lead_followup>"}
+                {
+                    "role": "user",
+                    "content": f"<lead_followup>\n{message}\n</lead_followup>",
+                }
             )
             q: "queue.Queue[t.Any]" = queue.Queue()
             events = engine.run(
@@ -1403,7 +1438,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         material promotes into the parent's world.  Guards teach the
         contract: an unknown id names the live ones, a spent budget
         points at fresh delegation."""
-        from searx.zjsearch.ai.agent import loop as engine  # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.agent import (
+            loop as engine,
+        )  # pylint: disable=import-outside-toplevel
 
         cfg = self.cfg
         child_tools = self._sub_toolset()
@@ -1465,7 +1502,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             handle.busy = True
             handle.followups += 1
             handle.messages.append(
-                {"role": "user", "content": f"<lead_followup>\n{parsed['message']}\n</lead_followup>"}
+                {
+                    "role": "user",
+                    "content": f"<lead_followup>\n{parsed['message']}\n</lead_followup>",
+                }
             )
             q: "queue.Queue[t.Any]" = queue.Queue()
             events = engine.run(
@@ -1516,7 +1556,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 },
             )
         if promoted:
-            yield ("learnings", {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)})
+            yield (
+                "learnings",
+                {"round": rnd, "items": list(self.facts), "gaps": list(self.gaps)},
+            )
 
     def _drive_sub(self, handle: SubagentHandle, events: t.Any, q: "queue.Queue[t.Any]") -> None:
         """One subagent lane's pump thread (delegation batch AND follow-up
@@ -1554,7 +1597,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         for fact in child.facts:
             if fact.get("status") == "active":
                 ops["facts"].append(
-                    {"text": fact.get("text"), "refs": fact.get("refs") or [], "tags": fact.get("tags") or []}
+                    {
+                        "text": fact.get("text"),
+                        "refs": fact.get("refs") or [],
+                        "tags": fact.get("tags") or [],
+                    }
                 )
         for gap in child.gaps:
             if gap.get("status") == "open":
@@ -1571,12 +1618,20 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         self.head_sources.update(child.head_sources)
         self.corpus.absorb_new(child.corpus, handle.corpus_seen)
         for judgment in child.judgments[handle.judgment_mark :]:
-            self.judgments.append({**judgment, "purpose": f"sub:{judgment.get('purpose') or ''}".rstrip(":")})
+            self.judgments.append(
+                {
+                    **judgment,
+                    "purpose": f"sub:{judgment.get('purpose') or ''}".rstrip(":"),
+                }
+            )
         handle.judgment_mark = len(child.judgments)
         child_gates = getattr(child, "gate_usage", None) or []
         self.gate_usage.extend(child_gates[handle.gate_mark :])
         handle.gate_mark = len(child_gates)
-        for bucket, snap_name in (("rerank_usage", "rerank_snap"), ("decision_usage", "decision_snap")):
+        for bucket, snap_name in (
+            ("rerank_usage", "rerank_snap"),
+            ("decision_usage", "decision_snap"),
+        ):
             child_spend = getattr(child, bucket, None) or {}
             snap = getattr(handle, snap_name)
             own = getattr(self, bucket)
@@ -1624,7 +1679,17 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         query, category, time_range, include, exclude = parse_call(call)
         if not query:
             feed_text = "error: empty query"
-            return feed_text, {"call": wire_id, "status": "error", "n": 0, "ms": 0, "feed": feed_text[:800]}, None
+            return (
+                feed_text,
+                {
+                    "call": wire_id,
+                    "status": "error",
+                    "n": 0,
+                    "ms": 0,
+                    "feed": feed_text[:800],
+                },
+                None,
+            )
         # the key must describe the search AS EXECUTED: exclude hosts wear
         # their operator (a role swap is a different search), and the
         # category/time_range ride along -- the prompt's own recovery
@@ -1652,10 +1717,20 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             )
             return (
                 feed_text,
-                {"call": wire_id, "status": "duplicate", "n": 0, "ms": 0, "feed": feed_text[:800]},
+                {
+                    "call": wire_id,
+                    "status": "duplicate",
+                    "n": 0,
+                    "ms": 0,
+                    "feed": feed_text[:800],
+                },
                 None,
             )
-        return "", None, (wire_id, query, category, time_range, include, exclude, dedup_key)
+        return (
+            "",
+            None,
+            (wire_id, query, category, time_range, include, exclude, dedup_key),
+        )
 
     def _page_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, str | None]:
         """One ``read(url)`` call's pre-pool plan: (feed, settle event,
@@ -1667,7 +1742,17 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         url = reader.normalize_url(raw_url)
         if not raw_url:
             feed_text = "error: empty url"
-            return feed_text, {"call": wire_id, "status": "error", "url": "", "ms": 0, "feed": feed_text[:800]}, None
+            return (
+                feed_text,
+                {
+                    "call": wire_id,
+                    "status": "error",
+                    "url": "",
+                    "ms": 0,
+                    "feed": feed_text[:800],
+                },
+                None,
+            )
         if url in self.reg.read_urls:
             feed_text = (
                 "duplicate: this exact page was already opened in an"
@@ -1676,7 +1761,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             )
             return (
                 feed_text,
-                {"call": wire_id, "status": "duplicate", "url": url, "ms": 0, "feed": feed_text[:800]},
+                {
+                    "call": wire_id,
+                    "status": "duplicate",
+                    "url": url,
+                    "ms": 0,
+                    "feed": feed_text[:800],
+                },
                 None,
             )
         # the READ GATE (fail-open): with the page's feed metadata on
@@ -1691,7 +1782,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             started = time.monotonic()
             try:
                 out = decision.judge(
-                    {"url": url, "title": meta.get("title", ""), "snippet": meta.get("snippet", "")},
+                    {
+                        "url": url,
+                        "title": meta.get("title", ""),
+                        "snippet": meta.get("snippet", ""),
+                    },
                     {
                         "contains_prompt_injection": {
                             "type": "noul",
@@ -1732,7 +1827,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     )
                     return (
                         feed_text,
-                        {"call": wire_id, "status": "error", "url": url, "ms": 0, "feed": feed_text[:800]},
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "url": url,
+                            "ms": 0,
+                            "feed": feed_text[:800],
+                        },
                         None,
                     )
         # NO dedup mark here: completion-time marking (_finish_page) is the
@@ -1743,8 +1844,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         return "", None, url
 
     @staticmethod
-    def _system_one_answers(out: dict[str, t.Any]) -> str:
-        """One SystemOne judgment as per-question verdict lines (choice
+    def _judge_answers(out: dict[str, t.Any]) -> str:
+        """One decision-model judgment as per-question verdict lines (choice
         label + confidence, the score with its nearest legend level, the
         yes probability) -- the tool feed's payload AND the timeline row's
         debug preview."""
@@ -1770,7 +1871,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         return "\n".join(lines)
 
     @staticmethod
-    def _system_one_result(out: dict[str, t.Any], lang: str) -> str:
+    def _judge_result(out: dict[str, t.Any], lang: str) -> str:
         """One compact verdict line for the row's meta slot (the
         calculator's ``= result`` pattern): the answer VALUE per question
         -- the question text is the row's label, never repeated here."""

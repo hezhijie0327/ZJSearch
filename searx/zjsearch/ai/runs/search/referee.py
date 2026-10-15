@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """AI Search executor: the REFEREE -- the fail-open decision gates.
 
-Every gate here is ONE small structured completion (or SystemOne pass)
+Every gate here is ONE small structured completion (or decision-model pass)
 that advises the researcher or guards the writer's inputs: the plan
 review (subtask sharpening), the coverage referee (per-round done/thin
 advice), the pre-write evidence check (a source that fails its noul is

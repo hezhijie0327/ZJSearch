@@ -81,7 +81,7 @@ export interface GlobalData {
   embedding?: { tk: string; model: string; dimensions?: number };
   /** Decision-model capability (token + model): absent when the
       zjsearch.decision block is off/unconfigured — the browser proxies its
-      SystemOne judgments (choice / score / noul) through /zjsearch/ai/decision */
+      decision-model judgments (choice / score / noul) through /zjsearch/ai/decision */
   decision?: { tk: string; model: string };
   /** Rerank-model capability (token + model): absent when the
       zjsearch.rerank block is off/unconfigured — the knowledge base's

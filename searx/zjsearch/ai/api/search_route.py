@@ -39,7 +39,11 @@ from searx.zjsearch.ai.llm import decision, jsongate
 from searx.zjsearch.ai.llm import sdk as sdk_registry
 from searx.zjsearch.ai.runs.search.context import _relevance_order
 from searx.zjsearch.ai.runs.search.executor import Searches
-from searx.zjsearch.ai.runs.search.state import restore_subagents, serialize_subagents, state_block
+from searx.zjsearch.ai.runs.search.state import (
+    restore_subagents,
+    serialize_subagents,
+    state_block,
+)
 from searx.zjsearch.ai.tools import research_subtask as subtask_module
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.report import outline as report_outline
@@ -70,7 +74,7 @@ from searx.zjsearch.ai.tools import (
     past_research_spec,
     message_subtask_spec,
     research_subtask_spec,
-    system_one_spec,
+    judge_spec,
     task_write_spec,
     tool_spec,
     user_memory_spec,
@@ -109,7 +113,10 @@ def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
     questions = sanitize_questions(value.get("questions"))
     if not questions:
         return None
-    return {"intro": str(value.get("intro") or "").strip()[:200], "questions": questions}
+    return {
+        "intro": str(value.get("intro") or "").strip()[:200],
+        "questions": questions,
+    }
 
 
 _LANE_FINAL_WAIT_SECONDS = 120.0
@@ -118,7 +125,9 @@ past it the run settles honestly (their digests already in the feed are
 written, undelivered <task_result> injections are dropped)."""
 
 
-def _late_feed(state: Searches) -> t.Callable[[bool], tuple[list[dict[str, t.Any]], list[dict[str, t.Any]]]]:
+def _late_feed(
+    state: Searches,
+) -> t.Callable[[bool], tuple[list[dict[str, t.Any]], list[dict[str, t.Any]]]]:
     """The loop's background-lane drain: on the FINAL call (the write
     boundary) it first gives the lanes their bounded wait, then flushes
     the remaining events + queued digests."""
@@ -223,18 +232,16 @@ def parse_resume(raw: t.Any, sources_base: int) -> dict[str, t.Any] | None:
             if not (str(key).startswith("S") and len(key) <= 8 and isinstance(item.get("messages"), list)):
                 continue
             archived_messages = [
-                dict(m)
-                for m in item["messages"][:400]
-                if isinstance(m, dict) and str(m.get("role") or "")
+                dict(m) for m in item["messages"][:400] if isinstance(m, dict) and str(m.get("role") or "")
             ]
             if not archived_messages:
                 continue
             subagents[str(key)] = {
                 "seq": item.get("seq") if isinstance(item.get("seq"), int) else 0,
-                "followups": item.get("followups") if isinstance(item.get("followups"), int) else 0,
-                "parsed": item.get("parsed") if isinstance(item.get("parsed"), dict) else {},
+                "followups": (item.get("followups") if isinstance(item.get("followups"), int) else 0),
+                "parsed": (item.get("parsed") if isinstance(item.get("parsed"), dict) else {}),
                 "messages": archived_messages,
-                "facts": item.get("facts") if isinstance(item.get("facts"), list) else [],
+                "facts": (item.get("facts") if isinstance(item.get("facts"), list) else []),
                 "gaps": item.get("gaps") if isinstance(item.get("gaps"), list) else [],
             }
     return {
@@ -320,7 +327,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         {
             "e": "attachment",
             "items": [
-                {"name": str(f.get("name") or "attachment"), "mime": "text/markdown", "text": str(f.get("text") or "")}
+                {
+                    "name": str(f.get("name") or "attachment"),
+                    "mime": "text/markdown",
+                    "text": str(f.get("text") or ""),
+                }
                 for f in attached_files
             ],
         }
@@ -339,7 +350,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     if isinstance(raw_past, list):
         for item in raw_past[:6]:
             if isinstance(item, dict) and item.get("url"):
-                past_sources.append({"url": str(item["url"])[:500], "title": str(item.get("title") or "")[:200]})
+                past_sources.append(
+                    {
+                        "url": str(item["url"])[:500],
+                        "title": str(item.get("title") or "")[:200],
+                    }
+                )
     mode = str(payload.get("mode") or "balanced").strip().lower()
     if mode not in SEARCH_MODES:
         mode = "balanced"
@@ -447,8 +463,14 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                         "target": q[:200],
                         "answers": answers,
                         "record_questions": [
-                            {"name": "ambiguous", "instructions": "The query reads intent-ambiguous"},
-                            {"name": "high_stakes", "instructions": "The query is a high-stakes direction"},
+                            {
+                                "name": "ambiguous",
+                                "instructions": "The query reads intent-ambiguous",
+                            },
+                            {
+                                "name": "high_stakes",
+                                "instructions": "The query is a high-stakes direction",
+                            },
                         ],
                         "worth_asking": clarify_worth_asking,
                         "ms": int((time.monotonic() - started) * 1000),
@@ -458,9 +480,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     if research_needed and clarify_worth_asking and clarify_state == "ask" and not history:
         gate = clarify_gate(cfg, q, lang, gate_usage, attachments_note=gate_note)
         if gate:
-            gate_preamble = (
-                [{"e": "decisions", "items": [pre_entry]}] if pre_entry else []
-            ) + ([attachment_event] if attachment_event else [])
+            gate_preamble = ([{"e": "decisions", "items": [pre_entry]}] if pre_entry else []) + (
+                [attachment_event] if attachment_event else []
+            )
             stream = _Ndjson(
                 _clarify_events(gate),
                 cfg,
@@ -492,7 +514,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # the same block a real request attachment uses.  Request
         # attachments win when present (no mixing of the two channels).
         recalled_files = (
-            [{"name": entry["title"], "text": entry["text"]} for entry in past_research_entries if not entry["url"] and entry["text"]]
+            [
+                {"name": entry["title"], "text": entry["text"]}
+                for entry in past_research_entries
+                if not entry["url"] and entry["text"]
+            ]
             if past_research_entries
             else []
         )
@@ -513,7 +539,14 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 attached_files=writer_files,
             ),
         )
-        stream = _Ndjson(events, cfg, q, lang, gate_usage, preamble=[attachment_event] if attachment_event else None)
+        stream = _Ndjson(
+            events,
+            cfg,
+            q,
+            lang,
+            gate_usage,
+            preamble=[attachment_event] if attachment_event else None,
+        )
         response = _respond(stream)
         if response.status_code == 502 and image_parts and not degraded:
             logger.warning("zjsearch_ai_search: multimodal request rejected -- retrying text-only")
@@ -597,7 +630,8 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         if restored is not None:
             outline = restored
             logger.info(
-                "zjsearch_ai_search: restored the interrupted report's outline (%d sections)", len(restored["sections"])
+                "zjsearch_ai_search: restored the interrupted report's outline (%d sections)",
+                len(restored["sections"]),
             )
     if outline_requested and outline is None:
         if report_template is not None:
@@ -676,7 +710,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # single-write writer already carried the binding note; without this
         # the report body could never apply the framework it was built on.
         for file in state.attached_files:
-            state.corpus.add(str(file["text"])[:60_000], ref_n=0, title=str(file["name"])[:120], kind="attachment")
+            state.corpus.add(
+                str(file["text"])[:60_000],
+                ref_n=0,
+                title=str(file["name"])[:120],
+                kind="attachment",
+            )
     if resume is not None and resume.get("write_direct"):
         # THE WRITER-REGEN REHYDRATION: the run's corpus and feed lived in
         # the dead process's executor -- the replayed conversation's tool
@@ -693,7 +732,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             text = str(message.get("content") or "")
             if len(text) < 200:
                 continue
-            state.corpus.add(text[:20_000], ref_n=0, title=str(message.get("name") or "tool result")[:120], kind="resume")
+            state.corpus.add(
+                text[:20_000],
+                ref_n=0,
+                title=str(message.get("name") or "tool result")[:120],
+                kind="resume",
+            )
             if fed < 40:
                 state.feed.append(f"[recovered material -- {message.get('name') or 'tool'}]\n{text[:6_000]}")
                 fed += 1
@@ -850,7 +894,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         try:
             run_journal.journal().index_run(thread, handle.key, research_q, mode)
         except sqlite3.Error:
-            logger.warning("zjsearch ai search: journal index failed -- reload matcher degraded", exc_info=True)
+            logger.warning(
+                "zjsearch ai search: journal index failed -- reload matcher degraded",
+                exc_info=True,
+            )
     # the subagent pump observes the run's control plane NON-destructively
     # (peek over read): a user stop/preempt must reach the RUNNING
     # subagents -- today the delegation batch blocked the stop until every
@@ -909,12 +956,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     events = engine.run(
         cfg,
         research_messages,
-        tools=[tool_spec(browser_on), calculator_spec(), user_memory_spec(), learnings_spec()]
-        + (
-            [system_one_spec()]
-            if decision.enabled() and decision.configured() and decision.sdk_missing() is None
-            else []
-        )
+        tools=[
+            tool_spec(browser_on),
+            calculator_spec(),
+            user_memory_spec(),
+            learnings_spec(),
+        ]
+        + ([judge_spec()] if decision.enabled() and decision.configured() and decision.sdk_missing() is None else [])
         + ([past_research_spec()] if past_research_entries else [])
         + ([web_browser_tool.web_browser_spec()] if browser_on else [])
         + [ask_user_spec()]
@@ -986,9 +1034,8 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # first event (the 决策结果 card opens with them) -- a FLAT event list:
     # every element is ONE wire event dict (the decisions batch is an
     # element, not a wrapper)
-    driver_preamble = (
-        ([{"e": "decisions", "items": preflight}] if preflight else [])
-        + ([attachment_event] if attachment_event else [])
+    driver_preamble = ([{"e": "decisions", "items": preflight}] if preflight else []) + (
+        [attachment_event] if attachment_event else []
     )
     driver = threading.Thread(
         target=_drive,
@@ -1097,10 +1144,13 @@ class _SettleTail:
             if rerank and rerank.get("calls"):
                 # the ranking cascade's endpoint spend, its own bucket (the
                 # model stats page sums it separately from the LLM tokens)
-                usage["rerank"] = {"calls": int(rerank["calls"]), "tokens": int(rerank.get("tokens") or 0)}
+                usage["rerank"] = {
+                    "calls": int(rerank["calls"]),
+                    "tokens": int(rerank.get("tokens") or 0),
+                }
             decision_spend = self.decision_usage
             if decision_spend and decision_spend.get("calls"):
-                # the system_one delegations' spend, its own bucket beside
+                # the judge delegations' spend, its own bucket beside
                 # the rerank one (input-only -- the decision model does
                 # not generate)
                 usage["decision"] = {
@@ -1154,13 +1204,24 @@ class _SettleTail:
             # stands (no gate, no spend)
             return candidate
         try:
-            return generate_title(self.cfg, self.question, answer, self.lang, self.outline_title, self.gate_usage)
+            return generate_title(
+                self.cfg,
+                self.question,
+                answer,
+                self.lang,
+                self.outline_title,
+                self.gate_usage,
+            )
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("zjsearch_ai_search: title generation failed: %r", exc)
             return None
 
     def late_events(  # pylint: disable=too-many-branches
-        self, answer: str, awaiting: bool, related_seen: bool, fence_title: str | None = None
+        self,
+        answer: str,
+        awaiting: bool,
+        related_seen: bool,
+        fence_title: str | None = None,
     ) -> t.Iterator[dict[str, t.Any]]:
         """The LATE events after the settle: the TITLE pass (decision-gate
         the writer's own fence title; regenerate only when it fails), the
@@ -1361,7 +1422,11 @@ def _drive(  # pylint: disable=too-many-branches
             handle.publish(event)
         handle.publish(wire.settle("error", halt="the run ended without a settle event"))
     except Exception as exc:  # pylint: disable=broad-except
-        logger.warning("zjsearch_ai_search: the run driver failed: %s: %s", type(exc).__name__, str(exc)[:300])
+        logger.warning(
+            "zjsearch_ai_search: the run driver failed: %s: %s",
+            type(exc).__name__,
+            str(exc)[:300],
+        )
         logger.warning("zjsearch_ai_search: driver traceback", exc_info=True)
         logger.warning("zjsearch_ai_search: last event repr: %s", repr(locals().get("event"))[:400])
         try:

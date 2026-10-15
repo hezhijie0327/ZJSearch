@@ -209,11 +209,9 @@ def serialize_subagents(core: "SearchesCore") -> dict[str, t.Any]:
                 for f in handle.child.facts
                 if f.get("status") == "active"
             ][:40],
-            "gaps": [
-                {"q": g.get("q"), "why": g.get("why")}
-                for g in handle.child.gaps
-                if g.get("status") != "closed"
-            ][:20],
+            "gaps": [{"q": g.get("q"), "why": g.get("why")} for g in handle.child.gaps if g.get("status") != "closed"][
+                :20
+            ],
         }
     if dropped:
         out["dropped"] = dropped
@@ -241,13 +239,17 @@ def restore_subagents(
         messages = data.get("messages")
         if not isinstance(messages, list) or not messages:
             continue
-        parsed = data.get("parsed") if isinstance(data.get("parsed"), dict) else {
-            "title": key,
-            "objective": "",
-            "output_format": "",
-            "tool_guidance": "",
-            "boundaries": "",
-        }
+        parsed = (
+            data.get("parsed")
+            if isinstance(data.get("parsed"), dict)
+            else {
+                "title": key,
+                "objective": "",
+                "output_format": "",
+                "tool_guidance": "",
+                "boundaries": "",
+            }
+        )
         try:
             seq = int(data.get("seq") or 0)
         except (TypeError, ValueError):
@@ -279,8 +281,16 @@ def restore_subagents(
         handle = SubagentHandle(
             str(key),
             seq,
-            {field: str(parsed.get(field) or "")[:600] for field in
-             ("title", "objective", "output_format", "tool_guidance", "boundaries")},
+            {
+                field: str(parsed.get(field) or "")[:600]
+                for field in (
+                    "title",
+                    "objective",
+                    "output_format",
+                    "tool_guidance",
+                    "boundaries",
+                )
+            },
             messages,
             child,
             ChildControl(),
@@ -377,7 +387,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # ``usage.rerank`` and the knowledge base's model stats sum it
         self.rerank_usage = {"calls": 0, "tokens": 0}
         # the decision model's account (zjsearch.decision): one entry per
-        # system_one delegation + its input tokens -- the settle folds it
+        # judge delegation + its input tokens -- the settle folds it
         # into ``usage.decision`` beside the rerank bucket
         self.decision_usage = {"calls": 0, "tokens": 0}
         # the judgment ledger: EVERY structured verdict the run hands down
@@ -488,7 +498,9 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         try:
             import flask  # pylint: disable=import-outside-toplevel
 
-            from flask.globals import request_ctx  # pylint: disable=import-outside-toplevel
+            from flask.globals import (
+                request_ctx,
+            )  # pylint: disable=import-outside-toplevel
 
             ctx = request_ctx._get_current_object()  # pylint: disable=protected-access,no-member
             self._search_ctx = (ctx.app, ctx.request.environ, ctx.request)

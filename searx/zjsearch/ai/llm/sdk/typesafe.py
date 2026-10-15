@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The SystemOne typesafe SDK factory -- the FIRST decision-model family.
+"""The typesafe SDK factory -- the FIRST decision-model family.
 
 The decision-model registry (``llm/decision.py``) pre-embeds the SDK
-selection: future decision families add a sibling module here and a line
-in that registry, mirroring the chat transports' pattern.
+selection: each decision family's ``decide`` lives on its own family
+surface, the embedding service's ``embed()`` pattern (the openai family
+decisions wire is ``sdk/openai.py``'s ``OpenaiSdk.decide``), and the
+registry dispatches between the factories.
 
 The surface is deliberately narrow -- ONE forward pass answers NAMED
 questions about a state (``choice`` classification / ``score`` graded /
@@ -53,19 +55,21 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
         self.kind = kind
         self.family = family
 
-    def system_one(
+    def decide(
         self,
         state: t.Any,
         questions: dict[str, dict[str, t.Any]],
         timeout: float | None = None,
     ) -> dict[str, t.Any] | None:
-        """One System-One judgment: ``(state, questions) -> {"answers",
+        """One decision-model judgment: ``(state, questions) -> {"answers",
         "usage", "latency_ms"}`` with JSON-safe answers.  Raw question
         dicts are accepted (the SDK coerces its own typed models); the
         client is one self-contained connection per call, closed on every
         path.  The caller's lens degrades on ``None`` (raised errors
         propagate -- the service owns the fail-open)."""
-        from typesafe_sdk import TypeSafeClient  # pylint: disable=import-outside-toplevel
+        from typesafe_sdk import (
+            TypeSafeClient,
+        )  # pylint: disable=import-outside-toplevel
 
         client = TypeSafeClient(
             api_key=str(self.cfg.get("api_key") or ""),

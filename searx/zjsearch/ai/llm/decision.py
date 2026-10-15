@@ -1,19 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The decision-model service: config + the server-side call.
 
-A dedicated block (``zjsearch.decision``) for the SYSTEM-ONE class of
-decision models: one forward pass answers NAMED QUESTIONS about a state
--- choice (classification), score (graded), noul (boolean) -- each with
-its probability distribution / confidence, WITHOUT generating prose.
-The high-frequency structured-judgment primitive (ticket triage, content
+A dedicated block (``zjsearch.decision``) for the decision models: one
+forward pass answers NAMED QUESTIONS about a state -- choice
+(classification), score (graded), noul (boolean) -- each with its
+probability distribution / confidence, WITHOUT generating prose.  The
+high-frequency structured-judgment primitive (ticket triage, content
 review, agent routing, result verification).
 
-``zjsearch.decision.sdk``: ``typesafe`` (the typesafe-sdk
-``TypeSafeClient.system_one`` surface; the registry dict + package gate
-are the pre-embedded SDK-selection seam -- future decision families slot
-in beside it).  The call is a single synchronous HTTP round trip (tens of
-milliseconds) -- it runs on the calling thread by design, no loop
-bridging.
+``zjsearch.decision.sdk``: ``typesafe`` (the typesafe-sdk vendor surface
+-- that vendor's own API is their "SystemOne" endpoint,
+``/v1/systemone``) or ``openai`` (OpenAI's ``/v1/decisions`` endpoint
+through the SDK's typed ``client.decisions.create`` -- ``base_url`` per
+the openai SDK convention, the ``.../v1`` root); the registry dict +
+package gate are the pre-embedded SDK-selection seam -- future decision
+families slot in beside them.  The call is a single synchronous HTTP
+round trip (tens of milliseconds) -- it runs on the calling thread by
+design, no loop bridging.
 """
 
 import importlib.util
@@ -25,12 +28,14 @@ from searx.zjsearch.ai.core import security
 
 logger = logging.getLogger(__name__)
 
-SDKS = ("typesafe",)
+SDKS = ("typesafe", "openai")
 """The ``zjsearch.decision.sdk`` values -- one SDK per decision API
-family.  ``typesafe`` is the first; the registry is the seam for the
-next (the selection pre-embeds the shape, not just the name)."""
+family.  ``typesafe`` is the first (the default); ``openai`` the second
+(the Decisions wire, ``sdk/openai.py``'s ``decide``); the registry is
+the seam for the next (the selection pre-embeds the shape, not just the
+name)."""
 
-SDK_PACKAGES = {"typesafe": "typesafe_sdk"}
+SDK_PACKAGES = {"typesafe": "typesafe_sdk", "openai": "openai"}
 """The import name of the SDK package each decision sdk needs."""
 
 MAX_QUESTIONS = 12
@@ -45,13 +50,16 @@ state in one forward pass; a novel is not what it is for)."""
 def cfg() -> dict[str, t.Any]:
     """The ``zjsearch.decision`` settings block (absent unless the
     deployment defines it): ``enabled`` / ``base_url`` / ``api_key`` /
-    ``model`` / ``sdk``."""
+    ``model`` / ``sdk``.  ``base_url`` follows the selected sdk's own
+    convention: the typesafe family takes the workspace root (the SDK
+    appends ``/v1/systemone``), the openai family the ``.../v1`` root
+    (the SDK appends ``/decisions``; absent rides the public endpoint)."""
     return core_config.zj_block("decision")
 
 
 def sdk(cfg_block: dict[str, t.Any] | None = None) -> str:
-    """The selected decision SDK: ``typesafe`` (the first family; the
-    registry pre-embeds the selection for the next)."""
+    """The selected decision SDK: ``typesafe`` (the default) or ``openai``
+    -- the registry pre-embeds the selection for the next family."""
     block = cfg_block if cfg_block is not None else cfg()
     kind = str(block.get("sdk") or "typesafe")
     return kind if kind in SDKS else "typesafe"
@@ -80,7 +88,7 @@ def configured() -> bool:
 def sdk_missing() -> str | None:
     """The missing SDK package for the configured decision sdk, or
     ``None`` when it imports (the install gate)."""
-    package = SDK_PACKAGES.get(sdk(), "typesafe_sdk")
+    package = SDK_PACKAGES[sdk()]
     if importlib.util.find_spec(package) is None:
         return package
     return None
@@ -150,31 +158,44 @@ def features(key: str) -> dict[str, t.Any]:
     return merged
 
 
+def _surface(block: dict[str, t.Any]) -> t.Any:
+    """The configured family's bound decision surface -- the embedding
+    service's ``resolve`` pattern, scoped to the decision families (the
+    chat registry cannot know the typesafe family, so the two factories
+    dispatch here; both surfaces speak ``decide(state, questions,
+    timeout)``).  The imports stay lazy (the SDK packages are optional
+    installs -- the package gate has already checked this one)."""
+    bound = {**block, "api_key": decision_key(block)}
+    base = str(block.get("base_url") or "")
+    if sdk(block) == "typesafe":
+        from .sdk.typesafe import factory  # pylint: disable=import-outside-toplevel
+    else:
+        from .sdk.openai import factory  # pylint: disable=import-outside-toplevel
+    return factory(bound, base, sdk(block), "decision")
+
+
 def judge(  # pylint: disable=too-many-return-statements
     state: t.Any,
     questions: dict[str, dict[str, t.Any]],
     timeout: float | None = None,
 ) -> dict[str, t.Any] | None:
-    """One System-One judgment: ``state`` (text or a JSON object) +
+    """One decision-model judgment: ``state`` (text or a JSON object) +
     ``questions`` (the wire question dict: type/criteria/instructions
     per name) -> ``{"answers": {...}, "usage": {...}, "latency_ms": ...}``
     verbatim from the model; ``None`` when the feature is off/unconfigured
     or the upstream fails -- every consumer degrades silently (a decision
-    is a lens, not a dependency).  The question shapes follow the SDK's
+    is a lens, not a dependency).  The question shapes follow the wire's
     own vocabulary: ``choice`` (criteria = label -> description),
     ``score`` (criteria = ordered legend), ``noul`` (boolean).  The call
-    itself delegates to the FAMILY surface (``llm.sdk.typesafe`` -- the
-    client lifecycle, the extra_headers/extra_body escape hatches and the
-    typed-answer downgrade live there), like the rerank service
-    delegates to the dashscope family."""
+    itself delegates to the FAMILY surface (``llm.sdk.typesafe`` or the
+    openai family's ``decide`` in ``llm.sdk.openai`` -- the client
+    lifecycle and the typed-answer downgrade live there), like the
+    embedding service resolves its families."""
     if not enabled() or not configured():
         return None
     block = cfg()
     family = sdk(block)
-    if family != "typesafe":
-        # the registry's seam: future decision families branch here
-        return None
-    if importlib.util.find_spec(SDK_PACKAGES["typesafe"]) is None:
+    if importlib.util.find_spec(SDK_PACKAGES[family]) is None:
         return None
     trimmed = {
         name: questions[name]
@@ -183,11 +204,9 @@ def judge(  # pylint: disable=too-many-return-statements
     }
     if not trimmed:
         return None
-    from .sdk.typesafe import factory  # pylint: disable=import-outside-toplevel
 
-    bound = {**block, "api_key": decision_key(block)}
     try:
-        return factory(bound, str(block.get("base_url") or ""), "typesafe", "decision").system_one(
+        return _surface(block).decide(
             state=str(state)[:MAX_STATE_CHARS] if isinstance(state, str) else state,
             questions=trimmed,
             timeout=timeout,

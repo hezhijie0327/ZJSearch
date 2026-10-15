@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``judge`` tool (SystemOne) -- spec, call parsing, row.
+"""AI Search: the ``judge`` tool (the decision model) -- spec, call parsing, row.
 
-The SystemOne delegation tool: ONE decision-model forward pass answers
+The decision-model delegation tool: ONE forward pass answers
 NAMED judgment questions about a state -- the tie-breaker for torn
 calls (which of two sources is more authoritative, does this snippet
 satisfy the subtask, is the claim supported), with a probability
@@ -18,8 +18,8 @@ from searx.zjsearch.ai.core.text import raw_args
 DECISION_TOOL = "judge"
 
 
-def system_one_spec() -> dict[str, t.Any]:
-    """The SystemOne delegation tool: ONE decision-model forward pass
+def judge_spec() -> dict[str, t.Any]:
+    """The decision-model delegation tool: ONE forward pass
     answers NAMED judgment questions about a state -- the tie-breaker for
     torn calls (which of two sources is more authoritative, does this
     snippet satisfy the subtask, is the claim supported), with a
@@ -65,17 +65,23 @@ def system_one_spec() -> dict[str, t.Any]:
                         "properties": {
                             "name": {
                                 "type": "string",
-                                "description": "Short id for the answer, e.g. \"more_authoritative\".",
+                                "description": 'Short id for the answer, e.g. "more_authoritative".',
                             },
-                            "type": {"type": "string", "enum": ["choice", "score", "noul"]},
-                            "instructions": {"type": "string", "description": "What to judge and by what standard."},
+                            "type": {
+                                "type": "string",
+                                "enum": ["choice", "score", "noul"],
+                            },
+                            "instructions": {
+                                "type": "string",
+                                "description": "What to judge and by what standard.",
+                            },
                             "criteria": {
                                 "description": (
                                     "choice: option name -> short description"
-                                    " (include an \"other\" fallback); score:"
+                                    ' (include an "other" fallback); score:'
                                     " ordered legend array, 3-7 levels from"
                                     " low to high; noul: optional"
-                                    " {\"true\": ..., \"false\": ...}."
+                                    ' {"true": ..., "false": ...}.'
                                 )
                             },
                         },
@@ -88,7 +94,9 @@ def system_one_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_system_one_call(call: dict[str, t.Any]) -> tuple[str, dict[str, dict[str, t.Any]]] | None:
+def parse_judge_call(
+    call: dict[str, t.Any],
+) -> tuple[str, dict[str, dict[str, t.Any]]] | None:
     """``(state, wire questions)`` off the raw call arguments, or ``None``
     when unusable: the questions arrive as the spec's array OR as the
     wire's named-question dict (models echo both shapes -- both
@@ -126,7 +134,7 @@ def parse_system_one_call(call: dict[str, t.Any]) -> tuple[str, dict[str, dict[s
 
 
 def decision_row(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The ``system_one`` timeline row: the label is the judgment STANDARD
+    """The ``judge`` timeline row: the label is the judgment STANDARD
     (the questions' instructions -- model-written, usually the user's own
     language), never the raw question ids ("most_worth_first_choice");
     the raw table rides the debug pane."""
