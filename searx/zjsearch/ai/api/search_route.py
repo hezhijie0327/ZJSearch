@@ -55,6 +55,7 @@ from searx.zjsearch.ai.runs import journal as run_journal
 from searx.zjsearch.ai.runs.search.progress import continuation_note, round_progress
 from searx.zjsearch.ai.runs.search.gates import (
     clarify_gate,
+    extend_budget_gate,
     generate_title,
     related_questions,
     research_gate,
@@ -118,6 +119,23 @@ def _ask_shape(arguments: str) -> dict[str, t.Any] | None:
         "intro": str(value.get("intro") or "").strip()[:200],
         "questions": questions,
     }
+
+
+def _budget_extension_tail(
+    cfg: dict[str, t.Any],
+    question: str,
+    state: t.Any,
+    base_rounds: int,
+    account: t.Any,
+) -> t.Callable[[int], tuple[int, str]]:
+    """The loop's budget-tail callback factory: ONE judged extension (the
+    gate reads the ledger's live state), the grant clamped to a fraction
+    of the base budget -- a tail-lights top-up, never a doubling."""
+    def tail(executed_rounds: int) -> tuple[int, str]:
+        extra, reason = extend_budget_gate(cfg, question, executed_rounds, state.facts, state.gaps, account=account)
+        return min(max(extra, 0), max(2, base_rounds // 6)), reason
+
+    return tail
 
 
 _LANE_FINAL_WAIT_SECONDS = 120.0
@@ -310,13 +328,17 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # verbatim to the researcher's first turn -- the server stores nothing
     # (the browser's knowledge base is the only attachment storage); a run
     # whose transport rejects them retries ONCE as text-only (below).
-    user_memories = parse_memories(payload.get("user_memories"))
-    past_research_entries = parse_past_research(payload.get("past_research"))
     # LIVE RECALL: the client serves past_research calls from its
     # browser-local store at ask time (the recall wire event) -- the index
     # then carries only the user's uploaded files (the no-research writer
     # path's only reader) and the model's own query drives the search
     live_recall = bool(payload.get("live_recall"))
+    # LIVE MEMORIES: with live_recall the snapshot does not ride the send
+    # -- the researcher prompt renders the tool-first variant and the
+    # first user_memory call pulls the store's list through the recall
+    # slot (handlers); both actions and the save near-dup gate read it
+    user_memories = None if live_recall else parse_memories(payload.get("user_memories"))
+    past_research_entries = parse_past_research(payload.get("past_research"))
     image_parts, attached_files = ([], []) if degraded else uploads.parse_uploads(payload.get("attachments"))
     # the conversion receipt: the client shipped BYTES, only the server's
     # converter can read PDFs/Office documents -- the extracted markdown
@@ -561,9 +583,18 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # scales accordingly -- the model-controlled depth made literal (the
     # budget number is only the top rung; fail-open keeps the default)
     probe = decision_features("depth_probe")
+    # the code-side LADDER FALLBACK: the deployment may tune the ladder
+    # per mode, but the model-judged sizing must not silently depend on
+    # it -- without settings these defaults keep both directions of the
+    # budget alive (a trivial question on deep still lands on a small
+    # rung, an exhaustive one still earns the top)
+    _LADDER_DEFAULTS = {
+        "balanced": [12, 24, 36, 48, 60],
+        "deep": [15, 35, 60, 90, 120],
+    }
     if probe.get("enabled") and mode in ("balanced", "deep") and decision.enabled() and decision.configured():
         try:
-            ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])]
+            ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])] or _LADDER_DEFAULTS.get(mode, [])
             if ladder:
                 started = time.monotonic()
                 out = decision.judge(
@@ -950,6 +981,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             subagent_tool=(mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4),
             depth_rung=depth_rung,
             user_memories=user_memories,
+            memories_live=live_recall,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
             deliverable_entities=state.deliverable_entities,
@@ -987,6 +1019,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         post_round_injections=state.drain_image_injections,
         max_rounds=max_rounds,
         round_progress=round_progress(state, budget("stall_rounds", mode, 2), budget("max_seconds", mode, 0)),
+        extend_budget=(
+            _budget_extension_tail(cfg, research_q or q, state, max_rounds, account) if research_needed else None
+        ),
         continuation=continuation,
         pre_write=state.evidence_check,
         ask_tool=ASK_TOOL,

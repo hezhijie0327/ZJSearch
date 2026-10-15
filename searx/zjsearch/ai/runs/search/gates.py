@@ -58,6 +58,70 @@ _RESEARCH_SCHEMA: dict[str, t.Any] = {
     "additionalProperties": False,
 }
 
+_EXTEND_SCHEMA: dict[str, t.Any] = {
+    "type": "object",
+    "properties": {
+        "extend": {"type": "boolean"},
+        "rounds": {"type": "integer"},
+        "reason": {"type": "string"},
+    },
+    "required": ["extend"],
+    "additionalProperties": False,
+}
+
+
+def extend_budget_gate(
+    cfg: dict[str, t.Any],
+    question: str,
+    rounds: int,
+    facts: list[dict[str, t.Any]],
+    gaps: list[dict[str, t.Any]],
+    account: t.Any = None,
+) -> tuple[int, str]:
+    """The budget tail's extension gate -- the model-judged OTHER END of
+    the depth probe: the probe sizes the run at START from the question's
+    apparent complexity, this one judges at the TAIL from what the
+    research actually found.  ONE structured completion over the ledger's
+    live state: genuinely mid-flight research with material open gaps
+    earns more rounds; a closed ledger (or one the gathered facts already
+    answer) wraps to the writer.  Returns ``(extra_rounds, reason)`` --
+    ``(0, "")`` on any skip/failure: fail-open wraps the run, never
+    blocks it.  The caller clamps ``extra`` by mode."""
+    open_gaps = [str(g.get("q") or "").strip() for g in gaps if g.get("status") == "open" and g.get("q")]
+    active_facts = sum(1 for f in facts if f.get("status") == "active")
+    gap_lines = "\n".join(f"- gap: {gap}" for gap in open_gaps) or "- (no open gaps)"
+    ledger = f"{gap_lines}\n- established facts: {active_facts}\n- research rounds spent: {rounds}"
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are the budget gate of an AI research run: the run's"
+                " research budget just ran out and you decide whether it"
+                " extends.  Extend ONLY when the ledger's open gaps are"
+                " genuinely material to the question AND live searching is"
+                " visibly mid-flight (recent rounds kept yielding new"
+                " sources) -- more rounds must buy real answer quality, not"
+                " polish.  Wrap (extend=false) when the gathered facts"
+                " already answer the question, the gaps are nice-to-have,"
+                " or the rounds have gone stale.  When extending, size the"
+                " grant to what the gaps actually need (a couple of rounds"
+                " per material gap, never a blanket doubling).  Output ONLY"
+                ' a JSON object: {"extend": true, "rounds": <int>,'
+                ' "reason": "<one line>"} or {"extend": false, "reason":'
+                ' "<one line>"}.'
+            ),
+        },
+        {"role": "user", "content": f"<q>{question}</q>\n<ledger>\n{ledger}\n</ledger>"},
+    ]
+    value, _usage = jsongate.json_completion(cfg, messages, "extend_budget", _EXTEND_SCHEMA, account=account)
+    if not value or not isinstance(value.get("extend"), bool) or not value["extend"]:
+        return 0, ""
+    try:
+        extra = int(value.get("rounds") or 0)
+    except (TypeError, ValueError):
+        return 0, ""
+    return max(1, min(extra, 24)), str(value.get("reason") or "").strip()[:300]
+
 
 def sanitize_questions(raw_items: t.Any) -> list[dict[str, t.Any]]:
     """The wire shape of clarify questions: q + single/multi + 2-4 short

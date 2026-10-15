@@ -136,6 +136,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     attached_files: list[dict[str, str]] | None = None,
     deliverable_entities: list[str] | None = None,
     depth_rung: int = 0,
+    memories_live: bool = False,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -256,18 +257,37 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " among the results." + browser_note + "\n</page_reader>"
         )
     facts = "\n".join(f"- {item['content']}" for item in user_memories or [])
-    memory_block = (
-        "<user_memory>\nDurable facts about the user (stored across"
-        " sessions) -- use them to personalize the research (a home city"
-        " grounds weather/local questions, stated preferences shape"
-        " source choices):\n"
-        + (facts or "(none stored yet)")
-        + "\nWhen the user reveals a NEW durable fact (home city,"
-        " occupation, a standing preference), SAVE it with the"
-        f" {USER_MEMORY_TOOL} tool (action=save) during this run -- never"
-        " one-off conversation details.  The answer must still answer the"
-        " question; saving is a silent side action.\n</user_memory>"
-    )
+    if memories_live:
+        # the LIVE variant: the facts are not injected -- the tool IS the
+        # read path (the first search/save pulls the store's list), so the
+        # block teaches WHEN to consult instead of carrying the content
+        memory_block = (
+            "<user_memory>\nDurable facts about the user (stored across"
+            " sessions -- home city, occupation, standing preferences)"
+            " live in the"
+            f" {USER_MEMORY_TOOL} tool: SEARCH it (action=search) when the"
+            " user references prior context or a standing preference could"
+            " shape the research (a home city grounds weather/local"
+            " questions; stated preferences shape source choices) --"
+            ' ideally before planning.  When the user reveals a NEW'
+            " durable fact, SAVE it with action=save during this run --"
+            " never one-off conversation details.  The answer must still"
+            " answer the question; saving is a silent side"
+            " action.\n</user_memory>"
+        )
+    else:
+        memory_block = (
+            "<user_memory>\nDurable facts about the user (stored across"
+            " sessions) -- use them to personalize the research (a home city"
+            " grounds weather/local questions, stated preferences shape"
+            " source choices):\n"
+            + (facts or "(none stored yet)")
+            + "\nWhen the user reveals a NEW durable fact (home city,"
+            " occupation, a standing preference), SAVE it with the"
+            f" {USER_MEMORY_TOOL} tool (action=save) during this run -- never"
+            " one-off conversation details.  The answer must still answer the"
+            " question; saving is a silent side action.\n</user_memory>"
+        )
     calculator_block = (
         "<calculator>\n"
         f"The {CALCULATOR_TOOL} tool evaluates ONE mathematical"

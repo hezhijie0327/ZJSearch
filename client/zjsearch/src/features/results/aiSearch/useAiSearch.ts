@@ -292,28 +292,42 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     void settleRun(core.threadId, last);
   }, [core.phase, core.threadId, core.runs]);
 
-  /** The LIVE RECALL answerer: the run's past_research call asked (the
-      recall wire event carried the model's own query) -- search the
-      local store (pages with text heads + corpus identities, the model's
-      query drives the ranking) and fill the server's slot.  Best-effort
-      by contract: the slot expires server-side in 6s and the tool fails
+  /** The LIVE RECALL answerer: the run asked through the recall wire
+      event -- kind picks the store lane: "memory" returns the user's
+      stored memory rows (the server ranks + dedups saves against them),
+      "corpus" (past_research) searches pages with text heads + corpus
+      identities, the model's query drives the ranking.  Best-effort by
+      contract: the slot expires server-side in 6s and the tool fails
       open, so every failure here is silent; the queries race a 5s budget
       so a cold boot can never hold the run's round past the ceiling. */
-  const serveRecall = async (rid: string, query: string) => {
+  const serveRecall = async (rid: string, query: string, kind: string) => {
     if (!capability) {
       return;
     }
-    const [pages, sources] = await withBudget(
-      Promise.all([recallPages(query, 4).catch(() => []), recallCorpus(query, 6, { fullBody: false }).catch(() => [])]),
-      [[] as Awaited<ReturnType<typeof recallPages>>, [] as Awaited<ReturnType<typeof recallCorpus>>],
-      5000,
-    );
-    const entries = [
-      ...pages.map((page) => ({ url: page.url, title: page.title, text: page.text })),
-      ...sources
-        .filter((item) => item.url)
-        .map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
-    ];
+    let entries: Array<Record<string, string>>;
+    if (kind === "memory") {
+      const memories = await withBudget(
+        loadMemories().catch(() => []),
+        [] as Awaited<ReturnType<typeof loadMemories>>,
+        5000,
+      );
+      entries = memories.map((memory) => ({ id: memory.id, content: memory.content }));
+    } else {
+      const [pages, sources] = await withBudget(
+        Promise.all([
+          recallPages(query, 4).catch(() => []),
+          recallCorpus(query, 6, { fullBody: false }).catch(() => []),
+        ]),
+        [[] as Awaited<ReturnType<typeof recallPages>>, [] as Awaited<ReturnType<typeof recallCorpus>>],
+        5000,
+      );
+      entries = [
+        ...pages.map((page) => ({ url: page.url, title: page.title, text: page.text })),
+        ...sources
+          .filter((item) => item.url)
+          .map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
+      ];
+    }
     await fetchJson("/zjsearch/ai/run/recall", {
       body: JSON.stringify({ tk: capability.tk, id: rid, entries }),
       headers: { "Content-Type": "application/json" },
@@ -372,7 +386,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       if (event.e === "recall") {
         const rid = typeof event.id === "string" ? event.id : "";
         if (rid) {
-          void serveRecall(rid, String(event.q ?? ""));
+          void serveRecall(rid, String(event.q ?? ""), String(event.kind ?? "corpus"));
         }
         return;
       }

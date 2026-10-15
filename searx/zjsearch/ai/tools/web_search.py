@@ -120,6 +120,19 @@ def tool_spec(with_browser: bool = False) -> dict[str, t.Any]:
                         ' ["pinterest.com"].'
                     ),
                 },
+                "refresh": {
+                    "type": "boolean",
+                    "description": (
+                        "Set true ONLY to deliberately re-run a query this"
+                        " run already executed -- the material may have"
+                        " changed (a live score, a just-published release,"
+                        " a page the user says updated).  The"
+                        " duplicate-query refusal is bypassed; pages"
+                        " already among your sources still keep their [n]"
+                        " numbers.  Never use it to paper over a thin"
+                        " result -- vary the query instead."
+                    ),
+                },
             },
             "required": ["query"],
         },

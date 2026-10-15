@@ -308,6 +308,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     executor: t.Any = None,
     max_rounds: int = 1,
     round_progress: t.Callable[[int], str | None] | None = None,
+    extend_budget: t.Callable[[int], tuple[int, str]] | None = None,
     continuation: t.Callable[[], str | None] | None = None,
     pre_write: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     ask_tool: str | None = None,
@@ -437,7 +438,42 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         # copy of itself -- a process death before the first round
         # completes must still be continuable
         yield _ctx_snapshot(messages, rounds, extra=snapshot_extra)
-        while rounds < max_rounds and halt_message is None:
+        extended = False
+        while halt_message is None:
+            if rounds >= max_rounds:
+                # THE BUDGET TAIL -- the judged other end of the depth
+                # probe: the probe sized the run from the question's
+                # apparent complexity at start, this gate judges from what
+                # the research actually found (an open ledger with live
+                # material earns more rounds, a closed one wraps to the
+                # writer).  ONE extension per run, model-facing through
+                # the next turn's user message.
+                if extend_budget is None or extended:
+                    break
+                extended = True
+                try:
+                    extra, reason = extend_budget(rounds)
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning(
+                        "zjsearch loop: budget extension gate failed: %s: %s",
+                        type(exc).__name__,
+                        str(exc)[:200],
+                    )
+                    break
+                if extra <= 0:
+                    break
+                max_rounds = rounds + extra
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"<budget_extension>{reason or 'the research is genuinely mid-flight'} --"
+                            f" {extra} more research rounds were granted;"
+                            " close the remaining gaps and wrap up within"
+                            " them.</budget_extension>"
+                        ),
+                    }
+                )
             if late_feed is not None:
                 # the BACKGROUND lane's flush: detached work's timeline
                 # events, then its settled results as user messages the

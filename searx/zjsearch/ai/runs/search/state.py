@@ -353,6 +353,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # a second save of the same fact within one run reads as duplicate
         # just like a save of a pre-existing stored fact
         self.saved_memories: list[str] = []
+        # LIVE MEMORIES: the snapshot pulls on the first user_memory call
+        # (the recall wire event, kind=memory) instead of riding the
+        # pre-send -- this flag makes that pull happen exactly once
+        self.memories_pulled = False
         # the past-research index (reader pages WITH text heads + corpus
         # sources identity-only): the tool's matches get numbered as real
         # history sources -- full-text matches return their content head,

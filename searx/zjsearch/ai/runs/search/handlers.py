@@ -841,8 +841,23 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 )
                 continue
             if tool_name == USER_MEMORY_TOOL:
-                # the near-dup gate's comparison set: the pre-sent snapshot
-                # PLUS the saves this run already accepted
+                # the near-dup gate's comparison set: the memory snapshot
+                # (pre-sent, or LIVE-pulled below) PLUS the saves this run
+                # already accepted.
+                # LIVE MEMORIES: the snapshot is not pre-sent -- the first
+                # user_memory call (search OR save) pulls the store's
+                # memory list through the recall slot (kind=memory), and
+                # BOTH actions plus the near-dup gate read the pulled
+                # list from here on.  Pull-once per run: the store barely
+                # changes mid-run, and a save arriving before any search
+                # still dedups against the real stored facts.
+                if self.live_recall and not self.memories_pulled:
+                    self.memories_pulled = True
+                    rid = recall_slot.open()
+                    yield ("recall", {"id": rid, "q": "user memories", "kind": "memory"})
+                    rows = recall_slot.wait(rid)
+                    if rows:
+                        self.user_memories = memory_cap.parse_memories(rows)
                 known_memories = [str(m.get("content") or "") for m in self.user_memories] + self.saved_memories
                 feed, event = user_memory_cap.evaluate_call(
                     call, self.user_memories, known=known_memories, account=self.account
@@ -1679,6 +1694,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         ``ms``/``feed`` (the debug contract).  The dedup mark itself is
         taken at completion (a failed search stays retryable)."""
         query, category, time_range, include, exclude = parse_call(call)
+        # the ESCAPE HATCH: the model may deliberately re-run an executed
+        # query (live material -- a score, a just-published release);
+        # page-level dedup still applies (already-numbered urls keep
+        # their [n]), only the query refusal is bypassed
+        refresh = bool(raw_args(call).get("refresh"))
         if not query:
             feed_text = "error: empty query"
             return (
@@ -1710,12 +1730,15 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             .lower()
             .split()
         )
-        if dedup_key in self.reg.ran:
+        if dedup_key in self.reg.ran and not refresh:
             feed_text = (
                 "duplicate: this exact query already ran in an earlier"
                 " round and its outcome is already in the conversation"
                 " (possibly empty) -- do not repeat it; search a DIFFERENT"
                 " facet or write the answer from the sources you have."
+                "  (If the material itself may have changed -- a live"
+                " score, a just-published release -- re-run it with"
+                " refresh: true.)"
             )
             return (
                 feed_text,

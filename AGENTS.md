@@ -1539,16 +1539,31 @@ output-shape differences on ONE loop, and goal's contract is "researches
 until the goal is met" — the loop ends on the task ledger closing (the
 model stops calling tools) or a stalled run (3 unproductive rounds),
 never on a small count.  `max_rounds: 32` is the runaway guard, not the
-plan (the ceiling is INTERNAL: mode budgets 6/60/120, the depth probe's ladder personalizes it per question — deliberately not a deployment knob); the prompt
+plan (the ceiling is INTERNAL: mode budgets 6/60/120, the depth probe's ladder personalizes it per question — deliberately not a deployment knob; a code-side default ladder keeps the sizing alive when the deployment carries none); the prompt
 tells the researcher to keep working open ledger items and to switch
-tools freely (searches, page reads, the calculator).
+tools freely (searches, page reads, the calculator).  THE BUDGET IS
+BIDIRECTIONAL (2026-10-15): the depth probe clamps the run at START (a
+trivial question on deep lands on a low rung), and the loop's
+budget-tail gate (`gates.extend_budget_gate`, ONE structured
+completion over the ledger's live state — open gaps, fact count,
+rounds spent) judges the OTHER end: genuinely mid-flight research with
+material gaps earns ONE extension (clamped to `max(2, base//6)` extra
+rounds, the model learns through a `<budget_extension>` user message);
+anything else wraps to the writer.  Fail-open in the wrap direction —
+a broken gate never blocks finishing.
 
 ## Failure becomes information (the stall policy + the findings ledger)
 
 FAILURE IS RETRYABLE: the dedup registry marks queries/pages at
 COMPLETION, never at plan time — a query whose engines errored and a
 page whose read failed stay re-runnable (an executed query — empty or
-not — is honestly remembered; only an errored one is not).  The search
+not — is honestly remembered; only an errored one is not).  THE JUDGED
+ESCAPE (2026-10-15): `web_search` accepts `refresh: true` — the model
+deliberately re-runs an executed query (live material: a score, a
+just-published release, a page the user says updated); the duplicate
+refusal is bypassed while page-level dedup still applies (already-
+numbered urls keep their [n] — the re-search dupes path renders the
+row), and the refusal feed itself teaches the escape.  The search
 dedup key describes the search AS EXECUTED: excludes wear their
 `-site:` operator (a role swap is a different search) and
 category/time_range ride along — the prompt's own recovery recipe
@@ -2212,6 +2227,20 @@ loses the event -- shipped bug).
 How runs consume the corpus (the client recalls BEFORE every AI-search
 POST; the server stays stateless):
 
+- `user_memory` — ONE tool, TWO actions, both the model's choice:
+  `search` (the read path) and `save` (flowing back as the `memory` wire
+  event).  LIVE (2026-10-15): with `live_recall` the snapshot no longer
+  rides the pre-send nor injects into the researcher prompt — the
+  prompt renders a tool-first block (WHEN to consult: the user
+  references prior context or a standing preference could shape the
+  plan — ideally before planning), and the first `user_memory` call of
+  a run (search OR save) pulls the store's list through the recall
+  slot (`kind: "memory"`; pull-once per run via
+  `state.memories_pulled`).  Both actions and the save near-dup gate
+  (embedding nearest-neighbour above the cosine floor — a lens, not a
+  dependency) read the PULLED list; a save arriving before any search
+  still dedups against the real stored facts.  Without the flag the
+  pre-sent snapshot injects exactly as before.
 - `history_sources` — corpus hits (sources + past answers): WRITER-phase
   only (numbered after the live feed; a url the researcher already
   numbered keeps ITS number).  THE RED LINE: recalled material never
