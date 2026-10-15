@@ -20,6 +20,7 @@ from searx.zjsearch.ai.tools import (
     ASK_TOOL,
     CALCULATOR_TOOL,
     LEARNINGS_TOOL,
+    ENGINE_INFO_TOOL,
     TASK_TOOL,
     TOOL_NAME,
     WEB_BROWSER_TOOL,
@@ -128,6 +129,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     page_tool: bool = False,
     task_tool: bool = False,
     browser_tool: bool = False,
+    engine_info_tool: bool = False,
     steerable: bool = False,
     subagent_tool: bool = False,
     user_memories: list[dict[str, str]] | None = None,
@@ -191,10 +193,22 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " same intent once without the filter before concluding there is"
             " nothing to find.",
             "- Never repeat a query you already ran; never use !bangs unless"
-            " the user explicitly names an engine (then prefix the query"
-            " with its engine bang, e.g. !baidu) -- without one, the"
+            " the user explicitly names an engine OR you know this"
+            " deployment keeps a fitting engine disabled (then prefix the"
+            " query with its bang, e.g. !bocha)"
+            " -- without one, the"
             " category parameter already fans out across every engine in"
             " that vertical.",
+            (
+                "- The category enum on web_search is this deployment's"
+                f" REAL verticals; the {ENGINE_INFO_TOOL} tool lists them"
+                " plus the disabled, bang-reachable engines (API-billed"
+                " ones are often held back).  Consult it once when the"
+                " question smells like a niche vertical or a search"
+                " landscape you do not know yet -- not on every run."
+                if engine_info_tool
+                else ""
+            ),
             (
                 "- Close a facet with reads, not just hits: when the searches"
                 f" surface the pages that answer it, spend {WEB_BROWSER_TOOL}"

@@ -3,6 +3,7 @@
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { askUserView } from "@/features/results/aiSearch/calls/views/askUser.tsx";
 import { calculatorView } from "@/features/results/aiSearch/calls/views/calculator.tsx";
+import { engineInfoView } from "@/features/results/aiSearch/calls/views/engineInfo.tsx";
 import { extractTableView } from "@/features/results/aiSearch/calls/views/extractTable.tsx";
 import { judgeView } from "@/features/results/aiSearch/calls/views/judge.tsx";
 import { learningsView } from "@/features/results/aiSearch/calls/views/learnings.tsx";
@@ -33,6 +34,7 @@ export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
   judge: judgeView,
   user_memory: memoryView,
   past_research: pastResearchView,
+  engine_info: engineInfoView,
   mcp: mcpView,
   extract_table: extractTableView,
   view_image: viewImageView,

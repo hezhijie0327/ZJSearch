@@ -22,16 +22,42 @@ from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
 TOOL_NAME = "web_search"
 
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
-"""The verticals the model may pick; each has a dedicated client layout."""
+"""The fallback verticals -- used only before the instance's engine map
+exists (bare imports, probes); the live enum is deployment-derived."""
 
 _BANG_PREFIX_RE = re.compile(r"^(?:\s*![a-z0-9_-]+)*(?:\s+|$)", re.IGNORECASE)
 _TIME_RANGES = ("day", "week", "month", "year")
 
 
-def tool_spec(with_browser: bool = False) -> dict[str, t.Any]:
+def available_categories() -> tuple[str, ...]:
+    """The deployment's REAL search verticals: every category at least one
+    enabled engine serves.  Upstream's ``categories`` map also carries
+    default-disabled engines -- a category only they declare can never
+    answer a ``category`` search (fan-out skips them; only an explicit
+    engine bang reaches them), so both the spec's enum and the call
+    sanitizer read the same USABLE set.  Falls back to the static tuple
+    when the engine map is empty."""
+    from searx.engines import (  # pylint: disable=import-outside-toplevel
+        categories as engine_categories,
+        is_engine_active,
+    )
+
+    if not engine_categories or not any(engine_categories.values()):
+        return SEARCH_CATEGORIES
+    usable = sorted(
+        name
+        for name, members in engine_categories.items()
+        if any(is_engine_active(engine) and not engine.disabled for engine in members)
+    )
+    return tuple(usable) if usable else SEARCH_CATEGORIES
+
+
+def tool_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, t.Any]:
     """The ``web_search`` tool in the dialect-neutral llm shape; with the
-    browser configured, the description cross-references it (a model that
-    never sees a tool must not be told about it).  The
+    browser / engine_info tools registered by the caller, the description
+    cross-references them (a model that never sees a tool must not be
+    told about it).  The ``category`` enum is the deployment's real
+    verticals (:py:func:`available_categories`).  The
     ``included_sites``/``excluded_sites`` parameters carry the user's
     source preference (Morphic's domain filters): they are appended to
     the query as ``site:``/``-site:`` operators, which the engine's
@@ -54,10 +80,19 @@ def tool_spec(with_browser: bool = False) -> dict[str, t.Any]:
             " your query and near-duplicate syndications of already-seen stories"
             " are suppressed -- trust the top of the list, and few results usually"
             " means the topic is exhausted, not that your keywords were bad. Never"
-            " use bangs unless the user"
-            " explicitly names an engine (then prefix the query, e.g. \"!baidu"
-            " keywords\") -- a category search already fans out across every"
-            " engine in that vertical. Results arrive as globally numbered [n]"
+            " use bangs unless the user explicitly names an engine OR you know"
+            " this deployment keeps a fitting engine disabled (then prefix the"
+            ' query with its bang, e.g. "!bocha keywords") -- a category search'
+            " already fans out across every enabled engine in that vertical."
+            + (
+                "  The engine_info tool lists this deployment's engines --"
+                " the categories, and the disabled ones with the bang that"
+                " reaches each; consult it when unsure which vertical fits"
+                " or when searches keep coming back thin."
+                if with_info
+                else ""
+            )
+            + " Results arrive as globally numbered [n]"
             " sources to cite in the final answer.  Instant answers: a query"
             ' of exactly "$SYMBOL" (e.g. "$AAPL") or ending in " stock" /'
             ' " quote" (e.g. "AAPL stock") triggers the stock-quote plugin --'
@@ -80,10 +115,13 @@ def tool_spec(with_browser: bool = False) -> dict[str, t.Any]:
                 "query": {"type": "string", "description": "The keyword query to search for."},
                 "category": {
                     "type": "string",
-                    "enum": list(SEARCH_CATEGORIES),
+                    "enum": list(available_categories()),
                     "description": (
-                        "Optional vertical (images for visual context, news for"
-                        " current events); general when unsure."
+                        "Optional vertical -- the enum is exactly what this"
+                        " deployment serves (every listed category has"
+                        " enabled engines; each has its own client layout:"
+                        " images render as a masonry, videos as a grid);"
+                        " general when unsure."
                     ),
                 },
                 "time_range": {
@@ -174,7 +212,7 @@ def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[s
     query = query.replace("!", "")
     query = " ".join((bang + " " + query).split())[:200]
     category = str(args.get("category") or "general").strip().lower()
-    if category not in SEARCH_CATEGORIES:
+    if category not in available_categories():
         category = "general"
     time_range = str(args.get("time_range") or "").strip().lower()
     if time_range not in _TIME_RANGES:

@@ -27,6 +27,7 @@ from searx.zjsearch.ai.tools.web_browser import read as reader
 from searx.zjsearch.ai.tools import calculator
 from searx.zjsearch.ai.tools import past_research as past_research_cap
 from searx.zjsearch.ai.tools import memory as user_memory_cap
+from searx.zjsearch.ai.tools import engine_info as engine_info_tool
 from searx.zjsearch.ai.browser import session as browser_session
 from searx.zjsearch.ai.tools import research_subtask as subtask_tool
 from searx.zjsearch.ai.llm import decision
@@ -60,6 +61,7 @@ from searx.zjsearch.ai.tools import (
     parse_view_image_call,
     EXTRACT_TOOL,
     PAST_RESEARCH_TOOL,
+    ENGINE_INFO_TOOL,
     TASK_TOOL,
     USER_MEMORY_TOOL,
 )
@@ -383,6 +385,25 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         "result": event.get("result"),
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed[:800],
+                    },
+                )
+                continue
+            if tool_name == ENGINE_INFO_TOOL:
+                # the deployment inventory: instant read-only work (the
+                # engine map is already in memory) -- the feed teaches the
+                # model what this instance can search, the preview rides
+                # the row's expanded body, n drives the metric
+                feed_text, extras = engine_info_tool.evaluate_call()
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "n": extras["n"],
+                        "preview": extras["preview"],
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
                     },
                 )
                 continue
@@ -1066,9 +1087,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
 
     def _sub_toolset(self) -> list[dict[str, t.Any]]:
         """The SUBAGENT's toolset: the shared discipline tools -- search,
-        calculator, the findings ledger (ITS digest), page reads, the
-        browser session and the structured judge.  Built per delegation
-        pass: the availability flags are the RUN's.  The child's LEDGER
+        calculator, the deployment inventory, the findings ledger (ITS
+        digest), page reads, the browser session and the structured judge.
+        Built per delegation pass: the availability flags are the RUN's.  The child's LEDGER
         IS its digest: the delegation contract promises the lead "facts
         + gaps + the source lines", and ``_sub_digest`` builds exactly
         that from ``child.facts``/``child.gaps`` -- which only the
@@ -1079,13 +1100,14 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             calculator_spec,
             learnings_spec,
             judge_spec,
+            engine_info_spec,
             tool_spec,
         )
 
         browser_on = browser_config.ready()
         judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
         return (
-            [tool_spec(browser_on), calculator_spec(), learnings_spec()]
+            [tool_spec(browser_on, with_info=True), calculator_spec(), engine_info_spec(), learnings_spec()]
             + ([web_browser_tool.web_browser_spec()] if browser_on else [])
             + ([judge_spec()] if judge_on else [])
         )

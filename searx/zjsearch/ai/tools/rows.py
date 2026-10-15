@@ -19,6 +19,7 @@ from searx.zjsearch.ai.tools.judge import DECISION_TOOL, decision_row
 from searx.zjsearch.ai.tools.learnings import LEARNINGS_TOOL
 from searx.zjsearch.ai.tools.memory import USER_MEMORY_TOOL
 from searx.zjsearch.ai.tools.past_research import PAST_RESEARCH_TOOL
+from searx.zjsearch.ai.tools.engine_info import ENGINE_INFO_TOOL
 from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call
 from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
 from searx.zjsearch.ai.tools.research_subtask import MESSAGE_SUBTASK_TOOL, RESEARCH_SUBTASK_TOOL
@@ -103,6 +104,10 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": str(memory_args.get("query") or "")[:120],
             "args": memory_args,
         }
+    if call_name == ENGINE_INFO_TOOL:
+        # the deployment inventory: a fixed row label (the settlement's
+        # n + preview carry the engine count and the listing itself)
+        return {"id": idx, "tool": ENGINE_INFO_TOOL, "q": "", "args": raw_args(call)}
     if call_name == USER_MEMORY_TOOL:
         try:
             memory_args = raw_args(call)

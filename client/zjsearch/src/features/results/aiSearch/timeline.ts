@@ -63,6 +63,7 @@ export interface AiSearchCall {
     | "mcp"
     | "user_memory"
     | "past_research"
+    | "engine_info"
     | "task_write"
     | "learnings"
     | "judge"
@@ -1254,6 +1255,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "mcp",
   "user_memory",
   "past_research",
+  "engine_info",
   "task_write",
   "learnings",
   "judge",

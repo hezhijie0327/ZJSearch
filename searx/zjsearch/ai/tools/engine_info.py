@@ -1,0 +1,109 @@
+# SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+"""The ``engine_info`` tool: one self-contained package -- the model's
+window into WHICH ENGINES this deployment carries.  The ``category``
+enum on ``web_search`` is deployment-derived, but the engines BEHIND the
+verticals (and the deliberately disabled, API-billed ones an explicit
+bang still reaches) stay invisible until a search comes back thin -- so
+the model guesses.  ONE read-only inventory call answers it: the usable
+categories with their engine counts, plus every default-disabled engine
+with the bang shortcut that reaches it.  The text rides the tool-result
+feed (the model's copy) AND the settlement's ``preview`` (the timeline
+row's expanded body) -- one builder, two readers."""
+
+import typing as t
+
+from searx.zjsearch.ai.tools.web_search import available_categories
+
+ENGINE_INFO_TOOL = "engine_info"
+
+_MAX_DISABLED = 80
+"""The bangable-engines cap -- a deployment listing more disabled engines
+than this gets a tail note instead of the rest (the inventory is a map,
+not an audit)."""
+
+
+def engine_info_spec() -> dict[str, t.Any]:
+    """The ``engine_info`` tool spec."""
+    return {
+        "name": ENGINE_INFO_TOOL,
+        "description": (
+            "List the search ENGINES this deployment carries: the enabled"
+            " ones grouped by category (a category search on web_search"
+            " fans out across every enabled engine in that vertical), and"
+            " the engines kept disabled by default -- those are still"
+            " reachable by prefixing a query with their bang"
+            ' (e.g. "!bocha gpu prices"); useful for API-billed engines the'
+            " deployment deliberately holds back.  Call it when unsure"
+            " which vertical fits the question, when searches keep coming"
+            " back thin or empty (the right engine may be disabled), or"
+            " before relying on a niche vertical.  Read-only and instant;"
+            " once per run is usually enough."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    }
+
+
+def _disabled_engines() -> list[tuple[str, str, list[str]]]:
+    """The default-disabled engines that a bang still reaches: (name,
+    shortcut, categories), alphabetically.  Engines ``inactive`` in the
+    settings are excluded -- no bang unregisters them."""
+    from searx.engines import engines as engine_map, is_engine_active  # pylint: disable=import-outside-toplevel
+
+    out: list[tuple[str, str, list[str]]] = []
+    for name in sorted(engine_map):
+        engine = engine_map[name]
+        if engine.disabled and is_engine_active(engine):
+            out.append((name, str(engine.shortcut or name), sorted(set(engine.categories))))
+    return out
+
+
+def build_inventory() -> tuple[str, int, int]:
+    """The inventory text plus ``(enabled_engine_count, category_count)``
+    -- the counts ride the settlement row's metric."""
+    from searx.engines import engines as engine_map, is_engine_active  # pylint: disable=import-outside-toplevel
+
+    enabled = sum(1 for engine in engine_map.values() if is_engine_active(engine) and not engine.disabled)
+    categories = available_categories()
+    per_category = {name: 0 for name in categories}
+    for engine in engine_map.values():
+        if not is_engine_active(engine) or engine.disabled:
+            continue
+        for name in engine.categories:
+            if name in per_category:
+                per_category[name] += 1
+    lines: list[str] = [
+        f"This deployment searches {enabled} enabled engines"
+        f" across {len(categories)} categories:",
+        "  " + " · ".join(f"{name} ({per_category[name]})" for name in categories),
+    ]
+    disabled = _disabled_engines()
+    if disabled:
+        lines.append(
+            f"Disabled engines ({len(disabled)}) -- a bang prefix still"
+            " reaches them, e.g. \"!shortcut keywords\":"
+        )
+        shown = disabled[:_MAX_DISABLED]
+        lines.extend(
+            f"  {name} (bang: {shortcut}) -- {', '.join(cats) if cats else 'no category'}"
+            for name, shortcut, cats in shown
+        )
+        if len(disabled) > len(shown):
+            lines.append(f"  … and {len(disabled) - len(shown)} more")
+        lines.append(
+            "Bangs are for these held-back engines (or an engine the user"
+            " names) -- a category search already fans out across every"
+            " enabled engine in that vertical."
+        )
+    return "\n".join(lines), enabled, len(categories)
+
+
+def evaluate_call() -> tuple[str, dict[str, t.Any]]:
+    """One tool call -> (model feed, settlement extras).  The extras carry
+    ``preview`` (the timeline row's expanded body -- the same text the
+    model reads) and ``n`` (the enabled-engine count for the row's
+    metric)."""
+    text, enabled, _category_count = build_inventory()
+    return text, {"preview": text, "n": enabled}

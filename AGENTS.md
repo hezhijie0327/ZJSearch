@@ -285,10 +285,30 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
     shared prompt spine (identity/citations/markdown/voice/answer
-    contract) is `prompts/spine.py`; the reader/calculator/past_research/user_memory/mcp
+    contract) is `prompts/spine.py`; the reader/calculator/past_research/user_memory/engine_info/mcp
     tool implementations are self-contained packages under `ai/tools/`
   (one package per tool: spec + sanitizer + service; `core/`, `prompts/`,
-  `runs/`, `api/` complete the layout — see NEXTGEN-DESIGN.md).
+  `runs/`, `api/` complete the layout — see NEXTGEN-DESIGN.md).  THE
+  DEPLOYMENT-DERIVED SEARCH SURFACE: `web_search`'s `category` enum is
+  NOT a fixed list — `available_categories()` (tools/web_search.py)
+  derives it from `searx.engines` at spec-build time (every category ≥1
+  enabled-and-not-default-disabled engine serves; default-disabled
+  engines never ride category fan-out, so a category only they declare
+  is excluded), and `parse_call` validates against the same set — the
+  model sees exactly what the deployment serves (35 verticals on the
+  prod settings, not the 8 the old static tuple carried).  The ENGINES
+  behind the verticals are the `engine_info` tool (tools/engine_info.py):
+  ONE read-only inventory call (categories with engine counts + every
+  default-disabled engine with its bang shortcut) that rides the feed
+  AND the settlement's `preview` (the timeline row's expanded body,
+  engine count in the metric).  It exists for the API-billed engines a
+  deployment holds back (bocha/tavily/firecrawl/search1api/openfda ship
+  `disabled` by default): the bang doctrine in the web_search spec and
+  the researcher prompt is deliberately LOOSENED to "bang when the user
+  names an engine OR the inventory shows a fitting held-back one" —
+  verified live: the model quoted the rule, called engine_info first,
+  and ran an entire Tavily-named research through `!tvlyn`/`!tvly`
+  bangs discovered from the listing.
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
   silently): events are TIMELINE OPERATIONS — `{"e":"open","id","kind":

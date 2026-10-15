@@ -77,6 +77,7 @@ from searx.zjsearch.ai.tools import (
     message_subtask_spec,
     research_subtask_spec,
     judge_spec,
+    engine_info_spec,
     task_write_spec,
     tool_spec,
     user_memory_spec,
@@ -972,6 +973,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             page_tool=browser_on,
             task_tool=register_tasks,
             browser_tool=browser_on,
+            engine_info_tool=True,
             steerable=handle is not None,
             # delegation gate: the depth probe's rung decides -- deep runs
             # delegate from rung 2 (the heavy tool for a clearly heavy
@@ -992,8 +994,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         cfg,
         research_messages,
         tools=[
-            tool_spec(browser_on),
+            tool_spec(browser_on, with_info=True),
             calculator_spec(),
+            engine_info_spec(),
             user_memory_spec(),
             learnings_spec(),
         ]

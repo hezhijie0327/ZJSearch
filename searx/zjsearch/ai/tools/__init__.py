@@ -53,6 +53,11 @@ from searx.zjsearch.ai.tools.past_research import (
     past_research_spec,
 )
 from searx.zjsearch.ai.tools.rows import display_item
+from searx.zjsearch.ai.tools.engine_info import (
+    ENGINE_INFO_TOOL,
+    evaluate_call as engine_info_call,
+    engine_info_spec,
+)
 from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call, task_write_spec
 from searx.zjsearch.ai.tools.view_image import (
     VIEW_IMAGE_TOOL,
@@ -82,6 +87,7 @@ __all__ = [
     "WEB_BROWSER_TOOL",
     "PAST_RESEARCH_TOOL",
     "SEARCH_CATEGORIES",
+    "ENGINE_INFO_TOOL",
     "TASK_TOOL",
     "VIEW_IMAGE_TOOL",
     "TOOL_NAME",
@@ -108,6 +114,8 @@ __all__ = [
     "past_research_spec",
     "raw_args",
     "judge_spec",
+    "engine_info_call",
+    "engine_info_spec",
     "task_write_spec",
     "view_image_spec",
     "web_browser_spec",
