@@ -63,8 +63,10 @@ tavily_topic: TavilyTopic = "general"
 tavily_depth: TavilyDepth = "basic"
 """Search depth: ``basic``/``fast``/``ultra-fast`` cost 1 credit,
 ``advanced`` costs 2."""
-results_per_page = 10
-"""1-20, the API's single-call cap is 20."""
+results_per_page = 20
+"""1-20, the API's single-call cap is 20.  The lane cannot paginate, so the
+default pulls the cap (credits are per search, not per result -- pulling max
+is free); dial back here or per instance when unwanted."""
 
 time_range_support = True
 time_range_dict = {

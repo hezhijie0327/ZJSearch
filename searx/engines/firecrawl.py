@@ -75,7 +75,10 @@ firecrawl_source: FirecrawlSource = "web"
 """Which result lane this instance serves: ``web`` (default), ``news`` or
 ``images`` -- all answered by the same /v2/search endpoint."""
 results_per_page = 10
-"""Applied per source type by the API; every 10 results cost 2 credits."""
+"""Kept at 10 on purpose: credits bill per RESULT (2 per 10, rounded up) --
+a 100-row search would spend 20 credits where 10 rows spend 2.  The API
+accepts up to 100+ (verified live) and the lane cannot paginate; raise this
+per instance when the extra rows are worth the burn."""
 
 time_range_support = True
 time_range_dict = {

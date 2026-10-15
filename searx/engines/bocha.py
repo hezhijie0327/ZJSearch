@@ -69,8 +69,10 @@ or the ``images`` riding the same web-search response."""
 bocha_summary = True
 """Request the API's full-text ``summary`` field; rows fall back to the
 short ``snippet`` when it is absent."""
-results_per_page = 10
-"""1-50, the API's single-call cap is 50."""
+results_per_page = 50
+"""1-50, the API's single-call cap is 50.  The lane cannot paginate (the
+API ignores its page parameter), so the default pulls the cap -- dial back
+here or per instance when the row flood is unwanted."""
 
 time_range_support = True
 time_range_dict = {
