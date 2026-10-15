@@ -208,7 +208,7 @@ export function TagGraphView({
       const cw = canvas.clientWidth || 700;
       const ch = canvas.clientHeight || 420;
       const pad = 50;
-      const zoom = Math.min(1.4, Math.min(cw / (maxX - minX + pad * 2), ch / (maxY - minY + pad * 2)));
+      const zoom = Math.min(2.2, Math.min(cw / (maxX - minX + pad * 2), ch / (maxY - minY + pad * 2)));
       viewRef.current = {
         zoom,
         panX: (cw - (minX + maxX) * zoom) / 2,
@@ -236,7 +236,7 @@ export function TagGraphView({
             dy = rng() - 0.5;
             dist2 = 1;
           }
-          const force = (2600 * alpha) / dist2;
+          const force = (6800 * alpha) / dist2;
           const dist = Math.sqrt(dist2);
           a.vx -= (dx / dist) * force;
           a.vy -= (dy / dist) * force;
@@ -259,6 +259,39 @@ export function TagGraphView({
         a.vy += ddy * force;
         b.vx -= ddx * force;
         b.vy -= ddy * force;
+      }
+      // THE COLLISION PASS: a label is the widest part of a node -- pairs
+      // closer than the sum of their label radii are pushed apart until
+      // they clear (two relaxations).  The old params let high-degree
+      // hubs (the spring pull of a dozen edges) compress labels into an
+      // unreadable ball the pairwise repulsion alone could not open.
+      for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < nodes.length; i++) {
+          const a = nodes[i];
+          if (!a || a.pinned) {
+            continue;
+          }
+          const ra = a.tag.length * 3.4 + 8;
+          for (let j = i + 1; j < nodes.length; j++) {
+            const b = nodes[j];
+            if (!b || b.pinned) {
+              continue;
+            }
+            const rb = b.tag.length * 3.4 + 8;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+            const min = ra + rb;
+            if (dist >= min) {
+              continue;
+            }
+            const push = ((min - dist) / dist) * 0.5;
+            a.x -= dx * push;
+            a.y -= dy * push;
+            b.x += dx * push;
+            b.y += dy * push;
+          }
+        }
       }
       const anyPinned = nodes.some((node) => node.pinned);
       for (const node of nodes) {
@@ -344,8 +377,9 @@ export function TagGraphView({
     };
 
     // settle the seed headless: the first visible frame is already
-    // near-equilibrium (no clump-then-spread on entry)
-    for (let i = 0; i < 80; i++) {
+    // near-equilibrium (no clump-then-spread on entry) -- the collision
+    // pass needs the extra iterations to open the initial blob
+    for (let i = 0; i < 160; i++) {
       step();
     }
     fitToContent();

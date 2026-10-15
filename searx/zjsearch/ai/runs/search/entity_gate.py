@@ -127,13 +127,39 @@ def run_once(state: t.Any, items: list[dict[str, str]]) -> str | None:
     uncovered = _uncovered(entities, [str(item.get("title") or "") for item in items])
     state.deliverable_entities = uncovered
     names = [str(entity.get("name") or "") for entity in entities]
+    # THE NAMED-VERDICT-MAP: every decision speaks the ONE protocol
+    # (answer: {name: choice|score|noul}) -- keys use the task_N
+    # convention so the generic renderer resolves each row's label from
+    # the target's " / " title sequence (the entity names), and
+    # record_questions carries the richer why-text.  The old custom
+    # entities/uncovered fields rendered an EMPTY expanded card (the
+    # renderer's map path needs `answer`).
     state.judgments.append(
         {
             "purpose": "entity_coverage",
             "question": "Deliverable entities the answer makes claims about; screened against the plan",
             "target": " / ".join(names)[:200],
-            "entities": names,
-            "uncovered": uncovered,
+            "answer": {
+                f"task_{index}": {
+                    "type": "choice",
+                    "choice": "uncovered" if name in uncovered else "covered",
+                    "probabilities": {
+                        "covered": 0.0 if name in uncovered else 1.0,
+                        "uncovered": 1.0 if name in uncovered else 0.0,
+                    },
+                    "confidence": 1.0,
+                }
+                for index, name in enumerate(names)
+            },
+            "record_questions": [
+                {
+                    "name": f"task_{index}",
+                    "instructions": (
+                        f"{name} -- {entities[index].get('why')}" if entities[index].get("why") else name
+                    )[:200],
+                }
+                for index, name in enumerate(names)
+            ],
             "ms": int((time.monotonic() - started) * 1000),
         }
     )
