@@ -68,13 +68,13 @@ def _answer_images_block(proxied: bool) -> str:
     VERBATIM from the feed's ``img=`` entries and are validated against
     the run's registry server-side: anything else is dropped before it
     reaches the client.  The example rides the deployment's ACTUAL image
-    shape: ``image_proxify`` emits same-origin ``/image_proxy`` links only
+    shape: ``image_proxify`` emits same-origin ``/image`` links only
     when the request's preference enables it, raw URLs otherwise -- a
     model taught the wrong shape copies the wrong shape (the whitelist
     compares verbatim: a hallucinated proxy prefix on a raw-url
     deployment is a silently dropped group)."""
     sample = (
-        "img=/image_proxy?url=...&h=..."
+        "img=/image?url=...&h=..."
         if proxied
         else "img=https://upload.wikimedia.org/wikipedia/commons/...jpg"
     )

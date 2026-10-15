@@ -335,7 +335,7 @@ keeps its own npm lockfile.
                                # SEARXNG_SETTINGS_PATH=client/zjsearch/dev-settings.yml ./manage webapp.run
 
 The dev server proxies ``/search``, ``/autocompleter``, ``/preferences``,
-``/image_proxy``, … to ``http://127.0.0.1:8888`` (override with
+``/image``, … to ``http://127.0.0.1:8888`` (override with
 ``ZJSEARCH_BACKEND``), so the UI can be developed against a live backend.
 
 Selecting the theme

@@ -59,7 +59,7 @@ export default {
         "/autocompleter",
         "/preferences",
         "/clear_cookies",
-        "/image_proxy",
+        "/image",
         "/favicon_proxy",
         "/config",
         "/stats",

@@ -6,7 +6,7 @@ Image results ride along as OpenAI-shaped ``image_url`` content parts
 ``images`` setting picks the transport: ``base64`` (the default) fetches
 each picture server-side and inlines it, ``url`` hands the reference to
 the endpoint, anything else disables attachments.  Every candidate --
-either direction -- passes the SSRF gate: same-origin ``/image_proxy``
+either direction -- passes the SSRF gate: same-origin ``/image``
 links resolve to their original target first.
 """
 
@@ -55,7 +55,7 @@ def _image_network() -> Network:
 
 
 def _absolute_url(url: str) -> str:
-    """Same-origin relative links (``/image_proxy?url=...`` from the
+    """Same-origin relative links (``/image?url=...`` from the
     page-data) resolve against the instance; everything absolute passes
     through, non-http(s) results are dropped."""
     if url.startswith(("http://", "https://")):
@@ -65,11 +65,11 @@ def _absolute_url(url: str) -> str:
 
 
 def _proxied_original(url: str) -> str | None:
-    """The original image URL embedded in an ``/image_proxy`` link -- fetch
+    """The original image URL embedded in an ``/image`` link -- fetch
     it directly (the image network applies the outgoing proxies) instead of
     hopping through the instance's own proxy view."""
     parsed = urlsplit(url)
-    if not parsed.path.endswith("/image_proxy"):
+    if not parsed.path.endswith("/image"):
         return None
     return parse_qs(parsed.query).get("url", [None])[0]
 
@@ -77,7 +77,7 @@ def _proxied_original(url: str) -> str | None:
 def _check_url(url: str) -> bool:
     """Literal-level gate for server-fetched URLs -- the shared
     public-address gate (:py:mod:`core.guard`) as a boolean.  Same-origin
-    ``/image_proxy`` links are resolved by the caller before this gate and
+    ``/image`` links are resolved by the caller before this gate and
     stay allowed (the proxy applies searx's own upstream validation)."""
     return core_guard.public_url_rejection(url) is None
 
@@ -124,7 +124,7 @@ def _fetch_images_b64(urls: list[str]) -> list[str]:
 
 def _image_fetch_candidate(url: str, absolute: str) -> str | None:
     """The server-fetch URL for one client image reference -- ``None`` drops
-    it (a rejection is logged).  Same-origin ``/image_proxy`` links carry
+    it (a rejection is logged).  Same-origin ``/image`` links carry
     the original URL as their target: fetch it directly through the image
     network (the outgoing proxies apply) instead of hopping through the
     instance's own proxy view.  "Same-origin" means the RESOLVED absolute
