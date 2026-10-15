@@ -24,7 +24,9 @@ def install(app: flask.Flask) -> None:
     from searx.zjsearch import stream  # pylint: disable=import-outside-toplevel,cyclic-import
     from searx.zjsearch.ai import install as ai_install  # pylint: disable=import-outside-toplevel,cyclic-import
     from searx.zjsearch.pwa import install as pwa_install  # pylint: disable=import-outside-toplevel,cyclic-import
+    from searx.zjsearch.static_cache import install as static_cache_install  # pylint: disable=import-outside-toplevel,cyclic-import
 
     stream.install(app)
     ai_install(app)
     pwa_install(app)
+    static_cache_install(app)

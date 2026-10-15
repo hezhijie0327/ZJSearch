@@ -55,6 +55,11 @@ utils/lib_sxng_vite.sh
 /searx/static/assets/
 /searx/static/chunk/
 /searx/static/img/
+# the build's precompression siblings (tools/assets.ts gzipPublished;
+# WhiteNoise serves them per Accept-Encoding) -- the tar rules above keep
+# matching their originals, this catches every new artifact's .gz/.br pair
+/searx/static/*.gz
+/searx/static/*.br
 
 # lighthouse gate archives (raw LHR reports + scores, compared across commits)
 client/zjsearch/.lighthouse-archive/

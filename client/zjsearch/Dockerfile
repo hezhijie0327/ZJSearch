@@ -81,9 +81,16 @@ RUN \
     # the same path)
     && XDG_CACHE_HOME=/app/browser python3 -m searx.zjsearch.ai.browser.install \
     && python3 -m compileall -q searx \
+    # the vite build's closeBundle pass (tools/assets.ts) already wrote
+    # .gz/.br siblings for the zjsearch artifacts -- -f makes this pass
+    # deterministic over them (gzip exits 1 "already exists" without it,
+    # find swallows the failure and the siblings silently stay stale);
+    # .wasm/.data join the filter for the PGLite engine's --best brotli
+    # (WhiteNoise only serves on-disk .gz/.br siblings, per Accept-Encoding)
     && find searx/static \( -name '*.html' -o -name '*.css' -o -name '*.js' \
-        -o -name '*.svg' -o -name '*.ttf' -o -name '*.eot' \) \
-        -type f -exec gzip -9 -k {} \+ -exec brotli --best {} \+ \
+        -o -name '*.svg' -o -name '*.ttf' -o -name '*.eot' \
+        -o -name '*.wasm' -o -name '*.data' \) \
+        -type f -exec gzip -9 -k -f {} \+ -exec brotli --best -f {} \+ \
     && rm -rf /tmp/* /var/lib/apt/lists/* /var/tmp/*
 
 FROM python:${PYTHON_VERSION}-slim AS rebased_searxng

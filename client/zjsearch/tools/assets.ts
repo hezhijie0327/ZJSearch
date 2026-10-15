@@ -7,6 +7,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { brotliCompressSync, gzipSync, constants as zlibConstants } from "node:zlib";
 import sharp from "sharp";
 
 export function plgAssets(PATH: { brand: string; dist: string; root: string }): import("vite").Plugin {
@@ -83,9 +84,9 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
       // IndexedDB fsync on the main thread, the research page's ~1s freezes
       // (the「页面没有响应」jam).  REBUILT from scratch like chunk/: a hash
       // change must not leave stale artifacts at the static root.
-      const workerArtifact = /^(pglite|initdb|vector|pg_trgm|pg_textsearch).*\.(wasm|data|gz)$/;
+      const workerArtifact = /^(pglite|initdb|vector|pg_trgm|pg_textsearch).*\.(wasm|data|gz|br)$/;
       for (const file of await fs.readdir(rootStatic)) {
-        if (workerArtifact.test(file) || /^pg\.worker.*\.js$/.test(file)) {
+        if (workerArtifact.test(file) || /^pg\.worker.*\.js(\.(gz|br))?$/.test(file)) {
           await fs.rm(path.join(rootStatic, file), { force: true });
         }
       }
@@ -94,13 +95,115 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
           await fs.copyFile(path.join(PATH.dist, file), path.join(rootStatic, file));
         }
       }
+      // THE DIST COPY DIES HERE: the served copies live at the static root
+      // (the built worker bakes ONLY those hashed URLs -- grep-verified),
+      // so the dist originals are dead weight in every deployment that
+      // ships searx/ wholesale (~16.6MB per image).  Deleted only while
+      // UNLINKED (st.nlink === 1): nlink > 1 means an out-of-band hardlink
+      // flow shares the inode (the Windows local-verification links into
+      // themes/zjsearch) -- deleting our name there saves no space and
+      // would leave the flow's link sources missing.  emptyOutDir rebuilds
+      // them next build either way.
+      let distFreed = 0;
+      for (const file of await fs.readdir(PATH.dist)) {
+        if (!workerArtifact.test(file) && !/^pg\.worker.*\.js$/.test(file)) {
+          continue;
+        }
+        const distFile = path.join(PATH.dist, file);
+        const st = await fs.stat(distFile);
+        if (st.nlink > 1) {
+          continue;
+        }
+        distFreed += st.size;
+        await fs.rm(distFile, { force: true });
+      }
+      if (distFreed > 0) {
+        console.log(
+          `zjsearch-assets: dist dedup freed ${(distFreed / 1024 / 1024).toFixed(1)}MB (served copies live at the static root)`,
+        );
+      }
       // the CSS chunks' url(...) references (KaTeX woff2/woff/ttf) resolve
       // against the root-level CSS files -> /static/assets/...
+      // THE UNHASHED TWINS never publish: vite/emscripten also emit
+      // assets/pglite.wasm, pglite.data, initdb.wasm and the three plain
+      // tar.gz, but the worker's baked URLs are the hashed static-root
+      // names only (grep-verified -- `assets/` appears nowhere in
+      // pg.worker-*.js).  Pruned from the copy AND deleted from the dist:
+      // ~16MB of second copies no image needs to carry.
+      const unhashedBundle = /^(pglite\.(wasm|data)|initdb\.wasm|(vector|pg_trgm|pg_textsearch)\.tar\.gz)$/;
       await fs.rm(path.join(rootStatic, "assets"), { force: true, recursive: true });
-      await fs.cp(path.join(PATH.dist, "assets"), path.join(rootStatic, "assets"), { recursive: true });
+      await fs.cp(path.join(PATH.dist, "assets"), path.join(rootStatic, "assets"), {
+        recursive: true,
+        filter: (src) => !unhashedBundle.test(path.basename(src)),
+      });
+      const distAssets = path.join(PATH.dist, "assets");
+      for (const file of await fs.readdir(distAssets)) {
+        if (unhashedBundle.test(file)) {
+          await fs.rm(path.join(distAssets, file), { force: true });
+        }
+      }
       const rootChunk = path.join(rootStatic, "chunk");
       await fs.rm(rootChunk, { force: true, recursive: true });
       await fs.cp(path.join(PATH.dist, "chunk"), rootChunk, { recursive: true });
+      await gzipPublished(rootStatic);
     },
   };
+}
+
+/** WhiteNoise (the static layer in webapp.py) never compresses on the fly:
+    it only serves on-disk ``.gz``/``.br`` SIBLINGS of a file, negotiated by
+    Accept-Encoding (verified against whitenoise 6.12).  Without this pass
+    the PGLite engine's WASM + FS bundles (~16MB raw) and the JS chunks ride
+    every cold page load / store boot UNCOMPRESSED -- and the first AI
+    search of a browser session pays that on its critical path (the recall
+    lane boots the store before the run's POST can fire).  gzip-9 + brotli-9
+    at build time: ~16.6MB -> ~5.4MB gz / ~4.9MB br on the wire (~3x); the
+    Docker image's own find step (`client/zjsearch/Dockerfile`) brotlis at
+    --best and overwrites these for its filter set.  Identity clients and
+    every already-compressed artifact (the extension tars, woff2) are
+    skipped by the gain guard.  A fresh sibling takes effect only after the
+    instance restart -- the same rule the bundles already follow (WhiteNoise
+    indexes files once at import). */
+const GZIPPABLE = /\.(js|css|wasm|data|json|ttf|svg)$/;
+
+async function gzipPublished(rootStatic: string): Promise<void> {
+  // ONLY the published roots (top level + chunk/ + assets/): a blind
+  // recursive walk spills .gz siblings into themes/ -- the upstream simple
+  // theme's COMMITTED static dir included (observed, cleaned).
+  let saved = 0;
+  const compress = async (file: string): Promise<void> => {
+    const raw = await fs.readFile(file);
+    if (raw.length < 1024) return;
+    const gz = gzipSync(raw, { level: 9 });
+    if (gz.length < raw.length * 0.9) {
+      await fs.writeFile(`${file}.gz`, gz);
+      saved += raw.length - gz.length;
+    }
+    const br = brotliCompressSync(raw, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 9 } });
+    if (br.length < raw.length * 0.9) {
+      await fs.writeFile(`${file}.br`, br);
+      saved += raw.length - br.length;
+    }
+  };
+  for (const entry of await fs.readdir(rootStatic, { withFileTypes: true })) {
+    if (entry.isFile() && GZIPPABLE.test(entry.name) && !entry.name.endsWith(".gz")) {
+      await compress(path.join(rootStatic, entry.name));
+    }
+  }
+  for (const sub of ["chunk", "assets"]) {
+    const walk = async (dir: string): Promise<void> => {
+      for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(file);
+        } else if (entry.isFile() && GZIPPABLE.test(entry.name) && !entry.name.endsWith(".gz")) {
+          await compress(file);
+        }
+      }
+    };
+    await walk(path.join(rootStatic, sub));
+  }
+  if (saved > 0) {
+    console.log(`zjsearch-assets: gzip siblings wrote ${(saved / 1024 / 1024).toFixed(1)}MB off the wire`);
+  }
 }

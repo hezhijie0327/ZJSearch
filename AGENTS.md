@@ -520,7 +520,37 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   one 404s and main.tsx's `await import(ResultsPage)` never settles, so
   the streamed search page boots into the skeleton FOREVER (homepage SPA
   navigation still works, which misdirects the debugging; see Debugging
-  notes for the recipe).
+  notes for the recipe).  THE GZIP SIBLINGS: the build ends with a
+  `gzipPublished` pass over the static root — WhiteNoise NEVER compresses
+  on the fly, it only serves on-disk `.gz`/`.br` siblings (Accept-Encoding
+  negotiation, `Vary` added, smallest alternative wins; verified against
+  whitenoise 6.12), so without
+  them the PGLite engine's ~16.6MB cold-boot payload (`pglite-*.wasm` +
+  `pglite-*.data` + `pg.worker-*.js` + initdb) and the whole chunk graph
+  rode the wire UNCOMPRESSED — and the first AI search of a browser
+  session pays that on its critical path (the recall lane boots the store
+  before the run's POST can fire).  gzip-9 + brotli-9 at build time:
+  ~16.6MB → ~5.4MB gz / ~4.3MB br (brotli wins on the FS data bundle:
+  6.0MB → 1.2MB).  The Docker image's own precompression step
+  (`client/zjsearch/Dockerfile`) covers what this pass doesn't (html/eot,
+  the simple theme) and re-brotlis at --best — it carries `-f` on both
+  compressors, because the host-built siblings ride the context and gzip
+  without `-f` exits 1 on "already exists" (find swallows that exit, so a
+  stale sibling would sail through unnoticed).  A fresh sibling takes
+  effect only after the instance restart
+  (WhiteNoise indexes files once at import — the same rule the bundles
+  already follow); the worker-artifact cleanup regex consumes stale
+  `pg.worker-*.js.gz`/`.br` too.  THE DIST DEDUP: the built worker bakes
+  ONLY the hashed static-root URLs (`pglite-<hash>.wasm` … via
+  `new URL(…, self.location)`, grep-verified — `assets/` appears nowhere
+  in `pg.worker-*.js`), so the theme dir's own copies die at publish:
+  the hashed artifacts are deleted from the dist when UNLINKED
+  (`st.nlink === 1` — nlink > 1 means the Windows local-verification
+  hardlinks share the inode and deletion would strand their sources),
+  and the unhashed emscripten twins (`assets/pglite.wasm`/`pglite.data`/
+  `initdb.wasm`, the three plain `tar.gz`) are neither published nor
+  kept (~16.6MB + ~16MB per image).  `dist/chunk/` stays: it is a
+  junction target on that Windows flow.
 - The streamed search page fails SAFE: a late-chunk serialization error
   (a malformed result field reaching a macro) makes `searx.zjsearch.stream`
   emit a recovery `page_error` payload (a leading `</script>` closes a
@@ -780,7 +810,17 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   with a cached asset for up to 30 s (WhiteNoise) and may keep executing
   the stale bundle — wait the 30 s out or reload twice before concluding a
   change "didn't work". Template edits additionally need an instance
-  restart (Jinja caches compiled templates).
+  restart (Jinja caches compiled templates).  THE IMMUTABLE CARVE-OUT:
+  the content-hashed PGLite artifacts (`pglite-*`/`initdb-*`/`pg.worker-*`
+  and the three extension tars) get `max-age=31536000, immutable` from
+  `searx/zjsearch/static_cache.py` — a WSGI wrapper around the WhiteNoise
+  chain installed through the theme hook (webapp.py itself stays
+  untouched, upstream-conflict-free); a rebuild changes their URL, so
+  staleness can never apply to them.  The 30 s rule concerns the hashless
+  entry bundles (`zjsearch.min.js/css`, `chunk/zjs-results.min.js` — its
+  stable name is the streamed results shell's pre-warm URL, which is
+  exactly why `chunk/` can never blanket-immutable) and the unhashed
+  fonts.
 - A CSS transition FROZEN at its start value (computed
   `grid-template-rows: 0px` while the inline style says `1fr`, a
   `CSSTransition` stuck `playState: "running"`) is the JAM, not a theme

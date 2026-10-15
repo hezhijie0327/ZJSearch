@@ -81,7 +81,9 @@ export default {
     target: browserslistToEsbuild(manifest.browserslist),
     assetsDir: "",
     outDir: PATH.dist,
-    manifest: "manifest.json",
+    // build.manifest stays OFF: the emitted chunk graph (~86KB json) had no
+    // reader anywhere -- the PWA manifest is the per-theme TEMPLATE rendered
+    // at /manifest.json, never this static artifact
     emptyOutDir: true,
     // source maps are a debugging aid only — keep the ~1.5 MB of .map files
     // out of the deployed static folder unless they are explicitly requested
