@@ -688,7 +688,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # unconfigured model simply never flags)
                 established = [str(fact.get("text") or "") for fact in self.facts[:-written]] if written else []
                 for fact in self.facts[-written:] if written else []:
-                    conflict = audit.finding_conflict(str(fact.get("text") or ""), established)
+                    conflict = audit.finding_conflict(
+                        str(fact.get("text") or ""),
+                        established,
+                        usage_sink=self.decision_usage,
+                        embed_sink=self.embed_usage,
+                    )
                     if conflict is not None:
                         fact["conflict_with"] = self.facts[conflict].get("id")
                 self.round_learned = True
@@ -830,7 +835,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # the near-dup gate's comparison set: the pre-sent snapshot
                 # PLUS the saves this run already accepted
                 known_memories = [str(m.get("content") or "") for m in self.user_memories] + self.saved_memories
-                feed, event = user_memory_cap.evaluate_call(call, self.user_memories, known=known_memories)
+                feed, event = user_memory_cap.evaluate_call(
+                    call, self.user_memories, known=known_memories, embed_sink=self.embed_usage
+                )
                 feeds[wire_id - 1] = feed
                 ms = int((time.monotonic() - started) * 1000)
                 if event:
@@ -1631,6 +1638,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         for bucket, snap_name in (
             ("rerank_usage", "rerank_snap"),
             ("decision_usage", "decision_snap"),
+            ("embed_usage", "embed_snap"),
         ):
             child_spend = getattr(child, bucket, None) or {}
             snap = getattr(handle, snap_name)

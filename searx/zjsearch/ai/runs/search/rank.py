@@ -107,7 +107,9 @@ def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
 # fails open.
 
 
-def diverse_order(docs: list[str], threshold: float) -> tuple[list[int] | None, list[list[float]]]:
+def diverse_order(
+    docs: list[str], threshold: float, embed_sink: dict[str, int] | None = None
+) -> tuple[list[int] | None, list[list[float]]]:
     """The embedding diversity stage: near-duplicate results (syndicated
     copies, reworded aggregators) cluster away -- a document survives only
     when its best cosine against the ALREADY-KEPT heads stays under
@@ -119,7 +121,7 @@ def diverse_order(docs: list[str], threshold: float) -> tuple[list[int] | None, 
     if len(docs) < 2:
         return None, []
     try:
-        batch = embed_service.run_batch(docs, timeout=8.0)
+        batch = embed_service.run_batch(docs, timeout=8.0, usage_sink=embed_sink)
         if not batch:
             return None, []
         vectors = batch[0]

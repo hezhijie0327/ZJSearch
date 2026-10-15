@@ -559,6 +559,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     register_tasks = True
     research_q = (standalone_question(cfg, q, history, lang, gate_usage) if history else "") or q
     depth_probe_entry: dict[str, t.Any] | None = None
+    probe_usage = {"calls": 0, "tokens": 0}
     # the DEPTH PROBE: the decision model grades how deep/broad the
     # question needs to be (one score call) and the mode's round LADDER
     # scales accordingly -- the model-controlled depth made literal (the
@@ -591,6 +592,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 )
                 answers = out.get("answers") if isinstance(out, dict) else None
                 depth = answers.get("depth") if isinstance(answers, dict) else None
+                # the probe's spend joins the run's account (a LOCAL dict --
+                # `state` does not exist yet, the fold rides beside the
+                # pre-gate's once Searches() exists)
+                probe_call_usage = out.get("usage") if isinstance(out, dict) else {}
+                if isinstance(probe_call_usage, dict) and probe_call_usage.get("input_tokens"):
+                    probe_usage["calls"] += 1
+                    probe_usage["tokens"] += int(probe_call_usage.get("input_tokens") or 0)
                 if isinstance(depth, dict) and depth.get("score") is not None:
                     rung = max(0, min(int(round(float(depth["score"]))), len(ladder) - 1))
                     max_rounds = ladder[rung]
@@ -779,6 +787,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     if pre_usage.get("calls"):
         state.decision_usage["calls"] += pre_usage["calls"]
         state.decision_usage["tokens"] += pre_usage["tokens"]
+    if probe_usage.get("calls"):
+        state.decision_usage["calls"] += probe_usage["calls"]
+        state.decision_usage["tokens"] += probe_usage["tokens"]
     if pre_entry:
         state.judgments.append(pre_entry)
 
@@ -1035,6 +1046,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         gate_usage,
         rerank_usage=state.rerank_usage,
         decision_usage=state.decision_usage,
+        embed_usage=state.embed_usage,
         judgments=state.judgments,
         known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
         outline_title=str(outline["title"]) if outline else None,
@@ -1103,6 +1115,7 @@ class _SettleTail:
         gate_usage: list[dict[str, t.Any]],
         rerank_usage: dict[str, int] | None = None,
         decision_usage: dict[str, int] | None = None,
+        embed_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
         outline_title: str | None = None,
@@ -1119,6 +1132,9 @@ class _SettleTail:
         self.rerank_usage = rerank_usage
         # the decision model's account, same live-dict pattern
         self.decision_usage = decision_usage
+        # the server-side embedding account (diversity / packs / audit
+        # recall / memory dedup), same live-dict pattern
+        self.embed_usage = embed_usage
         # the judgment ledger (the executor's structured verdicts) -- the
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
@@ -1136,7 +1152,8 @@ class _SettleTail:
         usage = event.get("usage")
         rerank_spend = bool(self.rerank_usage and self.rerank_usage.get("calls"))
         decision_spend = bool(self.decision_usage and self.decision_usage.get("calls"))
-        if self.gate_usage or isinstance(usage, dict) or rerank_spend or decision_spend:
+        embed_spend = bool(self.embed_usage and self.embed_usage.get("calls"))
+        if self.gate_usage or isinstance(usage, dict) or rerank_spend or decision_spend or embed_spend:
             usage = (
                 dict(usage)
                 if isinstance(usage, dict)
@@ -1165,6 +1182,15 @@ class _SettleTail:
                 usage["decision"] = {
                     "calls": int(decision_spend["calls"]),
                     "tokens": int(decision_spend.get("tokens") or 0),
+                }
+            embed_spend = self.embed_usage
+            if embed_spend and embed_spend.get("calls"):
+                # the server-side embedding spend (diversity pruning, the
+                # corpus packs, the audit recall, the memory dedup), its
+                # own bucket (input-only -- embeddings generate nothing)
+                usage["embedding"] = {
+                    "calls": int(embed_spend["calls"]),
+                    "tokens": int(embed_spend.get("tokens") or 0),
                 }
             event = {**event, "usage": usage}
         if self.judgments:
@@ -1256,7 +1282,9 @@ class _SettleTail:
                 yield {"e": "related", "items": found}
         try:
             known = self.known_memories_fn() if self.known_memories_fn else None
-            facts, tags = extract_insights(self.cfg, self.question, answer, self.gate_usage, known=known)
+            facts, tags = extract_insights(
+                self.cfg, self.question, answer, self.gate_usage, known=known, embed_sink=self.embed_usage
+            )
             for fact in facts:
                 yield {"e": "memory", "content": fact}
             if tags:
@@ -1294,6 +1322,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         gate_usage: list[dict[str, t.Any]],
         rerank_usage: dict[str, int] | None = None,
         decision_usage: dict[str, int] | None = None,
+        embed_usage: dict[str, int] | None = None,
         judgments: list[dict[str, t.Any]] | None = None,
         preamble: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
@@ -1306,6 +1335,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             gate_usage,
             rerank_usage=rerank_usage,
             decision_usage=decision_usage,
+            embed_usage=embed_usage,
             judgments=judgments,
             known_memories_fn=known_memories_fn,
         )

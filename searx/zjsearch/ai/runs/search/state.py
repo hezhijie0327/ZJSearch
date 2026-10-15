@@ -120,6 +120,7 @@ class SubagentHandle:
         self.gate_mark = 0
         self.rerank_snap: dict[str, int] = {}
         self.decision_snap: dict[str, int] = {}
+        self.embed_snap: dict[str, int] = {}
         self.corpus_seen: set[int] = set()
 
     @property
@@ -390,6 +391,12 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # judge delegation + its input tokens -- the settle folds it
         # into ``usage.decision`` beside the rerank bucket
         self.decision_usage = {"calls": 0, "tokens": 0}
+        # the SERVER-side embedding account (the ranking cascade's
+        # diversity stage, the corpus packs, the audit recall, the memory
+        # dedup -- every ``embed_service.run_batch`` the run makes; the
+        # browser's knowledge embeddings ride their own proxy): the settle
+        # folds it into ``usage.embedding`` beside the rerank bucket
+        self.embed_usage = {"calls": 0, "tokens": 0}
         # the judgment ledger: EVERY structured verdict the run hands down
         # (the model-initiated ``judge`` calls today; the framework gates
         # join in later milestones) -- purpose, the questions asked, the
@@ -451,7 +458,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the RUN CORPUS (runs.search.corpus): the report synthesizer's
         # retrievable memory -- every result/page/fact lands here while
         # the research runs; a plain answer run never reads it (zero cost)
-        self.corpus = corpus.Corpus(usage=self.rerank_usage)
+        self.corpus = corpus.Corpus(usage=self.rerank_usage, embed_usage=self.embed_usage)
         # the report mode's recorded TABLE ARTIFACTS (extract_table):
         # snapshot-replace per id on the wire, per-section context at
         # synthesis time

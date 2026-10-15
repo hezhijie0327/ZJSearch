@@ -226,7 +226,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         graded: dict[int, float] = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
 
-            def _one(n_and_meta: tuple[int, dict[str, str]]) -> tuple[int, float]:
+            def _one(n_and_meta: tuple[int, dict[str, str]]) -> tuple[int, float, int]:
                 n, meta = n_and_meta
                 try:
                     out = decision.judge(
@@ -247,14 +247,20 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
                     )
                     answers = out.get("answers") if isinstance(out, dict) else None
                     reliable = answers.get("reliable_evidence") if isinstance(answers, dict) else None
+                    gate_usage = (
+                        out.get("usage") if isinstance(out, dict) and isinstance(out.get("usage"), dict) else {}
+                    )
+                    tokens = int(gate_usage.get("input_tokens") or 0)
                     if isinstance(reliable, dict):
-                        return n, float(reliable.get("noul") or 0.0)
+                        return n, float(reliable.get("noul") or 0.0), tokens
                 except Exception:  # pylint: disable=broad-except
                     pass
-                return n, 1.0  # unjudgable counts as PASS (fail-open)
+                return n, 1.0, 0  # unjudgable counts as PASS (fail-open)
 
-            for n, score in pool.map(_one, candidates):
+            tokens_spent = 0
+            for n, score, spent in pool.map(_one, candidates):
                 graded[n] = score
+                tokens_spent += spent
         failing = sorted(n for n, score in graded.items() if score < float(gate.get("pass_min", 0.45)))
         # NAMED-VERDICT-MAP shape: one noul per deep source (name s_<n>),
         # labels in record.questions -- the client's generic renderer needs
@@ -276,6 +282,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         }
         self.judgments.append(entry)
         self.decision_usage["calls"] += len(candidates)
+        self.decision_usage["tokens"] += tokens_spent
         if failing:
             note = (
                 "(evidence audit: sources "

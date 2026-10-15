@@ -45,12 +45,15 @@ shared notion of "reads as the same material again")."""
 class Corpus:
     """The run's chunk store + its retriever."""
 
-    def __init__(self, usage: dict[str, int] | None = None) -> None:
+    def __init__(self, usage: dict[str, int] | None = None, embed_usage: dict[str, int] | None = None) -> None:
         self._chunks: list[dict[str, t.Any]] = []
         # the run's ``rerank_usage`` dict (Searches state owns it): the
         # pack's rerank spend folds here so the model-stats card sees the
         # report synthesizer's calls too, not just the search cascade's
         self._usage = usage
+        # the same doctrine for the pack's EMBEDDING spend (the dedup
+        # pass and the embed rescue) -- ``usage.embedding`` on the settle
+        self._embed_usage = embed_usage
 
     def add(self, text: str, *, ref_n: int = 0, title: str = "", url: str = "", kind: str = "result") -> None:
         """Ingest one material item, split into line-boundary chunks.  ``n``
@@ -131,7 +134,9 @@ class Corpus:
             # retrieval head, any failure keeps the order standing
             try:
                 cand = order[:RERANK_HEAD]
-                batch = embed_service.run_batch([self._head(i) for i in cand], timeout=8.0)
+                batch = embed_service.run_batch(
+                    [self._head(i) for i in cand], timeout=8.0, usage_sink=self._embed_usage
+                )
                 if batch and len(batch[0]) == len(cand):
                     drop = {
                         cand[j]
@@ -199,7 +204,9 @@ class Corpus:
             return None
         head = self._chunks[:EMBED_RESCUE_LIMIT]
         try:
-            batch = embed_service.run_batch([query] + [chunk["text"][:400] for chunk in head], timeout=8.0)
+            batch = embed_service.run_batch(
+                [query] + [chunk["text"][:400] for chunk in head], timeout=8.0, usage_sink=self._embed_usage
+            )
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch corpus: embed rescue failed: %r", exc)
             return None

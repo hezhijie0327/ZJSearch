@@ -43,14 +43,16 @@ _EMBED_TIMEOUT = 4.0
 stall on a slow embedding upstream; past it the original order ships."""
 
 
-def ordered_context(question: str, context: str) -> str:
+def ordered_context(question: str, context: str, spend: dict[str, int] | None = None) -> str:
     """The numbered source lines ordered most-question-relevant-first --
     the model funnel's middle tier first (ONE rerank call over the line
     heads, the query-conditioned signal), the embedding cosine as the
     fallback.  The [n] labels travel with their lines, so the client's
     citation grammar is untouched; below the threshold, with too few
     numbered lines, or on any model failure the context returns
-    unchanged."""
+    unchanged.  ``spend`` (the route's live dict) takes the ordering's
+    model spend -- the settle folds it into its rerank/embedding
+    buckets."""
     lines = context.split("\n")
     numbered = [i for i, line in enumerate(lines) if _NUMBERED_LINE_RE.match(line)]
     if len(numbered) < 4 or len(context) <= _OVERVIEW_RERANK_ABOVE:
@@ -60,15 +62,22 @@ def ordered_context(question: str, context: str) -> str:
         # the cross-encoder wins whenever it answers (its own fail-open
         # returns (None, 0) -- the embedding fallback stands)
         try:
-            order, _tokens = rerank_service.rerank(question, heads)
+            order, tokens = rerank_service.rerank(question, heads)
         except Exception:  # pylint: disable=broad-except
-            order = None
+            order, tokens = None, 0
+        if spend is not None and tokens:
+            spend["rerank_calls"] = spend.get("rerank_calls", 0) + 1
+            spend["rerank_tokens"] = spend.get("rerank_tokens", 0) + tokens
         if order is not None and len(order) == len(numbered):
             result = list(lines)
             for slot, k in enumerate(order):
                 result[numbered[slot]] = lines[numbered[k]]
             return "\n".join(result)
-    batch = run_batch([question] + heads, timeout=_EMBED_TIMEOUT)
+    embed_spend: dict[str, int] = {}
+    batch = run_batch([question] + heads, timeout=_EMBED_TIMEOUT, usage_sink=embed_spend)
+    if spend is not None and embed_spend.get("tokens"):
+        spend["embed_calls"] = embed_spend.get("calls", 0)
+        spend["embed_tokens"] = embed_spend["tokens"]
     if not batch:
         return context
     vectors = batch[0]

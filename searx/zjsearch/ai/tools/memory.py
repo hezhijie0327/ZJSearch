@@ -121,7 +121,7 @@ def _dup_gate() -> tuple[bool, float]:
     return True, float(gate.get("cosine", 0.92))
 
 
-def _nearest(content: str, known: list[str]) -> int | None:
+def _nearest(content: str, known: list[str], embed_sink: dict[str, int] | None = None) -> int | None:
     """The stored fact this new one duplicates (its index) -- embedding
     nearest-neighbour above the gate's cosine floor.  ``None`` on any
     skip/failure: the save passes (the gate is a lens, not a dependency)."""
@@ -129,7 +129,7 @@ def _nearest(content: str, known: list[str]) -> int | None:
     if not active or not known:
         return None
     try:
-        batch = embed_service.run_batch([content] + list(known), timeout=8.0)
+        batch = embed_service.run_batch([content] + list(known), timeout=8.0, usage_sink=embed_sink)
         if not batch or len(batch[0]) != len(known) + 1:
             return None
         probe = batch[0][0]
@@ -141,7 +141,7 @@ def _nearest(content: str, known: list[str]) -> int | None:
     return None
 
 
-def _filter_near_dups(facts: list[str], known: list[str]) -> list[str]:
+def _filter_near_dups(facts: list[str], known: list[str], embed_sink: dict[str, int] | None = None) -> list[str]:
     """The extractor's facts minus the near-duplicates -- against the
     stored facts AND each other (the extractor's small model loves
     rephrasing one fact three ways).  ONE batch embed; anything it cannot
@@ -150,7 +150,7 @@ def _filter_near_dups(facts: list[str], known: list[str]) -> list[str]:
     if not active or (len(facts) < 2 and not known):
         return facts
     try:
-        batch = embed_service.run_batch(list(facts) + list(known), timeout=8.0)
+        batch = embed_service.run_batch(list(facts) + list(known), timeout=8.0, usage_sink=embed_sink)
         if not batch or len(batch[0]) != len(facts) + len(known):
             return facts
         vectors = batch[0]
@@ -176,6 +176,7 @@ def extract_insights(
     answer: str,
     usage_out: list[dict[str, t.Any]] | None = None,
     known: list[str] | None = None,
+    embed_sink: dict[str, int] | None = None,
 ) -> tuple[list[str], list[str]]:
     """The post-run extractor (LobeHub's downstream-extractor pattern):
     one small JSON completion decides whether the exchange revealed
@@ -228,12 +229,15 @@ def extract_insights(
     )
     clean_tags = [str(tag).strip()[:40] for tag in tags if str(tag).strip()] if isinstance(tags, list) else []
     if clean_facts and known is not None:
-        clean_facts = _filter_near_dups(clean_facts, list(known))
+        clean_facts = _filter_near_dups(clean_facts, list(known), embed_sink=embed_sink)
     return clean_facts, clean_tags[:8]
 
 
 def evaluate_call(
-    call: dict[str, t.Any], memories: list[dict[str, str]], known: list[str] | None = None
+    call: dict[str, t.Any],
+    memories: list[dict[str, str]],
+    known: list[str] | None = None,
+    embed_sink: dict[str, int] | None = None,
 ) -> tuple[str, dict[str, t.Any] | None]:
     """One tool call -> (model feed, wire event).  ``save`` ALSO yields a
     ``memory`` wire event -- the client persists the fact into its local
@@ -247,7 +251,7 @@ def evaluate_call(
         content = str(args.get("content") or "").strip()[:MAX_CONTENT]
         if not content:
             return "error: save needs a non-empty content", None
-        if known and _nearest(content, known) is not None:
+        if known and _nearest(content, known, embed_sink=embed_sink) is not None:
             feed = (
                 f'duplicate: "{content}" already reads as a stored fact -- do NOT re-save it;'
                 " if the stored wording is wrong, save a corrected, self-contained version."

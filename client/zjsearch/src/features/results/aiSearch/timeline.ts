@@ -270,6 +270,7 @@ export interface AiSearchRun {
     gates?: { input: number; output: number; calls: number } | null;
     rerank?: { calls: number; tokens: number };
     decision?: { calls: number; tokens: number };
+    embedding?: { calls: number; tokens: number };
   } | null;
   /** the server's halt explanation carried on settle (stall verdict,
       truncation, transport cut) -- the meta row renders it */

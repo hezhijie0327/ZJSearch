@@ -496,6 +496,7 @@ export const EN = {
 
   ai_usage_cache_write_title: "Cache-write tokens",
   ai_usage_rerank_title: "Rerank tokens",
+  ai_usage_embedding_title: "Embedding tokens",
   ai_usage_decision_title: "Decision model",
   open_in_new_tab: "Open page",
   knowledge_open: "Knowledge",

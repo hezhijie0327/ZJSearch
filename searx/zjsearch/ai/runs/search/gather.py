@@ -156,6 +156,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             kept, vectors = diverse_order(
                 [rerank_doc(raw[i]) for i in ranked_head],
                 float(decision_features("diversity").get("cosine", 0.92)),
+                embed_sink=self.embed_usage,
             )
             head_vectors: dict[int, list[float]] = {}
             dup_ratio = None

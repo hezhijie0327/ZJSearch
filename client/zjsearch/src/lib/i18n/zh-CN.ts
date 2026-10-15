@@ -495,6 +495,7 @@ export const ZH_CN: Record<StringKey, string> = {
 
   ai_usage_cache_write_title: "缓存写入词元",
   ai_usage_rerank_title: "重排序词元",
+  ai_usage_embedding_title: "嵌入词元",
   ai_usage_decision_title: "决策模型",
   open_in_new_tab: "打开网页",
   knowledge_open: "知识库",

@@ -4,12 +4,15 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   Ban,
   Brain,
   BrainCircuit,
   CircleCheck,
   Database,
   DatabaseZap,
+  Network,
+  Scale,
   ShieldAlert,
   Wrench,
 } from "lucide-react";
@@ -43,7 +46,10 @@ export interface AiUsage {
   gates?: (AiUsagePhase & { calls: number }) | null;
   /** the ranking cascade's endpoint spend (NOT LLM tokens) */
   rerank?: { calls: number; tokens: number };
+  /** the decision model's judgments (input-only) */
   decision?: { calls: number; tokens: number };
+  /** the server-side embedding spend (input-only) */
+  embedding?: { calls: number; tokens: number };
 }
 
 /** The run's quiet meta line at the END of the answer (lobehub's message
@@ -94,6 +100,17 @@ export function AiRunFooter({
           : []),
         ...(usage.cache_write
           ? [{ icon: DatabaseZap, title: t("ai_usage_cache_write_title"), value: formatTokens(usage.cache_write) }]
+          : []),
+        // the non-generating endpoints' input-only buckets (each shows its
+        // TOKENS; the tooltip names the model class)
+        ...(usage.rerank
+          ? [{ icon: ArrowUpDown, title: t("ai_usage_rerank_title"), value: formatTokens(usage.rerank.tokens) }]
+          : []),
+        ...(usage.decision
+          ? [{ icon: Scale, title: t("ai_usage_decision_title"), value: formatTokens(usage.decision.tokens) }]
+          : []),
+        ...(usage.embedding
+          ? [{ icon: Network, title: t("ai_usage_embedding_title"), value: formatTokens(usage.embedding.tokens) }]
           : []),
       ]
     : [];

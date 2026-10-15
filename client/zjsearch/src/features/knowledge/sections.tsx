@@ -1060,6 +1060,7 @@ export function InspectorView({
                     thoughts: usage.thoughts ?? null,
                     rerank: usage.rerank,
                     decision: usage.decision,
+                    embedding: usage.embedding,
                   } satisfies AiUsage)
                 : null
             }

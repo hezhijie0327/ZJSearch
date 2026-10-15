@@ -148,7 +148,9 @@ def make_synthesizer(
         # snapshot's shape field all follow the flipped value
         flipped = take_deck() if take_deck is not None else None
         if flipped is not None and flipped != deck:
-            logger.info("zjsearch report: output shape flipped at the write boundary (%s)", "deck" if flipped else "report")
+            logger.info(
+                "zjsearch report: output shape flipped at the write boundary (%s)", "deck" if flipped else "report"
+            )
             deck = flipped
             section_system = deck_prompts.DECK_SECTION_SYSTEM if deck else report_prompts.SECTION_SYSTEM
             claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
@@ -165,8 +167,19 @@ def make_synthesizer(
             else ("Executive Summary", "The report's key judgments and the basis for them")
         )
         sections: list[dict[str, t.Any]] = [
-            *([] if deck else [{"id": "summary", "title": summary_meta[0], "brief": summary_meta[1],
-                                "key_questions": [], "status": "pending"}]),
+            *(
+                []
+                if deck
+                else [
+                    {
+                        "id": "summary",
+                        "title": summary_meta[0],
+                        "brief": summary_meta[1],
+                        "key_questions": [],
+                        "status": "pending",
+                    }
+                ]
+            ),
             *outline["sections"],
         ]
 
@@ -228,7 +241,7 @@ def make_synthesizer(
         if embed_service.configured() and written:
             try:
                 heads = [text[:400] for text in list(written.values())[-6:]]
-                batch = embed_service.run_batch(heads, timeout=8.0)
+                batch = embed_service.run_batch(heads, timeout=8.0, usage_sink=state.embed_usage)
                 if batch and len(batch[0]) == len(heads):
                     avoid_vectors = batch[0]
             except Exception:  # pylint: disable=broad-except
@@ -240,7 +253,9 @@ def make_synthesizer(
         # corpus as it evicts, the ledger is the run's authoritative
         # map -- a signal-card section in particular needs the whole
         # evidence trail, not only what this section's query retrieves
-        active_facts = [str(f.get("text") or "").strip() for f in getattr(state, "facts", []) or [] if f.get("status") == "active"]
+        active_facts = [
+            str(f.get("text") or "").strip() for f in getattr(state, "facts", []) or [] if f.get("status") == "active"
+        ]
         ledger_block = ""
         if active_facts:
             shown: list[str] = []
@@ -253,9 +268,7 @@ def make_synthesizer(
             ledger_block = (
                 "<findings_ledger>\nThe research agent's distillation of what"
                 " the sources established (active facts only; their [n] labels"
-                " refer to the run's source registry):\n"
-                + "\n".join(shown)
-                + "\n</findings_ledger>"
+                " refer to the run's source registry):\n" + "\n".join(shown) + "\n</findings_ledger>"
             )
         user = _section_user(
             sec, outline, prev_tail, written, material, state.artifacts, state.attached_files or None, ledger_block
@@ -334,6 +347,12 @@ def make_synthesizer(
         answers = out.get("answers") if isinstance(out, dict) else None
         if not isinstance(answers, dict):
             return
+        # the gate's spend joins the run's account (the model-stats card's
+        # decision bucket)
+        gate_usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
+        if gate_usage.get("input_tokens"):
+            state.decision_usage["calls"] += 1
+            state.decision_usage["tokens"] += int(gate_usage.get("input_tokens") or 0)
         verdicts = []
         failed: list[str] = []
         for i, claim in enumerate(claims):

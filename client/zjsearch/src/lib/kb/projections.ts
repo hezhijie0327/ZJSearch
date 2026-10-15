@@ -187,6 +187,7 @@ export interface OverviewUsage {
   cache_write?: number | null;
   rerank?: { calls: number; tokens: number };
   decision?: { calls: number; tokens: number };
+  embedding?: { calls: number; tokens: number };
 }
 
 export function saveOverview(input: {

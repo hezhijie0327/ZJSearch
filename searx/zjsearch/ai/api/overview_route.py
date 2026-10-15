@@ -7,6 +7,7 @@ multimodal request to text-only, stream.  The ordering/capping business
 logic lives in :py:mod:`runs.overview`."""
 
 import logging
+import typing as t
 
 import flask
 
@@ -21,17 +22,34 @@ from searx.zjsearch.ai.runs.attachments import attach_images
 logger = logging.getLogger(__name__)
 
 
+def _merge_spend(events: t.Iterable[dict[str, t.Any]], spend: dict[str, int]) -> t.Iterator[dict[str, t.Any]]:
+    """The ordering pass's rerank/embedding spend folded into the settle's
+    usage -- the overview's only model spend beside the answer call
+    itself, so the client's footer renders the whole flow."""
+    for event in events:
+        if event.get("e") == "settle" and (spend.get("rerank_tokens") or spend.get("embed_tokens")):
+            usage = event.get("usage")
+            usage = usage if isinstance(usage, dict) else {}
+            if spend.get("rerank_tokens"):
+                usage["rerank"] = {"calls": spend.get("rerank_calls", 0), "tokens": spend["rerank_tokens"]}
+            if spend.get("embed_tokens"):
+                usage["embedding"] = {"calls": spend.get("embed_calls", 0), "tokens": spend["embed_tokens"]}
+            event = {**event, "usage": usage}
+        yield event
+
+
 def _answer() -> flask.Response:  # pylint: disable=too-many-locals
     """AI Overview: the fixed quick task on the shared engine."""
     payload, q, context = http.authorize(
         gate=overview.enabled() and llm_config.configured(llm_config.llm_cfg()), context=True
     )
     cfg = llm_config.llm_cfg()
-    context = overview.cap_lines(overview.ordered_context(q, context))
+    spend: dict[str, int] = {}
+    context = overview.cap_lines(overview.ordered_context(q, context, spend))
     lang = http.answer_lang(payload)
     image_parts = attach_images(payload, cfg)
 
-    events = engine.run(cfg, overview.build_answer_messages(q, context, lang, image_parts))
+    events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, image_parts)), spend)
     stream = _Ndjson(events)  # type: ignore[assignment]
     try:
         stream.prime()
@@ -41,7 +59,7 @@ def _answer() -> flask.Response:  # pylint: disable=too-many-locals
         # the endpoint rejected the multimodal request (no vision support,
         # or memory pressure) -- degrade to a text-only answer
         logger.warning("zjsearch_ai: image request rejected, retrying text-only")
-        events = engine.run(cfg, overview.build_answer_messages(q, context, lang, []))
+        events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, [])), spend)
         stream = _Ndjson(events)
         try:
             stream.prime()
