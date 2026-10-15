@@ -40,6 +40,7 @@ import {
 } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { type RunKeepalive, startRunKeepalive } from "@/lib/keepalive.ts";
+import { pg } from "@/lib/pg.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /**
@@ -59,6 +60,33 @@ import type { AiCapability } from "@/lib/types.ts";
  * prior Q&A travels as conversation history and the global [n] numbering
  * continues after the existing sources (sources_base).
  */
+
+/** THE 提交即 POST BUDGET: the knowledge store's boot (wasm compile,
+    election, DDL) must never hold the run's POST hostage.  The two
+    pre-POST store reads (the attachment inheritance and the recall
+    snapshot) race this budget -- a warm store answers in milliseconds and
+    never trips it; a cold one degrades to a recall-less POST exactly like
+    the error path already tolerates (the server registers no
+    past_research tool, the metadata fields stay empty) while the boot
+    continues in the background for the run's own recording.  The raced
+    work is NEVER cancelled: pgPromise memoizes, so the next submit finds
+    the store warm. */
+const RECALL_BUDGET_MS = 1200;
+
+/** Race `work` against a budget; the budget (or a work error) yields
+    `fallback`.  The loser keeps running. */
+async function withBudget<T>(work: Promise<T>, fallback: T, budgetMs = RECALL_BUDGET_MS): Promise<T> {
+  const guarded = work.catch(() => fallback);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), budgetMs);
+  });
+  try {
+    return await Promise.race([guarded, budget]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export type {
   AiAskQuestion,
@@ -264,6 +292,35 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     void settleRun(core.threadId, last);
   }, [core.phase, core.threadId, core.runs]);
 
+  /** The LIVE RECALL answerer: the run's past_research call asked (the
+      recall wire event carried the model's own query) -- search the
+      local store (pages with text heads + corpus identities, the model's
+      query drives the ranking) and fill the server's slot.  Best-effort
+      by contract: the slot expires server-side in 6s and the tool fails
+      open, so every failure here is silent; the queries race a 5s budget
+      so a cold boot can never hold the run's round past the ceiling. */
+  const serveRecall = async (rid: string, query: string) => {
+    if (!capability) {
+      return;
+    }
+    const [pages, sources] = await withBudget(
+      Promise.all([recallPages(query, 4).catch(() => []), recallCorpus(query, 6, { fullBody: false }).catch(() => [])]),
+      [[] as Awaited<ReturnType<typeof recallPages>>, [] as Awaited<ReturnType<typeof recallCorpus>>],
+      5000,
+    );
+    const entries = [
+      ...pages.map((page) => ({ url: page.url, title: page.title, text: page.text })),
+      ...sources
+        .filter((item) => item.url)
+        .map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
+    ];
+    await fetchJson("/zjsearch/ai/run/recall", {
+      body: JSON.stringify({ tk: capability.tk, id: rid, entries }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+  };
+
   /** The wire fold for ONE run, shared by the main stream and every
       attach: the host seq guard is the HOOK-level watermark (a replay
       and a live tail racing two connections dedup against one
@@ -304,6 +361,18 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           saveRunCtx(runId, threadId, messages).catch((error) => {
             console.warn("zjs: runctx save failed", error);
           });
+        }
+        return;
+      }
+      // LIVE RECALL: the run's past_research call asked -- serve it from
+      // the local store and fill the server's slot.  NOT a timeline op:
+      // nothing persists, nothing reduces (the call's own settlement row
+      // renders when the slot answers server-side); an answer for an
+      // expired slot is a server-side no-op, so this is fire-and-forget.
+      if (event.e === "recall") {
+        const rid = typeof event.id === "string" ? event.id : "";
+        if (rid) {
+          void serveRecall(rid, String(event.q ?? ""));
         }
         return;
       }
@@ -386,6 +455,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return { settled: false };
     }
     const apply = makeApply(threadId, runNo, refCounts);
+    // the store wakes WITH the stream -- off the submit path since the
+    // 提交即 POST budget: the run's own recording needs it within ~1.5s
+    // anyway (the evt flush), and an early boot means the model's first
+    // live-recall call finds a warm store instead of the 5s race
+    void pg().catch(() => {});
     settledRef.current = false;
     lastEventAtRef.current = Date.now();
     const outer = abortRef.current;
@@ -576,16 +650,31 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       wireAttachments.filter((item): item is AiSearchAttachment & { data: string } => Boolean(item.data)),
     );
     void (async () => {
-      // the browser recalls its knowledge BEFORE the POST, on TWO
-      // dimensions: the corpus (sources + past answers, WRITER-phase only)
-      // and the past_research index (archived full texts) -- each fusing
-      // the hybrid (BM25+vector) and the tag-graph dimensions -- plus the
-      // user-memory snapshot
-      const [corpus, readerHits, userMemories] = await Promise.all([
-        recallCorpus(q, 6).catch(() => []),
-        recallPages(q, 4).catch(() => []),
-        loadMemories().catch(() => []),
-      ]);
+      // the pre-POST recall is now METADATA-ONLY: the full-text
+      // past_research index is gone from the send -- the model's
+      // past_research calls go to the LIVE store (the recall wire event;
+      // live_recall below), so what still ships is the cheap identity
+      // layer: the corpus titles (history_sources/history_topics), the
+      // user's uploaded FILE heads (the no-research writer path's only
+      // reader -- url-less document rows), and the memory snapshot.
+      // 提交即 POST: the reads race the budget -- a cold store's boot
+      // degrades to a metadata-less POST (the server tolerates every
+      // field missing) instead of holding the submit hostage; the boot
+      // keeps running for the run's own recording.
+      const [corpus, docFiles, userMemories] = await withBudget(
+        Promise.all([
+          recallCorpus(q, 6, { fullBody: false }).catch(() => []),
+          recallPages(q, 4)
+            .catch(() => [])
+            .then((pages) => pages.filter((page) => !page.url)),
+          loadMemories().catch(() => []),
+        ]),
+        [
+          [] as Awaited<ReturnType<typeof recallCorpus>>,
+          [] as Awaited<ReturnType<typeof recallPages>>,
+          [] as Awaited<ReturnType<typeof loadMemories>>,
+        ],
+      );
       if (signal.aborted) {
         return;
       }
@@ -626,7 +715,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           ...new Set(
             [
               ...withUrl.map((item) => String(item.title || "").trim()),
-              ...readerHits.filter((hit) => !hit.url).map((hit) => hit.title.trim()),
+              ...docFiles.map((hit) => hit.title.trim()),
             ].filter(Boolean),
           ),
         ].slice(0, 8),
@@ -634,10 +723,12 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         // the thread ledger: the earlier runs' established facts + open
         // gaps (the sub-topic contract -- build on, never re-research)
         thread_ledger: threadLedger,
-        past_research: [
-          ...readerHits.map((hit) => ({ url: hit.url, title: hit.title, text: hit.text })),
-          ...withUrl.map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
-        ],
+        // LIVE RECALL: the model's past_research calls are answered from
+        // the live store (the recall wire event) -- only the user's own
+        // uploaded FILE heads still ride the send (url-less documents:
+        // the no-research writer path reads them without any tool)
+        past_research: docFiles.map((hit) => ({ url: "", title: hit.title, text: hit.text })),
+        live_recall: true,
       };
       // the consumption machinery (the seq guard, the stream watchdog,
       // the reattach ladder, the heartbeat, the background kicks) is the
@@ -756,8 +847,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       .slice(0, 12);
     const threadLedger = facts.length || gaps.length ? { facts, gaps } : undefined;
     let merged = attachments;
-    try {
-      const prior = await loadThreadAttachments(threadIdRef.current);
+    // 提交即 POST: the attachment inheritance races the same budget -- a
+    // cold store skips the inherited files for THIS run (the manual
+    // attachments still ride; nothing is lost from the store)
+    const prior = await withBudget(
+      loadThreadAttachments(threadIdRef.current).catch(() => null),
+      null,
+    );
+    if (prior) {
       const manual = new Set((attachments ?? []).map((item) => item.name ?? ""));
       const inherited: AiSearchAttachment[] = [];
       for (const rows of prior.values()) {
@@ -772,8 +869,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         }
       }
       merged = inherited.length ? [...inherited.slice(0, 6), ...(attachments ?? [])] : attachments;
-    } catch {
-      merged = attachments;
     }
     const meta = (attachments ?? []).map(({ kind, mime, name, bytes }) => ({ kind, mime, name, bytes }));
     appendRunEvents(`${threadIdRef.current}:${runNo}`, [

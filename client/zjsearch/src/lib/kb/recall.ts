@@ -373,9 +373,19 @@ async function fuseRecall(
     THE RED LINE: these rows reach the writer phase or the UI only --
     never the researcher's feed (ready-made material kills the search
     incentive).  Fuses the hybrid, tag-graph and hit-tag-expansion
-    dimensions, then the rerank tier re-scores the fused head. */
-export async function recallCorpus(query: string, limit = 6): Promise<KnowledgeItem[]> {
-  const ranked = await fuseRecall(query, ["source", "answer"], limit, { fullBody: true, citedBonus: true });
+    dimensions, then the rerank tier re-scores the fused head.
+    ``opts.fullBody: false`` keeps the rows identity-only (url/title/host)
+    -- the metadata lanes (history_sources/history_topics) never detoast
+    the bodies they don't read. */
+export async function recallCorpus(
+  query: string,
+  limit = 6,
+  opts: { fullBody?: boolean } = {},
+): Promise<KnowledgeItem[]> {
+  const ranked = await fuseRecall(query, ["source", "answer"], limit, {
+    fullBody: opts.fullBody ?? true,
+    citedBonus: true,
+  });
   return ranked.slice(0, limit).map((entry) => entry.item);
 }
 

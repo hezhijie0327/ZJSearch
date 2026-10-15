@@ -312,6 +312,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # whose transport rejects them retries ONCE as text-only (below).
     user_memories = parse_memories(payload.get("user_memories"))
     past_research_entries = parse_past_research(payload.get("past_research"))
+    # LIVE RECALL: the client serves past_research calls from its
+    # browser-local store at ask time (the recall wire event) -- the index
+    # then carries only the user's uploaded files (the no-research writer
+    # path's only reader) and the model's own query drives the search
+    live_recall = bool(payload.get("live_recall"))
     image_parts, attached_files = ([], []) if degraded else uploads.parse_uploads(payload.get("attachments"))
     # the conversion receipt: the client shipped BYTES, only the server's
     # converter can read PDFs/Office documents -- the extracted markdown
@@ -667,6 +672,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         max_rounds=max_rounds,
         user_memories=user_memories,
         past_research_entries=past_research_entries,
+        live_recall=live_recall,
         lang=lang,
         cfg=cfg,
         account=account,
@@ -960,7 +966,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             learnings_spec(),
         ]
         + ([judge_spec()] if decision.enabled() and decision.configured() and decision.sdk_missing() is None else [])
-        + ([past_research_spec()] if past_research_entries else [])
+        + ([past_research_spec()] if (past_research_entries or live_recall) else [])
         + ([web_browser_tool.web_browser_spec()] if browser_on else [])
         + [ask_user_spec()]
         + ([task_write_spec()] if register_tasks else [])

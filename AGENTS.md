@@ -345,7 +345,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (a research entry = its think segment + intent line + call rows), the
   answer buffer is its own field, and `settle` IS the terminal state
   (the old answerFrom/pending/thinkOpen reconstruction heuristics died
-  with the old protocol).  The clarify round-trip seeds a `clarify`
+  with the old protocol).  提交即 POST: the two pre-send store reads
+  (the attachment inheritance and the metadata recall) race
+  `RECALL_BUDGET_MS` (1.2s, `withBudget`) — a cold store's boot degrades
+  to a metadata-less POST (every field's absence is tolerated) instead
+  of holding the submit hostage, the boot keeps running for the run's
+  own recording, and the raced work is never cancelled (pgPromise
+  memoizes; the next submit finds the store warm).  The clarify
+  round-trip seeds a `clarify`
   step (the confirmed direction) at the answered run's timeline head;
   the task card is STATUS-ONLY (pending dot / active ping / done check
   / `missed` warning — a subtask that never gathered a source is NOT
@@ -527,9 +534,11 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   whitenoise 6.12), so without
   them the PGLite engine's ~16.6MB cold-boot payload (`pglite-*.wasm` +
   `pglite-*.data` + `pg.worker-*.js` + initdb) and the whole chunk graph
-  rode the wire UNCOMPRESSED — and the first AI search of a browser
-  session pays that on its critical path (the recall lane boots the store
-  before the run's POST can fire).  gzip-9 + brotli-9 at build time:
+  rode the wire UNCOMPRESSED — and a cold session's first store boot
+  (now OFF the submit path: the 提交即 POST budget races the pre-send
+  metadata reads and the run POSTs immediately, live recall serves the
+  model mid-run) paid it before the first recording flush.  gzip-9 +
+  brotli-9 at build time:
   ~16.6MB → ~5.4MB gz / ~4.3MB br (brotli wins on the FS data bundle:
   6.0MB → 1.2MB).  The Docker image's own precompression step
   (`client/zjsearch/Dockerfile`) covers what this pass doesn't (html/eot,
@@ -2223,7 +2232,22 @@ POST; the server stays stateless):
   loop — the recall tools live there; and the NO-RESEARCH write path
   passes recalled file heads to the writer as `<attached_file>`
   material (request attachments win when present), so a mis-gated
-  recall request still reaches the user's own files.
+  recall request still reaches the user's own files.  LIVE RECALL
+  (2026-10-15): with `live_recall: true` in the run body the
+  full-text index stays home — the model's `past_research` call
+  yields a `recall` wire event (`{id, q}`, the model's OWN query),
+  the client searches its live store and answers through
+  `POST /zjsearch/ai/run/recall` (the slot registry
+  `runs/search/recall.py`: random per-call id = the capability,
+  consumed on first answer or the 6s ceiling, FAIL-OPEN to the
+  no-matches line — a closed tab or a still-booting store costs the
+  run nothing but this one pull), so the model searches the LIVE
+  knowledge base with its own query terms instead of judging inside a
+  client-prefiltered snapshot (no 12-entry cap, no pre-send semantic
+  bias).  The client's pre-send index shrinks to the url-less FILE
+  heads (the no-research writer path's only reader); a client without
+  the flag keeps the old snapshot shape and a server without it
+  ignores the flag — both directions degrade to the index path.
 - THE ATTACHMENT→KB LOOP: the attachment table keeps the raw bytes
   (thread replay only); the KNOWLEDGE row is what makes an upload
   useful.  The server converts (markitdown), echoes the markdown back

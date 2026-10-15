@@ -24,6 +24,7 @@ EVENTS: frozenset[str] = frozenset(
         "decisions",
         "answer",
         "ask",
+        "recall",
         "steer",
         "gallery",
         "outline",

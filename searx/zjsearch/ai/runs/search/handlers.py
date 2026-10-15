@@ -32,6 +32,7 @@ from searx.zjsearch.ai.tools import research_subtask as subtask_tool
 from searx.zjsearch.ai.llm import decision
 from searx.zjsearch.ai.runs.search import audit
 from searx.zjsearch.ai.runs.search import entity_gate
+from searx.zjsearch.ai.runs.search import recall as recall_slot
 from searx.zjsearch.ai.runs.search.progress import (
     BUDGET_LAST_ROUND_NOTE,
     FEED_CONVERGE_NOTE,
@@ -729,7 +730,23 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 continue
             if tool_name == PAST_RESEARCH_TOOL:
                 query = parse_query(call)
-                matches = past_research_cap.rank(self.past_research_entries, query)
+                if self.live_recall:
+                    # LIVE RECALL: the model's own query goes to the
+                    # browser's knowledge base -- the recall wire event
+                    # asks, the client answers through
+                    # /zjsearch/ai/run/recall, the run parks on the slot
+                    # meanwhile.  FAIL-OPEN: a timeout (tab gone, store
+                    # never booted) feeds the no-matches line and the run
+                    # continues on live search alone, exactly like an
+                    # empty index answers.  The client RANKED the rows
+                    # (its hybrid recall ran on this query), so the
+                    # index rank is skipped; the parse sanitizes.
+                    rid = recall_slot.open()
+                    yield ("recall", {"id": rid, "q": query})
+                    rows = recall_slot.wait(rid)
+                    matches = past_research_cap.parse_entries(rows) if rows else []
+                else:
+                    matches = past_research_cap.rank(self.past_research_entries, query)
                 gathered = True
                 if matches:
                     events: list[dict[str, t.Any]] = []

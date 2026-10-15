@@ -331,6 +331,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         sources_base: int = 0,
         user_memories: list[dict[str, str]] | None = None,
         past_research_entries: list[dict[str, str]] | None = None,
+        live_recall: bool = False,
         search_language: str = "",
         account: t.Any = None,
         max_rounds: int = 0,
@@ -357,6 +358,12 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # history sources -- full-text matches return their content head,
         # source-only matches point back at web_browser for a live re-read
         self.past_research_entries = past_research_entries or []
+        # LIVE RECALL (the recall wire event): the client answers
+        # past_research calls from its browser-local store at ask time --
+        # the index above shrinks to the user's uploaded files (the
+        # no-research writer path's only reader) and the model's own
+        # query drives the search instead of a pre-shipped snapshot
+        self.live_recall = live_recall
         # the run's source registries (the [n] numbering, the two dedup
         # sets, the gallery whitelist) -- one object, see registry.py;
         # parallel SUBAGENTS share the PARENT's registry (injected), so
