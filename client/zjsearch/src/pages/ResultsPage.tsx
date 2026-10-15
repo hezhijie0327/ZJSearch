@@ -940,7 +940,11 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                     // fold.  No fog scrim -- it washed out whatever sat
                     // under it on short pages (a failed run's box read as
                     // dimmed); the pill's own card shadow separates it.
-                    <div className="zjs-print-hide sticky bottom-6 z-10">
+                    // The rail margin is the thread page's composer
+                    // confinement (lg:w-80 xl:w-96 rail + gap): without it
+                    // the composer spans the full column and slides UNDER
+                    // the live run's sources rail.
+                    <div className="zjs-print-hide sticky bottom-6 z-10 lg:me-[22rem] xl:me-[26rem]">
                       {jumpLatest ? (
                         <div className="relative z-10 mb-2 flex justify-center">
                           <button

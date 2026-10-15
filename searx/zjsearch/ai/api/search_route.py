@@ -658,6 +658,14 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             )
         if outline is None:
             logger.info("zjsearch_ai_search: outline gate failed -- falling back to the single write")
+    # the image-proxy preference, read ON the request thread: the run
+    # executes on the run host's driver thread and the writer coroutine
+    # bridges onto the shared network loop -- NEITHER carries a flask
+    # request context, so sxng_request raises "Working outside of request
+    # context" the moment the write turn builds (the searches survive the
+    # same detour only because gather clones a context per worker from
+    # the state's template)
+    images_proxied = bool(sxng_request.preferences.get_value("image_proxy"))
     state = Searches(
         sxng_request.preferences,
         list(sxng_request.user_plugins),
@@ -837,10 +845,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             sources_base,
             galleries_on=bool(state.reg.gallery_pool),
             # the images example must match what image_proxify actually
-            # emitted into this request's feed (same preference check):
+            # emitted into this request's feed (same preference check,
+            # captured on the request thread above):
             # a proxied-shape example on a raw-url deployment teaches the
             # model to copy a prefix the whitelist will reject
-            images_proxied=bool(sxng_request.preferences.get_value("image_proxy")),
+            images_proxied=images_proxied,
             past_sources=assign_past_sources(),
             relevance=await _relevance_order(research_q, state.feed, usage=state.rerank_usage),
             learnings=state.facts,
