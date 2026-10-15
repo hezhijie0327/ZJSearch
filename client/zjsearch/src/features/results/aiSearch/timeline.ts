@@ -53,6 +53,15 @@ export interface AiAskQuestion {
   options: string[];
 }
 
+/** engine_info's STRUCTURED listing (the settlement's inventory payload):
+    the expanded body renders it as category chips + bang rows; absent on
+    pre-inventory replays, whose preview text still rides `text`. */
+export interface AiEngineInventory {
+  total: number;
+  categories: Array<{ name: string; count: number }>;
+  disabled: Array<{ name: string; bang: string; cats: string[] }>;
+}
+
 export interface AiSearchCall {
   /** 1-based position of the call within its round */
   id: number;
@@ -106,6 +115,9 @@ export interface AiSearchCall {
       answer with its probability distribution) -- the row's expansion
       renders the same probability bars as the rail's decision card */
   answers?: Record<string, unknown>;
+  /** engine_info: the structured deployment listing -- the row's
+      expansion renders category chips + cap-expandable bang rows */
+  inventory?: AiEngineInventory;
   /** web_browser read: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
@@ -849,6 +861,19 @@ export function applyEvent(
               ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
               ...(event.answers !== undefined && event.answers !== null
                 ? { answers: event.answers as Record<string, unknown> }
+                : {}),
+              ...(event.inventory !== undefined && event.inventory !== null
+                ? {
+                    inventory: {
+                      total: Number((event.inventory as AiEngineInventory).total) || 0,
+                      categories: Array.isArray((event.inventory as AiEngineInventory).categories)
+                        ? (event.inventory as AiEngineInventory).categories
+                        : [],
+                      disabled: Array.isArray((event.inventory as AiEngineInventory).disabled)
+                        ? (event.inventory as AiEngineInventory).disabled
+                        : [],
+                    },
+                  }
                 : {}),
               ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
               ...(event.dupes !== undefined

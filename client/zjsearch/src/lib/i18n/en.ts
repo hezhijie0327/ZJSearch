@@ -195,6 +195,8 @@ export const EN = {
   ai_engine_info_row: "Search inventory",
   ai_engine_info_running: "Reading engine inventory…",
   ai_engine_info_done: "{n} engines available",
+  ai_engine_info_summary: "{n} enabled engines · {m} categories",
+  ai_engine_info_bang: "Held-back engines · a !bang reaches them ({n})",
   ai_task_card: "Research plan",
   ai_task_sources: "{n} sources in research",
   ai_task_source_one: "1 source in research",

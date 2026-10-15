@@ -391,8 +391,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             if tool_name == ENGINE_INFO_TOOL:
                 # the deployment inventory: instant read-only work (the
                 # engine map is already in memory) -- the feed teaches the
-                # model what this instance can search, the preview rides
-                # the row's expanded body, n drives the metric
+                # model what this instance can search, the STRUCTURED
+                # inventory rides the row's expanded body (category chips
+                # + bang rows), n drives the metric
                 feed_text, extras = engine_info_tool.evaluate_call()
                 feeds[wire_id - 1] = feed_text
                 yield (
@@ -401,7 +402,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         "call": wire_id,
                         "status": "ok",
                         "n": extras["n"],
-                        "preview": extras["preview"],
+                        "inventory": extras["inventory"],
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
                     },

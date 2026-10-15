@@ -60,9 +60,12 @@ def _disabled_engines() -> list[tuple[str, str, list[str]]]:
     return out
 
 
-def build_inventory() -> tuple[str, int, int]:
-    """The inventory text plus ``(enabled_engine_count, category_count)``
-    -- the counts ride the settlement row's metric."""
+def build_inventory() -> tuple[str, int, int, dict[str, t.Any]]:
+    """The inventory TEXT (the model's feed copy) plus the STRUCTURED
+    ``(enabled_engine_count, category_count, inventory)`` -- the inventory
+    dict rides the settlement's ``inventory`` key and renders as the
+    timeline row's structured body (category chips + bang rows); the text
+    stays feed-only."""
     from searx.engines import engines as engine_map, is_engine_active  # pylint: disable=import-outside-toplevel
 
     enabled = sum(1 for engine in engine_map.values() if is_engine_active(engine) and not engine.disabled)
@@ -97,13 +100,22 @@ def build_inventory() -> tuple[str, int, int]:
             " names) -- a category search already fans out across every"
             " enabled engine in that vertical."
         )
-    return "\n".join(lines), enabled, len(categories)
+    inventory = {
+        "total": enabled,
+        "categories": [{"name": name, "count": per_category[name]} for name in categories],
+        "disabled": [
+            {"name": name, "bang": shortcut, "cats": cats}
+            for name, shortcut, cats in disabled[:_MAX_DISABLED]
+        ],
+    }
+    return "\n".join(lines), enabled, len(categories), inventory
 
 
 def evaluate_call() -> tuple[str, dict[str, t.Any]]:
     """One tool call -> (model feed, settlement extras).  The extras carry
-    ``preview`` (the timeline row's expanded body -- the same text the
-    model reads) and ``n`` (the enabled-engine count for the row's
-    metric)."""
-    text, enabled, _category_count = build_inventory()
-    return text, {"preview": text, "n": enabled}
+    ``inventory`` (the STRUCTURED listing -- the timeline row's expanded
+    body renders it as category chips + bang rows) and ``n`` (the
+    enabled-engine count for the row's metric).  The feed text is the
+    model's copy; the debug pane shows its head as the receipt."""
+    text, enabled, _category_count, inventory = build_inventory()
+    return text, {"inventory": inventory, "n": enabled}
