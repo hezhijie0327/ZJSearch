@@ -1442,9 +1442,10 @@ contract promises facts + gaps, and `_sub_digest` builds exactly those
 from `child.facts`/`child.gaps`; a child without the tool returned a
 bare 「来源 N 条已入册」 and its report was discarded) and `judge` under
 the lead's decision gate; its SPEND joins the run's account
-(`_promote_child` folds the child's rerank/decision buckets, its
-judgments tagged `sub:`, and its gate usage — un-promoted, four
-subagents were dark matter on the model-stats card).  The digest lists
+(`_promote_child` merges the child's spend-ledger deltas — rerank /
+decision / embedding / gates — its judgments tagged `sub:` —
+un-promoted, four subagents were dark matter on the model-stats card).
+The digest lists
 only ACTIVE facts (superseded ones are history).  D: every model
 request passes ONE retry boundary (`llm/retry.py` at `Sdk.pump`): a
 failure BEFORE the attempt's first committed event is retried
@@ -1467,9 +1468,9 @@ mutates in place — sources, ledger and reads are all still in its
 context), the same loop re-runs it (fresh `SUB_ROUNDS` budget, the
 per-child `FOLLOWUP_MAX` 4 caps the channel, `ChildControl.reset()`
 unbinds a previous stop), and only the NEW material promotes —
-`_promote_child` folds against the handle's marks (feed/judgment/gate
-positions, spend snapshots, `corpus.absorb_new` by chunk identity
-because the corpus EVICTS and positional marks would drift).  The
+`_promote_child` folds against the handle's marks (feed/judgment
+positions, the spend-ledger snapshot, `corpus.absorb_new` by chunk
+identity because the corpus EVICTS and positional marks would drift).  The
 child's browser session closes at settle and the resume re-opens the
 SAME keyed session lazily (the persistent context keeps cookies).
 `<lead_followup>` is the child's taught shape for these turns.
@@ -2418,8 +2419,8 @@ redundant, both fused into ONE post-run extractor:
   generation completion (`gates.generate_title`, outline-title hint,
   fail-open).  Decision off = the candidate stands ungated; transport
   dead = the client's mechanical derive (first question clause, 24 chars)
-  stands.  The judgment's tokens join `decision_usage` (deliberately NOT
-  the decisions ledger -- card noise).
+  stands.  The judgment's spend lands in the run's model-spend ledger
+  (deliberately NOT the decisions ledger -- card noise).
 - **PRIORITY CHAIN** at the thread_head projection, behind the NEW
   `title_manual` lock (idempotent ALTER): manual rename > writer fence
   title > outline title > mechanical derive.  `renameThread()` sets both;

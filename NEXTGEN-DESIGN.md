@@ -584,6 +584,23 @@ features/results/aiSearch/
 
 ## 实施状态(2026-10-07 重构落地)
 
+**v3 基建(2026-10-15):用量账本统一 · 方舟向量家族 · 决策图片 · 命名清扫**:
+`llm/accounts.py` 的 `ModelAccount` 取代散落的桶折叠——rerank / decision /
+embedding / **gates**(经 `jsongate.json_completion` 唯一咽喉记账,
+`record` 形状无关、数值字段按模型类合并)全部折进 run 级账本;settle 合并与
+子代理 promote(`merge_delta` 增量)对桶泛化,新模型类 = 一个 kind 字符串 +
+服务侧一次 record,零分支上线。主循环 tokens 保留在 `_Tally`(research/write
+相位归属是它的家)。`zjsearch.embedding.sdk: ark` 新家族:方舟多模态向量化
+(`doubao-embedding-vision-*`,一条文本一次调用融合单向量;`params` 全透传,
+`dimensions` 实测 1024/2048 可选、必须与 pgvector 列宽一致;chat 侧
+OpenAI 兼容,走 openai 家族不建家)。决策模型图片输入:两家族一个词汇表
+(`judge` 工具 `images` 参数 → typesafe assets 表 / openai data-URL parts,
+`image-N` 纯文本引用 + 序号空洞)。命名清扫:`system_one` 全灭
+(`decide` / `judge_spec` / `parse_judge_call`),散文 SystemOne 只剩厂商
+端点事实。以及:503 触发 writer 崩溃修复(`write()` 的 request-context
+捕获回请求线程)、takeover composer 宽度对齐、AiRunFooter 补渲染
+rerank/decision/embedding 三桶。
+
 **vNext 批 1 已实施(2026-10-09,交付物实体 × 活计划 × markdown v2 × halt 键化)**:报告大纲 gate 吃附件头并自提 `entities`(交付物依赖但无节研究的实体),`uncovered_entities()` 用任务卡词匹配器零成本筛选,未覆盖实体进 `<deliverable_entities>` 块 + plan_review 的 `plan_complete` noul;单写模式同款启发式落在 `runs/search/entity_gate.py`(首个 task_write 触发一次,决策卡 purpose `entity_coverage`)。task_write 生命周期教学重写(活假设:交叉验证证伪即重发全量快照增删改,2-8 项,coverage 文案谎言清除)。markdown 词汇表成为镜像契约(DESIGN.md §5.1):`lib/markdownParts.ts` 共享链(callouts + ==mark== 移植自 ZJBlog,inspector 收编),`SECTION_SYSTEM` 挂 `markdown_surface()` + REPORT_SHAPE 形态学(矩阵→表格/数值序列→mermaid **`xychart`**/论断→callout;mermaid-12 注册名无 `-beta` 后缀,真机验证捕获)。settle halt 键化(`stopped_by_user`/`wrap_grace_ended`,客户端 `halts.ts` i18n 渲染,writer 侧英文 note),synth 死分支/摘要节标题 i18n,`citation_gate` 进 FEATURE_DEFAULTS。调试台报告 fixture 补 settle 事件(MermaidBlock 的 settled 门此前在调试台永不打开)+ 新语法审计块。lint/build 绿;真机验证(IAB):callout 绿栏、==mark==、xychart 柱线图、交付物实体决策行全部渲染。
 
 **v2.1 R2(控制与引导)已实施(2026-10-08)**:`steer` wire 事件(闭集)+ ControlBox 全量(steer FIFO 队列 cap3 / preempt 一次性槽 / wrap 标志)+ loop 边界单条 drain(steer 优先于 continuation,`<user_steering>` 注入)+ preempt 中断继续 + 写相可见 discarded + prompts 的引导教义块 + control 端点四动作 + 客户端双模式 composer(useAiSteer pending chips / ⚡ 抢占 / 引述行 / 收尾按钮)+ 调试台引导场景。355 测试全绿;live 验证(真实配置):引导在下一轮生效且时间线可见、抢占中断后 run 按引导继续、队列第 4 条 422、wrap settle `done/连接中断`。

@@ -224,7 +224,10 @@ the SDK's own convention:
        enabled: true
        sdk: openai  # openai (= the Responses API, the latest) |
                     # openai.chat_completions | openai.responses |
-                    # anthropic | gemini
+                    # anthropic | gemini | dashscope |
+                    # ark (volcengine -- VECTORS ONLY: the multimodal
+                    # vectorization wire on zjsearch.embedding.sdk; ark
+                    # chat is OpenAI-compatible and rides openai here)
                     # (the pre-rename dotted-less openai_chat_completions /
                     # openai_responses still work as aliases)
        base_url: "https://api.openai.com/v1"                    # openai dialects
