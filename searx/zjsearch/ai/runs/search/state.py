@@ -20,6 +20,7 @@ import time
 import typing as t
 
 
+from searx.zjsearch.ai.llm.accounts import ModelAccount
 from searx.zjsearch.ai.runs.search import audit
 from searx.zjsearch.ai.runs.search import corpus
 from searx.zjsearch.ai.runs.search.coverage import Coverage
@@ -118,9 +119,10 @@ class SubagentHandle:
         self.feed_mark = 0
         self.judgment_mark = 0
         self.gate_mark = 0
-        self.rerank_snap: dict[str, int] = {}
-        self.decision_snap: dict[str, int] = {}
-        self.embed_snap: dict[str, int] = {}
+        # the promotion mark for the child's spend ledger (the account's
+        # snapshot at the last fold -- a resumed subagent settles
+        # repeatedly and only the delta promotes)
+        self.spend_snap: dict[str, dict[str, int]] = {}
         self.corpus_seen: set[int] = set()
 
     @property
@@ -331,6 +333,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         user_memories: list[dict[str, str]] | None = None,
         past_research_entries: list[dict[str, str]] | None = None,
         search_language: str = "",
+        account: t.Any = None,
         max_rounds: int = 0,
         lang: str = "",
         cfg: dict[str, t.Any] | None = None,
@@ -383,20 +386,13 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # bookkeeping (plan writes, learnings, memory saves) is neither
         # progress nor stall for the detector
         self.round_gathered = False
-        # the rerank model's account (zjsearch.rerank): one entry per
-        # endpoint call + its prompt tokens -- the settle folds it into
-        # ``usage.rerank`` and the knowledge base's model stats sum it
-        self.rerank_usage = {"calls": 0, "tokens": 0}
-        # the decision model's account (zjsearch.decision): one entry per
-        # judge delegation + its input tokens -- the settle folds it
-        # into ``usage.decision`` beside the rerank bucket
-        self.decision_usage = {"calls": 0, "tokens": 0}
-        # the SERVER-side embedding account (the ranking cascade's
-        # diversity stage, the corpus packs, the audit recall, the memory
-        # dedup -- every ``embed_service.run_batch`` the run makes; the
-        # browser's knowledge embeddings ride their own proxy): the settle
-        # folds it into ``usage.embedding`` beside the rerank bucket
-        self.embed_usage = {"calls": 0, "tokens": 0}
+        # the run's model-spend ledger (llm.accounts.ModelAccount): the
+        # non-LLM endpoints -- rerank / decision / embedding -- record
+        # their own usage into it (the services parse their wire shapes;
+        # the callers only hand the account along), the settle folds
+        # ``account.buckets()`` generically and the subagent promote
+        # merges deltas against the handle's snapshot
+        self.account = account if account is not None else ModelAccount()
         # the judgment ledger: EVERY structured verdict the run hands down
         # (the model-initiated ``judge`` calls today; the framework gates
         # join in later milestones) -- purpose, the questions asked, the
@@ -458,7 +454,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the RUN CORPUS (runs.search.corpus): the report synthesizer's
         # retrievable memory -- every result/page/fact lands here while
         # the research runs; a plain answer run never reads it (zero cost)
-        self.corpus = corpus.Corpus(usage=self.rerank_usage, embed_usage=self.embed_usage)
+        self.corpus = corpus.Corpus(account=self.account)
         # the report mode's recorded TABLE ARTIFACTS (extract_table):
         # snapshot-replace per id on the wire, per-section context at
         # synthesis time
@@ -602,7 +598,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
             if fact["text"] and fact["text"].strip().lower() in exact_texts:
                 survivor = exact_texts[fact["text"].strip().lower()]
             else:
-                dup = audit.near_duplicate(fact["text"], [item["text"] for item in active])
+                dup = audit.near_duplicate(fact["text"], [item["text"] for item in active], account=self.account)
                 if dup is not None:
                     survivor = active[dup]
             if survivor is not None:

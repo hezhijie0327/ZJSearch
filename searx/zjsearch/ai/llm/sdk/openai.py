@@ -482,11 +482,14 @@ class OpenaiSdk:
 
     json_tiers = JSON_TIERS
 
-    def __init__(self, cfg: dict[str, t.Any], base: str, kind: str, family: str):
+    def __init__(self, cfg: dict[str, t.Any], base: str, kind: str, family: str, account: t.Any = None):
         self.cfg = cfg
         self.base = base
         self.kind = kind
         self.family = family
+        # the run's spend ledger -- only the DECISION surface records
+        # (chat/embedding usage rides their own captures)
+        self.account = account
 
     async def pump(
         self,
@@ -653,6 +656,10 @@ class OpenaiSdk:
         if usage_raw is not None:
             for key in ("input_tokens", "output_tokens"):
                 usage_meta[key] = int(_decisions_field(usage_raw, key) or 0)
+        if self.account is not None:
+            # the family records its own spend (the account is the run's
+            # ledger): one successful forward pass, input-only
+            self.account.record("decision", 1, usage_meta.get("input_tokens") or 0)
         return {
             "answers": answers,
             "usage": usage_meta,
@@ -660,11 +667,11 @@ class OpenaiSdk:
         }
 
 
-def factory(cfg: dict[str, t.Any], base: str, kind: str, family: str = "openai") -> OpenaiSdk:
+def factory(cfg: dict[str, t.Any], base: str, kind: str, family: str = "openai", account: t.Any = None) -> OpenaiSdk:
     """The OpenAI family factory: config + base_url + wire kind bound into
     one callable surface.  ``family`` separates the client cache
     namespaces (the chat transport and the embedding feature can share a
     base_url while carrying DIFFERENT keys).  The decision registry binds
     the same factory for its ``openai`` family (``decide`` ignores the
-    chat ``kind``)."""
-    return OpenaiSdk(cfg, base, kind, family)
+    chat ``kind``) and hands its spend ledger in."""
+    return OpenaiSdk(cfg, base, kind, family, account=account)

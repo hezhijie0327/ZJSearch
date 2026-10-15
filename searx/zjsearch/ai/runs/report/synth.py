@@ -241,7 +241,7 @@ def make_synthesizer(
         if embed_service.configured() and written:
             try:
                 heads = [text[:400] for text in list(written.values())[-6:]]
-                batch = embed_service.run_batch(heads, timeout=8.0, usage_sink=state.embed_usage)
+                batch = embed_service.run_batch(heads, timeout=8.0, account=state.account)
                 if batch and len(batch[0]) == len(heads):
                     avoid_vectors = batch[0]
             except Exception:  # pylint: disable=broad-except
@@ -340,19 +340,13 @@ def make_synthesizer(
         }
         started = time.monotonic()
         try:
-            out = decision.judge(state_str[:6000], questions, timeout=12.0)
+            out = decision.judge(state_str[:6000], questions, timeout=12.0, account=state.account)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch report: citation gate failed: %r", exc)
             return
         answers = out.get("answers") if isinstance(out, dict) else None
         if not isinstance(answers, dict):
             return
-        # the gate's spend joins the run's account (the model-stats card's
-        # decision bucket)
-        gate_usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
-        if gate_usage.get("input_tokens"):
-            state.decision_usage["calls"] += 1
-            state.decision_usage["tokens"] += int(gate_usage.get("input_tokens") or 0)
         verdicts = []
         failed: list[str] = []
         for i, claim in enumerate(claims):

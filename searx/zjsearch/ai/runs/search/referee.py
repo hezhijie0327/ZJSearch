@@ -75,14 +75,10 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             if entities:
                 judge_state["deliverable_entities"] = entities
             started = time.monotonic()
-            out = decision.judge(judge_state, questions, timeout=5.0)
+            out = decision.judge(judge_state, questions, timeout=5.0, account=self.account)
             answers = out.get("answers") if isinstance(out, dict) else None
             if not isinstance(answers, dict) or not answers:
                 return
-            usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
-            if usage.get("input_tokens"):
-                self.decision_usage["calls"] += len(answers)
-                self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
             if entities:
                 complete = answers.get("plan_complete")
                 if isinstance(complete, dict) and float(complete.get("noul") or 1.0) < 0.5:
@@ -148,16 +144,13 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
                 },
                 questions,
                 timeout=8.0,
+                account=self.account,
             )
         except Exception:  # pylint: disable=broad-except
             return
         answers = out.get("answers") if isinstance(out, dict) else None
         if not isinstance(answers, dict) or not answers:
             return
-        usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
-        if usage.get("input_tokens"):
-            self.decision_usage["calls"] += len(answers)
-            self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
         done_min = float(cov.get("done_min", 0.6))
         done_candidates, thin = [], []
         signature: list[tuple[str, str]] = []
@@ -244,23 +237,18 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
                             }
                         },
                         timeout=8.0,
+                        account=self.account,
                     )
                     answers = out.get("answers") if isinstance(out, dict) else None
                     reliable = answers.get("reliable_evidence") if isinstance(answers, dict) else None
-                    gate_usage = (
-                        out.get("usage") if isinstance(out, dict) and isinstance(out.get("usage"), dict) else {}
-                    )
-                    tokens = int(gate_usage.get("input_tokens") or 0)
                     if isinstance(reliable, dict):
-                        return n, float(reliable.get("noul") or 0.0), tokens
+                        return n, float(reliable.get("noul") or 0.0)
                 except Exception:  # pylint: disable=broad-except
                     pass
-                return n, 1.0, 0  # unjudgable counts as PASS (fail-open)
+                return n, 1.0  # unjudgable counts as PASS (fail-open)
 
-            tokens_spent = 0
-            for n, score, spent in pool.map(_one, candidates):
+            for n, score in pool.map(_one, candidates):
                 graded[n] = score
-                tokens_spent += spent
         failing = sorted(n for n, score in graded.items() if score < float(gate.get("pass_min", 0.45)))
         # NAMED-VERDICT-MAP shape: one noul per deep source (name s_<n>),
         # labels in record.questions -- the client's generic renderer needs
@@ -281,8 +269,6 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             "ms": int((time.monotonic() - started) * 1000),
         }
         self.judgments.append(entry)
-        self.decision_usage["calls"] += len(candidates)
-        self.decision_usage["tokens"] += tokens_spent
         if failing:
             note = (
                 "(evidence audit: sources "

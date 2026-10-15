@@ -217,14 +217,14 @@ async def embed_texts(
 
 
 def run_batch(
-    texts: list[str], timeout: float | None = None, usage_sink: dict[str, int] | None = None
+    texts: list[str], timeout: float | None = None, account: t.Any = None
 ) -> tuple[list[list[float]], str, dict[str, t.Any] | None] | None:
     """The browser-proxy workhorse: one batch on the shared loop, ``(vectors,
     model, usage)`` out; ``None`` when the upstream fails (the route
     answers 502).
     ``timeout`` bounds the wait for latency-sensitive callers (the
     overview's context ordering) -- ``None`` waits unbounded, the proxy's
-    own contract.  ``usage_sink`` (the run's ``embed_usage``) takes the
+    own contract.  ``account`` (the run's spend ledger) takes the
     batch's spend when given -- a FULLY-CACHED batch spent nothing
     upstream and adds nothing (the LRU hits are free).  The route owns
     gating and validation -- this is transport only.  The cached SDK clients are loop-bound, so the batch
@@ -262,7 +262,6 @@ def run_batch(
     if any(vector is None for vector in vectors):
         logger.warning("zjsearch_embedding: upstream returned a null vector -- batch dropped")
         return None
-    if usage_sink is not None and usage:
-        usage_sink["calls"] = usage_sink.get("calls", 0) + 1
-        usage_sink["tokens"] = usage_sink.get("tokens", 0) + int(usage.get("input") or 0)
+    if account is not None and usage:
+        account.record("embedding", 1, int(usage.get("input") or 0))
     return [vector for vector in vectors if vector is not None], model, usage

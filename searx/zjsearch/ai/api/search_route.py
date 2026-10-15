@@ -36,6 +36,7 @@ from searx.zjsearch.ai.agent.fences import parse_fence_json
 from searx.zjsearch.ai.llm import config as llm_config
 from searx.zjsearch.ai.api import http
 from searx.zjsearch.ai.llm import decision, jsongate
+from searx.zjsearch.ai.llm.accounts import ModelAccount
 from searx.zjsearch.ai.llm import sdk as sdk_registry
 from searx.zjsearch.ai.runs.search.context import _relevance_order
 from searx.zjsearch.ai.runs.search.executor import Searches
@@ -401,6 +402,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # research only for greetings, chat and writing tasks -- a CONTINUE
     # always researches (the transcript IS the research, no gate spend)
     research_needed = resume is not None or bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
+    # the run's model-spend ledger (llm.accounts.ModelAccount): born HERE
+    # -- before the first model touch (the clarify pre-gate) -- and handed
+    # to everything after it (the Searches state adopts it, the services
+    # record into it, the settle reads its buckets)
+    account = ModelAccount()
     # the clarify PRE-GATE (fail-open): two decision nouls decide whether
     # the query even reaches the (expensive) clarify completion -- AMBIGUOUS
     # (the answer's key depends on unstated intent) or HIGH-STAKES (a
@@ -411,7 +417,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the second opinion for everything ambiguous enough to reach it; the
     # pre-screen's verdict + spend join the 决策结果 card either way.
     clarify_worth_asking = True
-    pre_usage: dict[str, int] = {"calls": 0, "tokens": 0}
     pre_entry: dict[str, t.Any] | None = None
     if research_needed and clarify_state == "ask" and not history:
         pre = decision_features("clarify_gate")
@@ -438,6 +443,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                         },
                     },
                     timeout=5.0,
+                    account=account,
                 )
                 answers = pre_out.get("answers") if isinstance(pre_out, dict) else None
                 ambiguous = answers.get("ambiguous") if isinstance(answers, dict) else None
@@ -447,11 +453,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     stakes_score = float(stakes.get("noul") or 0.0) if isinstance(stakes, dict) else 0.0
                     worth = ambiguity >= float(pre.get("ambiguous_min", 0.65))
                     clarify_worth_asking = worth or stakes_score >= float(pre.get("high_stakes_min", 0.60))
-                raw_usage = pre_out.get("usage") if isinstance(pre_out, dict) else None
-                pre_gate_usage = raw_usage if isinstance(raw_usage, dict) else {}
-                if pre_gate_usage.get("input_tokens"):
-                    pre_usage["calls"] += 1
-                    pre_usage["tokens"] += int(pre_gate_usage.get("input_tokens") or 0)
                 if isinstance(answers, dict) and answers:
                     pre_entry = {
                         "purpose": "clarify_gate",
@@ -489,7 +490,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 q,
                 lang,
                 gate_usage,
-                decision_usage=pre_usage,
+                account=account,
                 judgments=[pre_entry] if pre_entry else None,
                 preamble=gate_preamble or None,
             )
@@ -559,7 +560,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     register_tasks = True
     research_q = (standalone_question(cfg, q, history, lang, gate_usage) if history else "") or q
     depth_probe_entry: dict[str, t.Any] | None = None
-    probe_usage = {"calls": 0, "tokens": 0}
     # the DEPTH PROBE: the decision model grades how deep/broad the
     # question needs to be (one score call) and the mode's round LADDER
     # scales accordingly -- the model-controlled depth made literal (the
@@ -589,16 +589,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                         }
                     },
                     timeout=8.0,
+                    account=account,
                 )
                 answers = out.get("answers") if isinstance(out, dict) else None
                 depth = answers.get("depth") if isinstance(answers, dict) else None
-                # the probe's spend joins the run's account (a LOCAL dict --
-                # `state` does not exist yet, the fold rides beside the
-                # pre-gate's once Searches() exists)
-                probe_call_usage = out.get("usage") if isinstance(out, dict) else {}
-                if isinstance(probe_call_usage, dict) and probe_call_usage.get("input_tokens"):
-                    probe_usage["calls"] += 1
-                    probe_usage["tokens"] += int(probe_call_usage.get("input_tokens") or 0)
                 if isinstance(depth, dict) and depth.get("score") is not None:
                     rung = max(0, min(int(round(float(depth["score"]))), len(ladder) - 1))
                     max_rounds = ladder[rung]
@@ -684,6 +678,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         past_research_entries=past_research_entries,
         lang=lang,
         cfg=cfg,
+        account=account,
     )
     state.question_held = research_q
     if resume is not None:
@@ -782,14 +777,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         state.judgments.append(depth_probe_entry)
     if outline_entry:
         state.judgments.append(outline_entry)
-    # the clarify pre-screen's spend + verdict join the run's account (the
-    # awaiting path passes the same two straight to its own _Ndjson)
-    if pre_usage.get("calls"):
-        state.decision_usage["calls"] += pre_usage["calls"]
-        state.decision_usage["tokens"] += pre_usage["tokens"]
-    if probe_usage.get("calls"):
-        state.decision_usage["calls"] += probe_usage["calls"]
-        state.decision_usage["tokens"] += probe_usage["tokens"]
     if pre_entry:
         state.judgments.append(pre_entry)
 
@@ -862,7 +849,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             # model to copy a prefix the whitelist will reject
             images_proxied=images_proxied,
             past_sources=assign_past_sources(),
-            relevance=await _relevance_order(research_q, state.feed, usage=state.rerank_usage),
+            relevance=await _relevance_order(research_q, state.feed, account=state.account),
             learnings=state.facts,
             gaps=state.gaps,
         )
@@ -1044,9 +1031,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         research_q,
         lang,
         gate_usage,
-        rerank_usage=state.rerank_usage,
-        decision_usage=state.decision_usage,
-        embed_usage=state.embed_usage,
+        account=state.account,
         judgments=state.judgments,
         known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
         outline_title=str(outline["title"]) if outline else None,
@@ -1113,9 +1098,7 @@ class _SettleTail:
         question: str,
         lang: str,
         gate_usage: list[dict[str, t.Any]],
-        rerank_usage: dict[str, int] | None = None,
-        decision_usage: dict[str, int] | None = None,
-        embed_usage: dict[str, int] | None = None,
+        account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
         outline_title: str | None = None,
@@ -1127,14 +1110,9 @@ class _SettleTail:
         self.outline_title = outline_title or None
         self.lang = lang
         self.gate_usage = gate_usage
-        # the executor's rerank-model account (a LIVE dict -- the settle
-        # reads it after the run's searches have mutated it)
-        self.rerank_usage = rerank_usage
-        # the decision model's account, same live-dict pattern
-        self.decision_usage = decision_usage
-        # the server-side embedding account (diversity / packs / audit
-        # recall / memory dedup), same live-dict pattern
-        self.embed_usage = embed_usage
+        # the run's model-spend ledger (a LIVE object -- the settle reads
+        # its buckets after the run's searches have mutated them)
+        self.account = account
         # the judgment ledger (the executor's structured verdicts) -- the
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
@@ -1144,16 +1122,17 @@ class _SettleTail:
         self.known_memories_fn = known_memories_fn
 
     def merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
-        """The settle with the GATES' token account folded into its usage:
-        ``usage.gates = {input, output, calls}`` -- the client's meta row
-        renders the whole flow, gates included.  The RERANK bucket forces
-        the fold too: a transport that reports no usage (or a writer that
-        died) must not silently drop the ranking cascade's spend."""
+        """The settle with the model-spend buckets folded into its usage:
+        ``usage.gates = {input, output, calls}`` (the small LLM
+        completions) plus one ``{calls, tokens}`` bucket per non-LLM
+        model class from the run's ledger -- GENERIC over the account's
+        kinds, so a new model class reaches the wire by recording, with
+        zero branches here.  The buckets force the fold too: a transport
+        that reports no usage (or a writer that died) must not silently
+        drop the cascade's or the judgments' spend."""
         usage = event.get("usage")
-        rerank_spend = bool(self.rerank_usage and self.rerank_usage.get("calls"))
-        decision_spend = bool(self.decision_usage and self.decision_usage.get("calls"))
-        embed_spend = bool(self.embed_usage and self.embed_usage.get("calls"))
-        if self.gate_usage or isinstance(usage, dict) or rerank_spend or decision_spend or embed_spend:
+        buckets = self.account.buckets() if self.account is not None else {}
+        if self.gate_usage or isinstance(usage, dict) or buckets:
             usage = (
                 dict(usage)
                 if isinstance(usage, dict)
@@ -1166,31 +1145,10 @@ class _SettleTail:
                 }
             )
             usage["gates"] = self.gates_sum()
-            rerank = self.rerank_usage
-            if rerank and rerank.get("calls"):
-                # the ranking cascade's endpoint spend, its own bucket (the
-                # model stats page sums it separately from the LLM tokens)
-                usage["rerank"] = {
-                    "calls": int(rerank["calls"]),
-                    "tokens": int(rerank.get("tokens") or 0),
-                }
-            decision_spend = self.decision_usage
-            if decision_spend and decision_spend.get("calls"):
-                # the judge delegations' spend, its own bucket beside
-                # the rerank one (input-only -- the decision model does
-                # not generate)
-                usage["decision"] = {
-                    "calls": int(decision_spend["calls"]),
-                    "tokens": int(decision_spend.get("tokens") or 0),
-                }
-            embed_spend = self.embed_usage
-            if embed_spend and embed_spend.get("calls"):
-                # the server-side embedding spend (diversity pruning, the
-                # corpus packs, the audit recall, the memory dedup), its
-                # own bucket (input-only -- embeddings generate nothing)
-                usage["embedding"] = {
-                    "calls": int(embed_spend["calls"]),
-                    "tokens": int(embed_spend.get("tokens") or 0),
+            for kind, spend in buckets.items():
+                usage[kind] = {
+                    "calls": int(spend["calls"]),
+                    "tokens": int(spend.get("tokens") or 0),
                 }
             event = {**event, "usage": usage}
         if self.judgments:
@@ -1223,13 +1181,10 @@ class _SettleTail:
                         }
                     },
                     timeout=5.0,
+                    account=self.account,
                 )
                 answers = out.get("answers") if isinstance(out, dict) else None
                 verdict = answers.get("good_title") if isinstance(answers, dict) else None
-                usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
-                if self.decision_usage is not None and usage.get("input_tokens"):
-                    self.decision_usage["calls"] += 1
-                    self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
                 if isinstance(verdict, dict) and float(verdict.get("noul") or 0.0) >= 0.6:
                     return candidate
             except Exception as exc:  # pylint: disable=broad-except
@@ -1283,7 +1238,7 @@ class _SettleTail:
         try:
             known = self.known_memories_fn() if self.known_memories_fn else None
             facts, tags = extract_insights(
-                self.cfg, self.question, answer, self.gate_usage, known=known, embed_sink=self.embed_usage
+                self.cfg, self.question, answer, self.gate_usage, known=known, account=self.account
             )
             for fact in facts:
                 yield {"e": "memory", "content": fact}
@@ -1320,9 +1275,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         question: str,
         lang: str,
         gate_usage: list[dict[str, t.Any]],
-        rerank_usage: dict[str, int] | None = None,
-        decision_usage: dict[str, int] | None = None,
-        embed_usage: dict[str, int] | None = None,
+        account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
         preamble: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
@@ -1333,9 +1286,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             question,
             lang,
             gate_usage,
-            rerank_usage=rerank_usage,
-            decision_usage=decision_usage,
-            embed_usage=embed_usage,
+            account=account,
             judgments=judgments,
             known_memories_fn=known_memories_fn,
         )

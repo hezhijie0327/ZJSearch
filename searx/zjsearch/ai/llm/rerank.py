@@ -104,23 +104,28 @@ def configured(cfg_block: dict[str, t.Any] | None = None) -> bool:
     return bool(block.get("model") and block.get("base_url"))
 
 
-def rerank(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
+def rerank(query: str, docs: list[str], account: t.Any = None) -> tuple[list[int] | None, int]:
     """The provider dispatch: one rerank call on the configured wire.
     RETURNS ``(order, tokens)`` -- ``order`` maps rank position -> doc
     index (a full permutation) and ``tokens`` is the billed prompt-token
-    count; ``(None, 0)`` on any skip, fail-open.  The sync SDK call runs
-    on the bounded dispatch pool under :py:data:`CALL_TIMEOUT` -- a hung
-    upstream frees the caller (previous order stands) instead of parking
-    the settlement drain."""
+    count; ``(None, 0)`` on any skip, fail-open.  ``account`` (the run's
+    spend ledger) records the call here -- the ONE entry every rerank
+    caller shares, so no call site folds a bucket.  The sync SDK call
+    runs on the bounded dispatch pool under :py:data:`CALL_TIMEOUT` -- a
+    hung upstream frees the caller (previous order stands) instead of
+    parking the settlement drain."""
     block = cfg()
     if not enabled(block) or not block.get("model"):
         return None, 0
     future = _CALLERS.submit(_dispatch, block, query, docs)
     try:
-        return future.result(CALL_TIMEOUT)
+        order, tokens = future.result(CALL_TIMEOUT)
     except concurrent.futures.TimeoutError:
         logger.warning("zjsearch rerank: no answer within %.0fs, keeping the previous order", CALL_TIMEOUT)
         return None, 0
+    if account is not None and order is not None:
+        account.record("rerank", 1, tokens)
+    return order, tokens
 
 
 def _dispatch(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tuple[list[int] | None, int]:

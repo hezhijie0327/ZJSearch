@@ -16,24 +16,25 @@ from searx.zjsearch.ai.api import http
 from searx.zjsearch.ai.core.ndjson import PrimedStream as _Ndjson
 from searx.zjsearch.ai.core.ndjson import UpstreamDead as _UpstreamDead
 from searx.zjsearch.ai.llm import config as llm_config
+from searx.zjsearch.ai.llm.accounts import ModelAccount
 from searx.zjsearch.ai.runs import overview
 from searx.zjsearch.ai.runs.attachments import attach_images
 
 logger = logging.getLogger(__name__)
 
 
-def _merge_spend(events: t.Iterable[dict[str, t.Any]], spend: dict[str, int]) -> t.Iterator[dict[str, t.Any]]:
-    """The ordering pass's rerank/embedding spend folded into the settle's
-    usage -- the overview's only model spend beside the answer call
-    itself, so the client's footer renders the whole flow."""
+def _merge_spend(events: t.Iterable[dict[str, t.Any]], account: t.Any) -> t.Iterator[dict[str, t.Any]]:
+    """The ordering pass's model spend folded into the settle's usage --
+    GENERIC over the account's buckets, the same merge the search
+    settle's tail does -- so the client's footer renders the whole
+    flow."""
     for event in events:
-        if event.get("e") == "settle" and (spend.get("rerank_tokens") or spend.get("embed_tokens")):
+        buckets = account.buckets()
+        if event.get("e") == "settle" and buckets:
             usage = event.get("usage")
             usage = usage if isinstance(usage, dict) else {}
-            if spend.get("rerank_tokens"):
-                usage["rerank"] = {"calls": spend.get("rerank_calls", 0), "tokens": spend["rerank_tokens"]}
-            if spend.get("embed_tokens"):
-                usage["embedding"] = {"calls": spend.get("embed_calls", 0), "tokens": spend["embed_tokens"]}
+            for kind, bucket in buckets.items():
+                usage[kind] = {"calls": int(bucket["calls"]), "tokens": int(bucket.get("tokens") or 0)}
             event = {**event, "usage": usage}
         yield event
 
@@ -44,12 +45,12 @@ def _answer() -> flask.Response:  # pylint: disable=too-many-locals
         gate=overview.enabled() and llm_config.configured(llm_config.llm_cfg()), context=True
     )
     cfg = llm_config.llm_cfg()
-    spend: dict[str, int] = {}
-    context = overview.cap_lines(overview.ordered_context(q, context, spend))
+    account = ModelAccount()
+    context = overview.cap_lines(overview.ordered_context(q, context, account))
     lang = http.answer_lang(payload)
     image_parts = attach_images(payload, cfg)
 
-    events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, image_parts)), spend)
+    events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, image_parts)), account)
     stream = _Ndjson(events)  # type: ignore[assignment]
     try:
         stream.prime()
@@ -59,7 +60,7 @@ def _answer() -> flask.Response:  # pylint: disable=too-many-locals
         # the endpoint rejected the multimodal request (no vision support,
         # or memory pressure) -- degrade to a text-only answer
         logger.warning("zjsearch_ai: image request rejected, retrying text-only")
-        events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, [])), spend)
+        events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, [])), account)
         stream = _Ndjson(events)
         try:
             stream.prime()

@@ -16,6 +16,7 @@ and a verdict that arrives after the answer can only badge, never fix.)
 """
 
 import logging
+import typing as t
 
 from searx.zjsearch.ai.llm import decision as decision_service
 from searx.zjsearch.ai.llm import embed as embed_service
@@ -35,7 +36,7 @@ facts this alike read as one fact rephrased -- the second is dropped and
 its refs merge into the survivor."""
 
 
-def near_duplicate(text: str, established: list[str]) -> int | None:
+def near_duplicate(text: str, established: list[str], account: t.Any = None) -> int | None:
     """The established fact ``text`` duplicates (its 0-based index), or
     ``None``: embedding nearest-neighbour above :py:data:`DEDUP_SIMILARITY`
     -- the small-model pathology where one fact is rephrased three ways
@@ -44,7 +45,7 @@ def near_duplicate(text: str, established: list[str]) -> int | None:
     if not (text and established and embed_service.enabled() and embed_service.configured()):
         return None
     try:
-        batch = embed_service.run_batch([text] + list(established), timeout=8.0)
+        batch = embed_service.run_batch([text] + list(established), timeout=8.0, account=account)
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug("zjsearch_audit: ledger dedup embed failed: %s", exc)
         return None
@@ -58,11 +59,11 @@ def near_duplicate(text: str, established: list[str]) -> int | None:
     return best
 
 
-def _nearest_fact(fact_text: str, established: list[str], embed_sink: dict[str, int] | None = None) -> int | None:
+def _nearest_fact(fact_text: str, established: list[str], account: t.Any = None) -> int | None:
     """The established fact most similar to the new one (its index), or
     ``None`` below the similarity floor -- distant facts cannot
     conflict, so no judgment is spent on them."""
-    batch = embed_service.run_batch([fact_text] + list(established), timeout=8.0, usage_sink=embed_sink)
+    batch = embed_service.run_batch([fact_text] + list(established), timeout=8.0, account=account)
     if not batch or len(batch[0]) != len(established) + 1:
         return None
     vectors = batch[0]
@@ -73,17 +74,12 @@ def _nearest_fact(fact_text: str, established: list[str], embed_sink: dict[str, 
     return best
 
 
-def finding_conflict(
-    fact_text: str,
-    established: list[str],
-    usage_sink: dict[str, int] | None = None,
-    embed_sink: dict[str, int] | None = None,
-) -> int | None:
+def finding_conflict(fact_text: str, established: list[str], account: t.Any = None) -> int | None:
     """The established fact this NEW fact most likely contradicts (its
     0-based index), or ``None``: embedding recall finds the nearest
     neighbour, then ONE consistency noul decides.  The caller records
-    the ⚡ pair on the findings card; ``usage_sink`` (the run's
-    ``decision_usage``) takes the judgment's spend when given."""
+    the ⚡ pair on the findings card; ``account`` (the run's spend
+    ledger) takes both model calls' spend when given."""
     gates = (
         bool(fact_text)
         and bool(established)
@@ -95,7 +91,7 @@ def finding_conflict(
     if not gates:
         return None
     try:
-        best = _nearest_fact(fact_text, established, embed_sink=embed_sink)
+        best = _nearest_fact(fact_text, established, account=account)
         if best is None:
             return None
         out = decision_service.judge(
@@ -109,11 +105,6 @@ def finding_conflict(
             timeout=AUDIT_TIMEOUT,
         )
         answers = out.get("answers") if isinstance(out, dict) else None
-        if usage_sink is not None:
-            usage = out.get("usage") if isinstance(out, dict) and isinstance(out.get("usage"), dict) else {}
-            if usage.get("input_tokens"):
-                usage_sink["calls"] += 1
-                usage_sink["tokens"] += int(usage.get("input_tokens") or 0)
         consistent = answers.get("consistent") if isinstance(answers, dict) else None
         # conflict = the consistency noul firmly NEGATIVE; anything else
         # (torn, failed, malformed) leaves the ledger unflagged

@@ -83,7 +83,7 @@ def rerank_doc(result: t.Any) -> str:
     return f"{title} - {content[:RERANK_SNIPPET_CHARS]}"
 
 
-def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
+def rerank_order(query: str, docs: list[str], account: t.Any = None) -> tuple[list[int] | None, int]:
     """The rerank-model leg (POLICY): the deployment's rerank provider
     (``llm.rerank`` -- ``zjsearch.rerank``, ``sdk`` picks the wire)
     re-scores ``docs`` against ``query``.  RETURNS ``(order, tokens)`` --
@@ -95,7 +95,7 @@ def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
     stands (fail-open)."""
     if len(docs) < 2:
         return None, 0
-    return rerank_service.rerank(query, docs)
+    return rerank_service.rerank(query, docs, account=account)
 
 
 # ---------------------------------------------------------------- funnel
@@ -108,7 +108,7 @@ def rerank_order(query: str, docs: list[str]) -> tuple[list[int] | None, int]:
 
 
 def diverse_order(
-    docs: list[str], threshold: float, embed_sink: dict[str, int] | None = None
+    docs: list[str], threshold: float, account: t.Any = None
 ) -> tuple[list[int] | None, list[list[float]]]:
     """The embedding diversity stage: near-duplicate results (syndicated
     copies, reworded aggregators) cluster away -- a document survives only
@@ -121,7 +121,7 @@ def diverse_order(
     if len(docs) < 2:
         return None, []
     try:
-        batch = embed_service.run_batch(docs, timeout=8.0, usage_sink=embed_sink)
+        batch = embed_service.run_batch(docs, timeout=8.0, account=account)
         if not batch:
             return None, []
         vectors = batch[0]

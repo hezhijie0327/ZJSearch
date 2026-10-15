@@ -321,20 +321,23 @@ def resolve_images(images: t.Any) -> list[dict[str, str]]:
     return resolved
 
 
-def _surface(block: dict[str, t.Any]) -> t.Any:
+def _surface(block: dict[str, t.Any], account: t.Any = None) -> t.Any:
     """The configured family's bound decision surface -- the embedding
     service's ``resolve`` pattern, scoped to the decision families (the
     chat registry cannot know the typesafe family, so the two factories
     dispatch here; both surfaces speak ``decide(state, questions,
-    timeout)``).  The imports stay lazy (the SDK packages are optional
-    installs -- the package gate has already checked this one)."""
+    timeout)``).  ``account`` binds the run's spend ledger at FACTORY
+    time: the surface records its own usage after every successful
+    answer, so no judge call site ever folds a bucket.  The imports stay
+    lazy (the SDK packages are optional installs -- the package gate has
+    already checked this one)."""
     bound = {**block, "api_key": decision_key(block)}
     base = str(block.get("base_url") or "")
     if sdk(block) == "typesafe":
         from .sdk.typesafe import factory  # pylint: disable=import-outside-toplevel
     else:
         from .sdk.openai import factory  # pylint: disable=import-outside-toplevel
-    return factory(bound, base, sdk(block), "decision")
+    return factory(bound, base, sdk(block), "decision", account=account)
 
 
 def judge(  # pylint: disable=too-many-return-statements
@@ -342,6 +345,7 @@ def judge(  # pylint: disable=too-many-return-statements
     questions: dict[str, dict[str, t.Any]],
     timeout: float | None = None,
     images: t.Any = None,
+    account: t.Any = None,
 ) -> dict[str, t.Any] | None:
     """One decision-model judgment: ``state`` (text or a JSON object) +
     ``questions`` (the wire question dict: type/criteria/instructions
@@ -359,7 +363,9 @@ def judge(  # pylint: disable=too-many-return-statements
     caps, transcode) into an asset the state/instructions reference as
     plain ``image-N`` text -- the typesafe family ships the assets map
     (references matched verbatim), the openai family attaches data-URL
-    parts in the same order."""
+    parts in the same order.  ``account`` (the run's spend ledger) binds
+    the family surface, which records its own usage -- the callers never
+    touch a bucket."""
     if not enabled() or not configured():
         return None
     block = cfg()
@@ -376,7 +382,7 @@ def judge(  # pylint: disable=too-many-return-statements
     assets = resolve_images(images) if images else []
 
     try:
-        return _surface(block).decide(
+        return _surface(block, account).decide(
             state=str(state)[:MAX_STATE_CHARS] if isinstance(state, str) else state,
             questions=trimmed,
             timeout=timeout,

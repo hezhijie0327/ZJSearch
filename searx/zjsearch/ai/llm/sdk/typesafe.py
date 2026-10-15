@@ -49,11 +49,14 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
     """The bound typesafe family surface: one instance per (config, base)
     binding."""
 
-    def __init__(self, cfg: dict[str, t.Any], base: str, kind: str, family: str):
+    def __init__(self, cfg: dict[str, t.Any], base: str, kind: str, family: str, account: t.Any = None):
         self.cfg = cfg
         self.base = base
         self.kind = kind
         self.family = family
+        # the run's spend ledger (llm.accounts.ModelAccount) -- the
+        # surface records its own usage after every successful answer
+        self.account = account
 
     def decide(
         self,
@@ -119,15 +122,21 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
         answers = _field(response, "answers")
         if not isinstance(answers, dict) or not answers:
             return None
-        usage = _field(response, "usage")
+        usage = _plain(_field(response, "usage"))
+        if self.account is not None:
+            # the family records its own spend (the account is the run's
+            # ledger): one successful forward pass, input-only
+            self.account.record("decision", 1, int((usage or {}).get("input_tokens") or 0))
         return {
             "answers": {name: _plain(answer) for name, answer in answers.items()},
-            "usage": _plain(usage) if usage else {},
+            "usage": usage or {},
             "latency_ms": _field(response, "latency_ms"),
         }
 
 
-def factory(cfg: dict[str, t.Any], base: str, kind: str = KIND, family: str = "typesafe") -> TypesafeSdk:
-    """The typesafe family factory: config + base bound into one callable
-    surface (mirrors the chat families' factories)."""
-    return TypesafeSdk(cfg, base, kind, family)
+def factory(
+    cfg: dict[str, t.Any], base: str, kind: str = KIND, family: str = "typesafe", account: t.Any = None
+) -> TypesafeSdk:
+    """The typesafe family factory: config + base (+ the run's spend
+    ledger) bound into one callable surface."""
+    return TypesafeSdk(cfg, base, kind, family, account=account)

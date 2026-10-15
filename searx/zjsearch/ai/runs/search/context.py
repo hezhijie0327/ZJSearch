@@ -17,6 +17,8 @@ model round trip, and any ranking failure leaves the chronological
 eviction standing silently.
 """
 
+import typing as t
+
 from searx.zjsearch.ai.llm.embed import cosine as _cosine
 from searx.zjsearch.ai.llm.embed import embed_texts
 from searx.zjsearch.ai.llm import rerank as rerank_service
@@ -72,14 +74,14 @@ def _fit_context(feed: list[str], cap: int, relevance: list[int] | None = None) 
     return blocks or ["The research found no usable sources."]
 
 
-async def _relevance_order(question: str, feed: list[str], usage: dict[str, int] | None = None) -> list[int] | None:
+async def _relevance_order(question: str, feed: list[str], account: t.Any = None) -> list[int] | None:
     """The feed blocks ranked against the question -- the writer's fill
     order when the context would overflow (the cap then keeps the MOST
     RELEVANT material instead of the newest).  The funnel's middle tier
     ranks first (the rerank cross-encoder, ONE call over the block
     heads); the embedding cosine is the fallback when the rerank service
-    is unconfigured.  ``usage`` (the run's ``rerank_usage`` dict) folds
-    the rerank leg's spend into the settle's account -- a discarded
+    is unconfigured.  ``account`` (the run's spend ledger) takes
+    the rerank leg's spend -- a discarded
     bucket undercounts the model-stats card.  ``None`` on any skip: a
     fitting feed, both models off, an upstream failure -- the
     chronological eviction stands, silently."""
@@ -91,12 +93,9 @@ async def _relevance_order(question: str, feed: list[str], usage: dict[str, int]
         # the cross-encoder: query-conditioned relevance, the signal the
         # bi-encoder approximates -- its order wins whenever it answers
         try:
-            order, tokens = rerank_service.rerank(question, heads)
+            order, _tokens = rerank_service.rerank(question, heads, account=account)
         except Exception:  # pylint: disable=broad-except
-            order, tokens = None, 0
-        if tokens and usage is not None:
-            usage["calls"] = usage.get("calls", 0) + 1
-            usage["tokens"] = usage.get("tokens", 0) + tokens
+            order = None
         if order is not None and len(order) == len(blocks):
             return order
     result = await embed_texts([question] + heads)

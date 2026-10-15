@@ -609,14 +609,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     continue
                 state, questions, images = parsed
                 started = time.monotonic()
-                out = decision.judge(state, questions, timeout=20.0, images=images)
+                out = decision.judge(state, questions, timeout=20.0, images=images, account=self.account)
                 # ONE timing for the branch: the judgment ledger's latency IS
                 # the row settlement's ``ms`` (never double-timed)
                 ms = int((time.monotonic() - started) * 1000)
                 if out is not None:
-                    usage = out.get("usage") if isinstance(out.get("usage"), dict) else {}
-                    self.decision_usage["calls"] += 1
-                    self.decision_usage["tokens"] += int(usage.get("input_tokens") or 0)
                     # SAME named-verdict-map protocol as the referee and the
                     # citation gate: answers + record_questions (name→label),
                     # so the client's one generic renderer covers the judge too
@@ -688,12 +685,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # unconfigured model simply never flags)
                 established = [str(fact.get("text") or "") for fact in self.facts[:-written]] if written else []
                 for fact in self.facts[-written:] if written else []:
-                    conflict = audit.finding_conflict(
-                        str(fact.get("text") or ""),
-                        established,
-                        usage_sink=self.decision_usage,
-                        embed_sink=self.embed_usage,
-                    )
+                    conflict = audit.finding_conflict(str(fact.get("text") or ""), established, account=self.account)
                     if conflict is not None:
                         fact["conflict_with"] = self.facts[conflict].get("id")
                 self.round_learned = True
@@ -836,7 +828,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # PLUS the saves this run already accepted
                 known_memories = [str(m.get("content") or "") for m in self.user_memories] + self.saved_memories
                 feed, event = user_memory_cap.evaluate_call(
-                    call, self.user_memories, known=known_memories, embed_sink=self.embed_usage
+                    call, self.user_memories, known=known_memories, account=self.account
                 )
                 feeds[wire_id - 1] = feed
                 ms = int((time.monotonic() - started) * 1000)
@@ -1635,19 +1627,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         child_gates = getattr(child, "gate_usage", None) or []
         self.gate_usage.extend(child_gates[handle.gate_mark :])
         handle.gate_mark = len(child_gates)
-        for bucket, snap_name in (
-            ("rerank_usage", "rerank_snap"),
-            ("decision_usage", "decision_snap"),
-            ("embed_usage", "embed_snap"),
-        ):
-            child_spend = getattr(child, bucket, None) or {}
-            snap = getattr(handle, snap_name)
-            own = getattr(self, bucket)
-            for field in ("calls", "tokens"):
-                delta = int(child_spend.get(field) or 0) - int(snap.get(field) or 0)
-                if delta > 0:
-                    own[field] = own.get(field, 0) + delta
-            setattr(handle, snap_name, dict(child_spend))
+        self.account.merge_delta(child.account, handle.spend_snap)
 
     def _sub_digest(self, handle: SubagentHandle) -> str:
         """The compressed report-back: established facts (each [n]-cited),
@@ -1805,6 +1785,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         }
                     },
                     timeout=5.0,
+                    account=self.account,
                 )
             except Exception:  # pylint: disable=broad-except
                 out = None
@@ -1812,10 +1793,6 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             injection = answers.get("contains_prompt_injection") if isinstance(answers, dict) else None
             if isinstance(injection, dict):
                 score = float(injection.get("noul") or 0.0)
-                gate_usage = out.get("usage") if isinstance(out, dict) and isinstance(out.get("usage"), dict) else {}
-                if gate_usage.get("input_tokens"):
-                    self.decision_usage["calls"] += 1
-                    self.decision_usage["tokens"] += int(gate_usage.get("input_tokens") or 0)
                 self.judgments.append(
                     {
                         "purpose": "read_gate",

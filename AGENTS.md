@@ -2769,16 +2769,25 @@ webp/gif transcode to PNG and in-window PNG/JPEG bytes ride verbatim
 unchecked).  The judge TOOL gains ``images`` (url strings off the
 gathered material, cap ``decision.MAX_IMAGES``, parsed as a third
 tuple element); the browser proxy + ``lib/decision.ts``'s ``decide()``
-carry the same optional list.  USAGE COVERAGE (every model spend folds
-into the settle's usage): ``gates`` (the small structured completions),
-``rerank`` (the cascade, the writer's context ordering, the corpus
-packs, the overview's ordering), ``decision`` (every judge call site --
-the probe, the gates, the tool, the audit scan), ``embedding`` (the
-server-side ``run_batch`` spend: diversity pruning, the corpus packs,
-the audit recall, the memory dedup -- ``usage.embedding``, input-only;
-a fully-cached LRU batch adds nothing).  The overview folds its
-ordering spend into its own settle; the browser proxies return usage to
-their callers unaccounted.
+carry the same optional list.  USAGE COVERAGE (every model spend lands
+in the settle's usage): the LLM completions split into the main tokens
++ the ``gates`` bucket (the small structured completions), and every
+NON-LLM endpoint records into ONE run-scoped ledger --
+``llm.accounts.ModelAccount``, owned by the Searches state and passed
+with the call (run attribution is explicit: the side-model services are
+stateless module functions and a process serves concurrent runs, while
+an ambient context would have to survive the gather workers, the
+dispatch pools and the driver thread -- the flask-context lesson).  The
+SERVICES parse their own wire usage and record (family knowledge stays
+in the family -- the decision family surfaces even bind the account at
+factory time and self-record, so no judge call site folds a bucket);
+the call sites only hand the account along.  The settle's merge is
+GENERIC over the account's kinds (``usage.rerank`` / ``decision`` /
+``embedding`` today -- a new model class is one new kind string, one
+service-side record, and it reaches the wire with zero branches); the
+subagent promote merges deltas against the handle's snapshot; the
+overview folds its ordering spend into its own settle; the browser
+proxies return usage to their callers unaccounted.
 
 ## Python CI (upstream gates for searx/ changes)
 

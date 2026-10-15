@@ -145,10 +145,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 return raw, {}, {"no_signal": True, "dup_ratio": None}
             head = order[:RERANK_HEAD]
             if len(head) >= 2:
-                sub_order, tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head])
-                if tokens:
-                    self.rerank_usage["calls"] += 1
-                    self.rerank_usage["tokens"] += tokens
+                sub_order, _tokens = rerank_order(query, [rerank_doc(raw[i]) for i in head], account=self.account)
                 if sub_order is not None:
                     order = [head[i] for i in sub_order] + order[RERANK_HEAD:]
             # ── the funnel's last stage: embedding diversity ──
@@ -156,7 +153,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             kept, vectors = diverse_order(
                 [rerank_doc(raw[i]) for i in ranked_head],
                 float(decision_features("diversity").get("cosine", 0.92)),
-                embed_sink=self.embed_usage,
+                account=self.account,
             )
             head_vectors: dict[int, list[float]] = {}
             dup_ratio = None
@@ -343,14 +340,11 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             return text
         heads = [f"{title}. {segment[:_SEGMENT_HEAD_CHARS]}" for segment in segments]
         try:
-            order, tokens = rerank_service.rerank(question, heads)
+            order, _tokens = rerank_service.rerank(question, heads, account=self.account)
         except Exception:  # pylint: disable=broad-except
             return text
         if not order or len(order) != len(segments):
             return text
-        if tokens:
-            self.rerank_usage["calls"] = self.rerank_usage.get("calls", 0) + 1
-            self.rerank_usage["tokens"] = self.rerank_usage.get("tokens", 0) + tokens
         keep: set[int] = set()
         used = 0
         for slot in order:  # most relevant first, at least one always fits
