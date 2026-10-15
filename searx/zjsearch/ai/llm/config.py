@@ -18,11 +18,13 @@ from urllib.parse import urlsplit
 from searx.zjsearch.ai.core import config as core_config
 from searx.zjsearch.ai.core import security
 
-ENDPOINT_KINDS = ("openai.chat_completions", "openai.responses", "anthropic", "gemini", "dashscope")
+ENDPOINT_KINDS = ("openai.chat_completions", "openai.responses", "anthropic", "gemini", "dashscope", "ark")
 """The canonical ``zjsearch.llm.sdk`` values -- ``SDK_ALIASES`` resolves
 shorthand / legacy inputs into one of these before validation."""
 
 SDK_ALIASES = {
+    "ark": "ark",
+    "volcengine": "ark",
     "openai": "openai.responses",
     "openai_chat_completions": "openai.chat_completions",
     "openai_responses": "openai.responses",
@@ -37,6 +39,7 @@ SDK_PACKAGES = {
     "anthropic": "anthropic",
     "gemini": "google.genai",
     "dashscope": "dashscope",
+    "ark": "arkruntime",
 }
 """The import name of the SDK package each canonical dialect needs."""
 

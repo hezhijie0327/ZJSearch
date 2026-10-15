@@ -24,6 +24,9 @@ typing-extensions==4.16.0
 #   dashscope         the alibaba native family (qwen chat /
 #                     TextEmbedding / TextReRank consumers ride it too)
 #   typesafe-sdk      the SystemOne decision-model surface
+#   arkruntime        the volcengine ark family (the multimodal
+#                     vectorization API; the chat side is OpenAI-compatible
+#                     and rides the openai family)
 # consumers: infra/sdk/*.py, infra/embed.py, infra/decision.py,
 # runtime/rank.py
 openai==3.29.0
@@ -31,6 +34,7 @@ anthropic==1.13.0
 google-genai==2.30.0
 dashscope==1.27.7
 typesafe-sdk==0.7.4
+arkruntime==0.12.0
 
 # zjsearch theme: the BM25 result reranker (searx/plugins/bm25_reranker.py)
 # -- Apache-2.0, numpy is its only runtime dependency

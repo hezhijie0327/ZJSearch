@@ -203,7 +203,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     parallel read lane: knobs, guard, TTL cache).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
     (openai with both chat wire shapes + embeddings, anthropic,
-    gemini), centrally registered in `sdk.resolve()`; the stream
+    gemini, ark for the volcengine multimodal vectors), centrally
+    registered in `sdk.resolve()`; the stream
     queue-bridge (`streaming.LlmStream`), the canonical finish/usage
     contract (`usage`), the prompt-cache shaping (`caching`), the
     tiered structured-output gate (`jsongate`), the embedding SERVICE
@@ -2790,6 +2791,32 @@ service-side record, and it reaches the wire with zero branches); the
 subagent promote merges deltas against the handle's snapshot; the
 overview folds its ordering spend into its own settle; the browser
 proxies return usage to their callers unaccounted.
+
+## Volcengine ark embedding family (volcengine ark)
+
+The SDK registry gained the ARK family (``zjsearch.embedding.sdk: ark``,
+`llm/sdk/ark.py`): the volcengine MULTIMODAL vectorization wire
+(``doubao-embedding-vision-*`` class models -- ``POST
+{base}/embeddings/multimodal``, a parts list fuses into ONE vector per
+call, so a text batch is one call per text).  Probed live
+(doubao-embedding-vision-251215): 2048 native dims, the call ACCEPTS
+``dimensions`` 1024/2048 and REJECTS others (InvalidParameter names the
+param) -- ``params.dimensions`` rides the call ONLY when the deployment
+sets it, and the width must match the pgvector column.  ALL the wire's
+own params ride ``zjsearch.embedding.params`` verbatim
+(``encoding_format`` / ``instructions`` / ``multi_embedding``{type,
+compression} / ``sparse_embedding`` -- probed live: the response's
+``data.multi_embedding`` / ``data.sparse_embedding`` extras come back
+when enabled and the surface takes the DENSE vector only, so the
+knowledge base stays float-dense).  The usage meta folds as
+``{"input": prompt_tokens}`` (the details split text/image tokens).
+The CHAT side needs no family: ark is OpenAI-compatible there
+(``zjsearch.llm.sdk: openai.chat_completions`` + ``base_url:
+https://ark.cn-beijing.volces.com/api/v3``), and a plain ark
+TEXT-embedding model rides the openai family's ``/embeddings`` the same
+way.  base_url per the SDK convention
+(``https://ark.cn-beijing.volces.com/api/v3``); the sync SDK rides a
+thread (never the shared loop) and the client caches per (base, key).
 
 ## Python CI (upstream gates for searx/ changes)
 

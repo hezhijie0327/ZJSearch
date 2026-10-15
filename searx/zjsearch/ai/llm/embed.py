@@ -40,11 +40,14 @@ MAX_TEXT_CHARS = 8000
 """Per-text truncation (the thread payloads can be large; embeddings of
 8k chars are plenty for ranking)."""
 
-SDKS = ("openai", "gemini", "dashscope")
+SDKS = ("openai", "gemini", "dashscope", "ark")
 """The ``zjsearch.embedding.sdk`` values -- one SDK per embeddings API
-family, mirroring the chat transport's family registry."""
+family, mirroring the chat transport's family registry.  ``ark`` is the
+volcengine MULTIMODAL vectorization wire (vision-class models, one call
+per text); a plain ark text-embedding model rides ``openai`` with the
+ark base_url -- the ``/embeddings`` route is OpenAI-shaped."""
 
-SDK_PACKAGES = {"openai": "openai", "gemini": "google.genai", "dashscope": "dashscope"}
+SDK_PACKAGES = {"openai": "openai", "gemini": "google.genai", "dashscope": "dashscope", "ark": "arkruntime"}
 """The import name of the SDK package each embedding sdk needs."""
 
 _CACHE_MAX = 256
@@ -119,7 +122,7 @@ def configured() -> bool:
     block = cfg()
     if not (block.get("model") and embedding_key(block)):
         return False
-    return bool(block.get("base_url")) or sdk(block) in ("gemini", "dashscope")
+    return bool(block.get("base_url")) or sdk(block) in ("gemini", "dashscope", "ark")
 
 
 def dimensions_of(cfg_block: dict[str, t.Any] | None = None) -> int:

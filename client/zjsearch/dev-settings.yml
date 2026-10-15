@@ -298,6 +298,11 @@ zjsearch:
     #   | gemini (google-genai embed_content; base_url may stay empty
     #   for the google default endpoint, or a gateway prefix that
     #   already includes the API name)
+    #   | ark (volcengine multimodal vectorization -- the
+    #   doubao-embedding-vision-* models, ONE vector per call;
+    #   params ride verbatim: encoding_format / instructions /
+    #   multi_embedding / sparse_embedding; params.dimensions accepts
+    #   1024 / 2048 and must match the pgvector column)
     base_url: "https://open.bigmodel.cn/api/paas/v4"
     api_key: ""                    # or the ZJSEARCH_EMBEDDING_KEY env
     model: "embedding-3"

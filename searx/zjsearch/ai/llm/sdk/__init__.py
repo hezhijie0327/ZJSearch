@@ -21,6 +21,7 @@ import typing as t
 from .. import config
 from .. import retry as retry_policy
 from .anthropic import AnthropicSdk, factory as anthropic_factory
+from .ark import ArkSdk, factory as ark_factory
 from .dashscope import DashscopeSdk, factory as dashscope_factory
 from .gemini import GeminiSdk, factory as gemini_factory
 from .openai import OpenaiSdk, factory as openai_factory
@@ -121,6 +122,8 @@ def resolve(cfg: dict[str, t.Any], family: str | None = None) -> Sdk:
         impl = anthropic_factory(cfg, base, kind, family or "anthropic")
     elif kind == "dashscope":
         impl = dashscope_factory(cfg, base, kind, family or "dashscope")
+    elif kind == "ark":
+        impl = ark_factory(cfg, base, kind, family or "ark")
     else:
         impl = gemini_factory(cfg, base, kind, family or "gemini")
     return Sdk(impl, kind, base)
@@ -135,6 +138,7 @@ def sdk_missing(cfg: dict[str, t.Any]) -> str | None:
 __all__ = [
     "SDK_PACKAGES",
     "AnthropicSdk",
+    "ArkSdk",
     "DashscopeSdk",
     "GeminiSdk",
     "OpenaiSdk",
