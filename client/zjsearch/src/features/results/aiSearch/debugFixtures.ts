@@ -609,11 +609,39 @@ const FULL_STAGE: DebugScenario = {
           ms: 583,
         },
         {
+          // the deliverable-entity gate speaks the ONE named-verdict-map
+          // protocol (the server's entity_gate.py): answer keyed task_N
+          // (row labels resolve from the target's " / " sequence -- the
+          // entity names), per-entity covered/uncovered choice
+          // primitives, and record_questions carrying the why-text -- the
+          // old entities/uncovered LIST fields rendered an empty card
           purpose: "entity_coverage",
           question: "Deliverable entities the answer makes claims about; screened against the plan",
-          target: "Bachem",
-          entities: ["Bachem"],
-          uncovered: ["Bachem"],
+          target: "Novo Nordisk / Cytiva",
+          answer: {
+            task_0: {
+              choice: "covered",
+              confidence: 1,
+              probabilities: { covered: 1, uncovered: 0 },
+              type: "choice",
+            },
+            task_1: {
+              choice: "uncovered",
+              confidence: 1,
+              probabilities: { covered: 0, uncovered: 1 },
+              type: "choice",
+            },
+          },
+          record_questions: [
+            {
+              name: "task_0",
+              instructions: "Novo Nordisk -- the answer's supplier-side recommendations rest on its API sourcing",
+            },
+            {
+              name: "task_1",
+              instructions: "Cytiva -- the recommended purification counterpart; no subtask studies it",
+            },
+          ],
           ms: 120,
         },
         {
