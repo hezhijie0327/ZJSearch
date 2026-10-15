@@ -46,17 +46,21 @@ def engine_info_spec() -> dict[str, t.Any]:
     }
 
 
-def _disabled_engines() -> list[tuple[str, str, list[str]]]:
+def _disabled_engines() -> list[tuple[str, str, list[str], bool]]:
     """The default-disabled engines that a bang still reaches: (name,
-    shortcut, categories), alphabetically.  Engines ``inactive`` in the
-    settings are excluded -- no bang unregisters them."""
+    shortcut, categories, paid), alphabetically.  ``paid`` = the
+    deployment configured an ``api_key`` for it (every call costs
+    money -- the executor holds such bangs until the user approves).
+    Engines ``inactive`` in the settings are excluded -- no bang
+    unregisters them."""
     from searx.engines import engines as engine_map, is_engine_active  # pylint: disable=import-outside-toplevel
 
-    out: list[tuple[str, str, list[str]]] = []
+    out: list[tuple[str, str, list[str], bool]] = []
     for name in sorted(engine_map):
         engine = engine_map[name]
         if engine.disabled and is_engine_active(engine):
-            out.append((name, str(engine.shortcut or name), sorted(set(engine.categories))))
+            paid = bool(str(getattr(engine, "api_key", "") or "").strip())
+            out.append((name, str(engine.shortcut or name), sorted(set(engine.categories)), paid))
     return out
 
 
@@ -86,12 +90,15 @@ def build_inventory() -> tuple[str, int, int, dict[str, t.Any]]:
     if disabled:
         lines.append(
             f"Disabled engines ({len(disabled)}) -- a bang prefix still"
-            " reaches them, e.g. \"!shortcut keywords\":"
+            " reaches them, e.g. \"!shortcut keywords\".  Engines marked"
+            " PAID are API-billed: one ask_user confirmation is required"
+            " before the first paid bang of a run (the executor holds"
+            " it otherwise):"
         )
         shown = disabled[:_MAX_DISABLED]
         lines.extend(
-            f"  {name} (bang: {shortcut}) -- {', '.join(cats) if cats else 'no category'}"
-            for name, shortcut, cats in shown
+            f"  {name} (bang: {shortcut}{' , PAID' if paid else ''}) -- {', '.join(cats) if cats else 'no category'}"
+            for name, shortcut, cats, paid in shown
         )
         if len(disabled) > len(shown):
             lines.append(f"  … and {len(disabled) - len(shown)} more")
@@ -104,8 +111,8 @@ def build_inventory() -> tuple[str, int, int, dict[str, t.Any]]:
         "total": enabled,
         "categories": [{"name": name, "count": per_category[name]} for name in categories],
         "disabled": [
-            {"name": name, "bang": shortcut, "cats": cats}
-            for name, shortcut, cats in disabled[:_MAX_DISABLED]
+            {"name": name, "bang": shortcut, "cats": cats, "paid": paid}
+            for name, shortcut, cats, paid in disabled[:_MAX_DISABLED]
         ],
     }
     return "\n".join(lines), enabled, len(categories), inventory

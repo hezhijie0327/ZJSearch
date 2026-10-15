@@ -47,6 +47,7 @@ from searx.zjsearch.ai.runs.search.state import (
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.tools import (
     ASK_TOOL,
+    paid_bangs,
     VIEW_IMAGE_TOOL,
     WEB_BROWSER_TOOL,
     DECISION_TOOL,
@@ -1713,10 +1714,18 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         """One ``web_search`` call's pre-pool plan: (feed, settle event,
         pool job) -- an empty query errors here, an exact repeat of an
         earlier round's query (site filters included) settles as a
-        duplicate, a fresh query is queued; the settle event carries its
-        ``ms``/``feed`` (the debug contract).  The dedup mark itself is
-        taken at completion (a failed search stays retryable)."""
-        query, category, time_range, include, exclude = parse_call(call)
+        duplicate, a !bang on an API-BILLED engine without the user's
+        approval is HELD (the feed teaches the ask_user confirmation --
+        paid engines cost real money and the model must not spend it
+        unsupervised), a fresh query is queued; the settle event carries
+        its ``ms``/``feed`` (the debug contract).  The dedup mark itself
+        is taken at completion (a failed search stays retryable)."""
+        query, category, time_range, include, exclude, paid_ok = parse_call(call)
+        if paid_ok:
+            # the model's approval record: sticky for the run (a
+            # process-restart resume rebuilds state and re-asks -- the
+            # safe direction for spending)
+            self.paid_ok = True
         # the ESCAPE HATCH: the model may deliberately re-run an executed
         # query (live material -- a score, a just-published release);
         # page-level dedup still applies (already-numbered urls keep
@@ -1729,6 +1738,32 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 {
                     "call": wire_id,
                     "status": "error",
+                    "n": 0,
+                    "ms": 0,
+                    "feed": feed_text[:800],
+                },
+                None,
+            )
+        # THE PAID GATE: a !bang naming an API-billed engine spends the
+        # user's money -- hold it until ONE ask_user confirmation lands,
+        # then the sticky flag lets every later bang through
+        if not self.paid_ok and (paid_hits := paid_bangs(query)):
+            feed_text = (
+                f"held: the bang targets {' , '.join(paid_hits)} -- an"
+                " API-BILLED engine (every call costs the user money) and"
+                " this run has no approval yet.  Ask ONCE: call ask_user"
+                " (as the ONLY call of a turn) with a short confirmation"
+                " naming the engine and that it is billed per call.  When"
+                " the user APPROVES, re-run this search with paid_ok:"
+                " true -- the approval covers the rest of the run.  If"
+                " they decline, never set paid_ok and stay on the free"
+                " engines."
+            )
+            return (
+                feed_text,
+                {
+                    "call": wire_id,
+                    "status": "approval",
                     "n": 0,
                     "ms": 0,
                     "feed": feed_text[:800],

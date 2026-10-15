@@ -189,7 +189,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": str(extract_args.get("title") or "")[:120],
             "args": extract_args,
         }
-    query, category, time_range, include, exclude = parse_call(call)
+    query, category, time_range, include, exclude, _paid_ok = parse_call(call)
     operators = " ".join([f"site:{host}" for host in include] + [f"-site:{host}" for host in exclude])
     if operators:
         query = f"{query} {operators}"

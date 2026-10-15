@@ -45,7 +45,10 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
   // the settled tails (interrupted / duplicate / failed) are the kernel's
   // vocabulary; the view owns pending + ok
   const metric =
-    call.status === "interrupted" || call.status === "duplicate" || call.status === "error"
+    call.status === "interrupted" ||
+    call.status === "duplicate" ||
+    call.status === "error" ||
+    call.status === "approval"
       ? settledCallText(call, t)
       : view.metric(props);
   return (

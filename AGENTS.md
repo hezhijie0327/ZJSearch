@@ -299,16 +299,33 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   prod settings, not the 8 the old static tuple carried).  The ENGINES
   behind the verticals are the `engine_info` tool (tools/engine_info.py):
   ONE read-only inventory call (categories with engine counts + every
-  default-disabled engine with its bang shortcut) that rides the feed
-  AND the settlement's `preview` (the timeline row's expanded body,
-  engine count in the metric).  It exists for the API-billed engines a
-  deployment holds back (bocha/tavily/firecrawl/search1api/openfda ship
+  default-disabled engine with its bang shortcut; the row's expanded body
+  renders the STRUCTURED `inventory` payload as two directory grids —
+  category cells + bang cells, `paid` engines carry an accent API-billed
+  tag — engine count in the metric; the plain text stays feed-only).
+  It exists for the API-billed engines a deployment holds back (bocha/tavily/firecrawl/search1api/openfda ship
   `disabled` by default): the bang doctrine in the web_search spec and
   the researcher prompt is deliberately LOOSENED to "bang when the user
   names an engine OR the inventory shows a fitting held-back one" —
   verified live: the model quoted the rule, called engine_info first,
   and ran an entire Tavily-named research through `!tvlyn`/`!tvly`
-  bangs discovered from the listing.
+  bangs discovered from the listing.  THE PAID GATE (bangs cost real
+  money): `paid_engines()` (tools/web_search.py) reads the settings'
+  per-engine `api_key` — the universal marker of the commercial engines
+  (64 on prod) — and `_search_plan` HOLDS a !bang naming one of them
+  until the user approves: the search settles as status `approval`
+  (the row reads 待用户确认, the minus icon family) with a feed that
+  teaches the ONE ask_user confirmation ("bocha 按调用计费,是否允许?
+  "), the run parks `awaiting` on the ask, and the user's yes comes
+  back through the normal clarify round-trip; the model then re-runs
+  with `paid_ok: true` (a sanctioned web_search argument), which sets
+  the STICKY `state.paid_ok` — one confirmation covers the whole run.
+  Fail direction is SAFE: a process-restart resume rebuilds state and
+  re-asks; children inherit the lead's flag (they have no ask tool);
+  enabled-by-default paid engines ride ordinary category fan-out and
+  are NOT gated (only the bang is an explicit paid choice).  The
+  aidebug stage ships the whole loop as the 计费引擎确认 scenario
+  (hold → ask → awaiting → clarifyTail paid_ok re-run).
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
   silently): events are TIMELINE OPERATIONS — `{"e":"open","id","kind":

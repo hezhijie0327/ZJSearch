@@ -72,6 +72,8 @@ from searx.zjsearch.ai.tools.web_browser import (
 from searx.zjsearch.ai.tools.web_search import (
     SEARCH_CATEGORIES,
     TOOL_NAME,
+    paid_bangs,
+    paid_engines,
     parse_call,
     tool_spec,
 )
@@ -88,6 +90,8 @@ __all__ = [
     "PAST_RESEARCH_TOOL",
     "SEARCH_CATEGORIES",
     "ENGINE_INFO_TOOL",
+    "paid_bangs",
+    "paid_engines",
     "TASK_TOOL",
     "VIEW_IMAGE_TOOL",
     "TOOL_NAME",

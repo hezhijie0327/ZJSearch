@@ -28,7 +28,7 @@ export function CallStatusIcon({ call }: { call: AiSearchCall }) {
     <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
   ) : call.status === "ok" ? (
     <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
-  ) : call.status === "interrupted" || call.status === "duplicate" ? (
+  ) : call.status === "interrupted" || call.status === "duplicate" || call.status === "approval" ? (
     <Minus aria-hidden="true" className="size-3 shrink-0" />
   ) : (
     <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
@@ -42,7 +42,9 @@ export function settledCallText(call: AiSearchCall, t: Translate): string {
     ? t("ai_search_row_interrupted")
     : call.status === "duplicate"
       ? t("ai_search_row_duplicate")
-      : t("ai_search_row_failed");
+      : call.status === "approval"
+        ? t("ai_search_row_approval")
+        : t("ai_search_row_failed");
 }
 
 /** The row shell: status mark + the row's tool icon, label and status

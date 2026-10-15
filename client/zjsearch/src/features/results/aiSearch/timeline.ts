@@ -59,7 +59,7 @@ export interface AiAskQuestion {
 export interface AiEngineInventory {
   total: number;
   categories: Array<{ name: string; count: number }>;
-  disabled: Array<{ name: string; bang: string; cats: string[] }>;
+  disabled: Array<{ name: string; bang: string; cats: string[]; paid?: boolean }>;
 }
 
 export interface AiSearchCall {
@@ -91,7 +91,7 @@ export interface AiSearchCall {
   /** web_browser read: the page url (the row's label) */
   url?: string;
   category: string;
-  status: "pending" | "ok" | "error" | "interrupted" | "duplicate";
+  status: "pending" | "ok" | "error" | "interrupted" | "duplicate" | "approval";
   /** web_search: result count */
   n?: number;
   /** web_browser read: characters of readable content returned */

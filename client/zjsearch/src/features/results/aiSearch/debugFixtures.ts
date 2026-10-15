@@ -250,18 +250,20 @@ const FULL_STAGE: DebugScenario = {
           { name: "shopping", count: 2 },
         ],
         disabled: [
-          { name: "bocha", bang: "bocha", cats: ["general", "web"] },
-          { name: "bocha images", bang: "bochai", cats: ["images"] },
-          { name: "brave.api", bang: "brapi", cats: ["general", "web"] },
-          { name: "exa", bang: "exa", cats: ["general", "web"] },
-          { name: "firecrawl", bang: "fc", cats: ["general", "web"] },
-          { name: "firecrawl news", bang: "fcn", cats: ["news"] },
-          { name: "google.api", bang: "goapi", cats: ["general"] },
-          { name: "openfda", bang: "fda", cats: ["science"] },
-          { name: "search1api youtube", bang: "s1yt", cats: ["music", "videos"] },
-          { name: "tavily", bang: "tvly", cats: ["general", "web"] },
-          { name: "tavily finance", bang: "tvlf", cats: ["finance", "other"] },
-          { name: "tavily news", bang: "tvlyn", cats: ["news"] },
+          { name: "1337x", bang: "1337x", cats: ["files"], paid: false },
+          { name: "bocha", bang: "bocha", cats: ["general", "web"], paid: true },
+          { name: "bocha images", bang: "bochai", cats: ["images"], paid: true },
+          { name: "brave.api", bang: "brapi", cats: ["general", "web"], paid: true },
+          { name: "digbt", bang: "dbt", cats: ["videos", "music", "files"], paid: false },
+          { name: "exa", bang: "exa", cats: ["general", "web"], paid: true },
+          { name: "firecrawl", bang: "fc", cats: ["general", "web"], paid: true },
+          { name: "firecrawl news", bang: "fcn", cats: ["news"], paid: true },
+          { name: "google.api", bang: "goapi", cats: ["general"], paid: true },
+          { name: "openfda", bang: "fda", cats: ["science"], paid: true },
+          { name: "search1api youtube", bang: "s1yt", cats: ["music", "videos"], paid: true },
+          { name: "tavily", bang: "tvly", cats: ["general", "web"], paid: true },
+          { name: "tavily finance", bang: "tvlf", cats: ["finance", "other"], paid: true },
+          { name: "tavily news", bang: "tvlyn", cats: ["news"], paid: true },
         ],
       },
       feed: 'This deployment searches 361 enabled engines across 28 categories:\n  apps (4) · blogs (8) · books (4) · …\nDisabled engines (12) -- a bang prefix still reaches them, e.g. "!shortcut keywords":\n  bocha (bang: bocha) -- general, web\n  …',
@@ -1894,9 +1896,173 @@ const PANORAMA_STAGE: DebugScenario = {
   ],
 };
 
+/** The PAID-ENGINE confirmation loop: the model's first !bocha bang is
+    HELD by the executor's paid gate (status "approval" -- the row reads
+    待用户确认), the feed teaches the ask_user confirmation, the run
+    settles awaiting on the ask, and the user's yes comes back as the
+    clarify transcript -- the resumed round re-runs the bang with
+    paid_ok: true (the sticky approval) and real results flow. */
+const PAID_STAGE: DebugScenario = {
+  id: "paid",
+  label: "计费引擎确认(扣下 · ask_user · 批准重跑)",
+  q: "用 bocha 查一下 2026 年的国产 GPU 新品发布",
+  mode: "balanced",
+  events: [
+    { e: "client.start", runNo: 1, q: "用 bocha 查一下 2026 年的国产 GPU 新品发布", mode: "balanced" },
+    { ...base },
+    { e: "phase", name: "plan" },
+    { e: "say", id: 1, t: "用户点名 bocha(计费引擎):先发起检索,若被扣下就向用户确认计费使用。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_search",
+        q: "!bocha 国产 GPU 新品发布 2026",
+        status: "pending",
+        args: { query: "!bocha 国产 GPU 新品发布 2026" },
+      },
+    ]),
+    {
+      e: "call",
+      id: 1,
+      call: 1,
+      status: "approval",
+      n: 0,
+      ms: 0,
+      feed: "held: the bang targets bocha -- an API-BILLED engine (every call costs the user money) and this run has no approval yet.  Ask ONCE: call ask_user (as the ONLY call of a turn) with a short confirmation naming the engine and that it is billed per call.  When the user APPROVES, re-run this search with paid_ok: true -- the approval covers the rest of the run.  If they decline, never set paid_ok and stay on the free engines.",
+    },
+    {
+      e: "think",
+      id: 1,
+      t: "bocha 是计费引擎,执行器把检索扣下了——按规则先用 ask_user 问一次用户,批准后再带 paid_ok 重跑。",
+    },
+    // the ask turn is its OWN entry (a turn = one open; the ask_user call
+    // is the position-1 call of entry 2 -- sharing entry 1's position
+    // would overwrite the held search's approval settlement)
+    { e: "close", id: 1 },
+    { e: "open", id: 2, kind: "research", round: 1 },
+    calls(
+      [
+        {
+          id: 1,
+          tool: "ask_user",
+          q: "",
+          status: "pending",
+          args: {
+            intro: "bocha 按调用计费,本次研究是否允许使用?",
+            questions: [
+              { q: "允许本次研究使用计费引擎 bocha 吗?", type: "single", options: ["允许", "不用,走免费引擎"] },
+            ],
+          },
+        },
+      ],
+      2,
+    ),
+    {
+      e: "call",
+      id: 2,
+      call: 1,
+      status: "ok",
+      ms: 4,
+      feed: "ask recorded -- the run continues on the user's best interpretation",
+    },
+    {
+      e: "ask",
+      intro: "bocha 按调用计费,本次研究是否允许使用?",
+      questions: [{ q: "允许本次研究使用计费引擎 bocha 吗?", type: "single", options: ["允许", "不用,走免费引擎"] }],
+    },
+    { e: "settle", status: "awaiting", halt: "awaiting the user's direction", finish: null, usage: null, model: null },
+  ],
+  clarifyTail: (transcript) => [
+    {
+      e: "client.clarify",
+      text: transcript,
+      startedAt: Date.now(),
+      mode: "balanced",
+    },
+    { ...base, id: 2, round: 1 },
+    { e: "phase", name: "research" },
+    { e: "say", id: 2, t: "用户已批准 bocha:带 paid_ok 重跑检索,并行一路免费引擎对照。" },
+    calls([
+      {
+        id: 1,
+        tool: "web_search",
+        q: "!bocha 国产 GPU 新品发布 2026",
+        status: "ok",
+        n: 8,
+        ms: 2140,
+        args: { query: "!bocha 国产 GPU 新品发布 2026", paid_ok: true },
+      },
+      {
+        id: 2,
+        tool: "web_search",
+        q: "国产 GPU 新品发布 2026",
+        status: "ok",
+        n: 5,
+        ms: 1870,
+        args: { query: "国产 GPU 新品发布 2026", category: "news" },
+      },
+    ]),
+    {
+      e: "sources",
+      items: [
+        {
+          n: 1,
+          title: "摩尔线程 MTT S4000 发布:2026 年 Q2 规模量产",
+          url: "https://chip.example.com/moore-s4000",
+          netloc: "chip.example.com",
+          round: 1,
+          id: 1,
+          idx: 0,
+          content: "摩尔线程发布第四代 GPU MTT S4000,FP32 算力 25 TFLOPS,宣布 2026 年 Q2 规模量产。",
+        },
+        {
+          n: 2,
+          title: "壁仞科技发布 BR100 系列训练卡",
+          url: "https://semiconductor.example.com/br100",
+          netloc: "semiconductor.example.com",
+          round: 1,
+          id: 1,
+          idx: 1,
+          content: "壁仞 BR100 系列面向千亿参数大模型训练,互联带宽对标国际旗舰产品。",
+        },
+      ],
+    },
+    { e: "call", id: 2, call: 1, status: "ok", n: 8, ms: 2140, feed: "plan: 5 deep + 3 shallow lines [1][2]…" },
+    { e: "call", id: 2, call: 2, status: "ok", n: 5, ms: 1870, feed: "plan: 5 deep lines [2]" },
+    { e: "close", id: 2 },
+    { e: "open", id: 3, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "answer",
+      t: "2026 年国产 GPU 新品集中在两条线:**摩尔线程 MTT S4000**(FP32 25 TFLOPS,Q2 规模量产)[1]与**壁仞 BR100 系列训练卡**(对标国际旗舰互联带宽)[2]。计费引擎 bocha 的结果与免费引擎的新闻线互相印证。",
+    },
+    { e: "close", id: 3 },
+    { e: "related", items: ["MTT S4000 的实际游戏性能如何?", "BR100 的互联带宽对标哪款产品?"] },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 6840,
+        output: 186,
+        thoughts: 140,
+        cached: 2100,
+        cache_write: 0,
+        research: { input: 5210, output: 96 },
+        write: { input: 1630, output: 90 },
+        gates: { input: 380, output: 18, calls: 2 },
+        rerank: null,
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+  ],
+};
+
 export const DEBUG_SCENARIOS: DebugScenario[] = [
   BROWSER_STAGE,
   FULL_STAGE,
+  PAID_STAGE,
   DECK_STAGE,
   SHAPE_FLIP_STAGE,
   PANORAMA_STAGE,

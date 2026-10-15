@@ -357,6 +357,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # (the recall wire event, kind=memory) instead of riding the
         # pre-send -- this flag makes that pull happen exactly once
         self.memories_pulled = False
+        # the paid-engine approval (the user's ask_user yes, relayed by
+        # the model's paid_ok: true): sticky for the run -- a !bang on an
+        # API-billed engine is held until it flips
+        self.paid_ok = False
         # the past-research index (reader pages WITH text heads + corpus
         # sources identity-only): the tool's matches get numbered as real
         # history sources -- full-text matches return their content head,

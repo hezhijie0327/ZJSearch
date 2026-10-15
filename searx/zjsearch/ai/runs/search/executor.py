@@ -39,6 +39,10 @@ class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
             cfg=parent.cfg,
         )
         child.reg = parent.reg
+        # the lead's paid-engine approval carries (a child's held search
+        # could not ask_user -- it has no ask tool; the lead already
+        # asked, or the child stays on free engines like the lead would)
+        child.paid_ok = parent.paid_ok
         if session_id:
             child.browser_session_id = session_id
         # the child was constructed on the DRIVER thread (no request

@@ -171,10 +171,61 @@ def tool_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, 
                         " result -- vary the query instead."
                     ),
                 },
+                "paid_ok": {
+                    "type": "boolean",
+                    "description": (
+                        "Set true ONLY after the user explicitly approved"
+                        " PAID (API-billed) engines for this run -- their"
+                        " answer to your ask_user confirmation is the"
+                        " record.  A !bang on an API-billed engine is held"
+                        " until then (the refusal feed teaches the ask);"
+                        " never set it without an explicit user yes."
+                    ),
+                },
             },
             "required": ["query"],
         },
     }
+
+
+_PAID_ENGINES: frozenset[str] | None = None
+"""Process-level cache -- the settings' engine list is fixed at load."""
+
+
+def paid_engines() -> frozenset[str]:
+    """The API-BILLED engines of this deployment: every settings entry
+    carrying a non-empty ``api_key`` (the commercial engines' universal
+    marker -- bocha/tavily/brave.api/...).  They cost money per call, so
+    the executor holds a !bang on one of them until the user approves the
+    spend (:py:data:`paid_ok`)."""
+    global _PAID_ENGINES  # pylint: disable=global-statement
+    if _PAID_ENGINES is None:
+        from searx import settings  # pylint: disable=import-outside-toplevel
+
+        _PAID_ENGINES = frozenset(
+            str(entry.get("name") or "")
+            for entry in settings["engines"]
+            if str(entry.get("api_key") or "").strip()
+        ) - {""}
+    return _PAID_ENGINES
+
+
+def paid_bangs(query: str) -> list[str]:
+    """The PAID engines a query's leading bang group targets, in order --
+    ``[]`` when the query bangs none (or only free engines).  Bang tokens
+    resolve through the same shortcut/name map the engine's own parser
+    uses, so ``!tvly`` and ``!tavily`` both name the paid engine."""
+    from searx.engines import engines as engine_map, engine_shortcuts  # pylint: disable=import-outside-toplevel
+
+    paid = paid_engines()
+    hits: list[str] = []
+    for token in query.split():
+        if not token.startswith("!") or len(token) < 2:
+            break
+        name = engine_shortcuts.get(token[1:].lower()) or token[1:].lower()
+        if name in paid and name not in hits:
+            hits.append(name)
+    return hits
 
 
 def _clean_sites(raw: t.Any) -> list[str]:
@@ -195,13 +246,15 @@ def _clean_sites(raw: t.Any) -> list[str]:
     return out
 
 
-def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[str]]:
-    """(query, category, time_range, included_sites, excluded_sites) of one
-    tool call -- sanitized: a LEADING group of engine bangs (e.g. "!baidu")
-    survives because the model may only use one when the user explicitly
-    names the engine; every other "!" is noise, whitespace collapses, the
-    category and the freshness window are whitelist-checked and the site
-    filters are host-shaped bare domains."""
+def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[str], bool]:
+    """(query, category, time_range, included_sites, excluded_sites,
+    paid_ok) of one tool call -- sanitized: a LEADING group of engine
+    bangs (e.g. "!baidu") survives because the model may only use one
+    when the user explicitly names the engine; every other "!" is noise,
+    whitespace collapses, the category and the freshness window are
+    whitelist-checked, the site filters are host-shaped bare domains and
+    ``paid_ok`` is the model's claim that the user approved paid engines
+    this run (the executor's paid gate reads it)."""
     args = raw_args(call)
     query = str(args.get("query") or "")
     bang_match = _BANG_PREFIX_RE.match(query)
@@ -223,4 +276,5 @@ def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[s
         time_range,
         _clean_sites(args.get("included_sites")),
         _clean_sites(args.get("excluded_sites")),
+        bool(args.get("paid_ok")),
     )

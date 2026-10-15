@@ -200,6 +200,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_engine_info_done: "{n} 个引擎可用",
   ai_engine_info_summary: "{n} 个启用引擎 · {m} 个类别",
   ai_engine_info_bang: "保留引擎 · !bang 直达（{n} 个）",
+  ai_engine_info_paid: "API 计费",
+  ai_search_row_approval: "待用户确认",
   ai_task_card: "调研计划",
   ai_task_sources: "{n} 个来源",
   ai_task_source_one: "1 个来源",

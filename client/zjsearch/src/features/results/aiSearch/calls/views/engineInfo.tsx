@@ -59,12 +59,19 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
           <p className="mt-2.5 text-xs text-ink-3">{t("ai_engine_info_bang", { n: String(inv.disabled.length) })}</p>
           <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-1">
             {shown.map((engine) => (
-              <div className={`${CELL} py-1.5`} key={engine.name} title={engine.cats.join(", ")}>
+              <div
+                className={`${CELL} py-1.5`}
+                key={engine.name}
+                title={engine.cats.join(", ") + (engine.paid ? " · " + t("ai_engine_info_paid") : "")}
+              >
                 <div className="truncate text-xs text-ink-2">{engine.name}</div>
                 <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
                   <span className="shrink-0 font-mono text-xs text-ink-2">!{engine.bang}</span>
                   {engine.cats.length > 0 ? (
                     <span className="truncate text-[11px] text-ink-3">{engine.cats.join(", ")}</span>
+                  ) : null}
+                  {engine.paid ? (
+                    <span className="shrink-0 text-[11px] text-accent">{t("ai_engine_info_paid")}</span>
                   ) : null}
                 </div>
               </div>
