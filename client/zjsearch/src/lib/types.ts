@@ -37,6 +37,7 @@ export interface GlobalData {
     | "stats"
     | "info"
     | "ai_thread"
+    | "ai_overview_debug"
     | "knowledge"
     | "404"
     | "redirect"
@@ -559,12 +560,21 @@ export interface KnowledgePageData {
   globals: GlobalData;
 }
 
+/** The AI Overview debug stage (`/zjsearch/ai/overview/debug`): a QA-only
+    synthetic host -- the real card lives on the results page and has no
+    route of its own; the payload is just the page identity (the fixture
+    streams live client-side, see OverviewDebugPage / AiDebugStage). */
+export interface AiOverviewDebugPageData {
+  globals: GlobalData;
+}
+
 export type AnyPageData =
   | SearchPageData
   | PreferencesPageData
   | StatsPageData
   | InfoPageData
   | AiThreadPageData
+  | AiOverviewDebugPageData
   | KnowledgePageData
   | RedirectPageData
   | ErrorPageData
@@ -600,6 +610,10 @@ export function isInfoPageData(data: AnyPageData): data is InfoPageData {
 
 export function isAiThreadPageData(data: AnyPageData): data is AiThreadPageData {
   return data.globals.page === "ai_thread";
+}
+
+export function isAiOverviewDebugPageData(data: AnyPageData): data is AiOverviewDebugPageData {
+  return data.globals.page === "ai_overview_debug";
 }
 
 export function isKnowledgePageData(data: AnyPageData): data is KnowledgePageData {

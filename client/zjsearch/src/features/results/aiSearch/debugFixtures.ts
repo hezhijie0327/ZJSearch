@@ -2059,6 +2059,88 @@ const PAID_STAGE: DebugScenario = {
   ],
 };
 
+/** The AI Overview debug stage's fixtures: the card's RAW stream text
+    split into replay chunks -- <think> wrappers, the visible markdown
+    answer, and the trailing run-meta sentinel are exactly what the real
+    wire carries (splitAnswerStream/extractRunMeta parse them back out
+    client-side).  These pin the parts no live search can test on
+    demand: the streaming mid-state, the citation chips, the fence
+    splitting and the failed settle. */
+export interface AiOverviewDebugScenario {
+  id: string;
+  label: string;
+  q: string;
+  /** the raw stream text, chunk by chunk (each step is a freezable
+      mid-stream state; the joined text is what state.text would hold) */
+  chunks: string[];
+  /** favicon + domain + title per citation, in [n] order */
+  sources: Array<{ favicon: string; domain: string; t: string; u: string }>;
+  /** the terminal phase once every chunk has streamed */
+  phase: "done" | "error";
+  /** the transport error message when phase === "error" */
+  error?: string;
+}
+
+const OVERVIEW_SOURCES = [
+  {
+    favicon: "",
+    domain: "chip.example.com",
+    t: "摩尔线程 MTT S4000 发布:2026 年 Q2 规模量产",
+    u: "https://chip.example.com/moore-s4000",
+  },
+  {
+    favicon: "",
+    domain: "semiconductor.example.com",
+    t: "壁仞科技发布 BR100 系列训练卡",
+    u: "https://semiconductor.example.com/br100",
+  },
+];
+
+const META_SENTINEL =
+  '<<<zjs-meta:{"finish":"stop","model":"deepseek-flash","usage":{"input":4210,"output":386,"thoughts":180,"cached":1024,"cache_write":0}}>>>';
+
+const OVERVIEW_STREAMED: AiOverviewDebugScenario = {
+  id: "ov-streamed",
+  label: "完整流(思考 · 引用 · 尾部 meta)",
+  q: "2026 年国产 GPU 有哪些新进展?",
+  chunks: [
+    "<think>用户问国产 GPU 的 2026 进展。检索材料集中在摩尔线程与壁仞两条线:",
+    "摩尔线程 MTT S4000 已宣布 Q2 量产,壁仞 BR100 面向训练侧。按时间线组织,数字带引用。</think>",
+    "2026 年国产 GPU 的新进展集中在两条线:\n\n",
+    "- **摩尔线程**:第四代 GPU MTT S4000,FP32 算力 25 TFLOPS,宣布 2026 年 Q2 规模量产[1];\n",
+    "- **壁仞科技**:BR100 系列训练卡面向千亿参数大模型训练,互联带宽对标国际旗舰[2]。\n\n",
+    "整体判断:制造与封装仍是约束,但训练侧的产品空白已被补上。",
+    META_SENTINEL,
+  ],
+  sources: OVERVIEW_SOURCES,
+  phase: "done",
+};
+
+const OVERVIEW_FENCES: AiOverviewDebugScenario = {
+  id: "ov-fences",
+  label: "fence 密集(切分器)",
+  q: "给一个对比表和 mermaid 图",
+  chunks: [
+    "<think>带表格与 mermaid 的回答:splitAnswerStream 不能把 fence 里的内容当 think。</think>",
+    '两家的定位对比:\n\n| | 摩尔线程 | 壁仞科技 |\n|---|---|---|\n| 主战场 | 图形+AI 推理 | 训练 |\n| 旗舰 | MTT S4000[1] | BR100[2] |\n\n```mermaid\nxychart\n  title "FP32 算力 (TFLOPS)"\n  bar [25, 43]\n```\n\n```python\n# fence 内的 <think> 与 [1] 都不是标记\nprint("[1]")\n```',
+    META_SENTINEL,
+  ],
+  sources: OVERVIEW_SOURCES,
+  phase: "done",
+};
+
+const OVERVIEW_ERROR: AiOverviewDebugScenario = {
+  id: "ov-error",
+  label: "失败态(receipt)",
+  q: "AI 回答失败了长什么样",
+  chunks: ["<think>正在整理来源…"],
+  sources: [],
+  phase: "error",
+  error: "HTTP 502: the AI stream was cut before any content",
+};
+
+export const AI_OVERVIEW_SCENARIOS: AiOverviewDebugScenario[] = [OVERVIEW_STREAMED, OVERVIEW_FENCES, OVERVIEW_ERROR];
+
 export const DEBUG_SCENARIOS: DebugScenario[] = [
   BROWSER_STAGE,
   FULL_STAGE,

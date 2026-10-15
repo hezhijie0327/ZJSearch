@@ -419,6 +419,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_report_progress: "已完成 {done}/{total} 节",
   ai_report_stamp_label: "已归档",
   ai_debug: "调试",
+  ai_debug_overview: "AI Overview 调试台",
   ai_debug_stage: "AI 调试台",
   attach_files: "添加图片或文件",
   ai_attach_section: "附件",

@@ -1,0 +1,12 @@
+{#- zjsearch: the AI Overview debug stage (/zjsearch/ai/overview/debug).
+    The real AI Overview card lives on the results page (it has no route of
+    its own -- the user's AI-answer trigger summons it there), so this QA
+    stage is a SYNTHETIC host: the payload carries just the identity and
+    the client mounts fixture streams through the real renderer (see
+    OverviewDebugPage / AiDebugStage). -#}
+{% extends "zjsearch/base.html" %}
+{% from "zjsearch/data/macros.html" import page_ai_overview_debug with context %}
+{% block title %}{% endblock %}
+{% block head %}<link rel="modulepreload" href="{{ url_for('static', filename='chunk/zjs-results.min.js') }}">{% endblock %}
+{% block app_skeleton %}{% include "zjsearch/skeleton.html" %}{% endblock %}
+{% block page_data %}{{ page_ai_overview_debug() }}{% endblock %}

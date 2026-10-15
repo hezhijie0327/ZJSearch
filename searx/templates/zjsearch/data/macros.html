@@ -400,6 +400,14 @@ pipeline features without any Python changes. -#}
 {"globals": {{ globals('ai_thread') }}, "thread": {{ thread|tojson }}}
 {%- endmacro %}
 
+{#- the AI Overview debug stage (/zjsearch/ai/overview/debug): a QA-only
+    synthetic host -- the real card lives on the results page and has no
+    route of its own; the payload carries just the identity (see
+    OverviewDebugPage / AiDebugStage) #}
+{% macro page_ai_overview_debug() -%}
+{"globals": {{ globals('ai_overview_debug') }}}
+{%- endmacro %}
+
 {% macro page_results(results, q, selected_categories, pageno, time_range,
                       suggestions, corrections, answers, infoboxes,
                       engine_data, paging, unresponsive_engines, timings,

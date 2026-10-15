@@ -13,6 +13,7 @@ import { SettingsContext } from "@/lib/settings.ts";
 import { PAPER_STRIP } from "@/lib/styles.ts";
 import type { AnyPageData } from "@/lib/types.ts";
 import {
+  isAiOverviewDebugPageData,
   isAiThreadPageData,
   isInfoPageData,
   isKnowledgePageData,
@@ -21,7 +22,15 @@ import {
   isStatsPageData,
 } from "@/lib/types.ts";
 import { IndexPage } from "@/pages/IndexPage.tsx";
-import { AiThreadPage, InfoPage, KnowledgePage, PreferencesPage, ResultsPage, StatsPage } from "@/pages/lazyPages.ts";
+import {
+  AiOverviewDebugPage,
+  AiThreadPage,
+  InfoPage,
+  KnowledgePage,
+  PreferencesPage,
+  ResultsPage,
+  StatsPage,
+} from "@/pages/lazyPages.ts";
 
 function Pages() {
   const { data, error } = useRouter();
@@ -72,6 +81,13 @@ function Pages() {
     return (
       <Suspense fallback={<PageFallback />}>
         <AiThreadPage data={data} />
+      </Suspense>
+    );
+  }
+  if (isAiOverviewDebugPageData(data)) {
+    return (
+      <Suspense fallback={<PageFallback />}>
+        <AiOverviewDebugPage data={data} />
       </Suspense>
     );
   }

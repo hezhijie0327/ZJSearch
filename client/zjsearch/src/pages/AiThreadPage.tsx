@@ -19,7 +19,7 @@ import { useRouter } from "@/lib/router.tsx";
 import { PAPER_STRIP } from "@/lib/styles.ts";
 import type { AiThreadPageData } from "@/lib/types.ts";
 
-// the debug stage LAZY-loads behind ?aidebug: its fixture catalog is
+// the debug stage LAZY-loads behind the `debug` thread id: its fixture catalog is
 // ~1,500 lines of QA-only data that otherwise rides EVERY real thread
 // visit in the page chunk (the stage itself is a QA surface, never a
 // user path)
@@ -33,12 +33,13 @@ const AiDebugStage = lazy(() =>
     server endpoint stays stateless) and follow-ups append to it.  A missing
     store entry (another browser, quota eviction) renders the empty state. */
 
-/** The page entry: `?aidebug` diverts to the AI debug stage (the UI's
-    own audit surface -- fixture wire-event scripts through the real fold
-    + renderers, no server surface, no tokens).  The flag lives on a
-    HOOKLESS wrapper so the impl's hook order is unconditional. */
+/** The page entry: the literal `debug` thread id (/zjsearch/ai/thread/debug)
+    diverts to the AI debug stage (the UI's own audit surface -- fixture
+    wire-event scripts through the real fold + renderers, no server
+    surface, no tokens).  The divert lives on a HOOKLESS wrapper so the
+    impl's hook order is unconditional. */
 export function AiThreadPage({ data }: { data: AiThreadPageData }) {
-  if (typeof window !== "undefined" && new window.URLSearchParams(window.location.search).has("aidebug")) {
+  if (data.thread === "debug") {
     return (
       <Shell globals={data.globals}>
         {/* the SAME horizontal geometry as the real thread page's main

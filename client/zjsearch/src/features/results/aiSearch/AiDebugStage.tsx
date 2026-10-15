@@ -2,14 +2,20 @@
 
 import { ChevronLeft, ChevronRight, FlaskConical, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AiAnswerCard } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
-import { DEBUG_SCENARIOS, type DebugScenario } from "@/features/results/aiSearch/debugFixtures.ts";
+import {
+  AI_OVERVIEW_SCENARIOS,
+  type AiOverviewDebugScenario,
+  DEBUG_SCENARIOS,
+  type DebugScenario,
+} from "@/features/results/aiSearch/debugFixtures.ts";
 import { applyEvent, type Core, emptyRun } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
 
 /**
- * The AI debug stage (`/zjsearch/ai/thread/<uuid>?aidebug`) -- the AI
+ * The AI debug stage (`/zjsearch/ai/thread/debug`) -- the AI
  * features' UNIVERSAL SIMULATOR.  Each scenario is a wire-event SCRIPT
  * replayed through the REAL fold (`applyEvent`) and rendered by the REAL
  * run section; the transport controls scrub the event timeline: drag to
@@ -252,6 +258,179 @@ export function AiDebugStage() {
         run={run}
         sourceMeta={meta}
       />
+    </div>
+  );
+}
+
+/** The AI Overview debug stage's surface (/zjsearch/ai/overview/debug):
+    the REAL AiAnswerCard fed by fixture raw-text streams -- the chunks
+    replay exactly what the wire would stream (think markers, markdown
+    answer, the trailing run-meta sentinel), the transport scrubs any
+    mid-stream state, and the fixture's sources ride the card's citation
+    chips.  The card's habitat is the results column, so the host keeps
+    its reading measure. */
+export function AiOverviewDebugStage() {
+  const t = useT();
+  const [scenarioId, setScenarioId] = useState(AI_OVERVIEW_SCENARIOS[0]?.id ?? "");
+  const [count, setCount] = useState<number>(Number.POSITIVE_INFINITY);
+  const [playing, setPlaying] = useState(false);
+  const scenario: AiOverviewDebugScenario =
+    AI_OVERVIEW_SCENARIOS.find((item) => item.id === scenarioId) ??
+    (AI_OVERVIEW_SCENARIOS[0] as AiOverviewDebugScenario);
+  const total = scenario.chunks.length;
+  const at = Math.min(Number.isFinite(count) ? count : total, total);
+  const text = useMemo(() => scenario.chunks.slice(0, at).join(""), [scenario, at]);
+  const phase: "streaming" | "done" | "error" = at < total ? "streaming" : scenario.phase;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: at/count are read ONCE at effect start (the resume point); the interval owns the ticking, re-running on every tick would restart it
+  useEffect(() => {
+    if (!playing) {
+      return;
+    }
+    let i = at >= total ? 0 : at;
+    setCount(i);
+    const timer = window.setInterval(() => {
+      i += 1;
+      setCount(i);
+      if (i >= total) {
+        window.clearInterval(timer);
+        setPlaying(false);
+      }
+    }, 260);
+    return () => {
+      window.clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- at/count are read ONCE at effect start (the resume point); the interval owns the rest
+  }, [playing, total]);
+
+  const seek = (next: number): void => {
+    setPlaying(false);
+    setCount(Math.max(0, Math.min(next, total)));
+  };
+  const pick = (id: string): void => {
+    setScenarioId(id);
+    setCount(Number.POSITIVE_INFINITY);
+    setPlaying(false);
+  };
+
+  const state = {
+    phase,
+    query: scenario.q,
+    text,
+    open: true,
+    error: phase === "error" ? (scenario.error ?? "error") : null,
+    start: () => {
+      pick(scenario.id);
+    },
+    toggle: () => {},
+    regenerate: () => {
+      pick(scenario.id);
+    },
+    reset: () => {},
+  };
+  const lastChunk = at > 0 ? `chunk ${at}` : "—";
+
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 sm:px-6">
+      <div className="sticky top-14 z-10 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <FlaskConical aria-hidden="true" className="size-4 text-accent" />
+            {t("ai_debug_overview")}
+          </span>
+          {AI_OVERVIEW_SCENARIOS.map((item) => (
+            <button
+              aria-pressed={item.id === scenarioId}
+              className={`rounded-full border px-3 py-1 text-[13px] transition-colors ${
+                item.id === scenarioId
+                  ? "border-accent-strong bg-accent-soft font-medium text-accent"
+                  : "border-line text-ink-3 hover:text-ink"
+              }`}
+              key={item.id}
+              onClick={() => {
+                pick(item.id);
+              }}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2.5 flex items-center gap-2">
+          <button
+            aria-label={t("ai_debug_restart")}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
+            onClick={() => {
+              pick(scenario.id);
+            }}
+            title={t("ai_debug_restart")}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" className="size-3.5" />
+          </button>
+          <button
+            aria-label={t("ai_debug_step_back")}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
+            onClick={() => {
+              seek(at - 1);
+            }}
+            title={t("ai_debug_step_back")}
+            type="button"
+          >
+            <ChevronLeft aria-hidden="true" className="size-4" />
+          </button>
+          <button
+            aria-label={playing ? t("ai_debug_pause") : t("ai_debug_play")}
+            className={`grid size-8 shrink-0 place-items-center rounded-full transition-colors ${
+              playing ? "bg-accent-soft text-accent" : "border border-line text-ink-2 hover:text-ink"
+            }`}
+            onClick={() => {
+              setPlaying(!playing);
+            }}
+            title={playing ? t("ai_debug_pause") : t("ai_debug_play")}
+            type="button"
+          >
+            {playing ? (
+              <Pause aria-hidden="true" className="size-3.5" />
+            ) : (
+              <Play aria-hidden="true" className="size-3.5" />
+            )}
+          </button>
+          <button
+            aria-label={t("ai_debug_step_fwd")}
+            className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
+            onClick={() => {
+              seek(at + 1);
+            }}
+            title={t("ai_debug_step_fwd")}
+            type="button"
+          >
+            <ChevronRight aria-hidden="true" className="size-4" />
+          </button>
+          <input
+            aria-label={t("ai_debug_timeline")}
+            className="zjs-range min-w-0 flex-1"
+            max={total}
+            min={0}
+            onChange={(event) => {
+              seek(Number(event.target.value));
+            }}
+            type="range"
+            value={at}
+          />
+          <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3">
+            {at}/{total} · {lastChunk}
+          </span>
+        </div>
+      </div>
+      <div className="space-y-3">
+        <AiAnswerCard q={scenario.q} sourceMeta={scenario.sources} state={state} />
+        {scenario.sources.length > 0 ? (
+          <p className="text-xs text-ink-3">
+            {scenario.sources.length} 个 fixture 来源 riding the card's citation chips
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

@@ -419,6 +419,7 @@ export const EN = {
   ai_report_progress: "{done}/{total} sections written",
   ai_report_stamp_label: "Filed",
   ai_debug: "Debug",
+  ai_debug_overview: "AI Overview debug stage",
   ai_debug_stage: "AI debug stage",
   attach_files: "Attach images or files",
   ai_attach_section: "Attachments",

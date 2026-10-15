@@ -324,7 +324,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   re-asks; children inherit the lead's flag (they have no ask tool);
   enabled-by-default paid engines ride ordinary category fan-out and
   are NOT gated (only the bang is an explicit paid choice).  The
-  aidebug stage ships the whole loop as the 计费引擎确认 scenario
+  debug stage ships the whole loop as the 计费引擎确认 scenario
   (hold → ask → awaiting → clarifyTail paid_ok re-run).
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
@@ -2585,15 +2585,22 @@ redundant, both fused into ONE post-run extractor:
   source -- the rail picker's option rows, the manager's list rows and
   the editor's shape pair all draw from it.
 
-## The AI debug stage (`?aidebug`) — the simulator and its coverage contract
+## The AI debug stages — the simulator and its coverage contract
 
-`/zjsearch/ai/thread/<uuid>?aidebug` (uuid-shaped id REQUIRED — the route
-validates the regex; the stage itself needs no server LLM) replays
-wire-event SCRIPTS (`debugFixtures.ts`) through the REAL fold and the
-REAL run section, with a transport scrubber (drag / step / replay --
-every intermediate state is a freezable QA surface).  THE RULE: a new
-tool row, wire event or state ships with a fixture in the same change --
-if the simulator can't show it, the UI can't render it.
+TWO addresses, no query flags: `/zjsearch/ai/thread/debug` (the literal
+`debug` thread id -- the route special-cases it before the UUID regex
+and the client diverts on `data.thread === "debug"`) replays wire-event
+SCRIPTS (`debugFixtures.ts`) through the REAL fold and the REAL run
+section, and `/zjsearch/ai/overview/debug` (a SYNTHETIC host -- the real
+AI Overview card lives on the results page and has no route of its own)
+replays the card's RAW stream chunks through the REAL `AiAnswerCard`
+(`AI_OVERVIEW_SCENARIOS`: streaming mid-states, citation chips, the
+fence splitter, the trailing run-meta sentinel, the failed settle).
+Both share the transport scrubber (drag / step / replay -- every
+intermediate state is a freezable QA surface) and the same gated shell
+family.  THE RULE: a new tool row, wire event or state ships with a
+fixture in the same change -- if the simulator can't show it, the UI
+can't render it.
 
 Scenario inventory (10): browser login collaboration (mirror frames ×
 wait_user × screenshot), the report kitchen-sink (every tool row ×
