@@ -659,7 +659,7 @@ class OpenaiSdk:
         if self.account is not None:
             # the family records its own spend (the account is the run's
             # ledger): one successful forward pass, input-only
-            self.account.record("decision", 1, usage_meta.get("input_tokens") or 0)
+            self.account.record("decision", tokens=usage_meta.get("input_tokens") or 0)
         return {
             "answers": answers,
             "usage": usage_meta,

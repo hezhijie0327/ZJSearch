@@ -124,7 +124,7 @@ def rerank(query: str, docs: list[str], account: t.Any = None) -> tuple[list[int
         logger.warning("zjsearch rerank: no answer within %.0fs, keeping the previous order", CALL_TIMEOUT)
         return None, 0
     if account is not None and order is not None:
-        account.record("rerank", 1, tokens)
+        account.record("rerank", tokens=tokens)
     return order, tokens
 
 

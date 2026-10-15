@@ -126,7 +126,7 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
         if self.account is not None:
             # the family records its own spend (the account is the run's
             # ledger): one successful forward pass, input-only
-            self.account.record("decision", 1, int((usage or {}).get("input_tokens") or 0))
+            self.account.record("decision", tokens=int((usage or {}).get("input_tokens") or 0))
         return {
             "answers": {name: _plain(answer) for name, answer in answers.items()},
             "usage": usage or {},

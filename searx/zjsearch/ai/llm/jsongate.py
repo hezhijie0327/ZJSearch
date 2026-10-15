@@ -116,11 +116,14 @@ def json_completion(
     messages: list[dict[str, t.Any]],
     name: str,
     schema: dict[str, t.Any],
+    account: t.Any = None,
 ) -> tuple[dict[str, t.Any] | None, dict[str, t.Any] | None]:
     """Returns ``(parsed object, usage)`` -- the value is ``None`` when
     every tier missed (callers fail open); the usage is whatever the
-    successful attempt (or the fallback) reported, so the gates' token
-    spend joins the run's account.
+    successful attempt (or the fallback) reported.  ``account`` (the
+    run's spend ledger) records the gate's spend HERE -- the ONE choke
+    point every small completion shares, so the gates bucket needs no
+    caller-side folding.
 
     One small structured-object completion (the gates -- clarify, related
     questions, follow-up rewrite): NATIVE structured output per dialect
@@ -163,9 +166,17 @@ def json_completion(
         value = _parsed(text, schema)
         if value is not None:
             _json_tier_cache[cache_key] = offset
+            if account is not None and usage:
+                account.record("gates", input=int(usage.get("input") or 0), output=int(usage.get("output") or 0))
             return value, usage
     text, usage = _stream_plain_text(cfg, messages)
-    return _parsed(text, schema), usage
+    parsed = _parsed(text, schema)
+    if account is not None and usage:
+        # the ONE choke point records the gates bucket (input/output are
+        # the LLM completion's spend; input-only callers just read fewer
+        # fields)
+        account.record("gates", input=int(usage.get("input") or 0), output=int(usage.get("output") or 0))
+    return parsed, usage
 
 
 def _parsed(text: str, schema: dict[str, t.Any]) -> dict[str, t.Any] | None:

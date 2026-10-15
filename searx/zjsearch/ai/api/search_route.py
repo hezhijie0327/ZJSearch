@@ -267,10 +267,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
 ) -> flask.Response:
     """AI Search: the researcher/writer split on the shared agent loop."""
     cfg = llm_config.llm_cfg()
-    # every gate completion's token account lands here -- the settle's
-    # usage carries the sum under ``gates`` (the gates are real model
-    # calls and MUST NOT be dark matter in the run's account)
-    gate_usage: list[dict[str, t.Any]] = []
     payload, q, _ctx = http.authorize(gate=enabled() and llm_config.configured(cfg))
     # the client-owned thread identity (browser-stored conversation): logged
     # for problem localization, never stored server-side -- the endpoint
@@ -401,12 +397,8 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # research); everything else passes one small completion that skips
     # research only for greetings, chat and writing tasks -- a CONTINUE
     # always researches (the transcript IS the research, no gate spend)
-    research_needed = resume is not None or bool(_URL_RE.search(q)) or research_gate(cfg, q, gate_usage)
-    # the run's model-spend ledger (llm.accounts.ModelAccount): born HERE
-    # -- before the first model touch (the clarify pre-gate) -- and handed
-    # to everything after it (the Searches state adopts it, the services
-    # record into it, the settle reads its buckets)
     account = ModelAccount()
+    research_needed = resume is not None or bool(_URL_RE.search(q)) or research_gate(cfg, q, account=account)
     # the clarify PRE-GATE (fail-open): two decision nouls decide whether
     # the query even reaches the (expensive) clarify completion -- AMBIGUOUS
     # (the answer's key depends on unstated intent) or HIGH-STAKES (a
@@ -479,7 +471,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             except Exception:  # pylint: disable=broad-except
                 clarify_worth_asking = True
     if research_needed and clarify_worth_asking and clarify_state == "ask" and not history:
-        gate = clarify_gate(cfg, q, lang, gate_usage, attachments_note=gate_note)
+        gate = clarify_gate(cfg, q, lang, account=account, attachments_note=gate_note)
         if gate:
             gate_preamble = ([{"e": "decisions", "items": [pre_entry]}] if pre_entry else []) + (
                 [attachment_event] if attachment_event else []
@@ -489,7 +481,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 cfg,
                 q,
                 lang,
-                gate_usage,
                 account=account,
                 judgments=[pre_entry] if pre_entry else None,
                 preamble=gate_preamble or None,
@@ -545,7 +536,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             cfg,
             q,
             lang,
-            gate_usage,
+            account=account,
             preamble=[attachment_event] if attachment_event else None,
         )
         response = _respond(stream)
@@ -558,7 +549,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # BEHAVIOR note (speed's "do not bother") shapes its use, the surface
     # never gates it
     register_tasks = True
-    research_q = (standalone_question(cfg, q, history, lang, gate_usage) if history else "") or q
+    research_q = (standalone_question(cfg, q, history, lang, account=account) if history else "") or q
     depth_probe_entry: dict[str, t.Any] | None = None
     # the DEPTH PROBE: the decision model grades how deep/broad the
     # question needs to be (one score call) and the mode's round LADDER
@@ -643,7 +634,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 lang,
                 clarifications if clarify_state == "answered" else "",
                 report_template,
-                gate_usage,
+                account=account,
                 attachments=outline_attachments,
                 deck=deck_requested,
             )
@@ -653,7 +644,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 research_q,
                 lang,
                 clarifications if clarify_state == "answered" else "",
-                gate_usage,
+                account=account,
                 attachments=outline_attachments,
                 prior_topics=prior_topics,
                 deck=deck_requested,
@@ -708,7 +699,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             )
     # the loop-side gates (the entity gate's extraction) append to the SAME
     # list the settle's gates bucket folds
-    state.gate_usage = gate_usage
     state.attached_files = [
         {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
     ]
@@ -809,7 +799,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             lang,
             clarifications if clarify_state == "answered" else "",
             template,
-            gate_usage,
+            account=state.account,
             attachments=outline_attachments,
             prior_topics=prior_topics,
             deck=deck,
@@ -1004,7 +994,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     outline,
                     research_q,
                     lang,
-                    gate_usage,
                     take_template=_take_template,
                     take_deck=_take_deck,
                     deck=deck_requested,
@@ -1030,7 +1019,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         cfg,
         research_q,
         lang,
-        gate_usage,
         account=state.account,
         judgments=state.judgments,
         known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
@@ -1097,7 +1085,6 @@ class _SettleTail:
         cfg: dict[str, t.Any],
         question: str,
         lang: str,
-        gate_usage: list[dict[str, t.Any]],
         account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
         known_memories_fn: t.Callable[[], list[str]] | None = None,
@@ -1109,9 +1096,10 @@ class _SettleTail:
         # title pass's candidate when no fence title rode the answer
         self.outline_title = outline_title or None
         self.lang = lang
-        self.gate_usage = gate_usage
         # the run's model-spend ledger (a LIVE object -- the settle reads
-        # its buckets after the run's searches have mutated them)
+        # its buckets after the run's searches have mutated them); the
+        # gates' spend rides INSIDE it (jsongate records at its choke
+        # point), so gates_sum is gone with the list it summed
         self.account = account
         # the judgment ledger (the executor's structured verdicts) -- the
         # settle carries it verbatim so the knowledge base's run meta is
@@ -1132,7 +1120,7 @@ class _SettleTail:
         drop the cascade's or the judgments' spend."""
         usage = event.get("usage")
         buckets = self.account.buckets() if self.account is not None else {}
-        if self.gate_usage or isinstance(usage, dict) or buckets:
+        if isinstance(usage, dict) or buckets:
             usage = (
                 dict(usage)
                 if isinstance(usage, dict)
@@ -1144,12 +1132,8 @@ class _SettleTail:
                     "cache_write": 0,
                 }
             )
-            usage["gates"] = self.gates_sum()
             for kind, spend in buckets.items():
-                usage[kind] = {
-                    "calls": int(spend["calls"]),
-                    "tokens": int(spend.get("tokens") or 0),
-                }
+                usage[kind] = dict(spend)  # the bucket VERBATIM -- each model class's own shape
             event = {**event, "usage": usage}
         if self.judgments:
             event = {**event, "judgments": self.judgments}
@@ -1200,7 +1184,7 @@ class _SettleTail:
                 answer,
                 self.lang,
                 self.outline_title,
-                self.gate_usage,
+                account=self.account,
             )
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("zjsearch_ai_search: title generation failed: %r", exc)
@@ -1229,7 +1213,7 @@ class _SettleTail:
             # think for the better part of a minute -- that is why the
             # fence is the fast path and this trails the settle)
             try:
-                found = related_questions(self.cfg, self.question, answer, self.lang, self.gate_usage)
+                found = related_questions(self.cfg, self.question, answer, self.lang, account=self.account)
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("zjsearch_ai_search: related fallback failed: %r", exc)
                 found = []
@@ -1237,9 +1221,7 @@ class _SettleTail:
                 yield {"e": "related", "items": found}
         try:
             known = self.known_memories_fn() if self.known_memories_fn else None
-            facts, tags = extract_insights(
-                self.cfg, self.question, answer, self.gate_usage, known=known, account=self.account
-            )
+            facts, tags = extract_insights(self.cfg, self.question, answer, known=known, account=self.account)
             for fact in facts:
                 yield {"e": "memory", "content": fact}
             if tags:
@@ -1248,18 +1230,13 @@ class _SettleTail:
                 yield {"e": "tags", "items": tags}
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch_ai_search: memory extraction failed: %r", exc)
-        if self.gate_usage:
-            # the trailing completions' spend: the absolute gates sum
-            # replaces the settle's bucket (idempotent -- the client sets
-            # it), so the WHOLE flow stays accounted
-            yield {"e": "usage", "gates": self.gates_sum()}
-
-    def gates_sum(self) -> dict[str, t.Any]:
-        return {
-            "input": sum(int(g.get("input") or 0) for g in self.gate_usage),
-            "output": sum(int(g.get("output") or 0) for g in self.gate_usage),
-            "calls": len(self.gate_usage),
-        }
+        # the trailing completions' spend is already in the ledger (the
+        # gates bucket -- jsongate records at its ONE choke point); the
+        # late usage event re-publishes the absolute totals (idempotent --
+        # the client sets it), so the WHOLE flow stays accounted
+        gates = self.account.spend("gates") if self.account is not None else {}
+        if gates.get("calls"):
+            yield {"e": "usage", "gates": gates}
 
 
 class _Ndjson:  # pylint: disable=too-few-public-methods
@@ -1274,7 +1251,6 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         cfg: dict[str, t.Any],
         question: str,
         lang: str,
-        gate_usage: list[dict[str, t.Any]],
         account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
         preamble: list[dict[str, t.Any]] | None = None,
@@ -1285,7 +1261,6 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             cfg,
             question,
             lang,
-            gate_usage,
             account=account,
             judgments=judgments,
             known_memories_fn=known_memories_fn,

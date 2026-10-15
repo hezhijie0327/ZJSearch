@@ -112,13 +112,12 @@ class SubagentHandle:
         # refusing, and the settling lane chains them
         self.busy = False
         self.pending_messages: list[str] = []
-        # the parent-fold bookkeeping: feed/judgment/gate positions, the
-        # spend snapshots and the absorbed corpus-chunk identities -- all
-        # read AFTER each settlement, so a resume promotes only the new
+        # the parent-fold bookkeeping: feed/judgment positions, the spend
+        # snapshot and the absorbed corpus-chunk identities -- all read
+        # AFTER each settlement, so a resume promotes only the new
         # material
         self.feed_mark = 0
         self.judgment_mark = 0
-        self.gate_mark = 0
         # the promotion mark for the child's spend ledger (the account's
         # snapshot at the last fold -- a resumed subagent settles
         # repeatedly and only the delta promotes)
@@ -430,7 +429,6 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # assigns the same list object): loop-side gate completions (the
         # entity gate's extraction) append here and fold into the settle's
         # gates bucket through the route's own accounting
-        self.gate_usage: list[dict[str, t.Any]] = []
         # THIS round's new source titles (the coverage referee's evidence)
         self.round_new_titles: list[str] = []
         # whether THIS round recorded learnings (the 边做边记 discipline note)

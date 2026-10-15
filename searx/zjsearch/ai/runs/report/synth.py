@@ -101,15 +101,13 @@ def make_synthesizer(
     outline: dict[str, t.Any],
     question: str,
     lang: str,
-    gate_usage: list[dict[str, t.Any]],  # pylint: disable=unused-argument
     take_template: t.Callable[[bool], dict[str, t.Any] | None] | None = None,
     take_deck: t.Callable[[], bool | None] | None = None,
     deck: bool = False,
 ) -> t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]]:
     """Bind the run's state and outline; returns the synthesizer the loop
-    calls with the tally at write-phase time.  ``gate_usage`` receives the
-    outline gate's spend on the route side; the citation gate's verdicts
-    land in ``state.judgments`` (the 决策结果 card).  ``take_template`` is
+    calls with the tally at write-phase time.  The citation gate's
+    verdicts land in ``state.judgments`` (the 决策结果 card).  ``take_template`` is
     the rail's 输出结构 channel: ONE pending template consumed at the write
     boundary -- a template the user picked while the research ran REPLACES
     the route-time outline before the first section streams (the rebuilt

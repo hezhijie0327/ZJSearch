@@ -2770,20 +2770,22 @@ unchecked).  The judge TOOL gains ``images`` (url strings off the
 gathered material, cap ``decision.MAX_IMAGES``, parsed as a third
 tuple element); the browser proxy + ``lib/decision.ts``'s ``decide()``
 carry the same optional list.  USAGE COVERAGE (every model spend lands
-in the settle's usage): the LLM completions split into the main tokens
-+ the ``gates`` bucket (the small structured completions), and every
-NON-LLM endpoint records into ONE run-scoped ledger --
+in the settle's usage): ONE run-scoped ledger --
 ``llm.accounts.ModelAccount``, owned by the Searches state and passed
-with the call (run attribution is explicit: the side-model services are
-stateless module functions and a process serves concurrent runs, while
-an ambient context would have to survive the gather workers, the
-dispatch pools and the driver thread -- the flask-context lesson).  The
-SERVICES parse their own wire usage and record (family knowledge stays
-in the family -- the decision family surfaces even bind the account at
-factory time and self-record, so no judge call site folds a bucket);
-the call sites only hand the account along.  The settle's merge is
-GENERIC over the account's kinds (``usage.rerank`` / ``decision`` /
-``embedding`` today -- a new model class is one new kind string, one
+with the call -- carries every model class (run attribution is
+explicit: the model services are stateless module functions and a
+process serves concurrent runs, while an ambient context would have to
+survive the gather workers, the dispatch pools and the driver thread --
+the flask-context lesson).  The SERVICES parse their own wire usage and
+record (family knowledge stays in the family -- the decision family
+surfaces even bind the account at factory time and self-record, so no
+judge call site folds a bucket): ``rerank`` / ``decision`` /
+``embedding`` from their endpoints, and the LLM's small structured
+completions (``gates``) from ``jsongate.json_completion``'s ONE choke
+point (``record`` is shape-agnostic -- numeric fields merge per model
+class).  The MAIN loop tokens stay with the engine tally (they carry
+the research/write phase split).  The settle's merge is GENERIC over
+the account's kinds (a new model class is one new kind string, one
 service-side record, and it reaches the wire with zero branches); the
 subagent promote merges deltas against the handle's snapshot; the
 overview folds its ordering spend into its own settle; the browser

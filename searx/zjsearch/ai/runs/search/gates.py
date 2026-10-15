@@ -14,9 +14,6 @@ import typing as t
 
 from searx.zjsearch.ai.llm import jsongate
 
-UsageOut = list[dict[str, t.Any]] | None
-"""A gate's token account lands HERE (the route's collector list) -- the
-gates are real completions and their spend joins the run's usage."""
 _CLARIFY_SCHEMA: dict[str, t.Any] = {
     "type": "object",
     "properties": {
@@ -81,7 +78,7 @@ def sanitize_questions(raw_items: t.Any) -> list[dict[str, t.Any]]:
     return questions
 
 
-def research_gate(cfg: dict[str, t.Any], question: str, usage_out: UsageOut = None) -> bool:
+def research_gate(cfg: dict[str, t.Any], question: str, account: t.Any = None) -> bool:
     """The pre-flight gate (Vane's skipSearch, narrowed to our contract):
     False only for requests where NO answer detail can benefit from live
     web sources -- greetings and small talk, creative writing (poems,
@@ -112,16 +109,14 @@ def research_gate(cfg: dict[str, t.Any], question: str, usage_out: UsageOut = No
         },
         {"role": "user", "content": f"<q>{question}</q>"},
     ]
-    value, usage = jsongate.json_completion(cfg, messages, "research_gate", _RESEARCH_SCHEMA)
-    if usage_out is not None and usage:
-        usage_out.append(usage)
+    value, _usage = jsongate.json_completion(cfg, messages, "research_gate", _RESEARCH_SCHEMA, account=account)
     if not value or not isinstance(value.get("research"), bool):
         return True
     return value["research"]
 
 
 def standalone_question(
-    cfg: dict[str, t.Any], question: str, history: list[dict[str, str]], lang: str, usage_out: UsageOut = None
+    cfg: dict[str, t.Any], question: str, history: list[dict[str, str]], lang: str, account: t.Any = None
 ) -> str:
     """The follow-up rewrite (Vane's standalone follow-up): one small
     completion turns a thread-relative question into a self-contained one
@@ -145,9 +140,7 @@ def standalone_question(
         },
         {"role": "user", "content": f"<conversation>\n{convo}\n</conversation>\n<follow_up>{question}</follow_up>"},
     ]
-    value, usage = jsongate.json_completion(cfg, messages, "standalone_question", _STANDALONE_SCHEMA)
-    if usage_out is not None and usage:
-        usage_out.append(usage)
+    value, _usage = jsongate.json_completion(cfg, messages, "standalone_question", _STANDALONE_SCHEMA, account=account)
     return str((value or {}).get("question") or "").strip()[:300]
 
 
@@ -155,7 +148,7 @@ def clarify_gate(
     cfg: dict[str, t.Any],
     question: str,
     lang: str,
-    usage_out: UsageOut = None,
+    account: t.Any = None,
     attachments_note: str = "",
 ) -> dict[str, t.Any] | None:
     """The pre-research human-in-loop gate: one small completion decides
@@ -196,9 +189,7 @@ def clarify_gate(
         },
         {"role": "user", "content": f"<q>{question}</q>{attachments_note}"},
     ]
-    value, usage = jsongate.json_completion(cfg, messages, "clarify_gate", _CLARIFY_SCHEMA)
-    if usage_out is not None and usage:
-        usage_out.append(usage)
+    value, _usage = jsongate.json_completion(cfg, messages, "clarify_gate", _CLARIFY_SCHEMA, account=account)
     if not value or not value.get("ask"):
         return None
     questions = sanitize_questions(value.get("questions"))
@@ -213,7 +204,7 @@ def generate_title(
     answer: str,
     lang: str,
     outline_title: str | None = None,
-    usage_out: UsageOut = None,
+    account: t.Any = None,
 ) -> str | None:
     """The settle-tail's TITLE generation (the fallback when the writer's
     own fence title is missing or failed the decision gate): one small
@@ -238,18 +229,14 @@ def generate_title(
         },
     ]
     try:
-        value, usage = jsongate.json_completion(cfg, messages, "thread_title", {"type": "object"})
+        value, _usage = jsongate.json_completion(cfg, messages, "thread_title", {"type": "object"}, account=account)
     except Exception:  # pylint: disable=broad-except
         return None
-    if usage_out is not None and usage:
-        usage_out.append(usage)
     title = str((value or {}).get("title") or "").strip().strip('"“”')
     return title[:40] or None
 
 
-def related_questions(
-    cfg: dict[str, t.Any], question: str, answer: str, lang: str, usage_out: UsageOut = None
-) -> list[str]:
+def related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: str, account: t.Any = None) -> list[str]:
     """Three follow-up questions for the Related section -- one small
     structured completion after the answer settles; empty on any
     failure."""
@@ -270,9 +257,7 @@ def related_questions(
             ),
         },
     ]
-    value, usage = jsongate.json_completion(cfg, messages, "related_questions", _RELATED_SCHEMA)
-    if usage_out is not None and usage:
-        usage_out.append(usage)
+    value, _usage = jsongate.json_completion(cfg, messages, "related_questions", _RELATED_SCHEMA, account=account)
     items = (value or {}).get("questions")
     if not isinstance(items, list):
         return []

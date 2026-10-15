@@ -1624,9 +1624,6 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 }
             )
         handle.judgment_mark = len(child.judgments)
-        child_gates = getattr(child, "gate_usage", None) or []
-        self.gate_usage.extend(child_gates[handle.gate_mark :])
-        handle.gate_mark = len(child_gates)
         self.account.merge_delta(child.account, handle.spend_snap)
 
     def _sub_digest(self, handle: SubagentHandle) -> str:

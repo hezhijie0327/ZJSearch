@@ -174,7 +174,6 @@ def extract_insights(
     cfg: dict[str, t.Any],
     question: str,
     answer: str,
-    usage_out: list[dict[str, t.Any]] | None = None,
     known: list[str] | None = None,
     account: t.Any = None,
 ) -> tuple[list[str], list[str]]:
@@ -192,7 +191,7 @@ def extract_insights(
     from searx.zjsearch.ai.llm import jsongate  # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.prompts import extractor  # pylint: disable=import-outside-toplevel
 
-    value, usage = jsongate.json_completion(
+    value, _usage = jsongate.json_completion(
         cfg,
         [
             {
@@ -218,9 +217,8 @@ def extract_insights(
             },
             "required": ["facts", "tags"],
         },
+        account=account,
     )
-    if usage_out is not None and usage:
-        usage_out.append(usage)
     value = value or {}
     facts = value.get("facts")
     tags = value.get("tags")

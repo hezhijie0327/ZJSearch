@@ -34,7 +34,7 @@ def _merge_spend(events: t.Iterable[dict[str, t.Any]], account: t.Any) -> t.Iter
             usage = event.get("usage")
             usage = usage if isinstance(usage, dict) else {}
             for kind, bucket in buckets.items():
-                usage[kind] = {"calls": int(bucket["calls"]), "tokens": int(bucket.get("tokens") or 0)}
+                usage[kind] = dict(bucket)  # verbatim -- the class's own shape
             event = {**event, "usage": usage}
         yield event
 

@@ -61,7 +61,7 @@ _EXTRACT_SCHEMA: dict = {
 
 
 def _extract(
-    cfg: dict[str, t.Any], question: str, attached_files: list[dict[str, str]], gate_usage: list[dict[str, t.Any]]
+    cfg: dict[str, t.Any], question: str, attached_files: list[dict[str, str]], account: t.Any = None
 ) -> list[dict[str, str]]:
     """One small json completion: the deliverable entities of this
     request.  ``[]`` on any failure (fail-open)."""
@@ -71,17 +71,16 @@ def _extract(
         if text:
             user += f'\n<attachment name="{file.get("name") or "attachment"}">\n{text}\n</attachment>'
     try:
-        value, usage = jsongate.json_completion(
+        value, _usage = jsongate.json_completion(
             cfg,
             [{"role": "system", "content": _EXTRACT_SYSTEM}, {"role": "user", "content": user}],
             "deliverable_entities",
             _EXTRACT_SCHEMA,
+            account=account,
         )
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug("zjsearch entity_gate: extraction failed: %r", exc)
         return []
-    if usage:
-        gate_usage.append(usage)
     out: list[dict[str, str]] = []
     for raw in (value or {}).get("entities") or []:
         if not isinstance(raw, dict):
@@ -122,7 +121,7 @@ def run_once(state: t.Any, items: list[dict[str, str]]) -> str | None:
     if not question:
         return None
     started = time.monotonic()
-    entities = _extract(state.cfg, question, list(getattr(state, "attached_files", []) or []), state.gate_usage)
+    entities = _extract(state.cfg, question, list(getattr(state, "attached_files", []) or []), account=state.account)
     if not entities:
         return None
     uncovered = _uncovered(entities, [str(item.get("title") or "") for item in items])

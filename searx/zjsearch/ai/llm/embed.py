@@ -263,5 +263,5 @@ def run_batch(
         logger.warning("zjsearch_embedding: upstream returned a null vector -- batch dropped")
         return None
     if account is not None and usage:
-        account.record("embedding", 1, int(usage.get("input") or 0))
+        account.record("embedding", tokens=int(usage.get("input") or 0))
     return [vector for vector in vectors if vector is not None], model, usage

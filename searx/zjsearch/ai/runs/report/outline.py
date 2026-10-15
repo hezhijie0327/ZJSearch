@@ -41,7 +41,7 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
     question: str,
     lang: str,
     clarified: str,
-    gate_usage: list[dict[str, t.Any]],
+    account: t.Any = None,
     attachments: list[dict[str, str]] | None = None,
     prior_topics: list[str] | None = None,
     deck: bool = False,
@@ -72,17 +72,16 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
         name = str(file.get("name") or "attachment")
         user += f'\n<attachment name="{name}">\n{text}\n</attachment>'
     try:
-        value, usage = jsongate.json_completion(
+        value, _usage = jsongate.json_completion(
             cfg,
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "deck_outline" if deck else "report_outline",
             report_prompts.OUTLINE_SCHEMA,
+            account=account,
         )
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch report: outline gate failed: %r", exc)
         return None
-    if usage:
-        gate_usage.append(usage)
     return _parse_outline(value, question)
 
 
@@ -189,7 +188,7 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
     lang: str,
     clarified: str,
     template: dict[str, t.Any],
-    gate_usage: list[dict[str, t.Any]],
+    account: t.Any = None,
     attachments: list[dict[str, str]] | None = None,
     prior_topics: list[str] | None = None,
     deck: bool = False,
@@ -218,17 +217,16 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
             continue
         user += f'\n<attachment name="{file.get("name") or "attachment"}">\n{text}\n</attachment>'
     try:
-        value, usage = jsongate.json_completion(
+        value, _usage = jsongate.json_completion(
             cfg,
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             "deck_outline_template" if deck else "report_outline_template",
             report_prompts.OUTLINE_SCHEMA,
+            account=account,
         )
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch report: template outline gate failed: %r", exc)
         return None
-    if usage:
-        gate_usage.append(usage)
     outline = _parse_outline(value, question)
     if outline is not None:
         # the structure's IDENTITY rides the skeleton: the rail's 输出结构
