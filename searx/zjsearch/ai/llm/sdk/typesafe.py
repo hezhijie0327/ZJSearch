@@ -60,17 +60,40 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
         state: t.Any,
         questions: dict[str, dict[str, t.Any]],
         timeout: float | None = None,
+        images: list[dict[str, str]] | None = None,
     ) -> dict[str, t.Any] | None:
         """One decision-model judgment: ``(state, questions) -> {"answers",
         "usage", "latency_ms"}`` with JSON-safe answers.  Raw question
         dicts are accepted (the SDK coerces its own typed models); the
         client is one self-contained connection per call, closed on every
-        path.  The caller's lens degrades on ``None`` (raised errors
-        propagate -- the service owns the fail-open)."""
+        path.  ``images`` are the service-resolved assets (``{ref,
+        data_base64, format}``) -- they ride the vendor's top-level
+        ``assets`` map, the state/instructions reference them by their
+        plain-text ``ref`` (the vendor matches the strings verbatim; an
+        unreferenced asset 400s the request, and the service's docs-conform
+        geometry keeps one bad picture from killing the call), and the
+        experimental-images gate header rides per-call.  The caller's lens
+        degrades on ``None`` (raised errors propagate -- the service owns
+        the fail-open)."""
         from typesafe_sdk import (
             TypeSafeClient,
         )  # pylint: disable=import-outside-toplevel
 
+        call_body = extra_body(self.cfg) or None
+        call_headers = extra_headers(self.cfg) or None
+        if images:
+            call_body = {
+                **(call_body or {}),
+                "assets": {
+                    asset["ref"]: {
+                        "type": "image",
+                        "format": asset["format"],
+                        "data_base64": asset["data_base64"],
+                    }
+                    for asset in images
+                },
+            }
+            call_headers = {**(extra_headers(self.cfg) or {}), "TypeSafe-Danger-Zone-Images": "true"}
         client = TypeSafeClient(
             api_key=str(self.cfg.get("api_key") or ""),
             # a base ending in /v1 is always a misconfig (the SDK appends
@@ -88,7 +111,8 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
                 questions,
                 model=str(self.cfg.get("model")),
                 timeout=timeout or sdk_timeout(),
-                extra_body=extra_body(self.cfg) or None,
+                extra_headers=call_headers,
+                extra_body=call_body,
             )
         finally:
             client.close()

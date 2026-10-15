@@ -35,11 +35,15 @@ export function decisionConfigured(): boolean {
 /** One decision-model judgment: a compact state (text or JSON) plus 1..12
     named questions -- ``{"type": "choice"|"score"|"noul", ...}`` per the
     route's vocabulary -- answers back as ``{name: {choice|score|noul}}``
-    with each verdict's distribution.  Resolves null when the feature is
+    with each verdict's distribution.  ``images`` lists picture URLs
+    (http/https or data URLs, max 4) for visual judgments: fetched
+    server-side and attached as image-1..image-N -- reference them in the
+    state by those plain names.  Resolves null when the feature is
     off/unconfigured or the upstream failed. */
 export async function decide(
   state: string | Record<string, unknown>,
   questions: Record<string, Record<string, unknown>>,
+  images?: string[],
 ): Promise<{
   answers: Record<string, Record<string, unknown>>;
   usage?: Record<string, unknown> | null;
@@ -54,7 +58,7 @@ export async function decide(
       usage?: Record<string, unknown> | null;
       latency_ms?: number;
     }>("/zjsearch/ai/decision", {
-      body: JSON.stringify({ tk: config.token, state, questions }),
+      body: JSON.stringify({ tk: config.token, state, questions, ...(images?.length ? { images } : {}) }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });

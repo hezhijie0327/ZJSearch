@@ -2751,7 +2751,34 @@ absent rides the public endpoint).  A question the Decisions wire
 cannot express (a choice with <2 options, a score with <2 levels) drops
 on the openai family -- its answer stays absent, the consumers'
 fail-open covers it -- because a malformed question would 400 the
-WHOLE request.
+WHOLE request.  IMAGES (both families take pictures): ``judge(...,
+images=[urls])`` resolves each URL (data or public http/https through
+``guard.public_url_rejection`` -- the model names URLs, the server
+fetches) into assets the state/instructions reference as PLAIN
+``image-1..N`` text: the typesafe family ships the vendor's top-level
+``assets`` map + the ``TypeSafe-Danger-Zone-Images`` gate header
+(reference strings matched verbatim; an unreferenced asset 400s), the
+openai family attaches data-URL ``input_image`` parts in the same
+order.  The resolver drops unusable pictures instead of failing the
+call (SSRF-refused, non-image, over 6 MiB, below the 256px/78,400px
+geometry floor) and DOWNSCALES the oversized into the
+1568px/2.4MP window; a dropped image leaves an ORDINAL GAP so the
+caller's ``image-2`` mention keeps pointing at the same picture;
+webp/gif transcode to PNG and in-window PNG/JPEG bytes ride verbatim
+(PIL optional -- without it only the wire-native formats pass,
+unchecked).  The judge TOOL gains ``images`` (url strings off the
+gathered material, cap ``decision.MAX_IMAGES``, parsed as a third
+tuple element); the browser proxy + ``lib/decision.ts``'s ``decide()``
+carry the same optional list.  USAGE COVERAGE (every model spend folds
+into the settle's usage): ``gates`` (the small structured completions),
+``rerank`` (the cascade, the writer's context ordering, the corpus
+packs, the overview's ordering), ``decision`` (every judge call site --
+the probe, the gates, the tool, the audit scan), ``embedding`` (the
+server-side ``run_batch`` spend: diversity pruning, the corpus packs,
+the audit recall, the memory dedup -- ``usage.embedding``, input-only;
+a fully-cached LRU batch adds nothing).  The overview folds its
+ordering spend into its own settle; the browser proxies return usage to
+their callers unaccounted.
 
 ## Python CI (upstream gates for searx/ changes)
 

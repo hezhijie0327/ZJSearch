@@ -19,12 +19,14 @@ round trip (tens of milliseconds) -- it runs on the calling thread by
 design, no loop bridging.
 """
 
+import base64
 import importlib.util
+import io
 import logging
 import typing as t
 
 from searx.zjsearch.ai.core import config as core_config
-from searx.zjsearch.ai.core import security
+from searx.zjsearch.ai.core import guard, security
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,29 @@ questions, not a questionnaire."""
 MAX_STATE_CHARS = 24_000
 """The state payload's truncation point (the decision model reads the
 state in one forward pass; a novel is not what it is for)."""
+
+MAX_IMAGES = 4
+"""Images per judgment call -- a decision model looks at a handful of
+pictures, not a gallery."""
+
+MAX_IMAGE_BYTES = 6 * 1024 * 1024
+"""One image's decoded size cap (the typesafe wire takes 16 MiB a file
+and 32 MiB a request; six MiB an image keeps four of them clear of the
+request ceiling with the base64 headroom to spare)."""
+
+IMAGE_FETCH_TIMEOUT = 8.0
+"""One image fetch's budget -- thumbnails and page photos land in well
+under a second; the cap exists so a hung host cannot stall the calling
+thread (the resolution runs on it, no loop bridging)."""
+
+_IMAGE_MIN_SIDE = 256
+_IMAGE_MAX_SIDE = 1568
+_IMAGE_MIN_PIXELS = 78_400
+_IMAGE_MAX_PIXELS = 2_458_624
+"""The typesafe wire's image geometry window (256-1568 px a side,
+78,400-2,458,624 pixels in total); violations are rejected with the
+WHOLE request, so the resolver drops too-small images and downscales
+the oversized ones instead of letting one bad picture kill the call."""
 
 
 def cfg() -> dict[str, t.Any]:
@@ -158,6 +183,144 @@ def features(key: str) -> dict[str, t.Any]:
     return merged
 
 
+def _image_entry(data: bytes, fmt: str) -> dict[str, str]:
+    """One resolved asset: ``{ref, data_base64, format}`` -- the ref is
+    the plain-text handle the state/instructions write (the typesafe wire
+    matches reference strings verbatim; the openai family attaches the
+    parts in order, so ``image-N`` reads the same on both)."""
+    return {
+        "ref": "",
+        "data_base64": base64.b64encode(data).decode("ascii"),
+        "format": fmt,
+    }
+
+
+def _normalize_image(data: bytes, declared: str) -> tuple[bytes, str] | None:
+    """Sniff, validate and fit one image into the wires' geometry window:
+    in-window PNG/JPEG bytes ride VERBATIM; anything else (webp, gif,
+    bmp) transcodes to PNG when PIL is importable; the oversized
+    downscale and the EXIF rotation re-encode (a downscaled picture
+    still answers the question -- a 400 on the WHOLE typesafe request
+    does not).  ``(data, format)`` out, ``None`` when the image is
+    unusable (too small, undecodable)."""
+    try:
+        from PIL import Image, ImageOps  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        # no PIL on this deploy: only the wire-native formats pass, unchecked
+        return (data, declared) if declared in ("png", "jpeg") and len(data) <= MAX_IMAGE_BYTES else None
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            src = (probe.format or "").upper()
+            fmt = "png" if src == "PNG" else ("jpeg" if src in ("JPEG", "MPO") else "png")
+            width, height = probe.size
+            if width * height < _IMAGE_MIN_PIXELS or min(width, height) < _IMAGE_MIN_SIDE:
+                return None
+            scale = min(
+                1.0,
+                _IMAGE_MAX_SIDE / max(width, height),
+                (_IMAGE_MAX_PIXELS / (width * height)) ** 0.5,
+            )
+            if (
+                scale >= 1.0
+                and fmt == declared
+                and not probe.getexif().get(274)  # no EXIF rotation to apply
+                and probe.mode in ("RGB", "RGBA", "L", "P", "1")
+                and len(data) <= MAX_IMAGE_BYTES
+            ):
+                return data, fmt  # in-window wire-native bytes: untouched
+            image = ImageOps.exif_transpose(probe)
+            if scale < 1.0:
+                image = image.resize((max(1, int(width * scale)), max(1, int(height * scale))))
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            out = _encode(image, fmt)
+            if len(out) > MAX_IMAGE_BYTES:
+                out = _encode(image, "jpeg" if fmt == "png" else "png")
+            return (out, fmt) if len(out) <= MAX_IMAGE_BYTES else None
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("zjsearch_decision: image normalization failed, dropped: %r", exc)
+        return None
+
+
+def _encode(image: t.Any, fmt: str) -> bytes:
+    """One PIL image as PNG or JPEG bytes."""
+    buffer = io.BytesIO()
+    if fmt == "png":
+        image.save(buffer, format="PNG", optimize=True)
+    else:
+        image.save(buffer, format="JPEG", quality=85)
+    return buffer.getvalue()
+
+
+def _resolve_one(url: str, client: t.Any) -> dict[str, str] | None:
+    """One URL (``data:`` or public http(s)) as ``{data_base64,
+    format}`` -- ``None`` when unusable."""
+    if url.startswith("data:"):
+        header, _, payload = url.partition(",")
+        if not payload or not header.endswith(";base64"):
+            return None
+        meta = header[5:].lower()
+        if not meta.startswith("image/"):
+            return None
+        declared = "png" if "image/png" in meta else ("jpeg" if "image/jpeg" in meta or "image/jpg" in meta else "")
+        data = base64.b64decode(payload, validate=True)
+        if len(data) > MAX_IMAGE_BYTES:
+            return None
+        normalized = _normalize_image(data, declared)
+        return None if normalized is None else _image_entry(*normalized)
+    rejection = guard.public_url_rejection(url)
+    if rejection is not None:
+        logger.debug("zjsearch_decision: image url refused: %s", rejection)
+        return None
+    response = client.get(url)
+    if response.status_code != 200:
+        return None
+    content_type = str(response.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if not content_type.startswith("image/"):
+        return None
+    data = response.content
+    if not data or len(data) > MAX_IMAGE_BYTES:
+        return None
+    declared = "png" if content_type == "image/png" else ("jpeg" if content_type in ("image/jpeg", "image/jpg") else "")
+    normalized = _normalize_image(data, declared)
+    return None if normalized is None else _image_entry(*normalized)
+
+
+def resolve_images(images: t.Any) -> list[dict[str, str]]:
+    """The caller's image URLs (http/https or ``data:`` URLs) resolved
+    into the wire assets: the SSRF gate first (the model names URLs, the
+    server fetches -- the reader's doctrine), then a size-capped fetch
+    and the geometry normalization.  A ref rides ``image-1..N`` in the
+    order given; a dropped image KEEPS its ordinal gap (the state's
+    ``image-2`` mention degrades to plain text -- every wire reads
+    unmatched reference text as text, and renumbering would silently
+    move the evidence under the caller's words)."""
+    resolved: list[dict[str, str]] = []
+    if not isinstance(images, (list, tuple)):
+        return resolved
+    candidates = [str(url or "").strip() for url in images][:MAX_IMAGES]
+    if not any(candidates):
+        return resolved
+    import httpx2  # pylint: disable=import-outside-toplevel
+
+    with httpx2.Client(timeout=IMAGE_FETCH_TIMEOUT, follow_redirects=True) as client:
+        for index, url in enumerate(candidates, 1):
+            if not url:
+                continue
+            try:
+                entry = _resolve_one(url, client)
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("zjsearch_decision: image %r dropped: %r", url[:120], exc)
+                entry = None
+            if entry is not None:
+                # the ref rides the URL's POSITION, not the survivor count:
+                # a dropped image leaves an ordinal gap so the caller's
+                # "image-2" mention keeps pointing at the same picture
+                entry["ref"] = f"image-{index}"
+                resolved.append(entry)
+    return resolved
+
+
 def _surface(block: dict[str, t.Any]) -> t.Any:
     """The configured family's bound decision surface -- the embedding
     service's ``resolve`` pattern, scoped to the decision families (the
@@ -178,6 +341,7 @@ def judge(  # pylint: disable=too-many-return-statements
     state: t.Any,
     questions: dict[str, dict[str, t.Any]],
     timeout: float | None = None,
+    images: t.Any = None,
 ) -> dict[str, t.Any] | None:
     """One decision-model judgment: ``state`` (text or a JSON object) +
     ``questions`` (the wire question dict: type/criteria/instructions
@@ -190,7 +354,12 @@ def judge(  # pylint: disable=too-many-return-statements
     itself delegates to the FAMILY surface (``llm.sdk.typesafe`` or the
     openai family's ``decide`` in ``llm.sdk.openai`` -- the client
     lifecycle and the typed-answer downgrade live there), like the
-    embedding service resolves its families."""
+    embedding service resolves its families.  ``images`` lists picture
+    URLs for visual judgments: each resolves (SSRF gate, size/geometry
+    caps, transcode) into an asset the state/instructions reference as
+    plain ``image-N`` text -- the typesafe family ships the assets map
+    (references matched verbatim), the openai family attaches data-URL
+    parts in the same order."""
     if not enabled() or not configured():
         return None
     block = cfg()
@@ -204,12 +373,14 @@ def judge(  # pylint: disable=too-many-return-statements
     }
     if not trimmed:
         return None
+    assets = resolve_images(images) if images else []
 
     try:
         return _surface(block).decide(
             state=str(state)[:MAX_STATE_CHARS] if isinstance(state, str) else state,
             questions=trimmed,
             timeout=timeout,
+            images=assets,
         )
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_decision: judge failed: %s", exc)

@@ -586,6 +586,7 @@ class OpenaiSdk:
         state: t.Any,
         questions: dict[str, dict[str, t.Any]],
         timeout: float | None = None,
+        images: list[dict[str, str]] | None = None,
     ) -> dict[str, t.Any] | None:
         """One decision-model judgment over the Decisions wire (the
         decision service's ``openai`` family -- the ``embed()`` pattern,
@@ -594,9 +595,14 @@ class OpenaiSdk:
         into the canonical shapes, and the result reads ``{"answers",
         "usage", "latency_ms"}`` exactly like the typesafe family's.
         ``base_url`` follows the openai SDK convention (the ``.../v1``
-        root; absent rides the public endpoint).  A sync one-shot on the
-        calling thread (no loop bridging) on the SDK's own HTTP stack.
-        Raised errors propagate (the service owns the fail-open)."""
+        root; absent rides the public endpoint).  ``images`` are the
+        service-resolved assets (``{ref, data_base64, format}``) -- the
+        wire only takes INLINE data URLs, so they ride one user message
+        as ``input_image`` parts after the state text, in order (the
+        state references ``image-N``; the parts arrive in that order).
+        A sync one-shot on the calling thread (no loop bridging) on the
+        SDK's own HTTP stack.  Raised errors propagate (the service owns
+        the fail-open)."""
         wire_questions = []
         for name, question in questions.items():
             wire = _decisions_question(name, question)
@@ -609,11 +615,24 @@ class OpenaiSdk:
             wire_questions.append(wire)
         if not wire_questions:
             return None
+        state_text = state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
+        if images:
+            content: list[dict[str, t.Any]] = [{"type": "input_text", "text": state_text}]
+            for asset in images:
+                content.append(
+                    {
+                        "type": "input_image",
+                        "image_url": f"data:image/{asset['format']};base64,{asset['data_base64']}",
+                    }
+                )
+            wire_input: t.Any = [{"role": "user", "content": content}]
+        else:
+            wire_input = state_text
         client = _decisions_client(self.cfg, self.base, str(self.cfg.get("api_key") or ""))
         started = time.monotonic()
         response = client.decisions.create(
             model=str(self.cfg.get("model")),
-            input=(state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)),
+            input=wire_input,
             questions=wire_questions,
             timeout=float(timeout) if timeout is not None else clients.sdk_timeout(),
             extra_headers=extra_headers(self.cfg) or None,

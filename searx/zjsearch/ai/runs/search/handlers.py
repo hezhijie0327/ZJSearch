@@ -607,9 +607,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         },
                     )
                     continue
-                state, questions = parsed
+                state, questions, images = parsed
                 started = time.monotonic()
-                out = decision.judge(state, questions, timeout=20.0)
+                out = decision.judge(state, questions, timeout=20.0, images=images)
                 # ONE timing for the branch: the judgment ledger's latency IS
                 # the row settlement's ``ms`` (never double-timed)
                 ms = int((time.monotonic() - started) * 1000)

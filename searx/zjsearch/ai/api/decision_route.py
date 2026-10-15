@@ -22,12 +22,15 @@ def _decision_view() -> flask.Response:
     payload = http.token_payload(gate=decision.enabled() and decision.configured())
     state = payload.get("state")
     questions = payload.get("questions")
+    images = payload.get("images")
     if state is None or not isinstance(questions, dict) or not questions or len(questions) > MAX_QUESTIONS:
         return (
             flask.jsonify({"error": f"state plus 1..{MAX_QUESTIONS} questions (choice / score / noul) are required"}),
             422,
         )
-    result = decision.judge(state, questions, timeout=15.0)
+    if images is not None and not (isinstance(images, list) and all(isinstance(url, str) for url in images)):
+        return flask.jsonify({"error": "images must be a list of urls"}), 422
+    result = decision.judge(state, questions, timeout=15.0, images=images)
     if result is None:
         return flask.jsonify({"error": "decision upstream failed"}), 502
     return flask.jsonify(result)
