@@ -13,7 +13,7 @@ Host)、问题清单与逐日实施日志已清理,可在 git 历史查阅本文
 
 | 能力 | 设计一句话 |
 |---|---|
-| 四档单循环 | speed / balanced / deep 是预算与停机策略的差别;report / deck 是 deep 之上的**输出形态**(大纲门 → 逐节合成),不是第四种 agent |
+| 三档单循环 | 三个产品一个引擎:**Search**(speed,AI Overview 感:一轮、最小工具面、无 plan/ledger)· **Deep Search**(balanced,探针阶梯 12-60)· **Deep Research**(deep,阶梯 15-120、分解、唯一有委派);report / deck 是 balanced+deep 之上的**输出形态**(大纲门 → 逐节合成);输出**语法**三档同一(shape_ladder),档位只定长度预算 |
 | Run Host | run 的命与客户端连接解耦:断开 = detach,重连 = reattach 同一个 run;宽限超时优雅收尾,每个 run 都有真实终态 |
 | 控制面 | 运行中引导(轮边界注入)/ 抢占(中断当前 turn 后注入)/ 停子代理 / 收尾 / 停止——永不静默打断在飞流 |
 | 子代理 | `delegate_research` 起嵌套 loop:独立上下文 + 共享 [n] 注册表 + 摘要回传;delegation gate 按深度档 + rung 开放;子代理可追问、可后台、可独立停止 |
@@ -49,8 +49,11 @@ searx/zjsearch/ai/
   agent/       loop(相位机:RESEARCH → WRITE)· wire(闭集校验)·
                executor(契约)· echo / fences(跨方言思维回显 + 流分割)·
                compact(转写折叠)
-  prompts/     spine(共享骨架:身份/引用/markdown/voice/答案契约)·
-               researcher · report · deck · extractor
+  prompts/     spine(共享骨架:身份/引用/markdown/voice/答案契约 ·
+               shape_ladder 三档输出语法+预算 · block())·
+               researcher(块函数化,toolset 派生门控)· subagent(委派
+               persona)· notes(run 级诚实注释)· report · deck ·
+               extractor;工具教条走各包 INSTRUCTIONS → <tool_notes>
   tools/       一工具一自包含模块(spec + run + settle + 行语义):
                search_web · browse/(read 并行读道 + session 服务)·
                calculate · build_table(表格/数据点产物)· record_findings ·
@@ -87,7 +90,7 @@ searx/zjsearch/ai/
 一个模块 + 注册一行 + 前端一个 view(未知工具兜底到通用行,不静默破相)。
 
 与 MCP 的边界:`zjsearch.mcp` 把外部 streamable-HTTP 服务器桥接成
-`mcp_<server>_<tool>` 工具;模型面永远只有一个 `search_mcp_tools`
+`mcp_<server>_<tool>` 工具;模型面永远只有一个 `search_tools`(合并索引:外部 server 工具 + 本部署披露的长尾工具 list_engines/evaluate/recall_history/inspect_image)
 发现工具(渐进披露),按关键词取完整 schema 后再按名调用。
 
 ---
@@ -122,11 +125,11 @@ searx/zjsearch/ai/
 
 **四档是预算策略,不是四种 agent**:
 
-| 档 | 轮数阶梯 | 停滞出口 | 写出口 |
+| 档 | 轮数阶梯(路由缺省) | 停滞出口 | 写出口 |
 |---|---|---|---|
-| speed | 1 波内(≤6) | 1 轮无新源 | 单写 |
-| balanced | 4/8/16/24/32 | 3 轮(先警告) | 单写 |
-| deep | 12/24/48/96/120 | 4 轮 | **形态化输出(强制)** |
+| speed(Search) | 1 波内(≤6) | 1 轮无新源 | 单写 |
+| balanced(Deep Search) | 12/24/36/48/60 | 3 轮(先警告) | 单写 |
+| deep(Deep Research) | 15/35/60/90/120 | 4 轮 | **形态化输出(强制)** |
 
 deep 档的输出形态 = 报告(分节文档)或演示文稿(Marpit 幻灯片),运行
 开始后可在右栏「输出结构」卡切换(两步确认;形状切换同时给 researcher
@@ -177,7 +180,7 @@ HTTP 响应只是第一个订阅者。
 - **引导**:Enter 入队轮边界注入(`steer` 事件 drained,`<user_steering>`
   user 消息,优先于 continuation 注记);⚡/Shift+Enter 抢占(在飞 turn
   取消后注入继续);写相关闭引导道,未送达可见作废;
-- **子代理**:delegation gate(deep 从 rung 2、balanced 从 rung 4)开
+- **子代理**:delegation gate(Deep Research 独有:deep 从 rung 2)开
   `delegate_research`——嵌套 loop、自己的工具面(含 record_findings 与 evaluate)、
   预算与 `ChildControl`;**共享 [n] 注册表**让重复搜索结算为 duplicate;
   回传 = 事实/缺口摘要(facts/gaps 即子代理的 digest);子代理可寻址:
@@ -306,17 +309,21 @@ flowchart TB
 
 ### 4. 档位与 SYNTHESIZE
 
-| 档 | 轮数阶梯 | 停滞出口 | 写出口 | 产物 |
+| 档 | 轮数阶梯(路由缺省) | 停滞出口 | 写出口 | 产物 |
 |---|---|---|---|---|
-| speed | 1 波内(≤6 轮顶) | 1 轮无新源即停 | 单写 | 短答 |
-| balanced | 4 / 8 / 16 / 24 / 32 | 3 轮 | 单写 | 适中答案 |
-| deep | 12 / 24 / 48 / 96 / 120 | 4 轮 | **形态化输出(强制)** | 报告文档 / 演示文稿 |
+| speed(Search) | 1 波内(≤6 轮顶) | 1 轮无新源即停 | 单写 | AI Overview 式紧凑答(COMPACT 预算) |
+| balanced(Deep Search) | 12 / 24 / 36 / 48 / 60 | 3 轮 | 单写 | 2-4 短节(MODERATE 预算) |
+| deep(Deep Research) | 15 / 35 / 60 / 90 / 120 | 4 轮 | **形态化输出(强制)** | 报告文档 / 演示文稿 |
+
+三档工具面:Search = search_web/calculate/ask_user/memory/inspect_image;Deep Search 加
+plan/ledger/browse(附件图时)+ 披露长尾(list_engines/evaluate/recall_history/inspect_image
+经 `search_tools` 发现);Deep Research 再加委派。
 
 ```mermaid
 flowchart TB
-  SP["speed:一轮打满,无 ledger"] --> W1["单写出口(一次补全)"]
-  BA["balanced:阶梯定轮数,轻 ledger"] --> W1
-  DE["deep:阶梯定轮数,全 ledger"] --> OUT
+  SP["speed(Search):一轮打满,无 plan/ledger"] --> W1["单写出口(一次补全)"]
+  BA["balanced(Deep Search):阶梯定轮数,轻 ledger"] --> W1
+  DE["deep(Deep Research):阶梯定轮数,全 ledger + 委派"] --> OUT
   W1 --> DONE1(["settle done"])
   OUT["大纲门(json 结构化)→ outline 事件(目录即进度)"] --> LOOP["RESEARCH(上图循环,语料持续入库)"]
   LOOP -->|"ledger 关闭 / stall"| SYN

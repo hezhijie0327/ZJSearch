@@ -293,8 +293,17 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     channel — the client appends, it never reconstructs.
   - **runs/** — the concrete tasks ON the engine. AI Search
     (`runs/search/`: profile/prompts/gates/tools/executor/route;
-    four depth modes = budget/decomposition/output-shape differences on
-    ONE loop; the executor splits into `registry` ([n]/dedup/gallery
+    THREE tiers, three products on ONE loop -- Search (speed: the
+    AI-Overview feel, one round, the minimal toolset: search/calculate/
+    ask_user/memory/inspect_image), Deep Search (balanced: the probe
+    ladder 12-60 rounds, the plan + ledger machinery), Deep Research
+    (deep: the ladder 15-120, decomposition, the ONLY tier with the
+    delegation tools) -- the tiers differ in budget/decomposition/
+    toolset/output-shape; the OUTPUT GRAMMAR is one (`spine.shape_ladder`:
+    bold-lead opening, sections when facets warrant, lists/tables/
+    callouts by content, citations on load-bearing claims) and the tier
+    sets only the LENGTH budget (COMPACT/MODERATE/THOROUGH -- the AI
+    Overview consumes the speed rung verbatim); the executor splits into `registry` ([n]/dedup/gallery
     whitelist), `coverage` (the task card's bidirectional-containment
     tracker), `feed` (the writer's compact [n] block builder), `rank`
     (the search_web RANKING CASCADE: engine order → BM25 via the classic
@@ -331,11 +340,24 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     Searches facade) and the AI OVERVIEW (`runs/overview.py` — the
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
-    shared prompt spine (identity/citations/markdown/voice/answer
-    contract) is `prompts/spine.py`; the reader/calculate/recall_history/memory/list_engines/mcp
-    tool implementations are self-contained packages under `ai/tools/`
-  (one package per tool: spec + sanitizer + service; `core/`, `prompts/`,
-  `runs/`, `api/` complete the layout — see NEXTGEN-DESIGN.md).  THE
+    prompt layer is `ai/prompts/` — the ONE home of the product voice:
+    `spine.py` (the shared fragments + `block()` + `answer_contract` +
+    `shape_ladder`), `researcher.py` (the lead's opener, blocks keyed off
+    the run's registered `toolset` frozenset), `subagent.py` (the
+    delegation persona), `notes.py` (the run-level honesty notes),
+    `report.py`/`deck.py`/`extractor.py`; every prompt string is authored
+    as a triple-quoted document — never `("..." "...")` concatenation.
+    THE TWO TOOL-TEXT CHANNELS (the MCP instructions pattern for internal
+    tools): a tool's `description` carries the call semantics and rides
+    the tools array; its package's `INSTRUCTIONS` constant carries the
+    doctrine (search craft, the reading rhythm, the ledger semantics...)
+    and `tools.TOOL_INSTRUCTIONS` feeds the system prompt's
+    `<tool_notes>`, in registration order, byte-stable per toolset —
+    the researcher keeps only what SPANS tools (persona, method, tier
+    round policy, few-shot recipes).  The tool implementations are
+    self-contained packages under `ai/tools/` (one package per tool:
+    spec + sanitizer + service; `core/`, `prompts/`, `runs/`, `api/`
+    complete the layout — see NEXTGEN-DESIGN.md).  THE
   DEPLOYMENT-DERIVED SEARCH SURFACE: `search_web`'s `category` enum is
   NOT a fixed list — `available_categories()` (tools/search_web.py)
   derives it from `searx.engines` at spec-build time (every category ≥1
@@ -550,7 +572,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   locale — `en.ts` is the source and defines the `StringKey` union, `zh-CN.ts`
   must implement it fully; every other locale falls back to English.  The
   AI reply language follows the SAME two-language rule server-side
-  (`language_directive` in `searx/zjsearch/ai/prompts.py` mirrors
+  (`language_directive` in `searx/zjsearch/ai/prompts/spine.py` mirrors
   `themeLocaleTag`): zh* → Simplified Chinese, everything else (incl.
   zh-Hant) → English.  Add new
   keys to `en.ts` first (then the other catalogs), render via `useT()` /
@@ -1614,18 +1636,24 @@ the wire; each operation runs inside ONE self-contained connection (open →
 initialize → act → close, a single loop task — the SDK's anyio task groups
 cannot survive the next `run_coroutine_threadsafe` task, so sessions are
 deliberately NOT cached).  Tools are namespaced `mcp_<server>_<tool>`;
-their schemas reach the model ONLY through the `search_mcp_tools`
-discovery tool (see below), never injected into the tools array raw.
+their schemas reach the model ONLY through the `search_tools` discovery
+tool (see below), never injected into the tools array raw.
 Executor dispatch is the `mcp_` prefix branch: blocking on the shared
 loop's result with a 90s budget, the timeline row renders the server-scoped
 tool name with a Plug icon.  Unconfigured = silence (no specs, no
 sessions); a dead endpoint contributes nothing (one server failing must
-not take the run down).  The tool surface is ALWAYS progressive
+not take the run down).  The long tail is ALWAYS progressive
 disclosure (the Agent Skills injection pattern): the run registers ONE
-`search_mcp_tools` discovery tool, never the raw schemas — the model
+`search_tools` discovery tool over the MERGED index — the external
+servers' tools AND the tier's disclosed internal long tail
+(list_engines/evaluate/recall_history/inspect_image on the research
+tiers; Search discloses nothing) — never the raw schemas.  The model
 keyword-searches it, receives the matched tools' COMPLETE parameter
-schemas, and calls them by name next turn (a miss returns the
-inventory for re-querying).  One uniform shape however small the
+schemas (an internal row carries the tool's `INSTRUCTIONS` doctrine
+beside its schema, an MCP row the server's), and calls them by name
+next turn (a miss returns both directories for re-querying).  The
+every-round instruments stay inline: the discovery round trip is a tax
+only the rarely-needed tools pay.  One uniform shape however small the
 surface (a 3-tool server pays the same single search round trip), and
 no schema rides a run that never needed it.  THE SERVER
 INSTRUCTIONS ride for free: `_with_session` hands the specs pass the
