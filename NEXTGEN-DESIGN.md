@@ -59,7 +59,8 @@ searx/zjsearch/ai/
                calculate · build_table(表格/数据点产物)· record_findings ·
                update_plan · ask_user · evaluate · memory · recall_history ·
                inspect_image ·
-               list_engines · delegate_research · mcp
+               list_engines · delegate_research · mcp(纯桥接器)·
+               search_tools(发现工具:合并索引)
   runs/        profile(档位/预算)· host(Run Host)· journal(run 日志)·
                overview(AI Overview)· attachments(多模态附件)
     search/    state · gather(并发执行)· registry([n] 注册表/dedup)·

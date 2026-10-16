@@ -24,6 +24,7 @@ import flask
 
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai.tools import mcp
+from searx.zjsearch.ai.tools import search_tools
 from searx.zjsearch.ai.tools import browse as browse_tool
 from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.browser import config as browser_config
@@ -943,7 +944,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # Research alone earns the delegation tools.  (delegating/research_tier/
     # judge_on/recall_on/disclosed_specs are computed above, beside the
     # Searches construction.)
-    mcp_tools = mcp.tools_surface(disclosed_specs)
+    mcp_tools = search_tools.tools_surface(disclosed_specs)
     tool_specs: list[dict[str, t.Any]] = [
         # with_info: the desc's list_engines pointer is accurate when the
         # inventory exists (inline OR disclosed) -- Search has neither

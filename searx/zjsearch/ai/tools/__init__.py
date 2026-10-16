@@ -8,8 +8,9 @@ untrusted call arguments into executed / displayed values, and the
 service that backs it (Vane's researcher/actions split, Morphic's
 lib/tools -- schema, description, parsing and execution live WITH the
 tool).  ``browse`` is the one package (the session/reader machinery),
-``mcp`` the external-server bridge, ``rows`` the calls-event row
-builders; the shared text guard is :py:mod:`core.text` (``raw_args``).
+``mcp`` the external-server bridge, ``search_tools`` the
+discovery instrument over the disclosed long tail, ``rows`` the
+calls-event row builders; the shared text guard is :py:mod:`core.text` (``raw_args``).
 
 Consumers (``runs.search.executor``, ``api.routes``,
 ``prompts.researcher``) import from the package root -- the re-exports

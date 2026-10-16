@@ -12,6 +12,7 @@ their tool modules (``evaluate.decision_row``); the dispatch stays here.
 import typing as t
 
 from searx.zjsearch.ai.tools import mcp
+from searx.zjsearch.ai.tools import search_tools
 from searx.zjsearch.ai.core.text import raw_args
 from searx.zjsearch.ai.tools.ask_user import ASK_USER_TOOL
 from searx.zjsearch.ai.tools.build_table import BUILD_TABLE_TOOL
@@ -123,7 +124,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": str(memory_args.get("query") or memory_args.get("content") or "")[:120],
             "args": memory_args,
         }
-    if call_name == mcp.DISCOVERY_TOOL:
+    if call_name == search_tools.DISCOVERY_TOOL:
         # progressive disclosure's discovery call: the row shows the
         # KEYWORD the model searched the tool inventory for (a bare
         # "tools" label reads as noise)
@@ -134,7 +135,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         return {
             "id": idx,
             "tool": "mcp",
-            "name": mcp.DISCOVERY_TOOL,
+            "name": search_tools.DISCOVERY_TOOL,
             "q": str(search_args.get("query") or "")[:120],
             "args": search_args,
         }

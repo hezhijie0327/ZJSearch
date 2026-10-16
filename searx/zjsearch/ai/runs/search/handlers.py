@@ -22,6 +22,7 @@ from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.core.config import zj_block
 from searx.zjsearch.ai.runs import attachments as uploads_fetch
 from searx.zjsearch.ai.tools import mcp
+from searx.zjsearch.ai.tools import search_tools
 from searx.zjsearch.ai.tools import browse as browse_tool
 from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.tools import calculate
@@ -944,7 +945,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         },
                     )
                 continue
-            if tool_name == mcp.DISCOVERY_TOOL:
+            if tool_name == search_tools.DISCOVERY_TOOL:
                 # progressive disclosure: the discovery tool returns the
                 # matched tools' full schemas (a text result like any
                 # other) over BOTH indexes -- the external MCP servers'
@@ -953,7 +954,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # not eat the stall detector's credits or draw the
                 # no-new-sources nag -- the catalog listing is metadata,
                 # the data starts at the first real tool call.
-                feed_text = mcp.search_tools(str(raw_args(call).get("query") or ""), internal_specs=self.disclosed_specs)
+                feed_text = search_tools.run_call(str(raw_args(call).get("query") or ""), internal_specs=self.disclosed_specs)
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",

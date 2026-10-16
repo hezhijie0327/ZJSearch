@@ -75,7 +75,7 @@ export interface AiSearchCall {
     | "recall_history"
     | "list_engines"
     | "update_plan"
-    | "findings"
+    | "record_findings"
     | "evaluate"
     | "ask_user"
     | "build_table"
@@ -1305,7 +1305,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "recall_history",
   "list_engines",
   "update_plan",
-  "findings",
+  "record_findings",
   "evaluate",
   "ask_user",
   "build_table",

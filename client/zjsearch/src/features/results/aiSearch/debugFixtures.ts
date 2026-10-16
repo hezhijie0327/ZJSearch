@@ -370,7 +370,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 5,
-          tool: "findings",
+          tool: "record_findings",
           q: "",
           status: "ok",
           n: 2,
@@ -1616,7 +1616,7 @@ const STEER_STAGE: DebugScenario = {
       },
       {
         id: 2,
-        tool: "findings",
+        tool: "record_findings",
         q: "3 条",
         status: "ok",
         ms: 640,
