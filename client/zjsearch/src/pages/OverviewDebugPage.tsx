@@ -10,7 +10,7 @@ const AiOverviewDebugStage = lazy(() =>
   import("@/features/results/aiSearch/AiDebugStage.tsx").then((m) => ({ default: m.AiOverviewDebugStage })),
 );
 
-/** The AI Overview debug stage's host (`/zjsearch/ai/overview/debug`):
+/** The AI Overview debug stage's host (`/zjsearch/debug/overview`):
     the card's real habitat is the results column, so the main keeps the
     results page's reading measure while the fixture streams replay
     through the real renderer. */

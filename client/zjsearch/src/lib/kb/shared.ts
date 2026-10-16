@@ -50,7 +50,7 @@ export function configureEmbeddingDimensions(dims: number): void {
 /** The thread's shareable address (browser-local: another device or
     browser gets the empty state, never someone else's conversation). */
 export function threadUrl(id: string): string {
-  return `/zjsearch/ai/thread/${id}`;
+  return `/zjsearch/ask/thread/${id}`;
 }
 
 export type KnowledgeKind =

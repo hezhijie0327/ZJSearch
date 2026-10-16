@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 /** The browser's decision-model judgments: the server's ``POST
-    /zjsearch/ai/decision`` route -- an HMAC-gated proxy to the
+    /zjsearch/ask/decision`` route -- an HMAC-gated proxy to the
     deployment's decision model (one forward pass answering NAMED
     questions about a state: ``choice`` / ``score`` / ``noul``, each with
     its probability, no text generation).  The capability rides the
@@ -57,7 +57,7 @@ export async function decide(
       answers?: Record<string, Record<string, unknown>>;
       usage?: Record<string, unknown> | null;
       latency_ms?: number;
-    }>("/zjsearch/ai/decision", {
+    }>("/zjsearch/ask/decision", {
       body: JSON.stringify({ tk: config.token, state, questions, ...(images?.length ? { images } : {}) }),
       headers: { "Content-Type": "application/json" },
       method: "POST",

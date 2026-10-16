@@ -257,7 +257,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     compatible-api's `/reranks` reachable via `path: /reranks`; the
     browser's recall proxy is `POST /zjsearch/knowledge/rerank`, HMAC-gated
     like the embed one), the decision SERVICE (`decision` — named
-    questions in one forward pass, `POST /zjsearch/ai/decision`
+    questions in one forward pass, `POST /zjsearch/ask/decision`
     the browser proxy; the client's helper is `lib/decision.ts`,
     helper-only by design until a consumer lands), the HMAC gate
     (`security`) and the shared route prologue (`http`).  Adding a
@@ -873,7 +873,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   consumer FAILS OPEN — the submission route's `index_run` only degrades
   the reload matcher, the replay route answers 404 — a broken shadow
   must never 500 the run itself.  `POST
-  /zjsearch/ai/run/journal {tk, run_key, after_seq}` replays the stored
+  /zjsearch/ask/run/journal {tk, run_key, after_seq}` replays the stored
   lines as NDJSON (the settle rides inside).  THE RELOAD RECOVERY:
   `resume()` detects an unfinished last run, and — the run key is
   persisted out-of-log (kind `runhost`) and the evt rows now KEEP the
@@ -1876,7 +1876,7 @@ thread and every wire event publishes into a per-run handle (seq-stamped
 buffer + subscribers); the HTTP response is just the FIRST SUBSCRIBER.
 A dropped connection is a DETACH, not a death: the run finishes its
 current round, holds at the round boundary, and `POST
-/zjsearch/ai/run/attach` (body: run_key from the `X-Zjs-Run-Id` response
+/zjsearch/ask/run/attach` (body: run_key from the `X-Zjs-Run-Id` response
 header + after_seq) replays the SAME run — the client's `useAiSearch`
 tracks the last seen `seq` (stripped before the evt log) and retries the
 attach with backoff before falling back to the local error settle.  A
@@ -1885,7 +1885,7 @@ wraps gracefully at its next boundary — halt note to the writer AND the
 settle — so every run ends with a real terminal state (the 2h stale
 sweep stops firing for this class); a finished handle stays fetchable
 for a TTL (1h) then the sweep drops it.  Stopping is an INSTRUCTION:
-`POST /zjsearch/ai/run/control {action:"stop"}` (the client's stop
+`POST /zjsearch/ask/run/control {action:"stop"}` (the client's stop
 button fires it before aborting) — the loop sees the flag mid-turn
 (1s-sliced event waits; an interrupted turn is an `interrupted` outcome,
 never `died`) or at the boundary, skips the writer, settles
@@ -1913,7 +1913,7 @@ settleRun; everything else post-settle stays dropped.  THE BACKGRAOUND
 TAB KEEPAIVE (E): a backgrounded tab's fetch dies to the OS or its
 timers throttle — the grace window now counts from the LAST HEARTBEAT:
 `RunHandle.touch()` restarts the detach clock and `POST
-/zjsearch/ai/run/keepalive {run_key}` beats every 45s from an INLINE
+/zjsearch/ask/run/keepalive {run_key}` beats every 45s from an INLINE
 BLOB WORKER (`lib/keepalive.ts` — a worker's timers are NOT throttled
 by tab visibility, the window's setInterval clamps to ~1/min under
 Chrome's intensive throttling).  A living tab whose fetch the OS
@@ -2329,7 +2329,7 @@ POST; the server stays stateless):
   full-text index stays home — the model's `past_research` call
   yields a `recall` wire event (`{id, q}`, the model's OWN query),
   the client searches its live store and answers through
-  `POST /zjsearch/ai/run/recall` (the slot registry
+  `POST /zjsearch/ask/run/recall` (the slot registry
   `runs/search/recall.py`: random per-call id = the capability,
   consumed on first answer or the 6s ceiling, FAIL-OPEN to the
   no-matches line — a closed tab or a still-booting store costs the
@@ -2613,11 +2613,11 @@ redundant, both fused into ONE post-run extractor:
 
 ## The AI debug stages — the simulator and its coverage contract
 
-TWO addresses, no query flags: `/zjsearch/ai/thread/debug` (the literal
+TWO addresses, no query flags: `/zjsearch/debug/thread` (the literal
 `debug` thread id -- the route special-cases it before the UUID regex
 and the client diverts on `data.thread === "debug"`) replays wire-event
 SCRIPTS (`debugFixtures.ts`) through the REAL fold and the REAL run
-section, and `/zjsearch/ai/overview/debug` (a SYNTHETIC host -- the real
+section, and `/zjsearch/debug/overview` (a SYNTHETIC host -- the real
 AI Overview card lives on the results page and has no route of its own)
 replays the card's RAW stream chunks through the REAL `AiAnswerCard`
 (`AI_OVERVIEW_SCENARIOS`: streaming mid-states, citation chips, the
@@ -2889,7 +2889,7 @@ cascade POLICY (BM25 fusion, head selection, splice) stays in
 
 The DECISION capability (`zjsearch.decision`,
 `llm/decision.py` + `api/decision_route.py`: ``POST
-/zjsearch/ai/decision``, HMAC-gated like the embed proxy): one forward
+/zjsearch/ask/decision``, HMAC-gated like the embed proxy): one forward
 pass answers NAMED questions about a state -- choice / score / noul,
 each with its probability distribution -- no text generation.  TWO SDK
 families, pre-embedded selection (`zjsearch.decision.sdk`, the registry

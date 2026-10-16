@@ -27,13 +27,13 @@ const AiDebugStage = lazy(() =>
   import("@/features/results/aiSearch/AiDebugStage.tsx").then((m) => ({ default: m.AiDebugStage })),
 );
 
-/** The standalone AI conversation page (`/zjsearch/ai/thread/<uuid>`):
+/** The standalone AI conversation page (`/zjsearch/ask/thread/<uuid>`):
     the thread is
     restored from the browser's storage (the ONLY storage it has -- the
     server endpoint stays stateless) and follow-ups append to it.  A missing
     store entry (another browser, quota eviction) renders the empty state. */
 
-/** The page entry: the literal `debug` thread id (/zjsearch/ai/thread/debug)
+/** The page entry: the literal `debug` thread id (/zjsearch/debug/thread)
     diverts to the AI debug stage (the UI's own audit surface -- fixture
     wire-event scripts through the real fold + renderers, no server
     surface, no tokens).  The divert lives on a HOOKLESS wrapper so the

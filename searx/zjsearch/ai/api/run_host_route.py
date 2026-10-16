@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The run host's live channels: ``POST /zjsearch/ai/run/attach`` (the
+"""The run host's live channels: ``POST /zjsearch/ask/run/attach`` (the
 REATTACH endpoint -- replay a run's event buffer after ``after_seq`` and
 follow the live tail; the SAME run, never a restart), ``POST
-/zjsearch/ai/run/control`` (the inbound control plane -- stop /
-steer / preempt / wrap / template), ``POST /zjsearch/ai/run/keepalive``
+/zjsearch/ask/run/control`` (the inbound control plane -- stop /
+steer / preempt / wrap / template), ``POST /zjsearch/ask/run/keepalive``
 (the backgrounded tab's heartbeat -- the detach grace counts from the
 last beat, so a living tab whose fetch the OS dropped keeps its run
-alive) and ``POST /zjsearch/ai/run/journal`` (the LATE COLLECTOR -- a
+alive) and ``POST /zjsearch/ask/run/journal`` (the LATE COLLECTOR -- a
 settled run's durable shadow: the journaled wire lines after
 ``after_seq``, serving windows the host's memory buffers cannot --
 beyond the terminal TTL and across process restarts).  These are the
@@ -208,7 +208,7 @@ def install(app: flask.Flask) -> None:
     these channels exist to serve its runs)."""
     if not _gate():
         return
-    app.add_url_rule("/zjsearch/ai/run/attach", "zjsearch_ai_run_attach", _attach_view, methods=["POST"])
-    app.add_url_rule("/zjsearch/ai/run/control", "zjsearch_ai_run_control", _control_view, methods=["POST"])
-    app.add_url_rule("/zjsearch/ai/run/keepalive", "zjsearch_ai_run_keepalive", _keepalive_view, methods=["POST"])
-    app.add_url_rule("/zjsearch/ai/run/journal", "zjsearch_ai_run_journal", _journal_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/run/attach", "zjsearch_ask_run_attach", _attach_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/run/control", "zjsearch_ask_run_control", _control_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/run/keepalive", "zjsearch_ask_run_keepalive", _keepalive_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/run/journal", "zjsearch_ask_run_journal", _journal_view, methods=["POST"])

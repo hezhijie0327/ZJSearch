@@ -145,7 +145,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             except Exception as exc:  # pylint: disable=broad-except
                 # coverage bookkeeping must never kill the settlement
                 logger.warning(
-                    "zjsearch_ai_search: browser source coverage tracking failed: %r",
+                    "zjsearch_ask_search: browser source coverage tracking failed: %r",
                     exc,
                 )
         netloc = urlsplit(url).netloc
@@ -334,7 +334,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             # the settlement assembly (source minting, corpus, feed) failed:
             # the row degrades honestly instead of taking the round down
             # (a [n] may already be on the wire -- the sources card still renders)
-            logger.warning("zjsearch_ai_search: browser settlement assembly failed: %r", exc)
+            logger.warning("zjsearch_ask_search: browser settlement assembly failed: %r", exc)
             feed = f"error: the web_browser action ran but its settlement failed ({type(exc).__name__})"
             yield settle("error", feed)
             return False
@@ -777,7 +777,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     # LIVE RECALL: the model's own query goes to the
                     # browser's knowledge base -- the recall wire event
                     # asks, the client answers through
-                    # /zjsearch/ai/run/recall, the run parks on the slot
+                    # /zjsearch/ask/run/recall, the run parks on the slot
                     # meanwhile.  FAIL-OPEN: a timeout (tab gone, store
                     # never booted) feeds the no-matches line and the run
                     # continues on live search alone, exactly like an

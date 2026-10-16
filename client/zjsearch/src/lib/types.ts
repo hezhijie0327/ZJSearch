@@ -86,7 +86,7 @@ export interface GlobalData {
   embedding?: { tk: string; model: string; dimensions?: number };
   /** Decision-model capability (token + model): absent when the
       zjsearch.decision block is off/unconfigured — the browser proxies its
-      decision-model judgments (choice / score / noul) through /zjsearch/ai/decision */
+      decision-model judgments (choice / score / noul) through /zjsearch/ask/decision */
   decision?: { tk: string; model: string };
   /** Rerank-model capability (token + model): absent when the
       zjsearch.rerank block is off/unconfigured — the knowledge base's
@@ -548,7 +548,7 @@ export interface ErrorPageData {
   message: string;
 }
 
-/** The standalone AI thread page (`/zjsearch/ai/thread/<uuid>`): the
+/** The standalone AI thread page (`/zjsearch/ask/thread/<uuid>`): the
     payload carries
     the thread identity plus fresh capability tokens -- the conversation
     itself lives in the browser's storage (see lib/kb). */
@@ -564,7 +564,7 @@ export interface KnowledgePageData {
   globals: GlobalData;
 }
 
-/** The AI Overview debug stage (`/zjsearch/ai/overview/debug`): a QA-only
+/** The AI Overview debug stage (`/zjsearch/debug/overview`): a QA-only
     synthetic host -- the real card lives on the results page and has no
     route of its own; the payload is just the page identity (the fixture
     streams live client-side, see OverviewDebugPage / AiDebugStage). */

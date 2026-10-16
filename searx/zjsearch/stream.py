@@ -296,7 +296,7 @@ def _render_context(webapp, template_name: str, **kwargs):  # pylint: disable=un
 
 class ZjsearchAiModeSearch(ZjsearchStreamedSearch):
     """AI search mode (``ai=1``): the raw query's engine fan-out is SKIPPED
-    -- every search on this page is driven by the agent (``POST /zjsearch/ai/search``),
+    -- every search on this page is driven by the agent (``POST /zjsearch/ask/search``),
     so running the classic search would double the engine load and duplicate
     the results.  The payload resolves immediately with an empty result set;
     the client renders the agent experience and falls back to the classic

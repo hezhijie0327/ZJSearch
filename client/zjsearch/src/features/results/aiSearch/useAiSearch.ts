@@ -44,7 +44,7 @@ import { pg } from "@/lib/pg.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /**
- * AI Search client state (POST /zjsearch/ai/search, NDJSON timeline ops) --
+ * AI Search client state (POST /zjsearch/ask/search, NDJSON timeline ops) --
  * THREADED: every question (the initial one and each follow-up) appends a
  * run section to the page instead of replacing it.
  *
@@ -328,7 +328,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           .map((item) => ({ url: item.url as string, title: item.title, host: item.host ?? "" })),
       ];
     }
-    await fetchJson("/zjsearch/ai/run/recall", {
+    await fetchJson("/zjsearch/ask/run/recall", {
       body: JSON.stringify({ tk: capability.tk, id: rid, entries }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
@@ -510,7 +510,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         const onAbort = () => controller.abort();
         outer?.signal.addEventListener("abort", onAbort);
         fetchEventStream(
-          "/zjsearch/ai/run/attach",
+          "/zjsearch/ask/run/attach",
           { tk: capability.tk, run_key: runKeyRef.current, after_seq: lastSeqRef.current },
           apply,
           controller.signal,
@@ -578,7 +578,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           attempt += 1;
           if (settledRef.current || outer?.signal.aborted) break;
           try {
-            await openStream("/zjsearch/ai/run/attach", {
+            await openStream("/zjsearch/ask/run/attach", {
               tk: capability.tk,
               run_key: runKeyRef.current,
               after_seq: lastSeqRef.current,
@@ -749,7 +749,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       // hook's shared consumeRunStream -- the probe path of continueRun
       // rides the exact same machinery against the attach endpoint
       try {
-        const outcome = await consumeRunStream(threadId, runNo, refCounts, "/zjsearch/ai/search", body, (response) => {
+        const outcome = await consumeRunStream(threadId, runNo, refCounts, "/zjsearch/ask/search", body, (response) => {
           runKeyRef.current = response.headers.get("X-Zjs-Run-Id") ?? "";
           if (runKeyRef.current) {
             // the reload recovery's probe address (the journal fetch and
@@ -1028,7 +1028,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           threadIdRef.current,
           last.runNo,
           refCountsRef.current,
-          "/zjsearch/ai/run/attach",
+          "/zjsearch/ask/run/attach",
           { tk: capability.tk, run_key: staleKey, after_seq: lastSeqRef.current },
           undefined,
           REATTACH_PROBE_MS,
@@ -1043,7 +1043,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           // the probe failed on the network (or its ladder ran out): the
           // handle may still be alive -- stop it BEFORE the resumed run
           // starts (two researchers on one question is pure waste)
-          void fetchJson("/zjsearch/ai/run/control", {
+          void fetchJson("/zjsearch/ask/run/control", {
             body: JSON.stringify({ tk: capability.tk, run_key: staleKey, action: "stop" }),
             headers: { "Content-Type": "application/json" },
             method: "POST",
@@ -1159,7 +1159,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return false;
     }
     try {
-      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ai/run/control", {
+      const out = await fetchJson<{ ok: boolean }>("/zjsearch/ask/run/control", {
         body: JSON.stringify({ tk: capability.tk, run_key: runKey, action, ...extra }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -1263,7 +1263,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       }
     };
     await fetchEventStream(
-      "/zjsearch/ai/run/journal",
+      "/zjsearch/ask/run/journal",
       { tk: capability.tk, thread: threadId, after_seq: 0 },
       wrapped,
       controller.signal,
@@ -1410,7 +1410,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         threadId,
         run.runNo,
         new Map(),
-        "/zjsearch/ai/run/attach",
+        "/zjsearch/ask/run/attach",
         { tk: capability.tk, run_key: runKey, after_seq: afterSeq },
         undefined,
         REATTACH_PROBE_MS,
@@ -1431,7 +1431,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         threadId,
         run.runNo,
         new Map(),
-        "/zjsearch/ai/run/journal",
+        "/zjsearch/ask/run/journal",
         { tk: capability.tk, run_key: runKey, after_seq: afterSeq },
         undefined,
         REATTACH_PROBE_MS,

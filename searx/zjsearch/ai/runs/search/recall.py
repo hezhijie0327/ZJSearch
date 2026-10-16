@@ -7,7 +7,7 @@ ships wholesale, the model's own query goes to the data.
 Flow: the handler opens a slot, yields the ``recall`` wire event (the
 client sees ``{id, q}``, runs its hybrid recall against PGlite) and
 blocks on :py:func:`wait` -- the client's answer lands through
-``POST /zjsearch/ai/run/recall`` (:py:func:`answer` fills the slot and
+``POST /zjsearch/ask/run/recall`` (:py:func:`answer` fills the slot and
 sets its event).  FAIL-OPEN on purpose: a timeout (the tab navigated
 away, the store never booted) returns ``None`` and the tool feeds its
 no-matches line -- the run continues on live search alone, exactly like

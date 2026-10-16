@@ -15,7 +15,7 @@ import { applyEvent, type Core, emptyRun } from "@/features/results/aiSearch/tim
 import { useT } from "@/lib/i18n.ts";
 
 /**
- * The AI debug stage (`/zjsearch/ai/thread/debug`) -- the AI
+ * The AI debug stage (`/zjsearch/debug/thread`) -- the AI
  * features' UNIVERSAL SIMULATOR.  Each scenario is a wire-event SCRIPT
  * replayed through the REAL fold (`applyEvent`) and rendered by the REAL
  * run section; the transport controls scrub the event timeline: drag to
@@ -262,7 +262,7 @@ export function AiDebugStage() {
   );
 }
 
-/** The AI Overview debug stage's surface (/zjsearch/ai/overview/debug):
+/** The AI Overview debug stage's surface (/zjsearch/debug/overview):
     the REAL AiAnswerCard fed by fixture raw-text streams -- the chunks
     replay exactly what the wire would stream (think markers, markdown
     answer, the trailing run-meta sentinel), the transport scrubs any

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/overview`` endpoint (AI Overview).
+"""The ``POST /zjsearch/ask/overview`` endpoint (AI Overview).
 
 THIN: authorize, assemble the messages
 (:py:func:`runs.overview.build_answer_messages`), degrade a rejected
@@ -89,4 +89,4 @@ def install(app: flask.Flask) -> None:
             package,
         )
         return
-    app.add_url_rule("/zjsearch/ai/overview", "zjsearch_ai_overview", _overview_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/overview", "zjsearch_ask_overview", _overview_view, methods=["POST"])

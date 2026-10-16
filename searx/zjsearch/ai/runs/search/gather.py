@@ -166,7 +166,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
         except Exception:  # pylint: disable=broad-except
             # one odd result shape must never take the round's remaining
             # settlements down with it -- the engine order stands
-            logger.exception("zjsearch_ai_search: ranking cascade failed -- keeping the engine order")
+            logger.exception("zjsearch_ask_search: ranking cascade failed -- keeping the engine order")
             return raw, {}, {"no_signal": False, "dup_ratio": None}
 
     def _finish(  # pylint: disable=too-many-locals, too-many-branches, too-many-statements
@@ -190,7 +190,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 if str(getattr(answer, "answer", "") or "").strip()
             ]
         except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("zjsearch_ai_search: search %d/%d failed: %r", rnd, idx, exc)
+            logger.warning("zjsearch_ask_search: search %d/%d failed: %r", rnd, idx, exc)
             feed_text = "error: the search failed"
             feeds[idx - 1] = feed_text
             yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
@@ -244,7 +244,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             # loop -- THIS call degrades to an error row, the round's
             # remaining calls still settle (the loop's own catch is the
             # last resort, and it kills the whole batch)
-            logger.warning("zjsearch_ai_search: search %d/%d settlement failed: %r", rnd, idx, exc)
+            logger.warning("zjsearch_ask_search: search %d/%d settlement failed: %r", rnd, idx, exc)
             feed_text = "error: the search failed"
             feeds[idx - 1] = feed_text
             yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
@@ -378,7 +378,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
         except Exception as exc:  # pylint: disable=broad-except
             # PageReadError or a worker-level surprise -- one dead-end line
             # for the model, an error row for the client
-            logger.warning("zjsearch_ai_search: page %d/%d failed (%s): %r", rnd, idx, url[:120], exc)
+            logger.warning("zjsearch_ask_search: page %d/%d failed (%s): %r", rnd, idx, url[:120], exc)
             feed_text = f"error: {str(exc)[:300] or type(exc).__name__}"
             feeds[idx - 1] = feed_text
             yield ("call", {"call": idx, "status": "error", "url": url, "ms": ms, "feed": feed_text[:800]})
@@ -411,7 +411,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 # coverage bookkeeping must never kill the settlement (the
                 # card falls back to queue-time state, the read itself is
                 # already recorded)
-                logger.warning("zjsearch_ai_search: page %d/%d coverage tracking failed: %r", rnd, idx, exc)
+                logger.warning("zjsearch_ask_search: page %d/%d coverage tracking failed: %r", rnd, idx, exc)
         # the read page always rides a sources event FIRST: a NEW url
         # registers its card, an already-numbered one re-emits its [n] with
         # ``crawled`` set -- the client upgrades the existing card in place

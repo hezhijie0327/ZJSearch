@@ -75,7 +75,7 @@ export function startRunKeepalive(
     }
     worker.postMessage({
       type: "start",
-      url: "/zjsearch/ai/run/keepalive",
+      url: "/zjsearch/ask/run/keepalive",
       body: JSON.stringify(body),
       intervalMs,
     });

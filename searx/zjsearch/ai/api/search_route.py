@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``POST /zjsearch/ai/search`` route.
+"""AI Search: the ``POST /zjsearch/ask/search`` route.
 
 Thin by design (Vane's api.ts, Morphic's app/api/chat/route.ts): parse
 and authorize the request, run the pre-flight gates, assemble
@@ -292,7 +292,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # stays stateless
     thread = str(payload.get("thread") or "").strip()[:64]
     if thread:
-        logger.info("zjsearch_ai_search: thread %s", thread)
+        logger.info("zjsearch_ask_search: thread %s", thread)
     # follow-up thread: prior Q&A turns + the global [n] numbering base
     raw_history = payload.get("history")
     history: list[dict[str, str]] = []
@@ -314,7 +314,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     resume = parse_resume(payload.get("resume"), sources_base)
     if resume is not None:
         logger.info(
-            "zjsearch_ai_search: resuming a dead run's conversation (%d messages, entry_base=%d, round_base=%d)",
+            "zjsearch_ask_search: resuming a dead run's conversation (%d messages, entry_base=%d, round_base=%d)",
             len(resume["messages"]),
             resume["entry_base"],
             resume["round_base"],
@@ -569,7 +569,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         )
         response = _respond(stream)
         if response.status_code == 502 and image_parts and not degraded:
-            logger.warning("zjsearch_ai_search: multimodal request rejected -- retrying text-only")
+            logger.warning("zjsearch_ask_search: multimodal request rejected -- retrying text-only")
             return _search(degraded=True)
         return response
 
@@ -640,7 +640,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # outline gate from free generation to FIXED-structure adaptation
     report_template = report_outline.parse_template(payload.get("template")) if outline_requested else None
     if outline_requested and payload.get("template") is not None and report_template is None:
-        logger.info("zjsearch_ai_search: malformed report template -- falling back to the free outline")
+        logger.info("zjsearch_ask_search: malformed report template -- falling back to the free outline")
     outline_attachments = [
         {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
     ]
@@ -660,7 +660,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         if restored is not None:
             outline = restored
             logger.info(
-                "zjsearch_ai_search: restored the interrupted report's outline (%d sections)",
+                "zjsearch_ask_search: restored the interrupted report's outline (%d sections)",
                 len(restored["sections"]),
             )
     if outline_requested and outline is None:
@@ -687,7 +687,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 deck=deck_requested,
             )
         if outline is None:
-            logger.info("zjsearch_ai_search: outline gate failed -- falling back to the single write")
+            logger.info("zjsearch_ask_search: outline gate failed -- falling back to the single write")
     # the image-proxy preference, read ON the request thread: the run
     # executes on the run host's driver thread and the writer coroutine
     # bridges onto the shared network loop -- NEITHER carries a flask
@@ -1090,7 +1090,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # orphaned run gets the stop instruction (its current turn runs
         # out, then the research closes without a writer).
         handle.control.stop()
-        logger.warning("zjsearch_ai_search: multimodal request rejected -- retrying text-only")
+        logger.warning("zjsearch_ask_search: multimodal request rejected -- retrying text-only")
         return _search(degraded=True)
     return response
 
@@ -1216,7 +1216,7 @@ class _SettleTail:
                 if isinstance(verdict, dict) and float(verdict.get("noul") or 0.0) >= 0.6:
                     return candidate
             except Exception as exc:  # pylint: disable=broad-except
-                logger.debug("zjsearch_ai_search: title gate skipped: %r", exc)
+                logger.debug("zjsearch_ask_search: title gate skipped: %r", exc)
         elif candidate:
             # the decision model is off: an existing writer/outline title
             # stands (no gate, no spend)
@@ -1231,7 +1231,7 @@ class _SettleTail:
                 account=self.account,
             )
         except Exception as exc:  # pylint: disable=broad-except
-            logger.debug("zjsearch_ai_search: title generation failed: %r", exc)
+            logger.debug("zjsearch_ask_search: title generation failed: %r", exc)
             return None
 
     def late_events(  # pylint: disable=too-many-branches
@@ -1259,7 +1259,7 @@ class _SettleTail:
             try:
                 found = related_questions(self.cfg, self.question, answer, self.lang, account=self.account)
             except Exception as exc:  # pylint: disable=broad-except
-                logger.warning("zjsearch_ai_search: related fallback failed: %r", exc)
+                logger.warning("zjsearch_ask_search: related fallback failed: %r", exc)
                 found = []
             if found:
                 yield {"e": "related", "items": found}
@@ -1273,7 +1273,7 @@ class _SettleTail:
                 # the run, its settle writes them into the projections
                 yield {"e": "tags", "items": tags}
         except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("zjsearch_ai_search: memory extraction failed: %r", exc)
+            logger.warning("zjsearch_ask_search: memory extraction failed: %r", exc)
         # the trailing completions' spend is already in the ledger (the
         # gates bucket -- jsongate records at its ONE choke point); the
         # late usage event re-publishes the absolute totals (idempotent --
@@ -1432,12 +1432,12 @@ def _drive(  # pylint: disable=too-many-branches
         handle.publish(wire.settle("error", halt="the run ended without a settle event"))
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning(
-            "zjsearch_ai_search: the run driver failed: %s: %s",
+            "zjsearch_ask_search: the run driver failed: %s: %s",
             type(exc).__name__,
             str(exc)[:300],
         )
-        logger.warning("zjsearch_ai_search: driver traceback", exc_info=True)
-        logger.warning("zjsearch_ai_search: last event repr: %s", repr(locals().get("event"))[:400])
+        logger.warning("zjsearch_ask_search: driver traceback", exc_info=True)
+        logger.warning("zjsearch_ask_search: last event repr: %s", repr(locals().get("event"))[:400])
         try:
             handle.publish(wire.settle("error", halt=f"the run driver failed: {exc}"))
         except Exception:  # pylint: disable=broad-except
@@ -1533,4 +1533,4 @@ def install(app: flask.Flask) -> None:
             package,
         )
         return
-    app.add_url_rule("/zjsearch/ai/search", "zjsearch_ai_search", _search, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/search", "zjsearch_ask_search", _search, methods=["POST"])

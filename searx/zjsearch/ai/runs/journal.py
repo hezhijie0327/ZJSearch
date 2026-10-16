@@ -13,7 +13,7 @@ across restarts.
 Write path: :py:meth:`searx.zjsearch.ai.runs.host.RunHandle.publish`
 calls the wired ``append`` outside its lock, one row per event (the
 driver thread is the only writer for a run).  Read path: the
-``/zjsearch/ai/run/journal`` route replays ``seq > after_seq`` as NDJSON
+``/zjsearch/ask/run/journal`` route replays ``seq > after_seq`` as NDJSON
 -- the SAME wire format the attach endpoint serves, consumed by the
 client's existing fold.  Rows expire (``JOURNAL_TTL``); a run whose
 journal is gone is back to the storage question it always was.

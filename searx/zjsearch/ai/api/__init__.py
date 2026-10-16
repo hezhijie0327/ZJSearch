@@ -7,7 +7,7 @@ Business logic lives in the task modules, never here.
 
 NAMING (the URL is the product contract; the module file mirrors it):
 
-- ``/zjsearch/ai/*`` -- the AI research conversation domain: the run
+- ``/zjsearch/ask/*`` -- the AI research conversation domain: the run
   stream, the run host's ``run/*`` actions, the thread/overview pages,
   and the decision model proxy.  Every URL's LAST segment is the
   module's feature name (``overview_route`` owns ``/ai/overview``).
@@ -41,9 +41,11 @@ def install(app: flask.Flask) -> None:
         search_route,
         tags_route,
         thread_page,
+        debug_page,
     )
 
     thread_page.install(app)
+    debug_page.install(app)
     knowledge_page.install(app)
     search_route.install(app)
     overview_route.install(app)

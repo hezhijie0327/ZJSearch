@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/decision`` endpoint: a thin, HMAC-gated browser
+"""The ``POST /zjsearch/ask/decision`` endpoint: a thin, HMAC-gated browser
 proxy to the decision-model service (:py:mod:`llm.decision` -- the
 engine and its config live there; this module is only the gate +
 validation + the call).  Consumers of the decision primitive (triage,
@@ -46,4 +46,4 @@ def install(app: flask.Flask) -> None:
     package install.  Silent when not configured."""
     if not decision.enabled() or not decision.configured():
         return
-    app.add_url_rule("/zjsearch/ai/decision", "zjsearch_ai_decision", _decision_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/decision", "zjsearch_ask_decision", _decision_view, methods=["POST"])

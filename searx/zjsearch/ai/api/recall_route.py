@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/run/recall`` endpoint: the live-recall
+"""The ``POST /zjsearch/ask/run/recall`` endpoint: the live-recall
 answerer.  The client's hybrid recall over its browser-local knowledge
 base lands here and fills the parked ``past_research`` call's slot (the
 ``recall`` wire event asked, keyed by the slot id minted for that one
@@ -32,4 +32,4 @@ def _recall_view() -> flask.Response:
 def install(app: flask.Flask) -> None:
     """Register the recall answer route; chained from the ai package
     install."""
-    app.add_url_rule("/zjsearch/ai/run/recall", "zjsearch_ai_run_recall", _recall_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/run/recall", "zjsearch_ask_run_recall", _recall_view, methods=["POST"])

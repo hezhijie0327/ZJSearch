@@ -70,7 +70,7 @@ def serialize_results(raw_results: list[t.Any], query: str) -> list[dict[str, t.
         # ValueError to jinja2.TemplateError; one bad result degrades to no
         # serialized feed for THAT search, never a crashed round
         logger.warning(
-            "zjsearch_ai_search: result serialization failed: %r -- head: %.240r",
+            "zjsearch_ask_search: result serialization failed: %r -- head: %.240r",
             exc,
             rendered if isinstance(rendered, str) else "",
         )

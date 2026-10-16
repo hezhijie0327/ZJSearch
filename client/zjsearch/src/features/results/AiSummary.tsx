@@ -167,7 +167,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
       }
     };
     void fetchStream(
-      "/zjsearch/ai/overview",
+      "/zjsearch/ask/overview",
       { context, images, lang, q, tk: capability.tk },
       (chunk) => {
         lineBuffer += chunk;
