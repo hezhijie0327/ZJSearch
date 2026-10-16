@@ -305,17 +305,14 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             self.model_shots += 1
             aimed_ref = str(args.get("ref") or "")
             if aimed_ref:
-                shot_note = (
-                    f"Attached: the close-up screenshot you requested of"
-                    f" element {aimed_ref} on the page you opened.  Read it"
-                    " now and decide your next action from what is visible."
-                )
+                shot_note = f"""\
+Attached: the close-up screenshot you requested of element {aimed_ref}
+on the page you opened.  Read it now and decide your next action from
+what is visible."""
             else:
-                shot_note = (
-                    "Attached: the screenshot you requested of the page you"
-                    " opened. Read it now and decide your next action from"
-                    " what is visible."
-                )
+                shot_note = """\
+Attached: the screenshot you requested of the page you opened.  Read it
+now and decide your next action from what is visible."""
             self.image_injections.append(
                 {
                     "role": "user",
@@ -451,12 +448,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 summary = f"{done}/{len(items)}"
                 # the row settles like every other (a plan write is instant
                 # work -- leaving it pending read as interrupted at the settle)
-                feed_text = (
-                    f"plan written: {done}/{len(items)} subtasks. Work the plan"
-                    " step by step; statuses are yours to update (resend the"
-                    " complete list to revise it), and the referee advises"
-                    " when a subtask's evidence runs thin."
-                )
+                feed_text = f"""\
+plan written: {done}/{len(items)} subtasks. Work the plan step by step;
+statuses are yours to update (resend the complete list to revise it),
+and the referee advises when a subtask's evidence runs thin."""
                 if getattr(self, "weak_tasks", None):
                     feed_text += (
                         "\n(plan review: these subtasks look hard to research independently --"
@@ -613,12 +608,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     cite = (" [" + ",".join(str(r) for r in row["refs"]) + "]") if row["refs"] else ""
                     lines.append("| " + " | ".join(cells) + cite + " |")
                 self.corpus.add("\n".join(lines), ref_n=0, title=artifact["title"], kind="table")
-                feed_text = (
-                    f"table {artifact['id']} recorded: {artifact['title']}"
-                    f" ({len(artifact['rows'])} rows x {len(artifact['columns'])} columns)."
-                    " It reaches the report as a real table -- interpret it in the"
-                    " relevant section, do not re-type the numbers."
-                )
+                feed_text = f"""\
+table {artifact['id']} recorded: {artifact['title']}
+({len(artifact['rows'])} rows x {len(artifact['columns'])} columns).
+It reaches the report as a real table -- interpret it in the relevant
+section, do not re-type the numbers."""
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",
@@ -639,13 +633,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         "zjsearch_decision: unusable call arguments: %.200s",
                         str(call.get("arguments") or ""),
                     )
-                    feed_text = (
-                        "error: evaluate needs a compact state string and"
-                        " 1-4 named questions (type choice / score / noul)."
-                        "  Do NOT invent a verdict and do not attribute one"
-                        " to evaluate -- if you must conclude, present the"
-                        " conclusion as your own judgment."
-                    )
+                    feed_text = """\
+error: evaluate needs a compact state string and 1-4 named questions
+(type choice / score / noul).  Do NOT invent a verdict and do not
+attribute one to evaluate -- if you must conclude, present the
+conclusion as your own judgment."""
                     feeds[wire_id - 1] = feed_text
                     yield (
                         "call",
@@ -1804,17 +1796,14 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         # user's money -- hold it until ONE ask_user confirmation lands,
         # then the sticky flag lets every later bang through
         if not self.paid_ok and (paid_hits := paid_bangs(query)):
-            feed_text = (
-                f"held: the bang targets {' , '.join(paid_hits)} -- an"
-                " API-BILLED engine (every call costs the user money) and"
-                " this run has no approval yet.  Ask ONCE: call ask_user"
-                " (as the ONLY call of a turn) with a short confirmation"
-                " naming the engine and that it is billed per call.  When"
-                " the user APPROVES, re-run this search with paid_ok:"
-                " true -- the approval covers the rest of the run.  If"
-                " they decline, never set paid_ok and stay on the free"
-                " engines."
-            )
+            feed_text = f"""\
+held: the bang targets {' , '.join(paid_hits)} -- an API-BILLED engine
+(every call costs the user money) and this run has no approval yet.
+Ask ONCE: call ask_user (as the ONLY call of a turn) with a short
+confirmation naming the engine and that it is billed per call.  When
+the user APPROVES, re-run this search with paid_ok: true -- the
+approval covers the rest of the run.  If they decline, never set
+paid_ok and stay on the free engines."""
             return (
                 feed_text,
                 {
@@ -1845,15 +1834,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             .split()
         )
         if dedup_key in self.reg.ran and not refresh:
-            feed_text = (
-                "duplicate: this exact query already ran in an earlier"
-                " round and its outcome is already in the conversation"
-                " (possibly empty) -- do not repeat it; search a DIFFERENT"
-                " facet or write the answer from the sources you have."
-                "  (If the material itself may have changed -- a live"
-                " score, a just-published release -- re-run it with"
-                " refresh: true.)"
-            )
+            feed_text = """\
+duplicate: this exact query already ran in an earlier round and its
+outcome is already in the conversation (possibly empty) -- do not
+repeat it; search a DIFFERENT facet or write the answer from the
+sources you have.  (If the material itself may have changed -- a live
+score, a just-published release -- re-run it with refresh: true.)"""
             return (
                 feed_text,
                 {
@@ -1893,11 +1879,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 None,
             )
         if url in self.reg.read_urls:
-            feed_text = (
-                "duplicate: this exact page was already opened in an"
-                " earlier round and its content is already in the"
-                " conversation -- do not re-read it."
-            )
+            feed_text = """\
+duplicate: this exact page was already opened in an earlier round and
+its content is already in the conversation -- do not re-read it."""
             return (
                 feed_text,
                 {
@@ -1957,10 +1941,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     }
                 )
                 if score > float(gate.get("injection_max", 0.70)):
-                    feed_text = (
-                        "blocked: this page's snippet looks like a prompt-injection attempt -- do NOT retry it;"
-                        " pick a different source."
-                    )
+                    feed_text = """\
+blocked: this page's snippet looks like a prompt-injection attempt --
+do NOT retry it; pick a different source."""
                     return (
                         feed_text,
                         {

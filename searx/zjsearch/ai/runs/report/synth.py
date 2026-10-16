@@ -265,7 +265,7 @@ def make_synthesizer(
                 "<findings_ledger>\nThe research agent's distillation of what"
                 " the sources established (active facts only; their [n] labels"
                 " refer to the run's source registry):\n" + "\n".join(shown) + "\n</findings_ledger>"
-            )
+            )  # a data wrapper (facts list), not a prose blob
         user = _section_user(
             sec, outline, prev_tail, written, material, state.artifacts, state.attached_files or None, ledger_block
         )
@@ -459,10 +459,14 @@ def _section_user(
             if body:
                 rows.append(f"- {title}: {body[:200]}")
         if rows:
+            rows_text = "\n".join(rows)
             parts.append(
-                "<earlier_sections_digest>\nWhat the EARLIER sections already"
-                " established (their openings; stay consistent with their"
-                " judgments and never re-argue them):\n" + "\n".join(rows) + "\n</earlier_sections_digest>"
+                f"""\
+<earlier_sections_digest>
+What the EARLIER sections already established (their openings; stay
+consistent with their judgments and never re-argue them):
+{rows_text}
+</earlier_sections_digest>"""
             )
     if prev_tail:
         parts.append(f"<previous_section_tail>\n{prev_tail}\n</previous_section_tail>")
@@ -471,12 +475,12 @@ def _section_user(
     if material:
         header = "<key_material>\nThe numbered lines are this run's sources; cite them by their [n]."
         if attachments:
-            header += (
-                "\nLines WITHOUT a [n] that begin with a file name are the USER'S ATTACHED"
-                " FRAMEWORK -- its rules are BINDING for this section's judgments: apply them"
-                " by their rule ID (e.g. [RULE-CCM-02]) right after the claim they support,"
-                " and never invent a rule ID the framework does not contain."
-            )
+            header += f"""\
+
+Lines WITHOUT a [n] that begin with a file name are the USER'S ATTACHED
+FRAMEWORK -- its rules are BINDING for this section's judgments: apply
+them by their rule ID (e.g. [RULE-CCM-02]) right after the claim they
+support, and never invent a rule ID the framework does not contain."""
         parts.append(header + "\n" + "\n".join(material) + "\n</key_material>")
         if attachments:
             names = ", ".join(f'\"{str(f.get("name") or "attachment")}\"' for f in attachments[:3])
@@ -499,9 +503,14 @@ def _section_user(
             if artifact.get("note"):
                 lines.append(f"note: {artifact['note']}")
             tables.append("\n".join(lines))
+        tables_text = "\n\n".join(tables)
         parts.append(
-            "<recorded_tables>\nThese tables were verified during research -- reproduce them as-is"
-            " (markdown tables render as real tables) and interpret them; do not retype their"
-            " numbers in prose.\n" + "\n\n".join(tables) + "\n</recorded_tables>"
+            f"""\
+<recorded_tables>
+These tables were verified during research -- reproduce them as-is
+(markdown tables render as real tables) and interpret them; do not
+retype their numbers in prose.
+{tables_text}
+</recorded_tables>"""
         )
     return "\n".join(p for p in parts if p)

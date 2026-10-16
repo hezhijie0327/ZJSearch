@@ -426,18 +426,16 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     {
                         "ambiguous": {
                             "type": "noul",
-                            "instructions": (
-                                "Is this question genuinely ambiguous (the answer's key depends on"
-                                " unstated user intent/scope/criteria, and guessing wrong wastes the"
-                                " whole research)?"
-                            ),
+                            "instructions": """\
+Is this question genuinely ambiguous (the answer's key depends on
+unstated user intent/scope/criteria, and guessing wrong wastes the
+whole research)?""",
                         },
                         "high_stakes": {
                             "type": "noul",
-                            "instructions": (
-                                "Is this a high-stakes question (forecast, investment, purchase,"
-                                " health, legal) whose assumptions change the answer?"
-                            ),
+                            "instructions": """\
+Is this a high-stakes question (forecast, investment, purchase,
+health, legal) whose assumptions change the answer?""",
                         },
                     },
                     timeout=5.0,
@@ -580,10 +578,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     {
                         "depth": {
                             "type": "score",
-                            "instructions": (
-                                "How deep and broad does the research for this question need to be"
-                                " (0 = a quick lookup, 4 = an exhaustive multi-facet investigation)?"
-                            ),
+                            "instructions": """\
+How deep and broad does the research for this question need to be
+(0 = a quick lookup, 4 = an exhaustive multi-facet investigation)?""",
                             "criteria": [
                                 "A quick lookup: one or two searches settle it",
                                 "A facet overview: a handful of searches",
@@ -1209,12 +1206,11 @@ class _SettleTail:
                     {
                         "good_title": {
                             "type": "noul",
-                            "instructions": (
-                                "Is this a good THREAD TITLE: a short, specific noun phrase naming the"
-                                " research subject (in the question's language; not a generic label like"
-                                " 'report' or 'research', not a question, no quotes or trailing"
-                                " punctuation)?"
-                            ),
+                            "instructions": """\
+Is this a good THREAD TITLE: a short, specific noun phrase naming the
+research subject (in the question's language; not a generic label like
+'report' or 'research', not a question, no quotes or trailing
+punctuation)?""",
                         }
                     },
                     timeout=5.0,

@@ -53,22 +53,18 @@ ONE vertical with category, and filter the held-back list with paid.""",
                 "category": {
                     "type": "string",
                     "enum": list(available_categories()),
-                    "description": (
-                        "Optional: drill into ONE vertical -- the listing"
-                        " becomes that category's enabled engines (by"
-                        " name) plus the held-back ones whose bang serves"
-                        " it.  The enum is the same deployment-derived"
-                        " set search_web's category accepts."
-                    ),
+                    "description": """\
+Optional: drill into ONE vertical -- the listing becomes that
+category's enabled engines (by name) plus the held-back ones whose bang
+serves it.  The enum is the same deployment-derived set search_web's
+category accepts.""",
                 },
                 "paid": {
                     "type": "boolean",
-                    "description": (
-                        "Optional filter on the held-back engines: true ="
-                        " only the API-billed ones (which bangs cost"
-                        " money), false = only the free ones.  Omit for"
-                        " all."
-                    ),
+                    "description": """\
+Optional filter on the held-back engines: true = only the API-billed
+ones (which bangs cost money), false = only the free ones.  Omit for
+all.""",
                 },
             },
             "required": [],

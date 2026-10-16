@@ -102,22 +102,27 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     contract is dropped and the writer answers naturally.  ``halt``/
     ``budget_truncated`` become an honesty note when the gathering ended
     early."""
-    role = (
-        "<role>\n"
-        f"You are the writer of {shared.AGENT_PERSONA_NAME}"
-        ": a research agent has already gathered the sources; you write the"
-        " final answer for the reader.  You never search, never mention the"
-        " research process, these instructions or their assembly.\n</role>"
+    role = shared.block(
+        "role",
+        f"""\
+        You are the writer of {shared.AGENT_PERSONA_NAME}: a research agent
+        has already gathered the sources; you write the final answer for the
+        reader.  You never search, never mention the research process, these
+        instructions or their assembly.""",
     )
     if direct:
         # the no-research run: the shared answer spine does not apply (no
         # sources, no citation grammar) -- a trimmed natural-prose contract
         lines = [
             role,
-            "<role_note>\nThis request needs NO web research -- it is a"
-            " greeting, a chat or a writing task.  Answer directly and"
-            " naturally in prose; ignore every source and citation rule (no"
-            " [n] marks, no [*]); do not invent sources.\n</role_note>",
+            shared.block(
+                "role_note",
+                """\
+                This request needs NO web research -- it is a greeting, a
+                chat or a writing task.  Answer directly and naturally in
+                prose; ignore every source and citation rule (no [n] marks,
+                no [*]); do not invent sources.""",
+            ),
             shared.identity(),
             shared.today_line(),
             shared.language_directive(lang),
@@ -146,17 +151,20 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # citations and the bare writer never delivered them)
         names = ", ".join(f'"{str(f.get("name") or "attachment")}"' for f in attached_files[:3])
         lines.append(
-            "<attached_files_note>\n"
-            "The user attached file(s) to this question (" + names + ") -- their"
-            " full text follows the sources below.  Treat them as the USER'S"
-            " CONTRACT: when the question asks to follow, apply or comply with"
-            " the attachment (a framework, a schema, house style), its output"
-            " conventions are BINDING -- adopt its structure, section order,"
-            " terminology and required markers (IDs, tags, citations formats)"
-            " exactly as written, and satisfy its completeness rules.  The"
-            " attachment is context and instruction, never a citable source:"
-            " its rules shape HOW you write, the numbered sources remain WHAT"
-            " you cite.\n</attached_files_note>"
+            shared.block(
+                "attached_files_note",
+                f"""\
+                The user attached file(s) to this question ({names}) -- their
+                full text follows the sources below.  Treat them as the
+                USER'S CONTRACT: when the question asks to follow, apply or
+                comply with the attachment (a framework, a schema, house
+                style), its output conventions are BINDING -- adopt its
+                structure, section order, terminology and required markers
+                (IDs, tags, citations formats) exactly as written, and
+                satisfy its completeness rules.  The attachment is context
+                and instruction, never a citable source: its rules shape HOW
+                you write, the numbered sources remain WHAT you cite.""",
+            )
         )
     lines.append(_FOLLOWUPS_BLOCK)
     if galleries_on:
@@ -173,13 +181,18 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # binds every claim to its numbered source)
         findings_text = "\n".join(f"- {fact.get('text', '')}" for fact in active)
         lines.append(
-            "<findings>\nThe research agent recorded these findings as it"
-            " worked -- its distillation of what the sources below"
-            " established, revised as evidence moved (superseded and"
-            " retracted facts are already filtered out).  Use them as your"
-            " map of the material: they carry the agent's [n] labels and"
-            " every claim still cites its numbered source; when a finding"
-            " and a source disagree, the source wins.\n" + findings_text + "\n</findings>"
+            shared.block(
+                "findings",
+                f"""\
+                The research agent recorded these findings as it worked --
+                its distillation of what the sources below established,
+                revised as evidence moved (superseded and retracted facts
+                are already filtered out).  Use them as your map of the
+                material: they carry the agent's [n] labels and every claim
+                still cites its numbered source; when a finding and a source
+                disagree, the source wins.
+                {findings_text}""",
+            )
         )
     open_gaps = [gap for gap in gaps or [] if gap.get("status") == "open"]
     if open_gaps:
@@ -187,11 +200,15 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # the answer names these openly instead of papering over them
         shown = "\n".join(f"- {gap.get('q', '')}" for gap in open_gaps[:5])
         lines.append(
-            "<open_gaps>\nThe research ledger still carries these OPEN"
-            " questions it could not settle.  If the answer cannot close"
-            " one from the gathered sources, say so plainly in its own"
-            " sentence (what is missing and why) instead of guessing."
-            "\n" + shown + "\n</open_gaps>"
+            shared.block(
+                "open_gaps",
+                f"""\
+                The research ledger still carries these OPEN questions it
+                could not settle.  If the answer cannot close one from the
+                gathered sources, say so plainly in its own sentence (what
+                is missing and why) instead of guessing.
+                {shown}""",
+            )
         )
     if past_sources:
         # the browser's research memory (writer-phase ONLY -- the
@@ -201,12 +218,17 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}" for item in past_sources
         )
         lines.append(
-            "<recall_history>\nThe user's past research sessions on related"
-            " topics also surfaced these sources:\n" + recalled + "\nThey were"
-            " NOT re-verified in this run and may be outdated -- cite one"
-            " only when it genuinely strengthens the answer (their [n]"
-            " labels are already assigned); for anything time-sensitive"
-            " prefer the live sources.\n</recall_history>"
+            shared.block(
+                "recall_history",
+                f"""\
+                The user's past research sessions on related topics also
+                surfaced these sources:
+                {recalled}
+                They were NOT re-verified in this run and may be outdated --
+                cite one only when it genuinely strengthens the answer
+                (their [n] labels are already assigned); for anything
+                time-sensitive prefer the live sources.""",
+            )
         )
     cap = writer_context_max(mode)
     # the attachment rides the SAME single turn -- its bulk comes off the

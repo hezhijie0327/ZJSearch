@@ -61,26 +61,27 @@ def outline_entities_paragraph(unit: str, extra_clause: str = "") -> str:
     ``unit`` is "section" (report) or "chapter" (deck); ``extra_clause``
     rides inside the sentence (the report's opportunities-for-X rule)."""
     extra = f" {extra_clause}" if extra_clause else ""
-    return (
-        "ALSO list the deliverable_entities: up to 6 named entities the"
-        f" FINAL deliverable depends on understanding but that NO {unit}"
-        " directly researches -- a counterpart, a competitor, a technology"
-        f" or a market the recommendations rest on{extra}.  The research"
-        " desk must gather basic sourced facts about each before writing"
-        " starts."
-    )
+    return f"""\
+ALSO list the deliverable_entities: up to 6 named entities the FINAL
+deliverable depends on understanding but that NO {unit} directly
+researches -- a counterpart, a competitor, a technology or a market the
+recommendations rest on{extra}.  The research desk must gather basic
+sourced facts about each before writing starts."""
 
+
+_OUTLINE_FREE = """\
+Design the report's section skeleton for the question: 4-8 CONTENT
+sections, each with a specific title (not "Introduction"/"Conclusion" --
+name the subject matter), a one-sentence brief of what the section must
+establish, and 1-3 key_questions the section's evidence must answer.
+Order the sections the way a decision-maker reads: the landscape first,
+mechanics/actors in the middle, implications and risks last.  Do NOT
+include an executive summary, a methodology note or an appendix -- the
+desk adds those itself."""
 
 OUTLINE_SYSTEM = (
-    f"{OUTLINE_EDITOR_LINE}  Design the report's section skeleton for the"
-    " question: 4-8 CONTENT sections, each with a specific title (not"
-    ' "Introduction"/"Conclusion" -- name the subject matter), a'
-    " one-sentence brief of what the section must establish, and 1-3"
-    " key_questions the section's evidence must answer.  Order the"
-    " sections the way a decision-maker reads: the landscape first,"
-    " mechanics/actors in the middle, implications and risks last.  Do NOT"
-    " include an executive summary, a methodology note or an appendix --"
-    " the desk adds those itself.  "
+    f"{OUTLINE_EDITOR_LINE}  {_OUTLINE_FREE}"
+    + "  "
     + outline_entities_paragraph(
         "section",
         extra_clause='(when the question asks for "opportunities for X", X itself belongs here unless a section studies it)',
@@ -88,17 +89,19 @@ OUTLINE_SYSTEM = (
     + "  " + _OUTLINE_RESPONSE_CONTRACT
 )
 
+_OUTLINE_TEMPLATE = """\
+The desk works from a FIXED report template supplied below -- its
+section structure is BINDING.  Instantiate the template for the
+question: keep every section the template marks non-optional, in the
+template's order (drop one ONLY when it is marked optional AND truly
+irrelevant to the question), write each section title with the
+question's ACTUAL entity names (a placeholder like "{company}" or "the
+target company" becomes the concrete name), and sharpen every brief +
+key_questions so the section's evidence answers THIS question."""
+
 TEMPLATE_ADAPT_SYSTEM = (
-    f"{OUTLINE_EDITOR_LINE}  The desk works from a FIXED report template"
-    " supplied below -- its section structure is BINDING.  Instantiate the"
-    " template for the question: keep every section the template marks"
-    " non-optional, in the template's order (drop one ONLY when it is"
-    " marked optional AND truly irrelevant to the question), write each"
-    ' section title with the question\'s ACTUAL entity names (a placeholder'
-    ' like "{company}" or "the target company" becomes the concrete name),'
-    " and sharpen every brief + key_questions so the section's evidence"
-    " answers THIS question.  "
-    + outline_entities_paragraph("section")
+    f"{OUTLINE_EDITOR_LINE}  {_OUTLINE_TEMPLATE}"
+    + "  " + outline_entities_paragraph("section")
     + "  " + _OUTLINE_RESPONSE_CONTRACT
 )
 
@@ -127,10 +130,9 @@ REPORT_SHAPE = spine.block(
       "In this section".""",
 )
 
-_SECTION_ROLE = (
-    "You write one section of a research report, grounded in the numbered"
-    " sources of THIS run."
-)
+_SECTION_ROLE = """\
+You write one section of a research report, grounded in the numbered
+sources of THIS run."""
 
 
 def section_system(role: str, surface: str, shape: str) -> str:
@@ -154,24 +156,22 @@ def section_system(role: str, surface: str, shape: str) -> str:
 
 SECTION_SYSTEM = section_system(_SECTION_ROLE, "report", REPORT_SHAPE)
 
-SUMMARY_SYSTEM = (
-    "You write the EXECUTIVE SUMMARY of a finished research report: 3-5"
-    ' bold-led findings ("**Bottom line.** ..." -- a BOLD short label, a'
-    " period, then the finding), each 1-3 sentences, each carrying its [n]"
-    " citations, followed by one short synthesis paragraph that names the"
-    " core logic tying the findings together.  Synthesize -- do not retell"
-    " section by section; the reader has not read them yet.  Ground every"
-    " statement in the sections' own citations, and write every label in"
-    " the report's language."
-)
+SUMMARY_SYSTEM = """\
+You write the EXECUTIVE SUMMARY of a finished research report: 3-5
+bold-led findings ("**Bottom line.** ..." -- a BOLD short label, a
+period, then the finding), each 1-3 sentences, each carrying its [n]
+citations, followed by one short synthesis paragraph that names the core
+logic tying the findings together.  Synthesize -- do not retell section
+by section; the reader has not read them yet.  Ground every statement in
+the sections' own citations, and write every label in the report's
+language."""
 
 SUMMARY_USER = (
     "<question>{q}</question>\n<written_sections>\n{digest}\n</written_sections>\n"
     "Write the executive summary in the report's language."
 )
 
-CITATION_GATE_INSTRUCTIONS = (
-    "For each numbered claim, judge whether the cited source's material"
-    " actually supports it (a source that merely mentions the topic does"
-    " NOT support a specific figure)."
-)
+CITATION_GATE_INSTRUCTIONS = """\
+For each numbered claim, judge whether the cited source's material
+actually supports it (a source that merely mentions the topic does NOT
+support a specific figure)."""

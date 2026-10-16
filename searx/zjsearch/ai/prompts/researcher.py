@@ -318,15 +318,24 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     run_context = f"{_memory_block(None if memories_live else user_memories)}\n"
     if clarifications:
         run_context += (
-            "<clarified>\nThe user already confirmed the research direction"
-            " before this run (honor it; do not re-ask):\n"
-            f"{clarifications}\n</clarified>\n"
+            shared.block(
+                "clarified",
+                f"""\
+                The user already confirmed the research direction before
+                this run (honor it; do not re-ask):
+                {clarifications}""",
+            )
+            + "\n"
         )
     elif clarify_skipped:
         run_context += (
-            "<clarified>\nThe user declined to clarify the direction:"
-            " proceed with your best interpretation and cover the plausible"
-            " facets.\n</clarified>\n"
+            shared.block(
+                "clarified",
+                """\
+                The user declined to clarify the direction: proceed with
+                your best interpretation and cover the plausible facets.""",
+            )
+            + "\n"
         )
     follow_up = _follow_up(sources_base)
     if follow_up:
@@ -334,31 +343,27 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     facts = [str(x).strip() for x in ((thread_ledger or {}).get("facts") or []) if str(x).strip()]
     gaps = [str(x).strip() for x in ((thread_ledger or {}).get("gaps") or []) if str(x).strip()]
     if facts or gaps:
-        thread_ctx = (
-            "<thread_context>\nThis thread's EARLIER runs already"
-            " established the facts below (their [n] marks refer to this"
-            " thread's source registry).  Build on them -- do NOT"
-            " re-research an established fact unless genuine"
-            " re-verification is needed"
-            + (
-                ", and re-affirm the ones you build on into your own"
-                " findings ledger (record_findings)"
-                if RECORD_FINDINGS_TOOL in toolset
-                else ""
-            )
-            + ".\n"
+        ledger_note = (
+            " Re-affirm the ones you build on into your own findings ledger"
+            f" ({RECORD_FINDINGS_TOOL})."
+            if RECORD_FINDINGS_TOOL in toolset
+            else ""
         )
+        established = "\n".join(f"- {f}" for f in facts[:40])
+        gap_lines = "\n".join(f"- {g}" for g in gaps[:12])
+        body = f"""\
+        This thread's EARLIER runs already established the facts below
+        (their [n] marks refer to this thread's source registry).  Build on
+        them -- do NOT re-research an established fact unless genuine
+        re-verification is needed.{ledger_note}"""
         if facts:
-            thread_ctx += "<established>\n" + "\n".join(f"- {f}" for f in facts[:40]) + "\n</established>\n"
+            body += f"\n<established>\n{established}\n</established>"
         if gaps:
-            thread_ctx += (
-                "<open_gaps>\nThe earlier runs left these questions open"
-                " -- cover the ones THIS question touches:\n"
-                + "\n".join(f"- {g}" for g in gaps[:12])
-                + "\n</open_gaps>\n"
+            body += (
+                "\n<open_gaps>\nThe earlier runs left these questions open"
+                f" -- cover the ones THIS question touches:\n{gap_lines}\n</open_gaps>"
             )
-        thread_ctx += "</thread_context>\n"
-        run_context += thread_ctx
+        run_context += shared.block("thread_context", body) + "\n"
     if mcp_servers:
         # the MCP servers' own usage guidance (the initialize results'
         # ``instructions``, captured during the memoized specs pass) --
@@ -369,31 +374,48 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         listed = "\n".join(f"- {name}: {text}" for name, text in mcp_servers.items() if text)
         if listed:
             run_context += (
-                "<mcp_servers>\nThe connected MCP servers (their tools are"
-                " reachable ONLY through the search_tools discovery tool --"
-                " keyword-search it to receive the matching tools' full"
-                f" schemas) carry their own usage guidance:\n{listed}\n</mcp_servers>\n"
+                shared.block(
+                    "mcp_servers",
+                    f"""\
+                    The connected MCP servers (their tools are reachable
+                    ONLY through the search_tools discovery tool --
+                    keyword-search it to receive the matching tools' full
+                    schemas) carry their own usage guidance:
+                    {listed}""",
+                )
+                + "\n"
             )
     if image_parts:
         run_context += (
-            "<attached_images>\nThe user attached image(s) to this"
-            " question.  READ them -- text, charts, products, screenshots --"
-            " and factor what they show into your research plan: search for"
-            " the entities, figures and context they reveal.  They are"
-            " question material, not search results: never treat them as"
-            " sources.\n</attached_images>\n"
+            shared.block(
+                "attached_images",
+                """\
+                The user attached image(s) to this question.  READ them --
+                text, charts, products, screenshots -- and factor what they
+                show into your research plan: search for the entities,
+                figures and context they reveal.  They are question
+                material, not search results: never treat them as
+                sources.""",
+            )
+            + "\n"
         )
     deliverable = [str(x) for x in (deliverable_entities or []) if str(x)]
     if deliverable:
+        entity_lines = "\n".join(f"- {name}" for name in deliverable[:5])
         run_context += (
-            "<deliverable_entities>\nThe final answer will make claims or"
-            " recommendations ABOUT these entities, but the current plan has"
-            " NO subtask researching them -- the reader cannot use such"
-            " recommendations without knowing what each entity is:\n"
-            + "\n".join(f"- {name}" for name in deliverable[:5])
-            + "\nAdd a subtask for each via "
-            f"{UPDATE_PLAN_TOOL} (or delegate a delegate_research) and gather their"
-            " basic sourced facts before the research ends.\n</deliverable_entities>\n"
+            shared.block(
+                "deliverable_entities",
+                f"""\
+                The final answer will make claims or recommendations ABOUT
+                these entities, but the current plan has NO subtask
+                researching them -- the reader cannot use such
+                recommendations without knowing what each entity is:
+                {entity_lines}
+                Add a subtask for each via {UPDATE_PLAN_TOOL} (or delegate
+                a delegate_research) and gather their basic sourced facts
+                before the research ends.""",
+            )
+            + "\n"
         )
     for file in attached_files or []:
         # 60K = the uploads layer's per-file cap (a framework contract must
@@ -401,12 +423,19 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # half and the run could never cite the rules it never saw)
         text = str(file.get("text") or "")[:60_000]
         trunc = "\n[... the file was truncated ...]" if len(str(file.get("text") or "")) > 60_000 else ""
+        name = file.get("name") or "attachment.md"
         run_context += (
-            "<attached_file>\nThe user attached this file -- its FULL text"
-            " follows.  Factor it into the plan; it is user-provided"
-            " material, not a web source.\n"
-            f'<file name="{file.get("name") or "attachment.md"}">\n{text}{trunc}\n</file>\n'
-            "</attached_file>\n"
+            shared.block(
+                "attached_file",
+                f"""\
+                The user attached this file -- its FULL text follows.
+                Factor it into the plan; it is user-provided material, not
+                a web source.
+                <file name="{name}">
+                {text}{trunc}
+                </file>""",
+            )
+            + "\n"
         )
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"

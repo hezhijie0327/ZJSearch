@@ -90,30 +90,28 @@ SENTINEL = (
     " ledger and the source stays citable as above ...]"
 )
 
-COMPACTION_PROMPT = (
-    "Summarize the research conversation above for continuation.  Respond"
-    " with TEXT ONLY -- do NOT call any tool.\n"
-    "Produce exactly these sections:\n"
-    "1. <direction> the research question, the confirmed scope, and every"
-    " user steering/clarification quoted VERBATIM.\n"
-    "2. <facts> every established fact with its numbers/dates and its [n]"
-    " citations copied EXACTLY -- a fact or figure not listed here is"
-    " lost for good.\n"
-    "3. <sources> one line per cited source: [n] title -- host.\n"
-    "4. <searched> the queries and angles already tried, so they are not"
-    " repeated.\n"
-    "5. <gaps> the open questions the sources could not settle.\n"
-    "6. <state> what was being worked on right before this point and the"
-    " immediate next step.\n"
-    "Keep it under 1200 words.  Never invent facts or [n] numbers."
-)
+COMPACTION_PROMPT = """\
+Summarize the research conversation above for continuation.  Respond
+with TEXT ONLY -- do NOT call any tool.
+Produce exactly these sections:
+1. <direction> the research question, the confirmed scope, and every
+user steering/clarification quoted VERBATIM.
+2. <facts> every established fact with its numbers/dates and its [n]
+citations copied EXACTLY -- a fact or figure not listed here is lost
+for good.
+3. <sources> one line per cited source: [n] title -- host.
+4. <searched> the queries and angles already tried, so they are not
+repeated.
+5. <gaps> the open questions the sources could not settle.
+6. <state> what was being worked on right before this point and the
+immediate next step.
+Keep it under 1200 words.  Never invent facts or [n] numbers."""
 
-LENGTH_RESUME_NOTE = (
-    "Your previous reply hit the output token limit and was cut off"
-    " mid-thought.  Resume DIRECTLY from where it stopped -- no apology,"
-    " no recap, no re-statement of what you already wrote.  If much"
-    " remains, break the remaining work into smaller pieces."
-)
+LENGTH_RESUME_NOTE = """\
+Your previous reply hit the output token limit and was cut off
+mid-thought.  Resume DIRECTLY from where it stopped -- no apology, no
+recap, no re-statement of what you already wrote.  If much remains,
+break the remaining work into smaller pieces."""
 
 __all__ = [
     "Compactor",

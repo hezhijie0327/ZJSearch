@@ -54,12 +54,10 @@ about the material (noul) -- each with probabilities.""",
             "properties": {
                 "state": {
                     "type": "string",
-                    "description": (
-                        "The material to judge, COMPACT (a few hundred words"
-                        " at most): a source's title + snippet, the two"
-                        " candidate options side by side, the claim plus the"
-                        " passage that supports it."
-                    ),
+                    "description": """\
+The material to judge, COMPACT (a few hundred words at most): a
+source's title + snippet, the two candidate options side by side, the
+claim plus the passage that supports it.""",
                 },
                 "images": {
                     "type": "array",

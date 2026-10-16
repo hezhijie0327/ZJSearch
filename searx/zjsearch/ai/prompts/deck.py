@@ -21,30 +21,36 @@ documents."""
 from searx.zjsearch.ai.prompts import report
 from searx.zjsearch.ai.prompts import spine
 
+_OUTLINE_FREE = """\
+Design the SLIDE DECK's chapter skeleton for the question: 4-8 CONTENT
+chapters, each of which becomes 1-4 presentation slides, with a specific
+title (not "Introduction"/"Conclusion" -- name the subject matter), a
+one-sentence brief of what the chapter must establish, and 1-3
+key_questions its evidence must answer.  Order the chapters the way a
+presenter tells the story: the landscape first, mechanics/actors in the
+middle, implications, risks and a recommendation last.  Do NOT include
+an executive summary, an agenda or an appendix chapter -- the desk adds
+the cover slide itself."""
+
 DECK_OUTLINE_SYSTEM = (
-    f"{report.OUTLINE_EDITOR_LINE}  Design the SLIDE DECK's chapter skeleton"
-    " for the question: 4-8 CONTENT chapters, each of which becomes 1-4"
-    ' presentation slides, with a specific title (not "Introduction"/'
-    '"Conclusion" -- name the subject matter), a one-sentence brief of what'
-    " the chapter must establish, and 1-3 key_questions its evidence must"
-    " answer.  Order the chapters the way a presenter tells the story: the"
-    " landscape first, mechanics/actors in the middle, implications, risks"
-    " and a recommendation last.  Do NOT include an executive summary, an"
-    " agenda or an appendix chapter -- the desk adds the cover slide"
-    f" itself.  {report.outline_entities_paragraph('chapter')}  "
+    f"{report.OUTLINE_EDITOR_LINE}  {_OUTLINE_FREE}"
+    f"  {report.outline_entities_paragraph('chapter')}  "
     + report._OUTLINE_RESPONSE_CONTRACT  # pylint: disable=protected-access
 )
 
+_OUTLINE_TEMPLATE = """\
+The desk works from a FIXED presentation template supplied below -- its
+chapter structure is BINDING.  Instantiate the template for the
+question: keep every chapter the template marks non-optional, in the
+template's order (drop one ONLY when it is marked optional AND truly
+irrelevant to the question), write each chapter title with the
+question's ACTUAL entity names (a placeholder like "{company}" or "the
+target company" becomes the concrete name), and sharpen every brief +
+key_questions so the chapter's evidence answers THIS question."""
+
 DECK_TEMPLATE_ADAPT_SYSTEM = (
-    f"{report.OUTLINE_EDITOR_LINE}  The desk works from a FIXED presentation"
-    " template supplied below -- its chapter structure is BINDING."
-    "  Instantiate the template for the question: keep every chapter the"
-    " template marks non-optional, in the template's order (drop one ONLY"
-    " when it is marked optional AND truly irrelevant to the question),"
-    " write each chapter title with the question's ACTUAL entity names (a"
-    ' placeholder like "{company}" or "the target company" becomes the'
-    " concrete name), and sharpen every brief + key_questions so the"
-    f" chapter's evidence answers THIS question.  {report.outline_entities_paragraph('chapter')}  "
+    f"{report.OUTLINE_EDITOR_LINE}  {_OUTLINE_TEMPLATE}"
+    f"  {report.outline_entities_paragraph('chapter')}  "
     + report._OUTLINE_RESPONSE_CONTRACT  # pylint: disable=protected-access
 )
 

@@ -101,71 +101,56 @@ def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict
                 "category": {
                     "type": "string",
                     "enum": list(available_categories()),
-                    "description": (
-                        "Optional vertical -- the enum is exactly what this"
-                        " deployment serves (every listed category has"
-                        " enabled engines; each has its own client layout:"
-                        " images render as a masonry, videos as a grid);"
-                        " general when unsure."
-                    ),
+                    "description": """\
+Optional vertical -- the enum is exactly what this deployment serves
+(every listed category has enabled engines; each has its own client
+layout: images render as a masonry, videos as a grid); general when
+unsure.""",
                 },
                 "time_range": {
                     "type": "string",
                     "enum": list(_TIME_RANGES),
-                    "description": (
-                        "Optional freshness window -- use it when the question"
-                        " is about recent material (news, releases, changelogs);"
-                        " omit otherwise."
-                    ),
+                    "description": """\
+Optional freshness window -- use it when the question is about recent
+material (news, releases, changelogs); omit otherwise.""",
                 },
                 "included_sites": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": (
-                        "Bare domains to RESTRICT the search to (at most 3),"
-                        " only when the user signals a source preference:"
-                        ' "search reddit", "search only GitHub" ->'
-                        ' ["github.com"];'
-                        ' "official sources" -> the relevant authoritative'
-                        " domains.  Prefer this over stuffing the site name"
-                        " into the keywords -- the filter is enforced exactly,"
-                        " the keyword is not.  Do not invent restrictions for"
-                        " ordinary queries.  If the filtered search comes"
-                        " back thin, run one more without it."
-                    ),
+                    "description": """\
+Bare domains to RESTRICT the search to (at most 3), only when the user
+signals a source preference: "search reddit", "search only GitHub" ->
+["github.com"]; "official sources" -> the relevant authoritative
+domains.  Prefer this over stuffing the site name into the keywords --
+the filter is enforced exactly, the keyword is not.  Do not invent
+restrictions for ordinary queries.  If the filtered search comes back
+thin, run one more without it.""",
                 },
                 "excluded_sites": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": (
-                        "Bare domains to EXCLUDE (at most 3), only when the"
-                        ' user signals an aversion: "not pinterest" ->'
-                        ' ["pinterest.com"].'
-                    ),
+                    "description": """\
+Bare domains to EXCLUDE (at most 3), only when the user signals an
+aversion: "not pinterest" -> ["pinterest.com"].""",
                 },
                 "refresh": {
                     "type": "boolean",
-                    "description": (
-                        "Set true ONLY to deliberately re-run a query this"
-                        " run already executed -- the material may have"
-                        " changed (a live score, a just-published release,"
-                        " a page the user says updated).  The"
-                        " duplicate-query refusal is bypassed; pages"
-                        " already among your sources still keep their [n]"
-                        " numbers.  Never use it to paper over a thin"
-                        " result -- vary the query instead."
-                    ),
+                    "description": """\
+Set true ONLY to deliberately re-run a query this run already executed
+-- the material may have changed (a live score, a just-published
+release, a page the user says updated).  The duplicate-query refusal is
+bypassed; pages already among your sources still keep their [n]
+numbers.  Never use it to paper over a thin result -- vary the query
+instead.""",
                 },
                 "paid_ok": {
                     "type": "boolean",
-                    "description": (
-                        "Set true ONLY after the user explicitly approved"
-                        " PAID (API-billed) engines for this run -- their"
-                        " answer to your ask_user confirmation is the"
-                        " record.  A !bang on an API-billed engine is held"
-                        " until then (the refusal feed teaches the ask);"
-                        " never set it without an explicit user yes."
-                    ),
+                    "description": """\
+Set true ONLY after the user explicitly approved PAID (API-billed)
+engines for this run -- their answer to your ask_user confirmation is
+the record.  A !bang on an API-billed engine is held until then (the
+refusal feed teaches the ask); never set it without an explicit user
+yes.""",
                 },
             },
             "required": ["query"],

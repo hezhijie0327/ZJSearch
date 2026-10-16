@@ -14,6 +14,8 @@ every other builder here."""
 
 import typing as t
 
+from searx.zjsearch.ai.prompts import spine as shared
+
 SUB_ROUNDS = 6
 """A subagent's round budget (one round = one parallel batch)."""
 
@@ -37,35 +39,50 @@ def subagent_messages(
     discipline here keeps only what spans the tools.  No task list, no
     ask, no memory writes: those are the LEAD's surfaces."""
     system_parts = [
-        "<role>\nYou are a research SUBAGENT. A lead researcher delegated one"
-        " subtask to you; you have your own context window and report a"
-        " compressed digest back.  Research ONLY your subtask.\n</role>",
-        f"<today>\n{today}\n</today>",
-        "<delegation>\n"
-        f"<title>{parsed['title']}</title>\n"
-        f"<objective>{parsed['objective']}</objective>\n"
-        f"<output_format>{parsed['output_format']}</output_format>\n"
-        f"<tool_guidance>{parsed['tool_guidance']}</tool_guidance>\n"
-        f"<boundaries>{parsed['boundaries']}</boundaries>\n"
-        "</delegation>",
-        "<discipline>\n"
-        "- Start WIDE (short broad queries), read the landscape, then"
-        " narrow; 3-10 tool calls is a normal subtask.\n"
-        "- Cite every fact with its [n]; never present a number without"
-        " one.\n"
-        f"- Write your final digest in {lang}.\n"
-        "</discipline>",
-        "<report>\nYour FINAL message is the digest the lead reads -- it"
-        " is your entire deliverable.  Follow output_format; lead with the"
-        " established facts (each with [n]), then the open questions your"
-        " sources could NOT settle.  Keep it under ~400 words: the lead"
-        " aggregates many digests.\n</report>",
-        "<follow_ups>\nThe lead may send LATER messages (wrapped in"
-        " <lead_followup>) after your digest -- a correction, a new angle,"
-        " a gap to close.  Each one continues THIS subtask: your sources,"
-        " ledger and reads are all still yours -- build on them instead of"
-        " starting over, then report a fresh digest in the same shape.\n"
-        "</follow_ups>",
+        shared.block(
+            "role",
+            """\
+            You are a research SUBAGENT. A lead researcher delegated one
+            subtask to you; you have your own context window and report a
+            compressed digest back.  Research ONLY your subtask.""",
+        ),
+        shared.block("today", today),
+        shared.block(
+            "delegation",
+            f"""\
+            <title>{parsed['title']}</title>
+            <objective>{parsed['objective']}</objective>
+            <output_format>{parsed['output_format']}</output_format>
+            <tool_guidance>{parsed['tool_guidance']}</tool_guidance>
+            <boundaries>{parsed['boundaries']}</boundaries>""",
+        ),
+        shared.block(
+            "discipline",
+            f"""\
+            - Start WIDE (short broad queries), read the landscape, then
+            narrow; 3-10 tool calls is a normal subtask.
+            - Cite every fact with its [n]; never present a number without
+            one.
+            - Write your final digest in {lang}.""",
+        ),
+        shared.block(
+            "report",
+            """\
+            Your FINAL message is the digest the lead reads -- it is your
+            entire deliverable.  Follow output_format; lead with the
+            established facts (each with [n]), then the open questions your
+            sources could NOT settle.  Keep it under ~400 words: the lead
+            aggregates many digests.""",
+        ),
+        shared.block(
+            "follow_ups",
+            """\
+            The lead may send LATER messages (wrapped in <lead_followup>)
+            after your digest -- a correction, a new angle, a gap to close.
+            Each one continues THIS subtask: your sources, ledger and reads
+            are all still yours -- build on them instead of starting over,
+            then report a fresh digest in the same shape.""",
+        ),
     ]
     if tool_notes:
         sections = "\n\n".join(f"[{name}]\n{text}" for name, text in tool_notes)

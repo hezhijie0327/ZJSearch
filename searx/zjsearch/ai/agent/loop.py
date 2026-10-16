@@ -69,10 +69,9 @@ _WRAP_HALT = "wrap_grace_ended"
 walks into the writer with the material gathered so far -- every run ends
 with a REAL terminal state."""
 
-_WRAP_NOTE = (
-    "The connection was lost past the detach grace window -- the answer is"
-    " written from the material gathered so far."
-)
+_WRAP_NOTE = """\
+The connection was lost past the detach grace window -- the answer is
+written from the material gathered so far."""
 """The WRITER-facing half of the wrap halt (an honest English research
 note -- the model must never see a machine key)."""
 
@@ -85,21 +84,19 @@ client's i18n catalog renders them): the guard-caused early ends of the
 research.  ``halt`` stays the human/writer-facing prose; the reason is
 what the client and the journal can branch on."""
 
-_LOOP_WARNING = (
-    "<loop_warning>\n"
-    "This round repeated the EXACT tool calls of the previous round (same\n"
-    "tools, same arguments) -- the results will not change.  Change the\n"
-    "approach: different keywords, another instrument, another facet -- or\n"
-    "stop calling tools and let the writer answer from what is gathered.\n"
-    "</loop_warning>"
-)
+_LOOP_WARNING = """\
+<loop_warning>
+This round repeated the EXACT tool calls of the previous round (same
+tools, same arguments) -- the results will not change.  Change the
+approach: different keywords, another instrument, another facet -- or
+stop calling tools and let the writer answer from what is gathered.
+</loop_warning>"""
 """The loop guard's ONE course correction (a user message, model-facing --
 NOT a ``steer`` event, which is the user's own channel)."""
 
-_LOOP_NOTE = (
-    "The research was cut short: the latest round repeated the previous"
-    " round's tool calls exactly -- answer from what was gathered."
-)
+_LOOP_NOTE = """\
+The research was cut short: the latest round repeated the previous
+round's tool calls exactly -- answer from what was gathered."""
 """The writer-facing research note when the loop guard ends the research."""
 
 _CONTROL_SLICE = 1.0
@@ -527,12 +524,10 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 messages.append(
                     {
                         "role": "user",
-                        "content": (
-                            f"<budget_extension>{reason or 'the research is genuinely mid-flight'} --"
-                            f" {extra} more research rounds were granted;"
-                            " close the remaining gaps and wrap up within"
-                            " them.</budget_extension>"
-                        ),
+                        "content": f"""\
+<budget_extension>{reason or 'the research is genuinely mid-flight'} --
+{extra} more research rounds were granted; close the remaining gaps and
+wrap up within them.</budget_extension>""",
                     }
                 )
             if late_feed is not None:

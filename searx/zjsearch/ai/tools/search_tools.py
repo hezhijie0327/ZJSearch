@@ -46,7 +46,7 @@ def discovery_spec(mcp_count: int, mcp_servers: list[str], internal_names: list[
             " a few broad keywords (route, weather, geo, engines, evaluate,"
             " judge, past research...) when the first search matches"
             " nothing."
-        ),
+        ),  # dynamic coverage composition -- assembly code, not a doc blob
         "inputSchema": {
             "type": "object",
             "properties": {

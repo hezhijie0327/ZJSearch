@@ -32,17 +32,15 @@ more; a chat-shaped answer rests on fewer external actors)."""
 _ATTACH_HEAD = 2_000
 """Per-attachment head inside the extraction prompt."""
 
-_EXTRACT_SYSTEM = (
-    "Extract from the research request the DELIVERABLE ENTITIES: up to"
-    " 4 named entities the final answer will make claims or"
-    " recommendations ABOUT, but that the request does not directly ask"
-    " to research -- a counterpart, competitor, customer, technology or"
-    " market the recommendations rest on (when the request asks for"
-    " \"opportunities for X\", X itself belongs here unless one of the"
-    " subtasks already studies X).  Only entities a web search could"
-    " profile; skip generic concepts.  Respond with ONLY:"
-    ' {"entities": [{"name": "...", "why": "..."}, ...]}'
-)
+_EXTRACT_SYSTEM = """\
+Extract from the research request the DELIVERABLE ENTITIES: up to 4
+named entities the final answer will make claims or recommendations
+ABOUT, but that the request does not directly ask to research -- a
+counterpart, competitor, customer, technology or market the
+recommendations rest on (when the request asks for "opportunities for
+X", X itself belongs here unless one of the subtasks already studies
+X).  Only entities a web search could profile; skip generic concepts.
+Respond with ONLY: {"entities": [{"name": "...", "why": "..."}, ...]}"""
 
 _EXTRACT_SCHEMA: dict = {
     "type": "object",
@@ -165,10 +163,9 @@ def run_once(state: t.Any, items: list[dict[str, str]]) -> str | None:
     )
     if not uncovered:
         return None
-    return (
-        "\n(deliverable coverage: the final answer will make claims about "
-        + "; ".join(uncovered[:3])
-        + " -- NO subtask researches them. Add a subtask for each via update_plan"
-        " (or delegate a delegate_research): their basic sourced facts must be"
-        " among the gathered sources before the research ends.)"
-    )
+    names = "; ".join(uncovered[:3])
+    return f"""\
+(deliverable coverage: the final answer will make claims about {names}
+-- NO subtask researches them. Add a subtask for each via update_plan
+(or delegate a delegate_research): their basic sourced facts must be
+among the gathered sources before the research ends.)"""

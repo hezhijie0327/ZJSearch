@@ -94,22 +94,18 @@ def extend_budget_gate(
     messages = [
         {
             "role": "system",
-            "content": (
-                "You are the budget gate of an AI research run: the run's"
-                " research budget just ran out and you decide whether it"
-                " extends.  Extend ONLY when the ledger's open gaps are"
-                " genuinely material to the question AND live searching is"
-                " visibly mid-flight (recent rounds kept yielding new"
-                " sources) -- more rounds must buy real answer quality, not"
-                " polish.  Wrap (extend=false) when the gathered facts"
-                " already answer the question, the gaps are nice-to-have,"
-                " or the rounds have gone stale.  When extending, size the"
-                " grant to what the gaps actually need (a couple of rounds"
-                " per material gap, never a blanket doubling).  Output ONLY"
-                ' a JSON object: {"extend": true, "rounds": <int>,'
-                ' "reason": "<one line>"} or {"extend": false, "reason":'
-                ' "<one line>"}.'
-            ),
+            "content": """\
+You are the budget gate of an AI research run: the run's research
+budget just ran out and you decide whether it extends.  Extend ONLY
+when the ledger's open gaps are genuinely material to the question AND
+live searching is visibly mid-flight (recent rounds kept yielding new
+sources) -- more rounds must buy real answer quality, not polish.  Wrap
+(extend=false) when the gathered facts already answer the question, the
+gaps are nice-to-have, or the rounds have gone stale.  When extending,
+size the grant to what the gaps actually need (a couple of rounds per
+material gap, never a blanket doubling).  Output ONLY a JSON object:
+{"extend": true, "rounds": <int>, "reason": "<one line>"} or {"extend":
+false, "reason": "<one line>"}."""
         },
         {"role": "user", "content": f"<q>{question}</q>\n<ledger>\n{ledger}\n</ledger>"},
     ]
@@ -153,23 +149,18 @@ def research_gate(cfg: dict[str, t.Any], question: str, account: t.Any = None) -
     messages = [
         {
             "role": "system",
-            "content": (
-                "You are the research gate of an AI search engine: decide"
-                " whether the request needs live web research.  Answer false"
-                " ONLY when nothing in a good answer could benefit from"
-                " current web sources: greetings and small talk, creative"
-                " writing (poems, stories, emails, essays), pure translation,"
-                " arithmetic, or reworking of the user's own text."
-                "  Everything else -- every factual question, however simple"
-                " or well known -- needs research: this engine always answers"
-                " with live, cited sources.  A request that points at the"
-                " user's OWN saved material (their knowledge base, their past"
-                " research, an uploaded file) ALSO needs research: the"
-                " research loop carries the recall tools that reach it."
-                "  Output ONLY a JSON object, no"
-                ' prose, no code fences: {"research": true} or {"research":'
-                ' false}.'
-            ),
+            "content": """\
+You are the research gate of an AI search engine: decide whether the
+request needs live web research.  Answer false ONLY when nothing in a
+good answer could benefit from current web sources: greetings and small
+talk, creative writing (poems, stories, emails, essays), pure
+translation, arithmetic, or reworking of the user's own text.  Every
+factual question, however simple or well known, needs research: this
+engine always answers with live, cited sources.  A request that points
+at the user's OWN saved material (their knowledge base, their past
+research, an uploaded file) ALSO needs research: the research loop
+carries the recall tools that reach it.  Output ONLY a JSON object, no
+prose, no code fences: {"research": true} or {"research": false}."""
         },
         {"role": "user", "content": f"<q>{question}</q>"},
     ]
@@ -191,16 +182,13 @@ def standalone_question(
     messages = [
         {
             "role": "system",
-            "content": (
-                "Rewrite the user's follow-up question as ONE self-contained"
-                " question that can be researched WITHOUT the conversation."
-                "  Resolve pronouns and ellipsis using the conversation;"
-                " never answer it, never add facts.  Output ONLY a JSON"
-                " object, no prose, no code fences:"
-                ' {"question": "<the rewritten question>"} -- or'
-                ' {"question": ""} when it is already self-contained.'
-                f"  Write in {lang}."
-            ),
+            "content": f"""\
+Rewrite the user's follow-up question as ONE self-contained question
+that can be researched WITHOUT the conversation.  Resolve pronouns and
+ellipsis using the conversation; never answer it, never add facts.
+Output ONLY a JSON object, no prose, no code fences: {{"question":
+"<the rewritten question>"}} -- or {{"question": ""}} when it is already
+self-contained.  Write in {lang}."""
         },
         {"role": "user", "content": f"<conversation>\n{convo}\n</conversation>\n<follow_up>{question}</follow_up>"},
     ]
@@ -229,27 +217,22 @@ def clarify_gate(
     messages = [
         {
             "role": "system",
-            "content": (
-                "You are the clarification gate of a deep-research search"
-                " engine: decide whether the request needs the user's"
-                " direction BEFORE any research begins." + posture + " One"
-                " class always justifies asking: a HIGH-STAKES deliverable"
-                " whose assumptions change the answer -- a forecast, an"
-                " investment, purchase, health or legal question -- where"
-                " the user's situation (timeline, risk appetite, existing"
-                " holdings) is unknowable from the question alone.  Broad"
-                ' informational topics ("how do solar panels work",'
-                ' "history of jazz") do NOT need clarification -- cover'
-                " their facets"
-                " instead.  Ask at most 3 questions; each carries 2-4 short"
-                " options (\"single\" = pick one, \"multi\" = pick any) and"
-                " the user can always add free text.  Output ONLY a JSON"
-                " object, no prose, no code fences: {\"ask\": true, \"intro\":"
-                " \"<one sentence on why you ask>\", \"questions\": [{\"q\":"
-                " \"<question>\", \"type\": \"single\", \"options\": [\"<short"
-                " option>\", ...]}]}  -- or {\"ask\": false} when research can"
-                f" start directly.  Write in {lang}."
-            ),
+            "content": f"""\
+You are the clarification gate of a deep-research search engine: decide
+whether the request needs the user's direction BEFORE any research
+begins.{posture}  One class always justifies asking: a HIGH-STAKES
+deliverable whose assumptions change the answer -- a forecast, an
+investment, purchase, health or legal question -- where the user's
+situation (timeline, risk appetite, existing holdings) is unknowable
+from the question alone.  Broad informational topics ("how do solar
+panels work", "history of jazz") do NOT need clarification -- cover
+their facets instead.  Ask at most 3 questions; each carries 2-4 short
+options ("single" = pick one, "multi" = pick any) and the user can
+always add free text.  Output ONLY a JSON object, no prose, no code
+fences: {{"ask": true, "intro": "<one sentence on why you ask>",
+"questions": [{{"q": "<question>", "type": "single", "options":
+["<short option>", ...]}}]}} -- or {{"ask": false}} when research can
+start directly.  Write in {lang}."""
         },
         {"role": "user", "content": f"<q>{question}</q>{attachments_note}"},
     ]
@@ -278,14 +261,12 @@ def generate_title(
     messages = [
         {
             "role": "system",
-            "content": (
-                "Name a research thread. Output ONLY a JSON object, no prose,"
-                " no markdown, no code fences:"
-                ' {"title": "<title>"} -- ONE short noun phrase (8-20'
-                " characters) in the question's language, specific to the"
-                ' subject: not generic ("research report", "survey"), not a'
-                " question, no quotes, no trailing punctuation."
-            ),
+            "content": """\
+Name a research thread. Output ONLY a JSON object, no prose, no
+markdown, no code fences: {"title": "<title>"} -- ONE short noun phrase
+(8-20 characters) in the question's language, specific to the subject:
+not generic ("research report", "survey"), not a question, no quotes,
+no trailing punctuation."""
         },
         {
             "role": "user",
@@ -307,12 +288,11 @@ def related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: s
     messages = [
         {
             "role": "system",
-            "content": (
-                "Suggest follow-up questions for a search session. Output ONLY a"
-                " JSON object, no prose, no markdown, no code fences:"
-                ' {"questions": ["<question 1>", "<question 2>",'
-                ' "<question 3>"]} -- exactly 3 short question strings.'
-            ),
+            "content": """\
+Suggest follow-up questions for a search session. Output ONLY a JSON
+object, no prose, no markdown, no code fences: {"questions":
+["<question 1>", "<question 2>", "<question 3>"]} -- exactly 3 short
+question strings."""
         },
         {
             "role": "user",

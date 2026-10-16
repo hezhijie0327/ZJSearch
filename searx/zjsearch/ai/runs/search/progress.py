@@ -25,19 +25,17 @@ BUDGET_LAST_ROUND_NOTE = "(budget note: ONE research round remains -- make it co
 the next turn reads it with the tool results it describes, so the model
 can spend the remaining round where it matters."""
 
-FEED_CONVERGE_NOTE = (
-    "(note: the source context is getting large -- start converging:"
-    " prefer answering from what you have over opening more pages.)"
-)
+FEED_CONVERGE_NOTE = """\
+(note: the source context is getting large -- start converging: prefer
+answering from what you have over opening more pages.)"""
 """The context-pressure note, appended once when the accumulated feed
 crosses the executor's soft limit -- the signal reaches the MODEL (not
 only the writer's input shaping)."""
 
-TIME_BUDGET_NOTE = (
-    "(budget note: the run's time budget is spent -- wrap up the research"
-    " this round: one or two targeted calls at most, then stop calling"
-    " tools so the writer can answer.)"
-)
+TIME_BUDGET_NOTE = """\
+(budget note: the run's time budget is spent -- wrap up the research
+this round: one or two targeted calls at most, then stop calling tools
+so the writer can answer.)"""
 """The wall-clock verdict: the run's ``max_seconds`` elapsed.  One more
 turn of grace (the note reaches the model through this round's feeds),
 then the time check ends the research regardless of productivity."""
@@ -95,7 +93,7 @@ def continuation_note(open_tasks: list[str], open_gaps: list[str]) -> str:
     lines = [
         "(progress note: you stopped calling tools, but the research"
         " ledger is not closed -- the question is not fully covered yet.",
-    ]
+    ]  # a short machine-note prefix; the composed list below stays code
     if open_tasks:
         shown = "; ".join(f'"{title}"' for title in open_tasks[:4])
         lines.append(f"Open subtasks: {shown}.")

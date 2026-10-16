@@ -222,24 +222,23 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 # note below (which also fires for results without textual
                 # signal): the model must know the engine found NOTHING so
                 # it rewrites the query instead of re-reading an empty page
-                feed_block += (
-                    "\n(search result: this query returned ZERO results --"
-                    " rewrite it: different keywords, another language,"
-                    " another category, or drop a filter; never repeat it"
-                    " verbatim -- the duplicate guard will refuse)"
-                )
+                feed_block += """\
+
+(search result: this query returned ZERO results -- rewrite it:
+different keywords, another language, another category, or drop a
+filter; never repeat it verbatim -- the duplicate guard will refuse)"""
             elif quality.get("no_signal"):
-                feed_block += (
-                    "\n(search quality: this query matched nothing textually --"
-                    " rephrase it: different keywords, another language, or a"
-                    " site: operator; repeating it verbatim wastes a round)"
-                )
+                feed_block += """\
+
+(search quality: this query matched nothing textually -- rephrase it:
+different keywords, another language, or a site: operator; repeating it
+verbatim wastes a round)"""
             elif (dup_ratio := quality.get("dup_ratio")) is not None and dup_ratio > 0.6:
-                feed_block += (
-                    f"\n(search quality: {int(round(dup_ratio * 100))}% of this query's head results were"
-                    " near-duplicate syndications of pages already in hand -- approach from another"
-                    " angle or change language)"
-                )
+                feed_block += f"""\
+
+(search quality: {int(round(dup_ratio * 100))}% of this query's head
+results were near-duplicate syndications of pages already in hand --
+approach from another angle or change language)"""
             # the PLUGINS' instant answers ride the same feed block: the
             # stock/calculate/time answerers' output is exactly the kind
             # of direct fact the researcher should quote -- without this
@@ -367,11 +366,10 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
         kept = "\n".join(segments[i] for i in sorted(keep))
         dropped = len(segments) - len(keep)
         if dropped:
-            kept += (
-                f"\n\n[... {dropped} less-relevant section(s) of this page"
-                " were trimmed from the research feed; the full text is"
-                " archived under its source ...]"
-            )
+            kept += f"""\
+
+[... {dropped} less-relevant section(s) of this page were trimmed from
+the research feed; the full text is archived under its source ...]"""
         return kept
 
     def _finish_page(
