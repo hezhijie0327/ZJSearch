@@ -83,6 +83,14 @@ RUN \
     # stage ships it together with the venv (the runtime ENV re-exports
     # the same path)
     && python3 -m searx.zjsearch.ai.browser.install \
+    # the launch pins the identity OS to windows (browser/engine.py) -- the
+    # trimmer drops the font groups windows does not read (~850 MB), keyed
+    # on the bundle's own groups.json (searx/zjsearch/ai/browser/trim_fonts
+    # .py, riding the patched /app/searx).  IMAGE-ONLY: a dev workstation's
+    # install keeps every group.  Same RUN ON PURPOSE: the venv is still
+    # activated here and the bundle just landed; a later RUN would need the
+    # /app/bin interpreter spelled out
+    && python3 -m searx.zjsearch.ai.browser.trim_fonts windows \
     && python3 -m compileall -q searx \
     # the vite build's closeBundle pass (tools/assets.ts) already wrote
     # .gz/.br siblings for the zjsearch artifacts -- -f makes this pass
@@ -95,16 +103,6 @@ RUN \
         -o -name '*.wasm' -o -name '*.data' \) \
         -type f -exec gzip -9 -k -f {} \+ -exec brotli --best -f {} \+ \
     && rm -rf /tmp/* /var/lib/apt/lists/* /var/tmp/*
-
-# The launch pins the identity OS to windows (browser/engine.py); the theme's
-# font trimmer (searx/zjsearch/ai/browser/trim_fonts.py -- already inside
-# /app/searx via the applied patch) drops the font groups windows does not
-# read (~850 MB), keyed on the bundle's own groups.json.  IMAGE-ONLY: a dev
-# workstation's install is untouched.  The venv interpreter EXPLICITLY: this
-# is a separate RUN, the activate from the install RUN is long gone.  The
-# separate layer is safe regardless: the final stage COPYs /app's end state,
-# intermediate build layers never reach it.
-RUN /app/bin/python3 -m searx.zjsearch.ai.browser.trim_fonts windows
 
 FROM python:${PYTHON_VERSION}-slim AS rebased_searxng
 
