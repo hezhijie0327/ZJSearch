@@ -21,6 +21,15 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  BootDocTitle,
+  BootPrefsRows,
+  BootProse,
+  BootRowsCard,
+  BootSearchCard,
+  BootStatsTable,
+  BootTabCard,
+} from "@/components/BootGhosts.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { fetchText } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -28,6 +37,7 @@ import { isModifiedClick } from "@/lib/link.ts";
 import { extractPageData } from "@/lib/pageData.ts";
 import { ICON_BTN } from "@/lib/styles.ts";
 import type { AnyPageData } from "@/lib/types.ts";
+import { isKnowledgePageData, isPreferencesPageData, isStatsPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** Panels the app can render inside the drawer. Returning null means "this
@@ -242,7 +252,7 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
               }}
             >
               {view.loading ? (
-                <PanelSkeleton />
+                <PanelSkeleton shape={panelShapeOfUrl(view.url)} />
               ) : view.error ? (
                 <p className="p-6 text-sm text-danger">{view.error}</p>
               ) : view.mode === "document" ? (
@@ -252,7 +262,7 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
                   </pre>
                 </article>
               ) : view.data ? (
-                <Suspense fallback={<PanelSkeleton />}>
+                <Suspense fallback={<PanelSkeleton shape={panelShapeOfData(view.data)} />}>
                   {panels.renderPage(view.data, view.hint) ?? <PanelFallback data={view.data} />}
                 </Suspense>
               ) : null}
@@ -264,27 +274,63 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
   );
 }
 
-/** The overlay panels' load ghost (preferences / about / stats / knowledge
-    share one shape): heading, section-tab pills, then setting rows of a
-    label + a control -- panel chrome, not six anonymous bars.  Generic on
-    purpose: one fallback serves every panel payload and the lazy page
-    chunks. */
-const PanelSkeleton = () => (
-  <div aria-busy="true" className="space-y-5 p-6">
-    <span className="zjs-skeleton block h-6 w-44" />
-    <div className="flex items-center gap-2">
-      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
-      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
-      <span className="zjs-skeleton h-8 w-20 rounded-lg" />
-    </div>
-    <div className="space-y-4">
-      {Array.from({ length: 5 }, (_, i) => (
-        <div className="flex items-center justify-between gap-4" key={i}>
-          <span className="zjs-skeleton h-4 w-1/3" />
-          <span className="zjs-skeleton h-9 w-24 rounded-lg" />
-        </div>
-      ))}
-    </div>
+/** The overlay panels' load ghost — one shape per panel family, drawn from
+    the same boot-ghost blocks the standalone pages boot with (boot.css's
+    `.zjs-boot*` family): preferences = segment tabs + setting rows, stats =
+    the engine table, knowledge = tabs + search + directory rows, info = the
+    reading column.  The drawer chrome carries the title, so these bodies
+    start at the panels' own content (the embedded pages hide their page
+    headings to match).  The fetch's shape comes from the URL (the payload
+    is not there yet); the chunk-load fallback reads it off the payload. */
+type PanelShape = "prefs" | "stats" | "doc" | "knowledge";
+
+function panelShapeOfUrl(url: string): PanelShape {
+  if (url.includes("/preferences")) {
+    return "prefs";
+  }
+  if (url.includes("/stats")) {
+    return "stats";
+  }
+  if (url.includes("/zjsearch/knowledge")) {
+    return "knowledge";
+  }
+  return "doc";
+}
+
+function panelShapeOfData(data: AnyPageData): PanelShape {
+  if (isPreferencesPageData(data)) {
+    return "prefs";
+  }
+  if (isStatsPageData(data)) {
+    return "stats";
+  }
+  if (isKnowledgePageData(data)) {
+    return "knowledge";
+  }
+  return "doc";
+}
+
+const PanelSkeleton = ({ shape }: { shape: PanelShape }) => (
+  <div aria-busy="true" className="p-6">
+    {shape === "prefs" ? (
+      <>
+        <BootTabCard />
+        <BootPrefsRows />
+      </>
+    ) : shape === "stats" ? (
+      <BootStatsTable />
+    ) : shape === "knowledge" ? (
+      <>
+        <BootTabCard tabs={8} />
+        <BootSearchCard />
+        <BootRowsCard />
+      </>
+    ) : (
+      <>
+        <BootDocTitle />
+        <BootProse />
+      </>
+    )}
   </div>
 );
 

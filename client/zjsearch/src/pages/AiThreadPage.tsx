@@ -2,6 +2,7 @@
 
 import { MessageCircleQuestion, Zap } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { BootRunBody } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
 import { Shell } from "@/components/Shell.tsx";
@@ -67,26 +68,13 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
 /** The thread page's resume ghost (page-private): while the async resume
     reads the store (the per-tab mirror may miss; PGlite is the fallback)
     the main column rendered BLANK -- a shared thread link read as dead.
-    The ghost mirrors AiSearchRunSection's zero-event state. */
+    It mirrors AiSearchRunSection's zero-event state through the SAME
+    boot-ghost blocks the server shell boots with (BootRunBody: run head +
+    the 188px sources rail), so the store → real swap never changes shape. */
 function ThreadGhost() {
   return (
-    <div aria-busy="true" className="mt-4 animate-fade-up space-y-5">
-      <span className="zjs-skeleton block h-9 w-72 max-w-full" />
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="zjs-skeleton size-5 rounded-full" />
-        <span className="zjs-skeleton h-5 w-24" />
-        <span className="zjs-skeleton h-4 w-16" />
-      </div>
-      <div className="rounded-lg border border-line p-3">
-        <span className="zjs-skeleton block h-4 w-44" />
-        <span className="zjs-skeleton mt-2 block h-6 w-full" />
-        <span className="zjs-skeleton mt-2 block h-6 w-[82%]" />
-      </div>
-      <div className="space-y-3">
-        <span className="zjs-skeleton block h-4 w-full" />
-        <span className="zjs-skeleton block h-4 w-[93%]" />
-        <span className="zjs-skeleton block h-4 w-[70%]" />
-      </div>
+    <div aria-busy="true" className="mt-4 animate-fade-up">
+      <BootRunBody />
     </div>
   );
 }

@@ -474,14 +474,21 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   category-tab (first tab amber-underlined) + filter rows, card bars in the
   exact `ResultSkeleton` rhythm (url / mt-1 title / mt-1.5 snippet ×2 / mt-2
   engines pill), right rail reserved width-only (20rem at lg, 24rem at xl).
-  The skeleton has TWO modes, keyed on the render context's `ai_mode`:
-  the CLASSIC shape above, and the AI-takeover shape (`ai=1`) — the run
-  title in real query text at text-3xl, the OPEN research box (process-row
-  ghosts + bordered box, `.zjs-boot-ai-*`), and the sources rail
-  (`lg:w-72 xl:w-80`, two grid columns below lg) — the takeover never
-  renders tabs/filters/card lists, so its skeleton never does either, and
-  the React pending leg (`AiBootGhost` in ResultsPage, page-private)
-  mirrors the same shape.  The AI run starts from the BOOT payload (the
+  The skeleton is SHAPE-KEYED — `boot_shape` (set by each template before
+  the include; the streamed search resolves it from `ai_mode`) selects one
+  geometry family per page surface, each mirroring its LOADED page:
+  `classic` (the results shape above), `ai` (the AI takeover — run title
+  in real query text, process row, the THREE-segment phase strip, the
+  OPEN research box holding only the planning note, and the sources rail
+  as ONE column of four 188px cells at every width — AiSearchSources-
+  Skeleton's exact footprint, starting level with the research column at
+  lg like the real run section's flex row), `thread` (TopNav bar header +
+  the same run ghost with a holding-bar title, in the thread's own
+  48/68/72rem measure), `knowledge` (TopNav + page heading + segment tabs
+  + search box + directory rows), `doc` (info / debug overview reading
+  column), `prefs`, `stats` (engine table), `hero` (the centered greeting
+  + ask card) and `note` (the 404's nav-less centered notice).  The AI run
+  starts from the BOOT payload (the
   start gate ignores `pending` — the server skipped the classic fan-out),
   so the research begins during the boot round-trip.  The three-way swap
   static skeleton → React pending → real results must never shift layout:
@@ -492,14 +499,21 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   live instance — keeps the skeleton on screen).
 - SKELETON COVERAGE IS UNIVERSAL: every surface a user can reach renders
   its OWN real shape while it loads — never a blank pane, a lone spinner,
-  or (worst) a dishonest empty state.  The inventory: classic results
-  (static skeleton + `ResultSkeleton`), AI takeover (the ai_mode skeleton
-  branch + `AiBootGhost`), lazy page chunks (`PageFallback` in app.tsx —
-  the family page scaffold, since Shell itself is inside the chunk),
-  overlay panels (the panel-chrome `PanelSkeleton`), the knowledge page's
-  graph/list skeletons (features/knowledge), and the AI thread page's
-  async resume (`ThreadGhost`).  A new surface ships
-  with its ghost in the same change; a load state that renders an empty
+  or (worst) a dishonest empty state.  The mechanics: the geometry lives
+  ONLY in boot.css's standalone `.zjs-boot*` classes, and three renderers
+  assemble them — the server shell (`skeleton.html`, the direct-visit
+  boot), `components/BootGhosts.tsx` (the TSX building blocks), and the
+  two client assemblers: `PageFallback` in app.tsx (shape-keyed per lazy
+  chunk, incl. the AI takeover via `globals.ai_mode`; also the payload-
+  less boot) and the drawer's `PanelSkeleton` (shape from the panel URL
+  while the fetch runs, from the payload for the chunk load).  The
+  in-flight views join the contract: the knowledge page's
+  directory/search/memory views take `loading` (null store data renders
+  `BootRowsCard` ghosts, never the final empty state — the kind listings
+  and the tag graph carry their own), the run inspector's answer body
+  ghosts while the evt log loads, and the AI thread page's async resume
+  rides `ThreadGhost` (BootRunBody).  A new surface ships with its ghost
+  in the same change; a load state that renders an empty
   message while data is still in flight is a bug.
 
 - The data contract lives in `searx/templates/zjsearch/data/macros.html` and is

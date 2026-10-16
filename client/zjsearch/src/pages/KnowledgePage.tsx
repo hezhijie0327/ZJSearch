@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import {
   AdminView,
@@ -507,6 +508,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 <TemplateManagerPanel search={debounced} />
               ) : kind === "memory" ? (
                 <MemorySection
+                  loading={memories === null}
                   memories={memoryList}
                   onAdd={(content) => {
                     saveMemory(content);
@@ -537,6 +539,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
               ) : searching ? (
                 <SearchResults
                   groups={searchByKind}
+                  loading={results === null}
                   onOpen={setView}
                   onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
                   onPin={pinItem}
@@ -544,11 +547,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 />
               ) : kindListing ? (
                 kindItems === null ? (
-                  <div className="space-y-2">
-                    {Array.from({ length: 5 }, (_, i) => (
-                      <span className="zjs-skeleton block h-16 rounded-xl" key={i} />
-                    ))}
-                  </div>
+                  <BootRowsCard rows={5} />
                 ) : (
                   <KindItemRows
                     emptyLine={
@@ -569,6 +568,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 )
               ) : (
                 <ThreadRows
+                  loading={threads === null}
                   onHome={embedded ? goHome : undefined}
                   onOpen={(thread) => openThreadInspector(thread.id, thread.title)}
                   onPin={(thread, on) => toggleThreadPin(thread.id, on)}

@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
@@ -149,6 +150,10 @@ export function ThreadRows({
   onRemove,
   onRename,
   threads,
+  /** the store subscription is still resolving — hold the directory's
+      shape with the boot-ghost rows instead of the final empty state (a
+      cold store's boot can take seconds; "知识库为空" during it lies) */
+  loading = false,
 }: {
   threads: ThreadSummary[];
   onOpen: (thread: ThreadSummary) => void;
@@ -158,12 +163,16 @@ export function ThreadRows({
   /** panel context: the empty state's home pill must leave the drawer, an
       anchor would be captured into a fallback panel */
   onHome?: () => void;
+  loading?: boolean;
 }) {
   const t = useT();
   // the directory's 报告 filter: only threads carrying report-mode runs
   const [reportsOnly, setReportsOnly] = useState(false);
   // the inline rename: one thread at a time, Enter saves, Escape cancels
   const [renaming, setRenaming] = useState<{ id: string } | null>(null);
+  if (loading) {
+    return <BootRowsCard rows={4} />;
+  }
   const shown = reportsOnly ? threads.filter((thread) => thread.reports > 0) : threads;
   if (threads.length === 0) {
     return (
@@ -370,18 +379,24 @@ const KIND_LABEL_KEYS: Record<
     hit reads its archived full text; anything else navigates. */
 export function SearchResults({
   groups,
+  loading = false,
   onOpen,
   onOpenThread,
   onPin,
   onRemove,
 }: {
   groups: Map<string, KnowledgeItem[]>;
+  /** the hybrid search is still in flight — row ghosts, not "无匹配" */
+  loading?: boolean;
   onOpen: (item: KnowledgeItem) => void;
   onOpenThread: (item: KnowledgeItem) => void;
   onPin: (item: KnowledgeItem, on: boolean) => void;
   onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
+  if (loading) {
+    return <BootRowsCard rows={4} />;
+  }
   if (groups.size === 0) {
     return <PaperEmpty icon={Search} line={t("knowledge_no_match_line")} title={t("knowledge_thread_no_match")} />;
   }
@@ -440,17 +455,23 @@ export function SearchResults({
     one card per durable fact (content + forget). */
 export function MemorySection({
   memories,
+  loading = false,
   onAdd,
   onForget,
   onSave,
 }: {
   memories: MemoryRow[];
+  /** the memory subscription is still resolving — hold the card's shape */
+  loading?: boolean;
   onAdd: (content: string) => void;
   onForget: (id: string) => void;
   onSave: (id: string, content: string) => void;
 }) {
   const t = useT();
   const [adding, setAdding] = useState(false);
+  if (loading) {
+    return <BootRowsCard rows={3} />;
+  }
   // group by day for the timeline view (LobeHub's GroupedVirtuoso shape,
   // minus the virtualization -- browser-local scale is hundreds of rows)
   const groups = new Map<string, MemoryRow[]>();
@@ -1038,7 +1059,13 @@ export function InspectorView({
                 <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
               )
             ) : body === null ? (
-              <p className="text-[13px] text-ink-3">…</p>
+              // the run's answer is still loading off the evt log — prose
+              // ghosts, not a lone ellipsis
+              <div aria-busy="true" className="space-y-3">
+                <span className="zjs-skeleton block h-4 w-full" />
+                <span className="zjs-skeleton block h-4 w-[93%]" />
+                <span className="zjs-skeleton block h-4 w-[70%]" />
+              </div>
             ) : body === "" ? (
               <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
             ) : (

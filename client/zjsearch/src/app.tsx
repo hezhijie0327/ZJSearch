@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Compass } from "lucide-react";
+import { Compass, Search } from "lucide-react";
+import type { ReactNode } from "react";
 import { Suspense, useEffect } from "react";
+import {
+  BootActions,
+  BootDocTitle,
+  BootPrefsRows,
+  BootProse,
+  BootRowsCard,
+  BootRunBody,
+  BootSearchCard,
+  BootStatsTable,
+  BootTabCard,
+} from "@/components/BootGhosts.tsx";
 import { Link, Shell } from "@/components/Shell.tsx";
 import { Tape } from "@/components/Tape.tsx";
 import { OverlayProvider } from "@/features/overlay/OverlayProvider.tsx";
@@ -37,10 +49,14 @@ function Pages() {
   const t = useT();
 
   if (!data) {
-    return (
+    // an error here is terminal (the payload is gone); a payload-less boot
+    // with no error still owes the user a shape, not a lone ellipsis
+    return error ? (
       <div className="grid min-h-dvh place-items-center">
-        <p className="text-sm text-ink-2">{error ?? "…"}</p>
+        <p className="text-sm text-ink-2">{error}</p>
       </div>
+    ) : (
+      <PageFallback shape="doc" />
     );
   }
 
@@ -50,7 +66,7 @@ function Pages() {
     // the chunk is pre-warmed on results boots (streamed shell inline import)
     // and by hero-search intent; the fallback only shows on a cold SPA nav
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback q={data.q} shape={data.globals.ai_mode === true ? "ai" : "classic"} />}>
         <ResultsPage data={data} />
       </Suspense>
     );
@@ -58,42 +74,42 @@ function Pages() {
 
   if (isPreferencesPageData(data)) {
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback brand={globals.instance_name} shape="prefs" />}>
         <PreferencesPage data={data} />
       </Suspense>
     );
   }
   if (isStatsPageData(data)) {
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback brand={globals.instance_name} shape="stats" />}>
         <StatsPage data={data} />
       </Suspense>
     );
   }
   if (isInfoPageData(data)) {
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback brand={globals.instance_name} shape="doc" />}>
         <InfoPage data={data} />
       </Suspense>
     );
   }
   if (isAiThreadPageData(data)) {
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback brand={globals.instance_name} shape="thread" />}>
         <AiThreadPage data={data} />
       </Suspense>
     );
   }
   if (isAiOverviewDebugPageData(data)) {
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback brand={globals.instance_name} shape="doc" />}>
         <AiOverviewDebugPage data={data} />
       </Suspense>
     );
   }
   if (isKnowledgePageData(data)) {
     return (
-      <Suspense fallback={<PageFallback />}>
+      <Suspense fallback={<PageFallback brand={globals.instance_name} shape="knowledge" />}>
         <KnowledgePage data={data} />
       </Suspense>
     );
@@ -135,33 +151,128 @@ function Pages() {
 }
 
 /** The lazy pages' load ghost: the lazy chunks (results / preferences /
-    stats / info) render NOTHING around them -- Shell included -- so a cold
-    chunk fetch read as a blank viewport with a spinner.  The ghost echoes
-    the family page scaffold instead: a top bar (brand + action circles)
-    and a reading column with a heading and prose rows.  Generic on
-    purpose: one static ghost serves every lazy page without pulling any
-    page chunk into the eager graph. */
-function PageFallback() {
-  return (
-    <div aria-busy="true">
-      <div className="flex items-center justify-between px-4 py-3 sm:px-6">
-        <span className="zjs-skeleton h-6 w-28" />
-        <span className="flex items-center gap-2">
-          <span className="zjs-skeleton size-9 rounded-full" />
-          <span className="zjs-skeleton size-9 rounded-full" />
-          <span className="zjs-skeleton size-9 rounded-full" />
-        </span>
-      </div>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-16 pt-6 sm:px-6">
-        <span className="zjs-skeleton block h-8 w-64 max-w-full" />
-        <div className="mt-6 space-y-3.5">
-          <span className="zjs-skeleton block h-4 w-full" />
-          <span className="zjs-skeleton block h-4 w-[92%]" />
-          <span className="zjs-skeleton block h-4 w-[96%]" />
-          <span className="zjs-skeleton block h-4 w-[85%]" />
-          <span className="zjs-skeleton block h-4 w-2/3" />
+    stats / info / thread / knowledge) render NOTHING around them -- Shell
+    included -- so a cold chunk fetch used to read as a blank viewport with
+    a spinner.  Each page family now boots into ITS OWN shape, mirroring
+    skeleton.html's boot shapes one-to-one (the geometry lives in boot.css's
+    `.zjs-boot*` family — server shell and this ghost share it, so the
+    static skeleton → ghost → real page chain never changes shape).
+    Generic markup only: no page chunk is pulled into the eager graph. */
+function PageFallback({
+  brand,
+  q,
+  shape,
+}: {
+  /** the instance name renders as the real brand text when known */
+  brand?: string;
+  shape: "classic" | "ai" | "thread" | "knowledge" | "doc" | "prefs" | "stats";
+  /** the search shapes show the real query in the header pill */
+  q?: string;
+}) {
+  const brandMark = brand ? (
+    <span className="zjs-boot-brand">
+      {brand}
+      <span>.</span>
+    </span>
+  ) : (
+    <span className="zjs-skeleton zjs-boot-brand-bar" />
+  );
+  let body: ReactNode;
+  if (shape === "ai" || shape === "thread") {
+    body = <BootRunBody title={shape === "ai" ? q : undefined} />;
+  } else if (shape === "knowledge") {
+    body = (
+      <>
+        <div className="zjs-boot-k-head">
+          <span className="zjs-skeleton zjs-boot-k-icon" />
+          <span className="zjs-skeleton zjs-boot-k-title" />
         </div>
-      </main>
+        <span className="zjs-skeleton zjs-boot-k-sub" />
+        <BootTabCard />
+        <BootSearchCard />
+        <BootRowsCard />
+      </>
+    );
+  } else if (shape === "prefs") {
+    body = (
+      <>
+        <BootDocTitle />
+        <BootTabCard />
+        <BootPrefsRows />
+      </>
+    );
+  } else if (shape === "stats") {
+    body = (
+      <>
+        <BootDocTitle />
+        <BootStatsTable />
+      </>
+    );
+  } else if (shape === "doc") {
+    body = (
+      <>
+        <BootDocTitle />
+        <BootProse />
+      </>
+    );
+  } else {
+    // classic: tabs / filters / the text-card stack / the width-only rail
+    body = (
+      <div className="zjs-boot-body">
+        <div className="zjs-boot-main">
+          <div aria-hidden="true" className="zjs-boot-tabs">
+            <span className="zjs-skeleton zjs-boot-tab is-selected" />
+            <span className="zjs-skeleton zjs-boot-tab" />
+            <span className="zjs-skeleton zjs-boot-tab" />
+            <span className="zjs-skeleton zjs-boot-tab" />
+            <span className="zjs-skeleton zjs-boot-tab" />
+          </div>
+          <div aria-hidden="true" className="zjs-boot-filters">
+            <span className="zjs-skeleton zjs-boot-filter" />
+            <span className="zjs-skeleton zjs-boot-filter" />
+            <span className="zjs-skeleton zjs-boot-filter" />
+          </div>
+          <div aria-hidden="true" className="zjs-boot-cards">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div className="zjs-boot-card" key={i}>
+                <span className="zjs-skeleton zjs-boot-w40" />
+                <span className="zjs-skeleton zjs-boot-title" />
+                <span className="zjs-skeleton zjs-boot-line" />
+                <span className="zjs-skeleton zjs-boot-line2" />
+                <span className="zjs-skeleton zjs-boot-pill" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div aria-hidden="true" className="zjs-boot-side" />
+      </div>
+    );
+  }
+  return (
+    <div aria-busy="true" className={`zjs-boot is-${shape}`}>
+      {shape === "classic" || shape === "ai" ? (
+        <div className="zjs-boot-shell">
+          <div className="zjs-boot-top">
+            {brandMark}
+            <div className="zjs-boot-q">
+              <span className="zjs-boot-q-text">{q}</span>
+              <span aria-hidden="true" className="zjs-boot-submit">
+                <Search aria-hidden="true" className="size-4.5" />
+              </span>
+            </div>
+            <BootActions />
+          </div>
+          {body}
+        </div>
+      ) : (
+        <>
+          <div aria-hidden="true" className="zjs-boot-nav">
+            {brandMark}
+            <BootActions />
+          </div>
+          <div className="zjs-boot-shell">{body}</div>
+        </>
+      )}
     </div>
   );
 }

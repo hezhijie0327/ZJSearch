@@ -1,8 +1,15 @@
 /* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
 
 /* Skeleton family: the .zjs-skeleton shimmer primitive (shared by the
-   server-streamed shell and React's ResultSkeleton in cardParts.tsx) and the
-   .zjs-boot streamed boot skeleton (skeleton.html) with its error screen. */
+   server-streamed shell and React's ResultSkeleton in cardParts.tsx), the
+   .zjs-boot streamed boot skeletons (skeleton.html — one geometry family
+   per page surface) with their error screen.
+
+   The per-shape geometry (.zjs-boot-ai*, .zjs-boot-k*, …) is written as
+   STANDALONE class selectors on purpose: React's pending ghosts
+   (PageFallback in app.tsx, ThreadGhost, the knowledge loading rows in
+   sections.tsx) build from the same classes without a .zjs-boot root, so
+   the server shell and the client ghost share one source of truth. */
 
 @layer components {
   .zjs-skeleton {
@@ -20,21 +27,83 @@
     animation: var(--animate-shimmer);
   }
 
-  /* boot skeleton: streamed by the server before the search finishes
-     (results page shell), wiped by React on boot.  Geometry mirrors the real
-     results page — header row, category tabs, filter row, text cards, an
-     empty right rail — so the boot swap does not shift the layout; hidden
-     for no-JS via the inline <noscript><style> in the skeleton markup. */
+  /* boot skeleton root: only the wipe marker (React replaces the whole
+     node) and the no-JS hide; all geometry lives on the shell / shape
+     blocks below */
   .zjs-boot {
+    min-height: 100dvh;
+  }
+
+  /* the page container: mirrors the loaded page's main column measure */
+  .zjs-boot-shell {
     max-width: var(--results-max, 90rem);
     margin-inline: auto;
     padding: 0.75rem 1rem 2rem;
   }
   @media (min-width: 40rem) {
-    .zjs-boot {
+    .zjs-boot-shell {
       padding-inline: 1.5rem;
     }
   }
+  .is-thread .zjs-boot-shell {
+    max-width: 48rem;
+    padding-top: 2.5rem;
+  }
+  @media (min-width: 64rem) {
+    .is-thread .zjs-boot-shell {
+      max-width: 68rem;
+    }
+  }
+  @media (min-width: 80rem) {
+    .is-thread .zjs-boot-shell {
+      max-width: 72rem;
+    }
+  }
+  .is-knowledge .zjs-boot-shell,
+  .is-doc .zjs-boot-shell,
+  .is-prefs .zjs-boot-shell,
+  .is-stats .zjs-boot-shell {
+    padding-top: 1.5rem;
+  }
+  .is-knowledge .zjs-boot-shell,
+  .is-doc .zjs-boot-shell {
+    max-width: 48rem;
+  }
+  .is-prefs .zjs-boot-shell {
+    max-width: 56rem;
+  }
+  .is-stats .zjs-boot-shell {
+    max-width: 64rem;
+  }
+  .is-hero .zjs-boot-shell {
+    max-width: 42rem;
+    padding-top: 0;
+  }
+  .is-note .zjs-boot-shell {
+    max-width: 28rem;
+    min-height: 60dvh;
+    display: grid;
+    place-items: center;
+  }
+
+  /* ── ghost TopNav (thread / knowledge / doc / prefs / stats / hero):
+     the h-14 frosted bar every standalone page renders (Shell TopNav) —
+     real brand text + ghost action circles */
+  .zjs-boot-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 3.5rem;
+    padding-inline: 1rem;
+    border-bottom: 1px solid color-mix(in oklab, var(--line) 80%, transparent);
+  }
+  @media (min-width: 40rem) {
+    .zjs-boot-nav {
+      padding-inline: 1.5rem;
+    }
+  }
+
   .zjs-boot-top {
     display: flex;
     align-items: center;
@@ -52,6 +121,13 @@
   }
   .zjs-boot-brand span {
     color: var(--accent);
+  }
+  /* the brand when its text is not known yet (the payload-less ghost) */
+  .zjs-boot-brand-bar {
+    display: block;
+    flex: none;
+    width: 9rem;
+    height: 1.75rem;
   }
   /* stand-in for the real compact SearchBox: h-12 ps-5 pe-2 with the
      max-w-2xl xl:max-w-3xl 2xl:max-w-4xl column of ResultsPage's header */
@@ -173,59 +249,99 @@
   /* bars follow the real card rhythm: url / mt-1 title / mt-1.5 snippet ×2
      / mt-2 engines pill — same values as ResultSkeleton in cardParts.tsx */
   .zjs-boot-w40 {
+    display: block;
     height: 16px;
     width: 160px;
   }
   .zjs-boot-title {
+    display: block;
     height: 24px;
     width: 75%;
     margin-top: 4px;
   }
   .zjs-boot-line {
+    display: block;
     height: 22px;
     width: 100%;
     margin-top: 6px;
   }
   .zjs-boot-line2 {
+    display: block;
     height: 22px;
     width: 83%;
     margin-top: 6px;
   }
   .zjs-boot-pill {
+    display: block;
     height: 22px;
     width: 112px;
     margin-top: 8px;
     border-radius: 9999px;
   }
-  /* ── AI takeover variant (ai=1): the agent page boots into ITS OWN
-     geometry — the run title, the OPEN research box and the sources rail —
-     never the classic tabs/filters/card list (the takeover never renders
-     them).  Mirrors AiSearchRunSection's boot state: title text-3xl
-     font-medium, header row icon+label+timer, the rounded-lg bordered box
-     with the planning note, the lg:w-80 xl:w-96 sources rail with
-     AiSearchSourcesSkeleton's four pulse cards (two grid columns below
-     lg, where the aside stacks under the answer). */
-  .zjs-boot-body.is-ai {
-    flex-direction: column;
+  /* width-only reservation of the results right rail (lg:w-80 xl:w-96),
+      which the real page keeps even while it is empty */
+  .zjs-boot-side {
+    display: none;
   }
-  @media (min-width: 64rem) {
-    .zjs-boot-body.is-ai {
-      flex-direction: row;
+  @media (min-width: 30rem) {
+    .zjs-boot-brand {
+      display: block;
     }
   }
+  /* the nav shapes always show the brand, at the TopNav's own size tier
+     (text-xl sm:text-2xl — the results header's 1.5rem is the wide tier) */
+  .zjs-boot-nav .zjs-boot-brand {
+    display: block;
+    font-size: 1.25rem;
+  }
+  @media (min-width: 40rem) {
+    .zjs-boot-nav .zjs-boot-brand {
+      font-size: 1.5rem;
+    }
+  }
+  @media (min-width: 64rem) {
+    .zjs-boot-side {
+      display: block;
+      flex: 0 0 20rem;
+    }
+  }
+  @media (min-width: 80rem) {
+    .zjs-boot-side {
+      flex-basis: 24rem;
+    }
+  }
+
+  /* ── AI run ghost (the ai=1 takeover AND the thread page): mirrors
+     AiBootGhost / AiSearchRunSection's zero-event state.  The run head
+     (title, process row, phase strip, the OPEN research box with the
+     planning note) spans the full measure; the sources rail starts level
+     with the research column at lg — exactly where the real run
+     section's lg:flex row places it.  The rail holds FOUR 188px pulse
+     cells: AiSearchSourcesSkeleton's exact footprint (one real source
+     card's resting height), ONE column at every width. */
   .zjs-boot-ai-title {
     margin-top: 0.25rem;
     overflow-wrap: break-word;
     font-size: 1.875rem;
     font-weight: 500;
-    line-height: 2.25rem;
+    line-height: 1.25;
     color: var(--ink);
+  }
+  /* the thread shape has no query text at boot — a bar holds the title's
+     line (text-3xl leading-tight line box) */
+  .zjs-boot-ai-title-bar {
+    display: block;
+    width: 18rem;
+    max-width: 100%;
+    height: 2.25rem;
+    margin-top: 0.25rem;
   }
   .zjs-boot-ai-process {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     margin-top: 1.25rem;
+    min-height: 1.75rem;
   }
   .zjs-boot-ai-glyph {
     flex: none;
@@ -233,16 +349,18 @@
     height: 1.25rem;
     border-radius: 9999px;
   }
+  /* the process label is text-xl (28px line box) in the real header */
   .zjs-boot-ai-label {
     width: 5.5rem;
-    height: 1.25rem;
+    height: 1.75rem;
   }
   .zjs-boot-ai-count {
     width: 4rem;
     height: 1rem;
   }
   /* the phase strip's ghost: mirrors the real PhaseStrip row (mt-2 + a
-     1rem text-xs line) so the boot → React swap never shifts */
+     1rem text-xs line, THREE segments) so the boot → React swap never
+     shifts */
   .zjs-boot-ai-phases {
     display: flex;
     align-items: center;
@@ -267,6 +385,8 @@
     width: 2.5rem;
     height: 0.5rem;
   }
+  /* the research box at zero events holds ONLY the planning note
+     (AiBootGhost's shape); the note is text-xs leading-relaxed + py-1 */
   .zjs-boot-ai-box {
     margin-top: 0.75rem;
     border: 1px solid var(--line);
@@ -274,74 +394,368 @@
     padding: 0.75rem;
   }
   .zjs-boot-ai-note {
-    height: 1rem;
-    width: 11rem;
+    display: block;
+    height: 1.25rem;
+    margin-block: 0.25rem;
   }
-  .zjs-boot-ai-row {
-    height: 1.5rem;
-    width: 100%;
-    margin-top: 0.5rem;
+  /* the two-column band: head → 20px → cols; below lg the rail follows
+     after another 20px (the real aside's mt-5), from lg it sits beside
+     the (empty) lead column with the row's gap-8 */
+  .zjs-boot-ai-cols {
+    display: block;
+    margin-top: 1.25rem;
   }
-  .zjs-boot-ai-row.is-short {
-    width: 82%;
+  .zjs-boot-ai-lead {
+    min-width: 0;
+    flex: 1 1 0;
   }
   .zjs-boot-ai-side {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 0.5rem;
-    align-content: start;
     margin-top: 1.25rem;
+    width: 100%;
   }
   .zjs-boot-ai-src-head {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    grid-column: 1 / -1;
+    margin-bottom: 0.25rem;
+  }
+  .zjs-boot-ai-src-glyph {
+    flex: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 9999px;
   }
   .zjs-boot-ai-src-title {
     width: 4rem;
-    height: 1.25rem;
+    height: 1rem;
   }
   .zjs-boot-ai-src {
-    height: 3.875rem;
+    display: block;
+    height: 11.75rem;
+    width: 100%;
+    border-radius: 0.5rem;
+  }
+  @media (min-width: 64rem) {
+    .zjs-boot-ai-cols {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 2rem;
+    }
+    .zjs-boot-ai-side {
+      flex: 0 0 20rem;
+      margin-top: 0;
+      width: auto;
+    }
+  }
+  @media (min-width: 80rem) {
+    .zjs-boot-ai-side {
+      flex-basis: 24rem;
+    }
+  }
+
+  /* ── knowledge library ghost (KnowledgePage standalone): page heading,
+     the segment-tab card, the search box, then directory rows.  The tab
+     card / search box / row card reuse the loaded page's own anatomy
+     (rounded-2xl border cards, h-9 segments, h-7 input, py-5 rows). */
+  .zjs-boot-k-head {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    margin-top: 1.25rem;
+  }
+  .zjs-boot-k-icon {
+    flex: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 0.5rem;
+  }
+  .zjs-boot-k-title {
+    display: block;
+    width: 10rem;
+    height: 2rem;
+  }
+  .zjs-boot-k-sub {
+    display: block;
+    width: 16rem;
+    max-width: 100%;
+    height: 1.25rem;
+    margin-top: 0.25rem;
+  }
+  /* spacing only BETWEEN blocks: the ghosts also render standalone
+     (panel skeletons, in-page loading rows) where the first block must
+     not inherit a top margin */
+  .zjs-boot-k-tabs:not(:first-child) {
+    margin-top: 1.25rem;
+  }
+  .zjs-boot-k-tabs {
+    display: flex;
+    gap: 0.375rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+    padding: 0.5rem;
+  }
+  .zjs-boot-k-tab {
+    display: block;
+    flex: 1 1 0;
+    height: 2.25rem;
+    border-radius: 0.75rem;
+  }
+  .zjs-boot-k-search:not(:first-child) {
+    margin-top: 0.75rem;
+  }
+  .zjs-boot-k-search {
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+    padding: 0.75rem 1rem;
+  }
+  .zjs-boot-k-q {
+    display: block;
+    height: 1.75rem;
     width: 100%;
   }
-  @media (min-width: 64rem) {
-    .zjs-boot-ai-side {
-      display: flex;
-      flex: 0 0 20rem;
-      flex-direction: column;
-      margin-top: 0;
-    }
-    .zjs-boot-ai-src {
-      height: 2.75rem;
+  .zjs-boot-k-rows:not(:first-child) {
+    margin-top: 1.25rem;
+  }
+  .zjs-boot-k-rows {
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+  }
+  .zjs-boot-k-row {
+    padding: 1.25rem;
+  }
+  .zjs-boot-k-row + .zjs-boot-k-row {
+    border-top: 1px solid var(--line);
+  }
+  .zjs-boot-k-row-title {
+    display: block;
+    width: 40%;
+    height: 1.75rem;
+  }
+  .zjs-boot-k-row-sub {
+    display: block;
+    width: 60%;
+    height: 1rem;
+    margin-top: 0.5rem;
+  }
+  .zjs-boot-k-row-meta {
+    display: block;
+    width: 10rem;
+    height: 0.75rem;
+    margin-top: 0.5rem;
+  }
+
+  /* ── doc ghost (info / debug overview + the generic reading column):
+     heading bar + prose lines (the InfoPage article's prose rhythm) */
+  .zjs-boot-doc-title {
+    display: block;
+    width: 16rem;
+    max-width: 100%;
+    height: 2rem;
+  }
+  .zjs-boot-doc-rows:not(:first-child) {
+    margin-top: 1.5rem;
+  }
+  .zjs-boot-doc-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+  }
+  .zjs-boot-doc-line {
+    display: block;
+    height: 1rem;
+    width: 100%;
+  }
+  .zjs-boot-doc-line:nth-child(2) {
+    width: 92%;
+  }
+  .zjs-boot-doc-line:nth-child(3) {
+    width: 96%;
+  }
+  .zjs-boot-doc-line:nth-child(4) {
+    width: 85%;
+  }
+  .zjs-boot-doc-line:nth-child(5) {
+    width: 66%;
+  }
+
+  /* ── preferences ghost: heading + segment tabs + label/control rows */
+  .zjs-boot-prefs-rows:not(:first-child) {
+    margin-top: 1.5rem;
+  }
+  .zjs-boot-prefs-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  .zjs-boot-prefs-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .zjs-boot-prefs-label {
+    display: block;
+    width: 33%;
+    height: 1rem;
+  }
+  .zjs-boot-prefs-control {
+    display: block;
+    flex: none;
+    width: 6rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+  }
+
+  /* ── stats ghost: heading + the engine table (4 fixed-ish columns) */
+  .zjs-boot-stats:not(:first-child) {
+    margin-top: 1.5rem;
+  }
+  .zjs-boot-stats {
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    overflow: hidden;
+  }
+  .zjs-boot-stats-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+  }
+  .zjs-boot-stats-row + .zjs-boot-stats-row {
+    border-top: 1px solid var(--line);
+  }
+  .zjs-boot-stats-cell {
+    display: block;
+    height: 0.875rem;
+    flex: none;
+  }
+  .zjs-boot-stats-cell.is-w1 {
+    width: 30%;
+  }
+  .zjs-boot-stats-cell.is-w2 {
+    width: 14%;
+  }
+  .zjs-boot-stats-cell.is-w3 {
+    width: 22%;
+  }
+  .zjs-boot-stats-cell.is-w4 {
+    width: 10%;
+  }
+
+  /* ── homepage hero ghost (IndexPage): the centered greeting line and
+     the ask card (bordered, shadow-card) with its controls row; the
+     hero shell owns the 20vh/30vh drop the real page renders */
+  .zjs-boot-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 20vh;
+  }
+  @media (min-width: 40rem) {
+    .zjs-boot-hero {
+      padding-top: 30vh;
     }
   }
-  @media (min-width: 80rem) {
-    .zjs-boot-ai-side {
-      flex-basis: 24rem;
+  .zjs-boot-hero-greet {
+    display: flex;
+    height: 4rem;
+    align-items: center;
+    justify-content: center;
+  }
+  @media (min-width: 40rem) {
+    .zjs-boot-hero-greet {
+      height: 5rem;
     }
   }
-  /* width-only reservation of the results right rail (lg:w-80 xl:w-96),
-      which the real page keeps even while it is empty */
-  .zjs-boot-side {
-    display: none;
+  .zjs-boot-hero-greet-bar {
+    display: block;
+    width: 18rem;
+    max-width: 100%;
+    height: 1.875rem;
   }
-  @media (min-width: 30rem) {
-    .zjs-boot-brand {
-      display: block;
+  @media (min-width: 40rem) {
+    .zjs-boot-hero-greet-bar {
+      height: 2.25rem;
     }
   }
-  @media (min-width: 64rem) {
-    .zjs-boot-side {
-      display: block;
-      flex: 0 0 20rem;
-    }
+  .zjs-boot-hero-card {
+    width: 100%;
+    margin-top: 3rem;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    background: var(--surface);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-card);
   }
-  @media (min-width: 80rem) {
-    .zjs-boot-side {
-      flex-basis: 24rem;
-    }
+  .zjs-boot-hero-q {
+    display: block;
+    height: 1.5rem;
+    width: 100%;
+  }
+  .zjs-boot-hero-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+  .zjs-boot-hero-chip {
+    display: block;
+    width: 4.5rem;
+    height: 1.75rem;
+    border-radius: 0.5rem;
+  }
+  .zjs-boot-hero-chip.is-short {
+    width: 3.5rem;
+  }
+  .zjs-boot-hero-dot {
+    display: block;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    margin-inline-start: auto;
+  }
+
+  /* ── 404 note ghost: the centered notice (the shell hides the top nav) */
+  .zjs-boot-note {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+  }
+  .zjs-boot-note-icon {
+    display: block;
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 9999px;
+  }
+  .zjs-boot-note-title {
+    display: block;
+    width: 6rem;
+    height: 1.75rem;
+  }
+  .zjs-boot-note-line {
+    display: block;
+    width: 12rem;
+    height: 1rem;
+  }
+  .zjs-boot-note-strip {
+    display: block;
+    width: 7rem;
+    height: 2.5rem;
+    margin-top: 0.5rem;
+    border-radius: 0.375rem;
   }
 
   /* boot error: replacement screen when the streamed search reports a
