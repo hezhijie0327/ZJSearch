@@ -34,9 +34,9 @@ def _browser_input_view() -> flask.Response:
     if kind == "done":
         session.finish_wait(session_id)
         return flask.jsonify({"ok": True})
-    if kind not in ("click", "wheel", "type", "key", "back", "forward", "reload"):
+    if kind not in ("click", "drag", "wheel", "type", "key", "back", "forward", "reload"):
         return (
-            flask.jsonify({"error": "type must be click / wheel / type / key / back / forward / reload"}),
+            flask.jsonify({"error": "type must be click / drag / wheel / type / key / back / forward / reload"}),
             422,
         )
     try:
@@ -48,6 +48,8 @@ def _browser_input_view() -> flask.Response:
             delta_y=int(payload.get("deltaY") or 0),
             text=str(payload.get("text") or "")[:_MAX_TEXT],
             key=str(payload.get("key") or "")[:24],
+            x2=int(payload.get("x2") or 0),
+            y2=int(payload.get("y2") or 0),
         )
     except session.SessionError as exc:
         return flask.jsonify({"error": str(exc)}), 502

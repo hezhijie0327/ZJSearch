@@ -19,6 +19,9 @@ _ACTIONS = (
     "press",
     "scroll",
     "screenshot",
+    "hover",
+    "select",
+    "drag",
     "read",
     "wait_user",
     "close",
@@ -49,14 +52,15 @@ def web_browser_spec() -> dict[str, t.Any]:
             "instead of retrying.\n\n"
             "SESSION -- the interactive lane: open a page, snapshot its\n"
             "interactive elements and sizeable images as refs, click/type/\n"
-            "press/scroll by ref,\n"
-            "take a screenshot you will SEE, read with NO url to extract\n"
-            "the page the session is currently on, or wait while the USER\n"
-            "operates the page in the live mirror (sign-in, verification,\n"
-            "anything human-only).  Reach for the session when a read\n"
-            "cannot see through (a sign-in wall, a verification gate) or\n"
-            "when interaction is the only way through -- the plain read is\n"
-            "always first.\n\n"
+            "press/scroll by ref, hover a menu open, select a native\n"
+            "dropdown's options, drag between two viewport points\n"
+            "(sliders), take a screenshot you will SEE, read with NO url\n"
+            "to extract the page the session is currently on, or wait\n"
+            "while the USER operates the page in the live mirror\n"
+            "(sign-in, verification, anything human-only).  Reach for the\n"
+            "session when a read cannot see through (a sign-in wall, a\n"
+            "verification gate) or when interaction is the only way\n"
+            "through -- the plain read is always first.\n\n"
             "PLATFORMS -- you may drive the session at ANY public platform\n"
             "directly: xiaohongshu, zhihu, bilibili, weibo, github,\n"
             "e-commerce, forums.  When the question's subject lives inside\n"
@@ -73,7 +77,12 @@ def web_browser_spec() -> dict[str, t.Any]:
             "captures that ONE element as a CLOSE-UP (the captcha image,\n"
             "a canvas widget, a chart) -- the crop is exactly what you see\n"
             "next turn, so aim before you shoot; without a ref it is the\n"
-            "whole viewport.  A click or submit that\n"
+            "whole viewport.  Child-frame refs are prefixed with their\n"
+            "frame index (`f1e5`) -- embedded widgets (captcha frames,\n"
+            "payment forms) live there; a screenshot of the frame's box\n"
+            "plus coordinate clicks is how you work INSIDE a widget that\n"
+            "does not expose its internals to the outline.  A click or\n"
+            "submit that\n"
             "NAVIGATES returns the fresh outline itself; a ref that died\n"
             "to a re-render (no navigation) fails fast -- re-snapshot and\n"
             "use the new ref.  Pages you open become citable sources: open\n"
@@ -100,7 +109,8 @@ def web_browser_spec() -> dict[str, t.Any]:
                 "ref": {
                     "type": "string",
                     "description": (
-                        "click/type: the snapshot ref (e.g. e12)."
+                        "click/type/hover/select: the snapshot ref (e12;"
+                        " child-frame elements are f1e5)."
                         " screenshot: capture that ONE element as a"
                         " close-up instead of the whole viewport."
                     ),
@@ -108,6 +118,18 @@ def web_browser_spec() -> dict[str, t.Any]:
                 "text": {"type": "string", "description": "type: the text to fill."},
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},
                 "key": {"type": "string", "description": "press: the key (Enter, Escape, Tab...)."},
+                "x": {"type": "integer", "description": "click: viewport X when clicking by COORDINATES instead of ref."},
+                "y": {"type": "integer", "description": "click: viewport Y when clicking by COORDINATES instead of ref."},
+                "x1": {"type": "integer", "description": "drag: start viewport X."},
+                "y1": {"type": "integer", "description": "drag: start viewport Y."},
+                "x2": {"type": "integer", "description": "drag: end viewport X."},
+                "y2": {"type": "integer", "description": "drag: end viewport Y."},
+                "steps": {"type": "integer", "description": "drag: interpolation steps (5-40, default 15)."},
+                "values": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "select: option values or labels to pick (max 6).",
+                },
                 "direction": {"type": "string", "enum": ["up", "down"], "description": "scroll direction."},
                 "seconds": {"type": "integer", "description": "wait_user: the human's operation window (10-600)."},
             },
@@ -127,11 +149,30 @@ def parse_web_browser_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     out: dict[str, t.Any] = {"action": action}
     if action in ("open", "read"):
         out["url"] = str(args.get("url") or "").strip()[:2000]
-    if action in ("click", "type", "screenshot"):
+    if action in ("click", "type", "screenshot", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
+    if action == "click":
+        try:
+            out["x"] = max(0, int(args.get("x")))
+            out["y"] = max(0, int(args.get("y")))
+        except (TypeError, ValueError):
+            pass
     if action == "type":
         out["text"] = str(args.get("text") or "")[:500]
         out["submit"] = args.get("submit") is True
+    if action == "select":
+        raw = args.get("values")
+        out["values"] = [str(v)[:200] for v in raw][:6] if isinstance(raw, list) else []
+    if action == "drag":
+        for key in ("x1", "y1", "x2", "y2"):
+            try:
+                out[key] = max(0, int(args.get(key)))
+            except (TypeError, ValueError):
+                pass
+        try:
+            out["steps"] = max(5, min(int(args.get("steps")), 40))
+        except (TypeError, ValueError):
+            out["steps"] = 15
     if action == "press":
         out["key"] = str(args.get("key") or "").strip()[:24]
     if action == "scroll":

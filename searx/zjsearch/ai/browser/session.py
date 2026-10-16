@@ -29,6 +29,7 @@ import logging
 import re
 import threading
 import typing as t
+from urllib.parse import urlsplit
 
 from searx.network.client import get_loop
 from searx.zjsearch.ai.browser import config as browser_config
@@ -49,6 +50,13 @@ SNAPSHOT_IMG_SLOTS = 20
 get refs AFTER the interactive pass (additive -- a link farm must not
 crowd the aimed screenshot's targets out, and a page without them costs
 nothing)."""
+
+SNAPSHOT_CHILD_FRAME_CAP = (30, 40)
+"""Per-child-frame outline budget (interactive, total): embedded widgets
+-- captcha challenge frames, payment forms -- MUST get refs even when
+the main frame ate the whole global budget (the 2captcha demos run
+~200 link-farm anchors), so child frames scan with their OWN cap, max
+three frames per snapshot."""
 
 _ACTION_TIMEOUT_MS = 15_000
 
@@ -98,7 +106,18 @@ _SNAPSHOT_JS = """
   }
   return out.join('\\n');
 }
-""" % (SNAPSHOT_MAX_ELEMENTS, SNAPSHOT_MAX_ELEMENTS + SNAPSHOT_IMG_SLOTS)
+"""
+
+_SNAPSHOT_JS_TEMPLATE = _SNAPSHOT_JS
+"""The raw scan (two ``%d`` caps: interactive lines, total lines incl.
+the img annex) -- formatted per frame, so child frames can scan under
+their own budget."""
+
+_SNAPSHOT_JS = _SNAPSHOT_JS_TEMPLATE % (
+    SNAPSHOT_MAX_ELEMENTS,
+    SNAPSHOT_MAX_ELEMENTS + SNAPSHOT_IMG_SLOTS,
+)
+"""The main frame's scan: the budgets every stored thread knows."""
 
 
 class SessionError(Exception):
@@ -115,7 +134,7 @@ class _Session:  # pylint: disable=too-few-public-methods
         self.lock = threading.Lock()
         self.page: "Page | None" = None
         self.wait_done = threading.Event()
-        self.pointer: tuple[int, int, str] | None = None
+        self.mark: dict[str, t.Any] | None = None
 
 
 _SESSIONS: dict[str, _Session] = {}
@@ -214,11 +233,15 @@ def wait_done(session_id: str = LEAD) -> bool:
     return get(session_id).wait_done.is_set()
 
 
-def _resolve_selector(ref: str) -> str:
-    ref = str(ref or "").strip()
-    if not re.fullmatch(r"e\d+", ref):
-        raise SessionError("a snapshot ref (e.g. e12) is required -- take a fresh snapshot")
-    return f'[data-zjs-ref="{ref}"]'
+def _resolve_selector(ref: str) -> tuple[str, int]:
+    """The attribute selector + frame index for one snapshot ref: plain
+    ``e12`` addresses the main frame, ``f1e5`` addresses frame 1 (the
+    outline prefixes child-frame refs with their frame index -- the DOM
+    attribute inside the frame stays the bare ``e5``)."""
+    m = re.fullmatch(r"(?:f(\d+))?(e\d+)", str(ref or "").strip())
+    if not m:
+        raise SessionError("a snapshot ref (e.g. e12 or f1e5) is required -- take a fresh snapshot")
+    return f'[data-zjs-ref="{m.group(2)}"]', int(m.group(1) or 0)
 
 
 def open_url(session_id: str, url: str) -> dict[str, str]:
@@ -238,7 +261,7 @@ def open_url(session_id: str, url: str) -> dict[str, str]:
             except Exception:  # pylint: disable=broad-except
                 pass
             await page.wait_for_timeout(browser_config.settle_ms())
-            outline = await page.evaluate(_SNAPSHOT_JS)
+            outline = await _snapshot_page(page)
             return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
 
         return _run(run())
@@ -251,7 +274,7 @@ def snapshot(session_id: str = LEAD) -> dict[str, str]:
 
         async def run() -> dict[str, str]:
             page = await _ensure_page(sess)
-            outline = await page.evaluate(_SNAPSHOT_JS)
+            outline = await _snapshot_page(page)
             return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
 
         return _run(run())
@@ -270,7 +293,7 @@ async def _post_action_state(page: "Page", before_url: str, settle_wait_ms: int)
     out: dict[str, t.Any] = {"url": str(page.url), "title": await page.title()}
     if out["url"] != before_url:
         await _settle_page(page)
-        out["snapshot"] = await page.evaluate(_SNAPSHOT_JS)
+        out["snapshot"] = await _snapshot_page(page)
     return out
 
 
@@ -284,33 +307,102 @@ async def _settle_page(page: "Page") -> None:
     await page.wait_for_timeout(browser_config.settle_ms())
 
 
-async def _resolve_live(page: "Page", ref: str) -> str:
-    """The selector for a snapshot ref, verified present: a ref that died
-    to a re-render (no navigation -- refs only die to navigation) fails
-    HERE with the recovery recipe instead of burning the action timeout
-    on a locator wait."""
-    sel = _resolve_selector(ref)
-    if not await page.locator(sel).count():
+async def _resolve_holder(page: "Page", ref: str) -> tuple["Page | object", str]:
+    """The click/fill/locator holder (the Page itself, or the child Frame
+    an ``fN``-prefixed ref lives in) + the attribute selector, verified
+    present: a ref that died to a re-render or a frame that went away
+    fails HERE with the recovery recipe instead of burning the action
+    timeout on a locator wait."""
+    sel, frame_idx = _resolve_selector(ref)
+    holder: "Page | object" = page
+    if frame_idx:
+        # frames[] is tree-ordered -- the SAME order the snapshot scan
+        # enumerates, and the outline's fN is ONE-BASED over the child
+        # list (f1 = the first child frame), so the index maps -1
+        frames = _live_frames(page)
+        if frame_idx > len(frames):
+            raise SessionError(
+                f"frame f{frame_idx} is gone (the page re-rendered under you)"
+                " -- take a fresh snapshot and address the element by its new ref"
+            )
+        holder = frames[frame_idx - 1]
+    if not await holder.locator(sel).count():
         raise SessionError(
             f"ref {ref} is no longer on the page (it re-rendered under you)"
             " -- take a fresh snapshot and address the element by its new ref"
         )
-    return sel
+    return holder, sel
 
 
-async def _track_pointer(sess: "_Session", page: "Page", sel: str, kind: str) -> None:
-    """Best-effort viewport-space landing point of one ref-targeted action:
-    the element's bounding-box center rides the next mirror frame as
-    px/py/pk and the client draws the model's cursor there.  A box that
-    cannot be resolved (detached mid-race, zero-size) just skips the
-    tracking -- the pointer is a visibility aid, never action-critical."""
+def _live_frames(page: "Page") -> list[t.Any]:
+    """The page's REAL child frames in tree order (the main frame and
+    about:blank / data: placeholders skipped) -- the snapshot scan and
+    the ref resolver must agree on the indexing."""
+    return [
+        f
+        for f in page.frames
+        if f is not page.main_frame and not f.url.startswith(("about:blank", "data:"))
+    ]
+
+
+_SNAP_FRAME_HEADER = "\n-- frame f{} {} --\n"
+
+
+async def _snapshot_page(page: "Page") -> str:
+    """The multi-frame outline: the MAIN frame first (its refs stay the
+    un-prefixed ``e12`` every stored thread speaks), then each real child
+    frame re-scanned with its refs prefixed ``f1e5`` under a one-line
+    header.  Child frames scan with their OWN cap
+    (:data:`SNAPSHOT_CHILD_FRAME_CAP`) -- an element-dense main page must
+    not starve the embedded widget the aimed interaction needs."""
+    outlines: list[str] = [await page.evaluate(_SNAPSHOT_JS)]
+    frames = _live_frames(page)
+    child_lines = 0
+    for idx, frame in enumerate(frames[:3], start=1):
+        try:
+            sub = await frame.evaluate(
+                _SNAPSHOT_JS_TEMPLATE % SNAPSHOT_CHILD_FRAME_CAP
+            )
+        except Exception:  # pylint: disable=broad-except
+            continue  # a frame that forbids evaluation (crashed, detached) reads as absent
+        if not sub:
+            continue
+        host = urlsplit(frame.url).hostname or frame.url[:40]
+        prefixed = "\n".join(
+            f"f{idx}{line}" if line and not line.startswith("--") else line for line in sub.splitlines()
+        )
+        outlines.append(_SNAP_FRAME_HEADER.format(idx, host) + prefixed)
+        child_lines += len(sub.splitlines())
+        if child_lines >= SNAPSHOT_CHILD_FRAME_CAP[1] * 2:
+            break
+    return "\n".join(outlines)
+
+
+async def _mark_ref_action(
+    sess: "_Session", holder: "Page | object", sel: str, kind: str, label: str
+) -> None:
+    """Best-effort ACTION MARK of one ref-targeted action: the element's
+    bounding box + landing point + a short intent label ride the next
+    mirror frame, and the takeover viewer sees WHICH element the action
+    touched and what it was -- not just a cursor dot.  An unresolvable
+    box (detached mid-race, zero-size) degrades to the point-only mark;
+    the mark is a visibility aid, never action-critical."""
     try:
-        box = await page.locator(sel).first.bounding_box(timeout=1_500)
+        loc = holder.locator(sel).first
+        await loc.scroll_into_view_if_needed(timeout=1_500)
+        box = await loc.bounding_box(timeout=1_500)
     except Exception:  # pylint: disable=broad-exception-caught
-        return
-    if not box:
-        return
-    sess.pointer = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2), kind)
+        box = None
+    if box:
+        sess.mark = {
+            "px": int(box["x"] + box["width"] / 2),
+            "py": int(box["y"] + box["height"] / 2),
+            "pk": kind,
+            "label": label,
+            "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])],
+        }
+    else:
+        sess.mark = {"pk": kind, "label": label}
 
 
 def click(session_id: str, ref: str) -> dict[str, t.Any]:
@@ -320,9 +412,9 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
-            sel = await _resolve_live(page, ref)
-            await _track_pointer(sess, page, sel, "click")
-            await page.click(sel, timeout=_ACTION_TIMEOUT_MS)
+            holder, sel = await _resolve_holder(page, ref)
+            await _mark_ref_action(sess, holder, sel, "click", f"clicked {ref}")
+            await holder.click(sel, timeout=_ACTION_TIMEOUT_MS)
             return await _post_action_state(page, before, 600)
 
         return _run(run())
@@ -335,9 +427,9 @@ def type_text(session_id: str, ref: str, text: str, submit: bool) -> dict[str, t
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
-            sel = await _resolve_live(page, ref)
-            await _track_pointer(sess, page, sel, "type")
-            await page.fill(sel, str(text), timeout=_ACTION_TIMEOUT_MS)
+            holder, sel = await _resolve_holder(page, ref)
+            await _mark_ref_action(sess, holder, sel, "type", f"typed {str(text)[:24]!r}")
+            await holder.fill(sel, str(text), timeout=_ACTION_TIMEOUT_MS)
             if submit:
                 await page.keyboard.press("Enter")
             return await _post_action_state(page, before, 400)
@@ -371,6 +463,105 @@ def scroll(session_id: str, direction: str) -> dict[str, str]:
         return _run(run())
 
 
+def _clamp_xy(x: t.Any, y: t.Any) -> tuple[int, int]:
+    try:
+        cx, cy = int(x), int(y)
+    except (TypeError, ValueError):
+        raise SessionError("viewport coordinates x/y must be integers") from None
+    return max(0, cx), max(0, cy)
+
+
+def click_xy(session_id: str, x: t.Any, y: t.Any) -> dict[str, t.Any]:
+    """A viewport-coordinate click -- the primitive for widget interiors
+    a ref cannot name (challenge tiles inside an iframe the snapshot
+    reffed as one box, canvas hit-regions).  The mouse lands where the
+    model aimed; humanize carries the trajectory."""
+    cx, cy = _clamp_xy(x, y)
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            before = str(page.url)
+            sess.mark = {"px": cx, "py": cy, "pk": "click", "label": f"clicked at {cx},{cy}"}
+            await page.mouse.click(cx, cy, timeout=_ACTION_TIMEOUT_MS)
+            return await _post_action_state(page, before, 600)
+
+        return _run(run())
+
+
+def hover(session_id: str, ref: str) -> dict[str, t.Any]:
+    """Hover one ref-targeted element -- hover-opened menus and tooltips
+    are real UI the snapshot cannot see until the pointer rests there."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            before = str(page.url)
+            holder, sel = await _resolve_holder(page, ref)
+            await _mark_ref_action(sess, holder, sel, "hover", f"hovered {ref}")
+            await holder.locator(sel).first.hover(timeout=_ACTION_TIMEOUT_MS)
+            return await _post_action_state(page, before, 400)
+
+        return _run(run())
+
+
+def select_options(session_id: str, ref: str, values: list[str]) -> dict[str, t.Any]:
+    """Select options on a native ``<select>`` (synthetic clicks never
+    open the native picker): ``values`` are option value/label strings."""
+    clean = [str(v or "").strip()[:200] for v in (values or [])][:6]
+    clean = [v for v in clean if v]
+    if not clean:
+        raise SessionError("select needs at least one option value or label")
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            before = str(page.url)
+            holder, sel = await _resolve_holder(page, ref)
+            chosen = await holder.locator(sel).first.select_option(clean, timeout=_ACTION_TIMEOUT_MS)
+            await _mark_ref_action(
+                sess, holder, sel, "select", f"selected: {', '.join(str(c) for c in chosen)}"
+            )
+            return {**(await _post_action_state(page, before, 300)), "chosen": [str(c) for c in chosen]}
+
+        return _run(run())
+
+
+def drag(session_id: str, x1: t.Any, y1: t.Any, x2: t.Any, y2: t.Any, steps: int = 15) -> dict[str, t.Any]:
+    """A mouse drag between two viewport points (down → interpolated
+    moves → up): the slider-captcha primitive.  ``mouse.move``'s own
+    interpolation plus the engine's humanized trajectories carry the
+    human shape; the pointer tracks the landing point on the mirror."""
+    ax, ay = _clamp_xy(x1, y1)
+    bx, by = _clamp_xy(x2, y2)
+    n = max(5, min(int(steps) if steps else 15, 40))
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            before = str(page.url)
+            sess.mark = {
+                "px": ax,
+                "py": ay,
+                "x2": bx,
+                "y2": by,
+                "pk": "drag",
+                "label": f"dragged {ax},{ay} -> {bx},{by}",
+            }
+            await page.mouse.move(ax, ay)
+            await page.mouse.down()
+            await page.mouse.move(bx, by, steps=n)
+            await page.wait_for_timeout(120)
+            await page.mouse.up()
+            return await _post_action_state(page, before, 600)
+
+        return _run(run())
+
+
 def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
     """A viewport screenshot as ``{img, w, h, url, title}`` -- the visual
     branch's payload (injected to the model) and the mirror frame shape."""
@@ -395,24 +586,25 @@ def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
 def inspect_b64(session_id: str, ref: str, quality: int = 75) -> dict[str, t.Any]:
     """ONE element as a close-up ``{img, w, h, url, title}`` -- the ref
     scoped screenshot the model aims at a widget a viewport shot only
-    smears (captcha image, canvas, chart).  ``locator.screenshot``
-    scrolls the element into view itself; a stale ref fails fast through
-    ``_resolve_live`` with the re-snapshot recipe.  Read-only: no
-    navigation check, no re-snapshot."""
+    smears (captcha image, canvas, chart, an iframe's challenge grid).
+    ``locator.screenshot`` scrolls the element into view itself; a stale
+    ref fails fast through ``_resolve_holder`` with the re-snapshot
+    recipe.  Read-only: no navigation check, no re-snapshot."""
     sess = get(session_id)
     with sess.lock:
 
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
-            sel = await _resolve_live(page, ref)
-            box = await page.locator(sel).first.bounding_box(timeout=1_500)
-            raw = await page.locator(sel).first.screenshot(
+            holder, sel = await _resolve_holder(page, ref)
+            raw = await holder.locator(sel).first.screenshot(
                 type="jpeg", quality=int(quality), timeout=_ACTION_TIMEOUT_MS
             )
+            box = await holder.locator(sel).first.bounding_box(timeout=1_500)
             return {
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(box["width"]) if box else 0,
                 "h": int(box["height"]) if box else 0,
+                "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])] if box else None,
                 "url": str(page.url),
                 "title": await page.title(),
             }
@@ -420,14 +612,21 @@ def inspect_b64(session_id: str, ref: str, quality: int = 75) -> dict[str, t.Any
         return _run(run())
 
 
+def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
+    """The ACTION layer's mark (the capture primitives stay pure -- they
+    serve mirror frames too, and a frame capture must never overwrite the
+    action's mark)."""
+    get(session_id).mark = mark
+
+
 def frame(session_id: str = LEAD) -> dict[str, t.Any]:
     """The mirror frame: the same capture at mirror quality, PLUS the
     model pointer when one has been tracked (px/py viewport space, pk the
     action kind -- the client draws the cursor and its click ripple)."""
     out = screenshot_b64(session_id, quality=55)
-    pointer = getattr(get(session_id), "pointer", None)
-    if pointer:
-        out["px"], out["py"], out["pk"] = pointer
+    mark = getattr(get(session_id), "mark", None)
+    if mark:
+        out.update(mark)
     return out
 
 
@@ -472,6 +671,8 @@ def session_input(
     delta_y: int = 0,
     text: str = "",
     key: str = "",
+    x2: int = 0,
+    y2: int = 0,
 ) -> None:
     """The Lightbox takeover's forwarded input, in viewport space."""
     sess = get(session_id)
@@ -481,6 +682,14 @@ def session_input(
             page = await _ensure_page(sess)
             if kind == "click":
                 await page.mouse.click(int(x), int(y))
+            elif kind == "drag":
+                # the human's slide: down at (x,y), interpolated moves to
+                # (x2,y2), up -- the same primitive the model's drag rides
+                await page.mouse.move(int(x), int(y))
+                await page.mouse.down()
+                await page.mouse.move(int(x2), int(y2), steps=15)
+                await page.wait_for_timeout(120)
+                await page.mouse.up()
             elif kind == "wheel":
                 await page.mouse.wheel(0, int(delta_y))
             elif kind == "type":

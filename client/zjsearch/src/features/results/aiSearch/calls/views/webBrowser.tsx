@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   BookOpenText,
   Camera,
+  ChevronsUpDown,
   Globe,
   Hourglass,
   Keyboard,
@@ -12,6 +13,8 @@ import {
   LogOut,
   type LucideIcon,
   MousePointerClick,
+  MoveHorizontal,
+  Pointer,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
@@ -51,6 +54,9 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   press: Keyboard,
   scroll: ArrowUpDown,
   screenshot: Camera,
+  hover: Pointer,
+  select: ChevronsUpDown,
+  drag: MoveHorizontal,
   read: BookOpenText,
   wait_user: Hourglass,
   close: LogOut,
@@ -79,20 +85,29 @@ function LocationLine({ page }: { page: { url: string; title: string } }) {
     exactly what the model sees.  Outline text is untrusted page content:
     rendered as plain text runs, never HTML. */
 function BrowserOutline({ snapshot, t }: { snapshot: string; t: ToolRowProps["t"] }) {
-  const rows = snapshot
-    .split("\n")
-    .map((line) => line.split("\t"))
-    .filter((parts) => parts.length >= 3 && /^e\d+$/.test(parts[0]?.trim() ?? ""));
+  const lines = snapshot.split("\n");
+  const rows = lines.filter((line) => /^(?:f\d+)?e\d+\t/.test(line));
   if (!rows.length) {
     return <p className="mt-1 px-1 text-xs text-ink-3">{t("ai_browser_outline_empty")}</p>;
   }
   return (
     <div className={`${READ_PANE} mt-1 max-h-56 space-y-0.5 overflow-y-auto overscroll-contain p-1.5`}>
-      {rows.map((parts) => {
+      {lines.map((line, i) => {
+        if (line.startsWith("-- frame ")) {
+          return (
+            <p className="px-1 pt-1 font-mono text-xs text-ink-3" key={`f${i}`} dir="auto">
+              {line.trim()}
+            </p>
+          );
+        }
+        const parts = line.split("\t");
+        if (parts.length < 3 || !/^(?:f\d+)?e\d+$/.test(parts[0] ?? "")) {
+          return null;
+        }
         const ref = parts[0] ?? "";
         const role = parts[1] ?? "";
         return (
-          <div className="flex min-w-0 items-center gap-1.5 text-xs" key={ref}>
+          <div className="flex min-w-0 items-center gap-1.5 text-xs" key={`${ref}-${i}`}>
             <span className="shrink-0 rounded bg-accent-soft px-1 font-mono text-xs leading-4 text-accent">{ref}</span>
             <span className="w-16 shrink-0 truncate font-mono text-xs text-ink-3">{role}</span>
             <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
@@ -166,7 +181,12 @@ export const webBrowserView: ToolView = {
         return t("ai_browser_act_snapshot");
       case "click": {
         const ref = String(args?.ref ?? "").trim();
-        return ref ? `${t("ai_browser_act_click")} ${ref}` : t("ai_browser_act_click");
+        if (ref) {
+          return `${t("ai_browser_act_click")} ${ref}`;
+        }
+        const cx = args?.x;
+        const cy = args?.y;
+        return cx !== undefined || cy !== undefined ? `${t("ai_browser_act_click")} ${cx ?? "?"},${cy ?? "?"}` : t("ai_browser_act_click");
       }
       case "type": {
         const text = String(args?.text ?? "").trim();
@@ -181,6 +201,19 @@ export const webBrowserView: ToolView = {
       case "screenshot": {
         const ref = String(args?.ref ?? "").trim();
         return ref ? `${t("ai_browser_act_screenshot")} ${ref}` : t("ai_browser_act_screenshot");
+      }
+      case "hover": {
+        const ref = String(args?.ref ?? "").trim();
+        return ref ? `${t("ai_browser_act_hover")} ${ref}` : t("ai_browser_act_hover");
+      }
+      case "select": {
+        const ref = String(args?.ref ?? "").trim();
+        return ref ? `${t("ai_browser_act_select")} ${ref}` : t("ai_browser_act_select");
+      }
+      case "drag": {
+        const x2 = args?.x2;
+        const y2 = args?.y2;
+        return x2 !== undefined || y2 !== undefined ? `${t("ai_browser_act_drag")} → ${x2 ?? "?"},${y2 ?? "?"}` : t("ai_browser_act_drag");
       }
       case "read":
         return pageLabel(call.url || call.page?.url);
@@ -229,7 +262,7 @@ export const webBrowserView: ToolView = {
         </>
       );
     }
-    if (action === "click" || action === "type" || action === "press" || action === "scroll") {
+    if (action === "click" || action === "type" || action === "press" || action === "scroll" || action === "hover" || action === "select" || action === "drag") {
       return call.page ? <LocationLine page={call.page} /> : null;
     }
     // read / wait_user carry the reading pane through the DEFAULT body

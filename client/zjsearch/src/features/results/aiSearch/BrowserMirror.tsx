@@ -33,8 +33,11 @@ import { ICON_BTN, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 type MirrorView = NonNullable<AiSearchRun["browser"]>;
 
-const VIEWPORT_W = 1280;
-const VIEWPORT_H = 800;
+// The session viewport's LAUNCH dimensions (engine WINDOW) -- the
+// fallback for frames that carry no w/h; live coordinates always map
+// through the frame's own capture dimensions.
+const VIEWPORT_W = 1920;
+const VIEWPORT_H = 1080;
 
 /** The address bar's compact form: host + path (the browser-chrome anchor
     the mirror was missing -- the bare page title read as a caption, not
@@ -48,50 +51,102 @@ function addressOf(url: string): string {
   }
 }
 
-/** The MODEL POINTER: the session's cursor at the landing point of the
-    last ref-targeted action (px/py viewport space, rendered as a
-    percentage of the displayed frame), gliding there with a short
-    transform transition, with a one-shot click ripple when the tracked
-    action was a click.  A synthetic cursor -- viewport screenshots never
-    contain one -- so the user can FOLLOW the model's hands between
-    snapshots. */
-function ModelPointer({ view }: { view: MirrorView }) {
-  if (view.px === undefined || view.py === undefined) {
+/** The ACTION MARK: the session's last model action drawn ON the frame --
+    the touched element's box, the drag's gesture line, and a short intent
+    label, plus the cursor + one-shot click ripple at the landing point
+    (px/py viewport space, rendered as percentages of the displayed
+    frame).  A synthetic overlay -- viewport screenshots never contain
+    one -- so the viewer sees WHAT the model did, not just where its
+    cursor rests.  Everything is optional; old frames render bare. */
+function ActionMark({ view }: { view: MirrorView }) {
+  const hasPoint = view.px !== undefined && view.py !== undefined;
+  const box = Array.isArray(view.box) && view.box.length === 4 ? view.box : null;
+  const dragLine = view.x2 !== undefined && view.y2 !== undefined && hasPoint;
+  if (!hasPoint && !box && !view.label) {
     return null;
   }
   const w = view.w || VIEWPORT_W;
   const h = view.h || VIEWPORT_H;
-  const clamp = (v: number, span: number) => `${Math.min(Math.max(v / span, 0), 1) * 100}%`;
+  const pct = (v: number, span: number) => `${Math.min(Math.max(v / span, 0), 1) * 100}%`;
   return (
-    <span
-      className="pointer-events-none absolute z-10"
-      style={{ left: clamp(view.px, w), top: clamp(view.py, h), transition: "left 250ms ease, top 250ms ease" }}
-    >
-      <MousePointer2
-        aria-hidden="true"
-        className="size-4 -translate-x-0.5 -translate-y-0.5 fill-ink text-ink drop-shadow-md"
-      />
-      {view.pk === "click" ? (
-        <span
-          aria-hidden="true"
-          className="zjs-ripple absolute left-0 top-0 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent"
-          key={`${view.px}-${view.py}`}
+    <div className="pointer-events-none absolute inset-0 z-10 animate-fade-in">
+      {box ? (
+        <div
+          className="absolute rounded-sm border-2 border-accent bg-accent/10"
+          style={{
+            left: pct(box[0] ?? 0, w),
+            top: pct(box[1] ?? 0, h),
+            width: pct(box[2] ?? 0, w),
+            height: pct(box[3] ?? 0, h),
+          }}
         />
       ) : null}
-    </span>
+      {dragLine ? (
+        <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${w} ${h}`}>
+          <line
+            className="text-accent"
+            stroke="currentColor"
+            strokeDasharray="10 8"
+            strokeWidth={4}
+            x1={view.px}
+            x2={view.x2}
+            y1={view.py}
+            y2={view.y2}
+          />
+          <circle className="fill-accent" cx={view.px} cy={view.py} r={7} />
+          <circle className="fill-accent" cx={view.x2} cy={view.y2} r={7} />
+        </svg>
+      ) : null}
+      {hasPoint ? (
+        <span
+          className="absolute z-10"
+          style={{ left: pct(view.px ?? 0, w), top: pct(view.py ?? 0, h), transition: "left 250ms ease, top 250ms ease" }}
+        >
+          <MousePointer2
+            aria-hidden="true"
+            className="size-4 -translate-x-0.5 -translate-y-0.5 fill-ink text-ink drop-shadow-md"
+          />
+          {view.pk === "click" ? (
+            <span
+              aria-hidden="true"
+              className="zjs-ripple absolute left-0 top-0 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-accent"
+              key={`${view.px}-${view.py}`}
+            />
+          ) : null}
+        </span>
+      ) : null}
+      {view.label ? (
+        <span
+          className="absolute z-10 max-w-[60%] truncate rounded-md bg-accent px-1.5 py-0.5 font-mono text-xs text-accent-contrast shadow-md"
+          dir="auto"
+          style={{
+            left: pct(box ? (box[0] ?? 0) : (view.px ?? 0), w),
+            top: pct(box ? Math.max((box[1] ?? 0) - 22, 2) : (view.py ?? 0) + 14, h),
+          }}
+        >
+          {view.label}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
-/** Map a click on the DISPLAYED frame to the session's viewport space. */
-function frameCoords(event: {
-  clientX: number;
-  clientY: number;
-  currentTarget: { getBoundingClientRect(): DOMRect };
-}): { x: number; y: number } {
+/** Map a click on the DISPLAYED frame to the session's viewport space.
+    The space comes from the FRAME's own capture dimensions -- the
+    viewport is whatever the session launched with, never a constant. */
+function frameCoords(
+  event: {
+    clientX: number;
+    clientY: number;
+    currentTarget: { getBoundingClientRect(): DOMRect };
+  },
+  spaceW?: number,
+  spaceH?: number,
+): { x: number; y: number } {
   const rect = event.currentTarget.getBoundingClientRect();
   return {
-    x: Math.round(((event.clientX - rect.left) / rect.width) * VIEWPORT_W),
-    y: Math.round(((event.clientY - rect.top) / rect.height) * VIEWPORT_H),
+    x: Math.round(((event.clientX - rect.left) / rect.width) * (spaceW || VIEWPORT_W)),
+    y: Math.round(((event.clientY - rect.top) / rect.height) * (spaceH || VIEWPORT_H)),
   };
 }
 
@@ -184,6 +239,13 @@ function BrowserLightbox({
   const [draft, setDraft] = useState("");
   const wheelLock = useRef(0);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  // the takeover's DRAG gesture: pointerdown stores the viewport-space
+  // start, move updates the trail, up lands the slide (>=8px move; a
+  // smaller gesture stays a tap).  The endpoint click is suppressed --
+  // the pointerup's synthetic click must not also fire a tap.
+  const dragStartRef = useRef<{ x1: number; y1: number } | null>(null);
+  const [dragTrail, setDragTrail] = useState<{ x1: number; y1: number; x: number; y: number } | null>(null);
+  const suppressClickRef = useRef(false);
   const entries = Object.entries(sessions ?? {}).filter(([, item]) => item.img);
   const multi = entries.length > 1;
   const activeView = (multi ? sessions?.[tab] : undefined) ?? view;
@@ -360,7 +422,7 @@ function BrowserLightbox({
             }
             const target = event.currentTarget;
             if (event.target === target) {
-              const { x, y } = frameCoords({ ...event, currentTarget: target });
+              const { x, y } = frameCoords({ ...event, currentTarget: target }, shown.w, shown.h);
               send({ type: "click", x, y });
             }
             dialogRef.current?.focus();
@@ -373,26 +435,79 @@ function BrowserLightbox({
                 coordinate; keyboard users use the bar below */}
             <img
               alt={shown.title || shown.url}
-              className={`w-full landscape:h-auto landscape:max-h-full landscape:w-auto ${isLead ? "cursor-crosshair" : ""}`}
+              className={`w-full touch-none landscape:h-auto landscape:max-h-full landscape:w-auto ${isLead ? "cursor-crosshair" : ""}`}
               onClick={(event) => {
                 if (!isLead) {
                   return;
                 }
+                if (suppressClickRef.current) {
+                  // a drag just landed -- the pointerup's synthetic click
+                  // must not also fire a tap at the endpoint
+                  suppressClickRef.current = false;
+                  return;
+                }
                 event.stopPropagation();
-                const rect = event.currentTarget.getBoundingClientRect();
-                send({
-                  type: "click",
-                  x: Math.round(((event.clientX - rect.left) / rect.width) * VIEWPORT_W),
-                  y: Math.round(((event.clientY - rect.top) / rect.height) * VIEWPORT_H),
-                });
+                const { x, y } = frameCoords(event, shown.w, shown.h);
+                send({ type: "click", x, y });
                 // clicking a non-focusable element blurs the takeover -- pull
                 // focus back so direct typing keeps flowing
                 dialogRef.current?.focus();
               }}
+              onPointerDown={(event) => {
+                if (!isLead || event.button !== 0) {
+                  return;
+                }
+                const { x, y } = frameCoords(event, shown.w, shown.h);
+                dragStartRef.current = { x1: x, y1: y };
+                setDragTrail({ x1: x, y1: y, x, y });
+                event.currentTarget.setPointerCapture(event.pointerId);
+              }}
+              onPointerMove={(event) => {
+                if (!dragStartRef.current) {
+                  return;
+                }
+                const { x, y } = frameCoords(event, shown.w, shown.h);
+                setDragTrail({ x1: dragStartRef.current.x1, y1: dragStartRef.current.y1, x, y });
+              }}
+              onPointerUp={(event) => {
+                const start = dragStartRef.current;
+                dragStartRef.current = null;
+                setDragTrail(null);
+                if (!start || !isLead) {
+                  return;
+                }
+                const { x, y } = frameCoords(event, shown.w, shown.h);
+                if (Math.abs(x - start.x1) + Math.abs(y - start.y1) < 8) {
+                  return; // a tap -- the click handler owns it
+                }
+                suppressClickRef.current = true;
+                send({ type: "drag", x1: start.x1, y1: start.y1, x2: x, y2: y });
+              }}
               role="presentation"
               src={`data:image/jpeg;base64,${shown.img}`}
             />
-            <ModelPointer view={shown} />
+            {dragTrail ? (
+              <svg
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+                preserveAspectRatio="none"
+                viewBox={`0 0 ${shown.w || VIEWPORT_W} ${shown.h || VIEWPORT_H}`}
+              >
+                <line
+                  className="text-accent"
+                  stroke="currentColor"
+                  strokeDasharray="10 8"
+                  strokeWidth={4}
+                  x1={dragTrail.x1}
+                  x2={dragTrail.x}
+                  y1={dragTrail.y1}
+                  y2={dragTrail.y}
+                />
+                <circle className="fill-accent" cx={dragTrail.x1} cy={dragTrail.y1} r={7} />
+                <circle className="fill-accent" cx={dragTrail.x} cy={dragTrail.y} r={7} />
+              </svg>
+            ) : null}
+            <ActionMark view={shown} />
           </div>
         </div>
         {isLead ? (
@@ -537,7 +652,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
               src={`data:image/jpeg;base64,${activeView.img}`}
               style={{ aspectRatio: `${activeView.w || VIEWPORT_W} / ${activeView.h || VIEWPORT_H}` }}
             />
-            <ModelPointer view={activeView} />
+            <ActionMark view={activeView} />
           </button>
         ) : (
           <div className="relative">
@@ -547,7 +662,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
               src={`data:image/jpeg;base64,${activeView.img}`}
               style={{ aspectRatio: `${activeView.w || VIEWPORT_W} / ${activeView.h || VIEWPORT_H}` }}
             />
-            <ModelPointer view={activeView} />
+            <ActionMark view={activeView} />
           </div>
         )}
       </div>

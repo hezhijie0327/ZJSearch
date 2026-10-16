@@ -117,7 +117,39 @@ def _act_snapshot(_args: dict[str, t.Any], session_id: str) -> ActionResult:
 
 
 def _act_click(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    if args.get("x") is not None or args.get("y") is not None:
+        # the aimed click: viewport coordinates for widget interiors a ref
+        # cannot name (challenge tiles inside an iframe the snapshot reffed
+        # as one box, canvas hit-regions)
+        state = session.click_xy(session_id, args.get("x"), args.get("y"))
+        return _state_result(f"clicked at {args.get('x')},{args.get('y')}.", state, session_id)
     return _state_result("clicked.", session.click(session_id, str(args.get("ref") or "")), session_id)
+
+
+def _act_hover(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    return _state_result("hovered.", session.hover(session_id, str(args.get("ref") or "")), session_id)
+
+
+def _act_select(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    state = session.select_options(session_id, str(args.get("ref") or ""), list(args.get("values") or []))
+    chosen = ", ".join(str(c) for c in state.get("chosen") or [])
+    return _state_result(f"selected: {chosen}.", state, session_id)
+
+
+def _act_drag(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    state = session.drag(
+        session_id,
+        args.get("x1"),
+        args.get("y1"),
+        args.get("x2"),
+        args.get("y2"),
+        args.get("steps") or 15,
+    )
+    return _state_result(
+        f"dragged {args.get('x1')},{args.get('y1')} -> {args.get('x2')},{args.get('y2')}.",
+        state,
+        session_id,
+    )
 
 
 def _act_type(args: dict[str, t.Any], session_id: str) -> ActionResult:
@@ -148,8 +180,31 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
         # the aimed shot: ONE element close-up instead of the viewport
         # (the crop is what the model sees next turn)
         shot = session.inspect_b64(session_id, ref, quality=75)
+        box = shot.get("box")
+        if box:
+            session.set_mark(
+                session_id,
+                {
+                    "px": int(box[0] + box[2] / 2),
+                    "py": int(box[1] + box[3] / 2),
+                    "pk": "shot",
+                    "label": f"screenshot {ref}",
+                    "box": box,
+                },
+            )
+        else:
+            session.set_mark(session_id, {"pk": "shot", "label": f"screenshot {ref}"})
     else:
         shot = session.screenshot_b64(session_id, quality=75)
+        session.set_mark(
+            session_id,
+            {
+                "px": int(shot["w"] / 2),
+                "py": int(shot["h"] / 2),
+                "pk": "shot",
+                "label": "screenshot",
+            },
+        )
     return ActionResult(
         feed="",
         frames=[
@@ -194,6 +249,9 @@ _ACTORS = {
     "press": _act_press,
     "scroll": _act_scroll,
     "screenshot": _act_screenshot,
+    "hover": _act_hover,
+    "select": _act_select,
+    "drag": _act_drag,
     "read": _act_read,
     "close": _act_close,
 }

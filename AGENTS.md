@@ -198,10 +198,18 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     parallel reads, same cookie store): snapshot refs via injected
     `data-zjs-ref` attributes (interactive elements FIRST, then sizeable
     visible `img` elements — alt/src-basename named — so the aimed
-    screenshot has targets), click/type/press that return the FRESH
+    screenshot has targets; the scan walks CHILD FRAMES too, their refs
+    prefixed `f1e5` under a `-- frame f1 host --` header — embedded
+    captcha/payment widgets are addressable), click/type/press that
+    return the FRESH
     outline automatically when the action navigated (refs die on
     navigation — the re-snapshot doctrine is automatic; a ref dead to a
-    plain re-render fails FAST with the recovery recipe), native text
+    plain re-render fails FAST with the recovery recipe), coordinate
+    primitives for widget interiors a ref cannot name (`click` with
+    x/y, `drag` from→to with mouse.move interpolation — the
+    slider-captcha primitive, humanize riding on top), `hover` (menus)
+    and `select` (native `<select>` — synthetic clicks never open the
+    native picker), native text
     extraction over the live DOM (`read` — the reader's pipeline, the
     reader's `max_chars` cap), and the raw input primitives the user's
     Lightbox takeover forwards.  The `screenshot` action is AIMED:
@@ -212,7 +220,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     ride); every injected screenshot spends a per-run budget
     (`_MAX_MODEL_SHOTS` 8, viewport + close-ups together) — past it the
     settlement errors honestly instead of turning the context into an
-    image carousel.  The open lane runs the reader's
+    image carousel.  The takeover's input forwarding mirrors the model's
+    surface (click / wheel / type / key / back / forward / reload plus
+    `drag` — the user's pointer gesture on the mirror maps to the same
+    down→interpolated-move→up primitive, so slider challenges are
+    human-solvable in the window too); the coordinate mapping reads the
+    FRAME's own capture dimensions, never a constant.  The open lane
+    runs the reader's
     public-url gate itself (`file://` never reaches `context.route`).
     The engine self-heals: a "closed"-flavored failure drops the
     poisoned context and the next action relaunches; a launch failure
@@ -1703,14 +1717,16 @@ shared) and the input route returns the POST-ACTION frame with every
 forwarded input (between the model's settlements the takeover stared at
 the stale prior frame -- fatally so for a navigation, whose whole
 effect IS the new page; the client overlays the frame locally until the
-next wire frame supersedes it).  The MODEL POINTER rides the wire
-frames: `click`/`type_text` track their target element's bounding-box
-center (`_track_pointer`, best-effort) and `frame()` carries
-`px/py/pk` -- the client draws a synthetic cursor at the landing point
-(viewport screenshots never contain one) with a one-shot click ripple,
-so the user can follow the model's hands between snapshots; the user's
-own forwarded inputs never move it (the synthetic cursor is the
-MODEL's).
+next wire frame supersedes it).  The MODEL ACTION MARK rides the wire
+frames: `click`/`type_text`/`hover`/`select` track their target
+element's bounding box (`_mark_ref_action` — box + landing point +
+intent label), `drag` carries its full from→to gesture, the aimed
+screenshot marks the captured box — the client's `ActionMark` draws the
+highlight box, the drag line and the label chip ON the mirror frame
+(`px/py/pk` + `box`/`x2`/`y2`/`label` — the bare cursor is the
+fallback), so the viewer sees WHAT the model did, not just where its
+cursor rests; the user's own forwarded inputs never move it (the mark
+is the MODEL's).
 
 THE READER'S RENDER CONTRACT (the built-in browser): the reader has
 exactly ONE render backend — the local Camoufox anti-detect Firefox

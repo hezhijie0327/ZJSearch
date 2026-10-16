@@ -359,6 +359,14 @@ export interface AiSearchRun {
     px?: number;
     py?: number;
     pk?: string;
+    /** the LAST action's visual mark: the touched element's viewport bbox
+        [x, y, w, h], the drag endpoint, and a short intent label -- the
+        mirror renders the box + gesture so the viewer sees WHAT the model
+        did, not just where its cursor rests */
+    box?: number[];
+    x2?: number;
+    y2?: number;
+    label?: string;
   } | null;
   /** ALL live browser sessions keyed by session id (v2.1 R3B: the lead
       plus one per delegating subagent -- the rail card's tab strip).
@@ -943,12 +951,17 @@ export function applyEvent(
         url: String(event.url ?? ""),
         title: String(event.title ?? ""),
         img: String(event.img ?? ""),
-        w: Number(event.w) || 1280,
-        h: Number(event.h) || 800,
+        w: Number(event.w) || 1920,
+        h: Number(event.h) || 1080,
         ...(event.wait_left !== undefined ? { waitLeft: Number(event.wait_left) || 0 } : {}),
         ...(event.px !== undefined && event.py !== undefined
           ? { px: Number(event.px), py: Number(event.py), pk: String(event.pk ?? "") }
           : {}),
+        ...(Array.isArray(event.box) ? { box: event.box.map(Number) } : {}),
+        ...(event.x2 !== undefined && event.y2 !== undefined
+          ? { x2: Number(event.x2), y2: Number(event.y2) }
+          : {}),
+        ...(event.label !== undefined ? { label: String(event.label) } : {}),
       };
       runs[lastIdx] = {
         ...run,

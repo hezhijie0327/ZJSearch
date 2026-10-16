@@ -2,12 +2,14 @@
 /** The Lightbox takeover's input channel: the stack's first
     client-to-server live path.  The token rides the boot capability (the
     same page-data HMAC token every AI endpoint takes); coordinates are
-    viewport-space (1280x800) -- the server clamps. */
+    viewport-space (the session's actual launch dimensions) -- the server
+    clamps. */
 
 import { fetchJson } from "@/lib/http.ts";
 
 export type BrowserInputPayload =
   | { type: "click"; x: number; y: number }
+  | { type: "drag"; x1: number; y1: number; x2: number; y2: number }
   | { type: "wheel"; deltaY: number }
   | { type: "type"; text: string }
   | { type: "key"; key: string }
