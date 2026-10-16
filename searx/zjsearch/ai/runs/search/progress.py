@@ -106,7 +106,7 @@ def continuation_note(open_tasks: list[str], open_gaps: list[str]) -> str:
         "Pick the most important one and run this round against it --"
         " change the keyword angle, read the promising page, or compute"
         " the missing figure.  If the evidence genuinely does not exist,"
-        " record that with learnings (close_gaps, close_as = the honest"
+        " record that with findings (close_gaps, close_as = the honest"
         " reason) and stop calling tools again -- the writer will report"
         " the residue.  A bare restatement of the question is NOT a"
         " round.)"

@@ -4,10 +4,10 @@ import { Calculator } from "lucide-react";
 import { CallResults } from "@/features/results/aiSearch/calls/rowBase.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
-/** The calculator view: the expression IS the row (`expr = result` on the
+/** The calculate view: the expression IS the row (`expr = result` on the
     shell), the result cards (when the call collided with sources) sit
     OUTSIDE the fold -- the one sanctioned always-visible body. */
-export const calculatorView: ToolView = {
+export const calculateView: ToolView = {
   Icon: Calculator,
   label: ({ call }) => call.q,
   metric: ({ call, t }) =>

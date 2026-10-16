@@ -4,12 +4,12 @@ import { Scale } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { AnswerValue } from "@/features/results/aiSearch/DecisionsCard.tsx";
 
-/** The judge (SystemOne decision) view: the settled one-line verdict on the
+/** The evaluate (SystemOne decision) view: the settled one-line verdict on the
     shell; the chevron opens the SAME structured probability bars the rail's
     decision card renders (one judgment, one rendering -- not a text dump).
     Legacy settlements without `answers` fall through to the kernel default
     (reading pane of the text preview). */
-export const judgeView: ToolView = {
+export const evaluateView: ToolView = {
   Icon: Scale,
   label: ({ call, t }) => call.q || t("ai_decision_row"),
   metric: ({ call, t }) =>

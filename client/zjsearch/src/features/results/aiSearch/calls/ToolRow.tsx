@@ -26,7 +26,7 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
   const t = useT();
   const [open, setOpen] = useState(false);
   const [debug, setDebug] = useState(false);
-  const view = TOOL_VIEWS[call.tool] ?? TOOL_VIEWS.web_search;
+  const view = TOOL_VIEWS[call.tool] ?? TOOL_VIEWS.search_web;
   const props = { call, results, t };
   const rawArgs = rawArgsOf(call);
   // DEBUG IS UNIVERSAL: every row exposes the raw arguments + the model's

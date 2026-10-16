@@ -24,10 +24,10 @@ import flask
 
 from searx.extended_types import sxng_request
 from searx.zjsearch.ai.tools import mcp
-from searx.zjsearch.ai.tools import web_browser as web_browser_tool
-from searx.zjsearch.ai.tools.web_browser import read as reader
+from searx.zjsearch.ai.tools import browse as browse_tool
+from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.browser import config as browser_config
-from searx.zjsearch.ai.tools.past_research import parse_entries as parse_past_research
+from searx.zjsearch.ai.tools.recall_history import parse_entries as parse_recall_history
 from searx.zjsearch.ai.tools.memory import extract_insights, parse_memories
 from searx.zjsearch.ai.agent import loop as engine
 from searx.zjsearch.ai.agent import wire
@@ -45,7 +45,7 @@ from searx.zjsearch.ai.runs.search.state import (
     serialize_subagents,
     state_block,
 )
-from searx.zjsearch.ai.tools import research_subtask as subtask_module
+from searx.zjsearch.ai.tools._subagent import SUB_ROUNDS
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.runs.report import synth as report_synth
@@ -66,21 +66,21 @@ from searx.zjsearch.ai.runs.profile import budget, enabled, SEARCH_MODES
 from searx.zjsearch.ai.prompts.researcher import initial_messages
 from searx.zjsearch.ai.runs.search.writer import writer_messages
 from searx.zjsearch.ai.tools import (
-    ASK_TOOL,
-    view_image_spec,
+    ASK_USER_TOOL,
+    inspect_image_spec,
     ask_user_spec,
-    calculator_spec,
+    calculate_spec,
     display_item,
-    extract_spec,
-    learnings_spec,
-    past_research_spec,
+    build_table_spec,
+    record_findings_spec,
+    recall_history_spec,
     message_subtask_spec,
-    research_subtask_spec,
-    judge_spec,
-    engine_info_spec,
-    task_write_spec,
-    tool_spec,
-    user_memory_spec,
+    delegate_research_spec,
+    evaluate_spec,
+    list_engines_spec,
+    update_plan_spec,
+    search_web_spec,
+    memory_spec,
 )
 
 logger = logging.getLogger(__name__)
@@ -95,8 +95,8 @@ _CONTENT_EVENTS = (
     "calls",
     "call",
     "close",
-    "tasks",
-    "learnings",
+    "plan",
+    "findings",
     "sources",
     "ask",
     "gallery",
@@ -169,7 +169,7 @@ RESUME_NOTE = (
     "<resume_note>The transcript above is your own research from a previous"
     " process that died mid-run -- it is complete up to the last tool results"
     " shown. Continue it where it stands: re-affirm your task ledger"
-    " (task_write) and findings ledger (learnings) first if they are not"
+    " (update_plan) and findings ledger (record_findings) first if they are not"
     " current in this transcript, do NOT repeat searches or page reads whose"
     " results already appear above (their sources keep their [n] numbers),"
     " then continue the open ledger items. The user experiences this as the"
@@ -329,17 +329,17 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # verbatim to the researcher's first turn -- the server stores nothing
     # (the browser's knowledge base is the only attachment storage); a run
     # whose transport rejects them retries ONCE as text-only (below).
-    # LIVE RECALL: the client serves past_research calls from its
+    # LIVE RECALL: the client serves recall_history calls from its
     # browser-local store at ask time (the recall wire event) -- the index
     # then carries only the user's uploaded files (the no-research writer
     # path's only reader) and the model's own query drives the search
     live_recall = bool(payload.get("live_recall"))
     # LIVE MEMORIES: with live_recall the snapshot does not ride the send
     # -- the researcher prompt renders the tool-first variant and the
-    # first user_memory call pulls the store's list through the recall
+    # first memory call pulls the store's list through the recall
     # slot (handlers); both actions and the save near-dup gate read it
     user_memories = None if live_recall else parse_memories(payload.get("user_memories"))
-    past_research_entries = parse_past_research(payload.get("past_research"))
+    past_research_entries = parse_recall_history(payload.get("recall_history"))
     image_parts, attached_files = ([], []) if degraded else uploads.parse_uploads(payload.get("attachments"))
     # the conversion receipt: the client shipped BYTES, only the server's
     # converter can read PDFs/Office documents -- the extracted markdown
@@ -443,7 +443,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         if pre.get("enabled") and decision.enabled() and decision.configured():
             try:
                 started = time.monotonic()
-                pre_out = decision.judge(
+                pre_out = decision.evaluate(
                     q,
                     {
                         "ambiguous": {
@@ -599,7 +599,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])] or _LADDER_DEFAULTS.get(mode, [])
             if ladder:
                 started = time.monotonic()
-                out = decision.judge(
+                out = decision.evaluate(
                     (research_q if research_q else q) + gate_note,
                     {
                         "depth": {
@@ -732,7 +732,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 resume["subagents"],
                 lambda parent, key: Searches.child(
                     parent,
-                    max_rounds=subtask_module.SUB_ROUNDS,
+                    max_rounds=SUB_ROUNDS,
                     session_id=f"sub-{id(parent):x}-{key}",
                 ),
             )
@@ -848,7 +848,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         """Number the recalled past-research sources AFTER the live feed's
         final [n] (idempotent: the pre-write sources event and the writer
         prompt share one assignment).  A url the researcher already
-        numbered (a ``past_research`` tool match, a re-read) keeps ITS
+        numbered (a ``recall_history`` tool match, a re-read) keeps ITS
         number -- the same page never rides two [n] labels."""
         if not past_sources:
             return []
@@ -879,7 +879,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             images_proxied=images_proxied,
             past_sources=assign_past_sources(),
             relevance=await _relevance_order(research_q, state.feed, account=state.account),
-            learnings=state.facts,
+            findings=state.facts,
             gaps=state.gaps,
         )
 
@@ -974,7 +974,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             page_tool=browser_on,
             task_tool=register_tasks,
             browser_tool=browser_on,
-            engine_info_tool=True,
+            list_engines_tool=True,
             steerable=handle is not None,
             # delegation gate: the depth probe's rung decides -- deep runs
             # delegate from rung 2 (the heavy tool for a clearly heavy
@@ -996,21 +996,21 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         cfg,
         research_messages,
         tools=[
-            tool_spec(browser_on, with_info=True),
-            calculator_spec(),
-            engine_info_spec(),
-            user_memory_spec(),
-            learnings_spec(),
+            search_web_spec(browser_on, with_info=True),
+            calculate_spec(),
+            list_engines_spec(),
+            memory_spec(),
+            record_findings_spec(),
         ]
-        + ([judge_spec()] if decision.enabled() and decision.configured() and decision.sdk_missing() is None else [])
-        + ([past_research_spec()] if (past_research_entries or live_recall) else [])
-        + ([web_browser_tool.web_browser_spec()] if browser_on else [])
+        + ([evaluate_spec()] if decision.enabled() and decision.configured() and decision.sdk_missing() is None else [])
+        + ([recall_history_spec()] if (past_research_entries or live_recall) else [])
+        + ([browse_tool.browse_spec()] if browser_on else [])
         + [ask_user_spec()]
-        + ([task_write_spec()] if register_tasks else [])
-        + ([extract_spec()] if outline is not None else [])
+        + ([update_plan_spec()] if register_tasks else [])
+        + ([build_table_spec()] if outline is not None else [])
         + (
             [
-                research_subtask_spec(),
+                delegate_research_spec(),
                 # the subagents' follow-up channel: only meaningful beside
                 # the delegation tool (the same depth gate mints both)
                 message_subtask_spec(),
@@ -1018,7 +1018,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             if (mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4)
             else []
         )
-        + [view_image_spec()]
+        + [inspect_image_spec()]
         + mcp_tools,
         executor=state.execute,
         post_round_injections=state.drain_image_injections,
@@ -1029,7 +1029,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         ),
         continuation=continuation,
         pre_write=state.evidence_check,
-        ask_tool=ASK_TOOL,
+        ask_tool=ASK_USER_TOOL,
         ask_shape=_ask_shape,
         display=lambda calls: [display_item(idx, call) for idx, call in enumerate(calls, 1)],
         **(
@@ -1197,7 +1197,7 @@ class _SettleTail:
         candidate = fence_title or self.outline_title
         if candidate and decision.enabled() and decision.configured():
             try:
-                out = decision.judge(
+                out = decision.evaluate(
                     {"question": self.question[:500], "title": candidate},
                     {
                         "good_title": {

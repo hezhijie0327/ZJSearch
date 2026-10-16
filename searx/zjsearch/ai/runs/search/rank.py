@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``web_search`` feed's ranking cascade.
+"""AI Search: the ``search_web`` feed's ranking cascade.
 
 Bocha's two-stage ranking cascade applied to the live web results the
 researcher's feed is cut from: :py:func:`bm25_order` fuses the engines'

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``past_research`` tool: one self-contained package -- the
+"""The ``recall_history`` tool: one self-contained package -- the
 model-facing spec, the call parser and the index service it backs (the
 model's RAG window into the browser's LOCAL knowledge base -- the
 PGlite corpus of sources and reader full-texts accumulated across
@@ -8,13 +8,13 @@ half already ran client-side when the index was picked -- carrying TWO
 entry kinds:
 
 - ``page`` entries: reader-cache pages WITH a ~1500-char content head
-  (what a past ``web_browser`` read extracted);
+  (what a past ``browse`` read extracted);
 - ``source`` entries: corpus sources the user's past runs touched,
   identity only (title + host -- no text stored).
 
 The tool searches the index on the model's initiative.  A page match
 returns its content head; a source-only match returns the identity plus
-the instruction to re-verify it live through ``web_browser`` -- past
+the instruction to re-verify it live through ``browse`` -- past
 material supplements, live sources win.
 
 THE RED LINE (AGENTS.md): this is supplementary, OPT-IN material -- the
@@ -27,7 +27,7 @@ import typing as t
 
 from searx.zjsearch.ai.core.text import query_terms, raw_args
 
-PAST_RESEARCH_TOOL = "past_research"
+RECALL_HISTORY_TOOL = "recall_history"
 
 MAX_ENTRIES = 12
 """Index entries per request -- pages carry a ~1500-char text head."""
@@ -37,11 +37,11 @@ MATCH_LIMIT = 4
 """Matches returned per tool call, each with its content slice."""
 
 
-def past_research_spec() -> dict[str, t.Any]:
-    """The ``past_research`` tool spec -- registered only when the client
+def recall_history_spec() -> dict[str, t.Any]:
+    """The ``recall_history`` tool spec -- registered only when the client
     sent an index."""
     return {
-        "name": PAST_RESEARCH_TOOL,
+        "name": RECALL_HISTORY_TOOL,
         "description": (
             "Search YOUR past research with this user (the browser-local"
             " knowledge base): pages you (or a previous session) already"
@@ -86,7 +86,7 @@ def parse_query(call: dict[str, t.Any]) -> str:
 
 
 def parse_entries(raw: t.Any) -> list[dict[str, str]]:
-    """The run payload's ``past_research`` index -- sanitized.  An entry
+    """The run payload's ``recall_history`` index -- sanitized.  An entry
     with a ``text`` head is a reader page; one without is a corpus source
     (identity only).  An entry WITHOUT a url is a USER-UPLOADED FILE (the
     knowledge base's attachment documents): locally archived material no

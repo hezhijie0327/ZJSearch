@@ -121,22 +121,22 @@ function CallRow({
   return <ToolRow call={call} results={merged} />;
 }
 
-/** The living task list (the task_write tool maintains it): a STATUS-ONLY
+/** The living task list (the update_plan tool maintains it): a STATUS-ONLY
     card -- one colored mark per state (pending dot, active ping, done
     check, uncovered warning), a done/total counter in the header.  How
     each subtask was researched is the research process timeline's job;
     this card never expands. */
-function TaskCard({ tasks, live }: { tasks: AiSearchRun["tasks"]; live: boolean }) {
+function TaskCard({ plan, live }: { plan: AiSearchRun["plan"]; live: boolean }) {
   const t = useT();
-  if (tasks.length === 0) {
+  if (plan.length === 0) {
     return null;
   }
-  const done = tasks.filter((task) => task.status === "done").length;
+  const done = plan.filter((task) => task.status === "done").length;
   return (
     <div className="mb-5">
-      <RailHeader count={`${done}/${tasks.length}`} icon={ListTodo} title={t("ai_task_card")} />
+      <RailHeader count={`${done}/${plan.length}`} icon={ListTodo} title={t("ai_task_card")} />
       <ul className="mt-3 space-y-1.5">
-        {tasks.map((task, index) => (
+        {plan.map((task, index) => (
           <TaskItem key={`${index}-${task.title}`} live={live} task={task} />
         ))}
       </ul>
@@ -170,7 +170,7 @@ function factHtml(text: string): string {
 /** One fact's meta tail: a retracted/superseded fact's status label, an
     active fact's CONFLICT FLAG as a warning chip with visible text (the
     old icon-only badge hid its meaning behind a hover tooltip), then the
-    fact's concept tags (the learnings tool's tags field) — one wrapping
+    fact's concept tags (the findings tool's tags field) — one wrapping
     meta row at the 12px chip tier, identical in both list partitions. */
 function FactMeta({ fact }: { fact: LedgerFact }) {
   const t = useT();
@@ -234,27 +234,27 @@ function citeHandlers(onCiteN: (n: number) => void) {
     clamp-and-reveal with inline [n] chip buttons, NEWEST-FIRST, capped
     at four. */
 function FindingsCard({
-  learnings,
+  findings,
   expanded,
   onToggleExpanded,
   onCiteN,
 }: {
-  learnings: LedgerFact[];
+  findings: LedgerFact[];
   /** CONTROLLED cap state (a [n] click expands it; the chip may fold) */
   expanded: boolean;
   onToggleExpanded: (next: boolean) => void;
   onCiteN: (n: number) => void;
 }) {
   const t = useT();
-  if (learnings.length === 0) {
+  if (findings.length === 0) {
     return null;
   }
-  const active = learnings.filter((fact) => fact.status === "active");
-  const factsHidden = Math.max(0, learnings.length - 4);
+  const active = findings.filter((fact) => fact.status === "active");
+  const factsHidden = Math.max(0, findings.length - 4);
   // the newest four lead; the OLDER tail sits inside a Collapse so the
   // +N reveal (and the collapse) plays as a height animation
-  const factView = [...learnings.slice(-4)].reverse();
-  const factExtra = [...learnings.slice(0, Math.max(0, learnings.length - 4))].reverse();
+  const factView = [...findings.slice(-4)].reverse();
+  const factExtra = [...findings.slice(0, Math.max(0, findings.length - 4))].reverse();
   return (
     <div className="mb-5">
       <RailHeader count={active.length} icon={NotebookPen} title={t("ai_findings_card")} />
@@ -419,7 +419,7 @@ function GapsCard({
 /** One task row: the colored status mark + the subtask title (+ its source
     count once covered).  Not interactive -- the process lives in the
     research timeline. */
-function TaskItem({ task, live }: { task: AiSearchRun["tasks"][number]; live: boolean }) {
+function TaskItem({ task, live }: { task: AiSearchRun["plan"][number]; live: boolean }) {
   const t = useT();
   return (
     <li>
@@ -2094,11 +2094,11 @@ function AiSearchRunSectionImpl({
             ) : null}
             {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
             <DecisionsCard decisions={run.decisions ?? []} />
-            {run.tasks.length > 0 ? <TaskCard live={run.status === "streaming"} tasks={run.tasks} /> : null}
-            {(run.learnings ?? []).length > 0 ? (
+            {run.plan.length > 0 ? <TaskCard live={run.status === "streaming"} plan={run.plan} /> : null}
+            {(run.findings ?? []).length > 0 ? (
               <FindingsCard
                 expanded={findingsExpanded}
-                learnings={run.learnings ?? []}
+                findings={run.findings ?? []}
                 onCiteN={handleCite}
                 onToggleExpanded={setFindingsExpanded}
               />

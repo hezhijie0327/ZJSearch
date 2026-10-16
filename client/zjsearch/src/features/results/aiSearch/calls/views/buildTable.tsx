@@ -3,10 +3,10 @@
 import { Table } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
-/** The extract_table view (the report mode's structured-evidence
+/** The build_table view (the report mode's structured-evidence
     channel): the table's caption is the row, the recorded matrix folds
     open as a real table with per-row citation refs. */
-export const extractTableView: ToolView = {
+export const buildTableView: ToolView = {
   Icon: Table,
   label: ({ call }) => call.q || String(call.args?.title ?? ""),
   metric: ({ call, t }) =>

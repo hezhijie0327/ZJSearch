@@ -30,7 +30,7 @@ def _decision_view() -> flask.Response:
         )
     if images is not None and not (isinstance(images, list) and all(isinstance(url, str) for url in images)):
         return flask.jsonify({"error": "images must be a list of urls"}), 422
-    result = decision.judge(state, questions, timeout=15.0, images=images)
+    result = decision.evaluate(state, questions, timeout=15.0, images=images)
     if result is None:
         return flask.jsonify({"error": "decision upstream failed"}), 502
     return flask.jsonify(result)

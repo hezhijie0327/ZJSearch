@@ -96,7 +96,7 @@ flowchart TB
   detection, cards/grids, answers, **aiSearch/** — the AI run surfaces,
   aiOverview), `knowledge/` (the browser-local research memory UI),
   `overlay/` (slide-in panels, injected by `app.tsx`), `hotkeys`,
-  `calculator`.
+  `calculate`.
 - `pages/` composes: state + event handlers + layout wiring.
   Page-private pieces sit next to the page.
 - **i18n is theme-owned**: `src/lib/i18n/` holds one catalog per locale;
@@ -129,7 +129,7 @@ flowchart TB
 ```
 
 The wire protocol is NDJSON timeline operations (open/think/say/calls/
-call/sources/tasks/learnings/answer/ask/decisions/phase/settle …) —
+call/sources/tasks/findings/answer/ask/decisions/phase/settle …) —
 `useAiSearch` is a dumb renderer over those ops, and stored threads
 replay through the exact same fold.
 
@@ -199,7 +199,7 @@ client/zjsearch/
     │   │                  #   tag graph, admin, templates)
     │   ├── overlay/       #   slide-in panels (injected by app.tsx)
     │   ├── hotkeys.ts
-    │   └── calculator.ts
+    │   └── calculate.ts
     └── pages/             # route composition roots (thin); page-private
                            # pieces sit next to the page (preferences/tabs/)
 ```

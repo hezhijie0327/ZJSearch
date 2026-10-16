@@ -13,7 +13,7 @@ import { useCapExpand } from "@/lib/useCapExpand.ts";
 const PURPOSE_LABELS: Record<string, string> = {
   read_gate: "ai_dec_read_gate",
   plan_review: "ai_dec_plan_review",
-  judge: "ai_dec_judge",
+  evaluate: "ai_dec_judge",
   evidence: "ai_dec_evidence_check",
   citation_gate: "ai_dec_citation_gate",
   coverage: "ai_dec_coverage",
@@ -115,7 +115,7 @@ function pctOf(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
-/** A decision entry's expansion: the NAMED-VERDICT-MAP shape (judge /
+/** A decision entry's expansion: the NAMED-VERDICT-MAP shape (evaluate /
     plan_review / coverage /
     read_gate / evidence / citation_gate ... -- any decision whose answer
     is {name: primitive verdict})
@@ -153,7 +153,7 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       </div>
     ) : null;
 
-  // ── The named verdict map (the universal shape): judge / plan_review /
+  // ── The named verdict map (the universal shape): evaluate / plan_review /
   //    coverage /
   //    read_gate answers all share ONE shape -- {name: choice|score|noul
   //    verdict}.
@@ -228,7 +228,7 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
 /**
  * The run's DECISION RESULTS card: EVERY decision-model call --
  * loop gates (depth probe / plan review / coverage referee / read gate /
- * pre-write evidence) and the model's own judge tool -- one row each.
+ * pre-write evidence) and the model's own evaluate tool -- one row each.
  * A row shows purpose + target + ms; CLICK expands the structured result
  * (per-question nouls with probabilities / verdict counts), unknown shapes
  * fall back to the raw JSON -- both question and result stay traceable.  The list reads

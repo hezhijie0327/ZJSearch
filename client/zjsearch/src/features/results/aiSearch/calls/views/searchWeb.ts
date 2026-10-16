@@ -3,10 +3,10 @@
 import { Search } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
-/** The web_search view (and the unknown-tool fallback via the registry):
+/** The search_web view (and the unknown-tool fallback via the registry):
     the query, the result count -- the body is the kernel default (the
     result-card strip). */
-export const webSearchView: ToolView = {
+export const searchWebView: ToolView = {
   Icon: Search,
   label: ({ call }) => call.q,
   metric: ({ call, t }) =>

@@ -116,7 +116,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     images_proxied: bool = False,
     past_sources: list[dict[str, t.Any]] | None = None,
     relevance: list[int] | None = None,
-    learnings: list[dict[str, t.Any]] | None = None,
+    findings: list[dict[str, t.Any]] | None = None,
     gaps: list[dict[str, t.Any]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
@@ -193,7 +193,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         lines.append(f"<research_note>\n{halt}\n</research_note>")
     elif budget_truncated:
         lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
-    active = [fact for fact in learnings or [] if fact.get("status") == "active"]
+    active = [fact for fact in findings or [] if fact.get("status") == "active"]
     if active:
         # the researcher's own distillation (dzhng's writeFinalReport
         # pattern): a pre-digested, REVISABLE evidence trail beside the raw
@@ -229,12 +229,12 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}" for item in past_sources
         )
         lines.append(
-            "<past_research>\nThe user's past research sessions on related"
+            "<recall_history>\nThe user's past research sessions on related"
             " topics also surfaced these sources:\n" + recalled + "\nThey were"
             " NOT re-verified in this run and may be outdated -- cite one"
             " only when it genuinely strengthens the answer (their [n]"
             " labels are already assigned); for anything time-sensitive"
-            " prefer the live sources.\n</past_research>"
+            " prefer the live sources.\n</recall_history>"
         )
     cap = writer_context_max(mode)
     # the attachment rides the SAME single turn -- its bulk comes off the

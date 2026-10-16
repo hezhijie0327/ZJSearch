@@ -16,7 +16,7 @@ from searx.zjsearch.ai.runs.search.state import SearchesCore
 
 
 class Searches(DispatchMixin, RefereeMixin, GatherMixin, SearchesCore):
-    """The ``web_search`` executor: real instance searches in a worker
+    """The ``search_web`` executor: real instance searches in a worker
     pool.  Yields the feature events for the wire protocol and ends with
     the agent framework's ``("tool_results", ...)`` alignment."""
 

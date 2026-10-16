@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``task_write`` tool -- spec and call parsing.
+"""AI Search: the ``update_plan`` tool -- spec and call parsing.
 
 The living task list (quality/goal): the model decomposes the request
 into subtasks, keeps their statuses current AND reshapes the plan as the
@@ -12,16 +12,16 @@ import typing as t
 
 from searx.zjsearch.ai.core.text import raw_args
 
-TASK_TOOL = "task_write"
+UPDATE_PLAN_TOOL = "update_plan"
 
 
-def task_write_spec() -> dict[str, t.Any]:
+def update_plan_spec() -> dict[str, t.Any]:
     """The living task list (quality/goal): the model decomposes the
     request into subtasks and keeps the plan current -- the client
     renders the list as the task card, and the list drives what gets
     delegated next."""
     return {
-        "name": TASK_TOOL,
+        "name": UPDATE_PLAN_TOOL,
         "description": (
             "Create or update the SUBTASK LIST for this research -- it is"
             " the ONLY way the plan or its statuses ever change, and the"
@@ -68,8 +68,8 @@ def task_write_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_task_call(call: dict[str, t.Any]) -> list[dict[str, str]]:
-    """The sanitized task list out of a ``task_write`` call.  No item cap:
+def parse_plan_call(call: dict[str, t.Any]) -> list[dict[str, str]]:
+    """The sanitized task list out of a ``update_plan`` call.  No item cap:
     the plan is the model's -- it sizes the list to the question (the
     title/status caps are the only sanitation)."""
     args = raw_args(call)

@@ -37,14 +37,14 @@ export function parseClarifyPairs(text: string): Array<{ q: string; a: string }>
   return pairs;
 }
 
-/** The task card's AUTHORITATIVE snapshot merge: the wire `tasks` event
+/** The task card's AUTHORITATIVE snapshot merge: the wire `plan` event
     replaces the list wholesale, but a task's research provenance (its
     steps and findings, LEGACY-era fields) survives the replace when the
     title matches. */
 export function mergeTaskSnapshot(
-  existing: AiSearchRun["tasks"],
+  existing: AiSearchRun["plan"],
   items: Array<Record<string, unknown>>,
-): AiSearchRun["tasks"] {
+): AiSearchRun["plan"] {
   return items.map((item) => {
     const prior = existing.find((task) => task.title === String(item.title ?? ""));
     return {
@@ -57,7 +57,7 @@ export function mergeTaskSnapshot(
   });
 }
 
-/** One ledger FACT (the learnings tool's v2 shape): revisable -- a later
+/** One ledger FACT (the findings tool's v2 shape): revisable -- a later
     fact may supersede or retract it; only active facts reach the writer. */
 export interface LedgerFact {
   id: number;
@@ -87,7 +87,7 @@ export interface LedgerGap {
   round?: number;
 }
 
-/** The findings ledger off a `learnings` wire event: the v2 items are
+/** The findings ledger off a `findings` wire event: the v2 items are
     fact objects (with ids/revision status); a stored legacy thread's
     plain-string facts type-dispatch into bare active facts.  An absent
     list is an empty ledger. */
@@ -126,7 +126,7 @@ export function learningFacts(items: unknown): LedgerFact[] {
     .filter((fact): fact is LedgerFact => fact !== null);
 }
 
-/** The ledger's gaps partition off a `learnings` wire event. */
+/** The ledger's gaps partition off a `findings` wire event. */
 export function learningGaps(gaps: unknown): LedgerGap[] {
   if (!Array.isArray(gaps)) {
     return [];
@@ -155,8 +155,8 @@ export function learningGaps(gaps: unknown): LedgerGap[] {
 
 /** The task card's settle completion, HONESTLY: a subtask with sources
     is done; one that never gathered a source stays visibly unresearched. */
-export function completeTasks(tasks: AiSearchRun["tasks"]): AiSearchRun["tasks"] {
-  return tasks.map((task) =>
+export function completeTasks(plan: AiSearchRun["plan"]): AiSearchRun["plan"] {
+  return plan.map((task) =>
     task.status === "done" || (task.sources?.length ?? 0) > 0
       ? { ...task, status: "done" as const }
       : { ...task, status: "missed" as const },
@@ -167,8 +167,8 @@ export function completeTasks(tasks: AiSearchRun["tasks"]): AiSearchRun["tasks"]
     its recorded facts AND its open gaps as the resume brief -- the
     researcher picks up exactly where the ledger stands instead of
     restarting. */
-export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGap[] = []): string {
-  const findings = learnings
+export function continueBrief(q: string, findings: LedgerFact[], gaps: LedgerGap[] = []): string {
+  const facts = findings
     .filter((fact) => fact.status === "active")
     .map((fact) => `- ${fact.text}`)
     .join("\n");
@@ -183,7 +183,7 @@ export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGa
   return (
     `This continues the previous INTERRUPTED research (same question -- do` +
     ` not start over): "${q}".\n` +
-    `Established findings before the interruption:\n${findings || "(none recorded)"}\n` +
+    `Established findings before the interruption:\n${facts || "(none recorded)"}\n` +
     (open ? `Unresolved gaps:\n${open}\n` : "") +
     `Continue from where it stopped: cover the unresearched facets; do not` +
     ` repeat angles already searched.`

@@ -18,7 +18,7 @@ import flask
 
 from searx.webutils import highlight_content
 from searx.zjsearch.ai.llm.embed import cosine as embed_cosine
-from searx.zjsearch.ai.tools.web_browser import read as reader
+from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.runs.search.registry import SourcesRegistry
 
 logger = logging.getLogger(__name__)

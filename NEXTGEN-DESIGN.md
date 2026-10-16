@@ -16,9 +16,9 @@ Host)、问题清单与逐日实施日志已清理,可在 git 历史查阅本文
 | 四档单循环 | speed / balanced / deep 是预算与停机策略的差别;report / deck 是 deep 之上的**输出形态**(大纲门 → 逐节合成),不是第四种 agent |
 | Run Host | run 的命与客户端连接解耦:断开 = detach,重连 = reattach 同一个 run;宽限超时优雅收尾,每个 run 都有真实终态 |
 | 控制面 | 运行中引导(轮边界注入)/ 抢占(中断当前 turn 后注入)/ 停子代理 / 收尾 / 停止——永不静默打断在飞流 |
-| 子代理 | `research_subtask` 起嵌套 loop:独立上下文 + 共享 [n] 注册表 + 摘要回传;delegation gate 按深度档 + rung 开放;子代理可追问、可后台、可独立停止 |
+| 子代理 | `delegate_research` 起嵌套 loop:独立上下文 + 共享 [n] 注册表 + 摘要回传;delegation gate 按深度档 + rung 开放;子代理可追问、可后台、可独立停止 |
 | 上下文工程 | 转写三级折叠(microcompact / auto-compact / reactive)+ Run Corpus(运行内语料检索)逐节装配 writer 上下文 |
-| 诚实机制 | 事实台账(learnings)+ 覆盖裁判 + 写前证据检查 + 节级引用门 + 交付物实体启发式;stall 与失败全部成为 writer 的诚实上下文 |
+| 诚实机制 | 事实台账(findings)+ 覆盖裁判 + 写前证据检查 + 节级引用门 + 交付物实体启发式;stall 与失败全部成为 writer 的诚实上下文 |
 | 人-in-the-loop | clarify 预门(歧义/高风险两 noul)+ 运行中 `ask_user`;付费引擎 !bang 的一次性确认门 |
 | 知识库 | 浏览器本地 PGlite:事件日志 + 投影,混合召回(BM25×向量 RRF + 标签图 + 命中标签一跳)|
 | 渲染引擎 | 内置 Camoufox 反检测 Firefox:指纹 OS 钉 windows(镜像构建随之裁掉其余 OS 专属字体组,~850M),构建期预取指纹模型/GeoIP/uBlock,首启零网络 |
@@ -52,10 +52,11 @@ searx/zjsearch/ai/
   prompts/     spine(共享骨架:身份/引用/markdown/voice/答案契约)·
                researcher · report · deck · extractor
   tools/       一工具一自包含模块(spec + run + settle + 行语义):
-               web_search · web_browser/(read 并行读道 + session 服务)·
-               calculator · extract(表格/数据点产物)· learnings · tasks ·
-               ask_user · judge · memory · past_research · view_image ·
-               engine_info · research_subtask · mcp
+               search_web · browse/(read 并行读道 + session 服务)·
+               calculate · build_table(表格/数据点产物)· record_findings ·
+               update_plan · ask_user · evaluate · memory · recall_history ·
+               inspect_image ·
+               list_engines · delegate_research · mcp
   runs/        profile(档位/预算)· host(Run Host)· journal(run 日志)·
                overview(AI Overview)· attachments(多模态附件)
     search/    state · gather(并发执行)· registry([n] 注册表/dedup)·
@@ -86,7 +87,7 @@ searx/zjsearch/ai/
 一个模块 + 注册一行 + 前端一个 view(未知工具兜底到通用行,不静默破相)。
 
 与 MCP 的边界:`zjsearch.mcp` 把外部 streamable-HTTP 服务器桥接成
-`mcp_<server>_<tool>` 工具;模型面永远只有一个 `mcp_search_tools`
+`mcp_<server>_<tool>` 工具;模型面永远只有一个 `search_mcp_tools`
 发现工具(渐进披露),按关键词取完整 schema 后再按名调用。
 
 ---
@@ -100,7 +101,7 @@ searx/zjsearch/ai/
   `think` / `say`(增量)· `calls`(批次)· `call`(单调用结算:
   n/chars/text/preview/dupes/page/img/snapshot… 全工具共用一个事件形状)·
   `close`
-- 快照(replace 语义):`tasks`(任务卡)· `learnings`(事实台账)·
+- 快照(replace 语义):`plan`(任务卡)· `findings`(事实台账)·
   `sources`([n] 全局注册表)· `decisions`(命名裁决图)· `outline` /
   `artifact` / `section`(报告/演示文稿三件套)
 - 门与流控:`answer`(writer 自己的缓冲)· `ask`(clarify 与运行中
@@ -148,7 +149,7 @@ deep 档的输出形态 = 报告(分节文档)或演示文稿(Marpit 幻灯片),
   状态块,前缀缓存稳定)→ reactive(供应商溢出拒绝触发一次强制折叠后
   重试);`ctx` 检查点携带折叠后的完整消息列表,断点继续零特殊处理;
 - **停滞策略**:无新源的轮先追加"换角度"注记,连续无新源按档停机;
-  `web_search` 的 `refresh: true` 是模型主动重跑已执行查询的 judged 逃生
+  `search_web` 的 `refresh: true` 是模型主动重跑已执行查询的 judged 逃生
   门;纯记账轮既非进度也非停滞;
 - **付费门**:API 计费引擎的 `!bang` 一次调用一确认(`approval` 结算 +
   ask_user 往返,`paid_ok` 粘滞整个 run);
@@ -177,7 +178,7 @@ HTTP 响应只是第一个订阅者。
   user 消息,优先于 continuation 注记);⚡/Shift+Enter 抢占(在飞 turn
   取消后注入继续);写相关闭引导道,未送达可见作废;
 - **子代理**:delegation gate(deep 从 rung 2、balanced 从 rung 4)开
-  `research_subtask`——嵌套 loop、自己的工具面(含 learnings 与 judge)、
+  `delegate_research`——嵌套 loop、自己的工具面(含 record_findings 与 evaluate)、
   预算与 `ChildControl`;**共享 [n] 注册表**让重复搜索结算为 duplicate;
   回传 = 事实/缺口摘要(facts/gaps 即子代理的 digest);子代理可寻址:
   `message_subtask` 跨进程边界追问(checkpoint 持久化 + 重放再水化),
@@ -248,8 +249,8 @@ flowchart TB
   RUNS --> CORE
   AGENT --> CORE
   API --> CORE
-  TOOLS -- "web_search" --> ENG
-  TOOLS -- "web_browser" --> BROWSER
+  TOOLS -- "search_web" --> ENG
+  TOOLS -- "browse" --> BROWSER
   BROWSER --> CORE
   LLM -- "chat / embed / rerank / decision" --> LLMX
   UI -- "settle 时投影" --> KB
@@ -272,7 +273,7 @@ sequenceDiagram
   loop RESEARCH(至 ledger 关闭 / 停滞 / 轮顶)
     L->>X: 本轮调用批(calls 事件:pending 行)
     X-->>C: 逐调用 settle(n / chars / text / preview / dupes)
-    L-->>C: sources · tasks · learnings · decisions
+    L-->>C: sources · tasks · findings · decisions
   end
   L->>L: 写前证据检查(来源数定抽查面)
   alt 单写(speed / balanced)
@@ -290,8 +291,8 @@ sequenceDiagram
 ```mermaid
 flowchart TB
   ROUND["第 N 轮:模型输出 thinking + 一批工具调用"] --> SPLIT{"调用分类"}
-  SPLIT -->|"web_search / web_browser read"| POOL["并发池(FIRST_COMPLETED)"]
-  SPLIT -->|"其余内联"| INLINE["calculator · learnings · task_write<br/>judge · memory · past_research · mcp · extract"]
+  SPLIT -->|"search_web / browse read"| POOL["并发池(FIRST_COMPLETED)"]
+  SPLIT -->|"其余内联"| INLINE["calculate · record_findings · update_plan<br/>evaluate · memory · recall_history · mcp · build_table"]
   POOL --> SETTLE["逐调用 settle:[n] 入账 · 排序级联<br/>(BM25 → rerank → 多样性) · 语料入库 · 完成时 dedup"]
   INLINE --> SETTLE
   SETTLE --> LEDGER["belief ledger(事实 / 缺口)+ 任务卡 provenance"]

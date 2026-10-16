@@ -11,10 +11,10 @@ interface LedgerArgFact {
   tags?: unknown;
 }
 
-/** The learnings view: the recorded facts fold open (the measured-clamp
+/** The findings view: the recorded facts fold open (the measured-clamp
     snippet per fact, accent-marked, the fact's concept tags as meta
     chips); the settled metric is the fact count the settlement carried. */
-export const learningsView: ToolView = {
+export const recordFindingsView: ToolView = {
   Icon: NotebookPen,
   label: ({ t }) => t("ai_learnings_row"),
   metric: ({ call, t }) =>

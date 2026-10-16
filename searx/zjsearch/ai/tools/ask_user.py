@@ -11,7 +11,7 @@ questions; the answers travel back as ``clarifications``.
 
 import typing as t
 
-ASK_TOOL = "ask_user"
+ASK_USER_TOOL = "ask_user"
 
 
 def ask_user_spec() -> dict[str, t.Any]:
@@ -25,7 +25,7 @@ def ask_user_spec() -> dict[str, t.Any]:
     options; every question carries the client's free-text line) -- a
     type the sanitizer would downgrade must not be advertised."""
     return {
-        "name": ASK_TOOL,
+        "name": ASK_USER_TOOL,
         "description": (
             "Stop researching and ask the user for direction.  Do NOT plow"
             " ahead on a guess: call this ONCE, as the ONLY call of its"

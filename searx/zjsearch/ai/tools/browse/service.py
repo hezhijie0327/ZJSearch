@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``web_browser`` action dispatch: JSON arguments in, model-facing
+"""The ``browse`` action dispatch: JSON arguments in, model-facing
 feed text out -- plus the side channels the executor interleaves into
 the wire: the mirror frames (the rail's live card), the settlement's
 page state / outline / screenshot (the timeline row's rendered result)
@@ -226,7 +226,7 @@ def _act_read(_args: dict[str, t.Any], session_id: str) -> ActionResult:
     # the read lane's cap is the shared extraction budget (lazy import:
     # the read module pulls the render engine)
     # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.tools.web_browser.read import max_chars as reader_max_chars
+    from searx.zjsearch.ai.tools.browse.read import max_chars as reader_max_chars
 
     state = session.extract(session_id, reader_max_chars())
     return ActionResult(

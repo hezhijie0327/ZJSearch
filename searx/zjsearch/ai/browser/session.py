@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The interactive sessions: keyed pages a tool drive can operate.
 
-The ``web_browser`` tool's actions land here as synchronous bridges onto
+The ``browse`` tool's actions land here as synchronous bridges onto
 the shared loop (the mcp/read pattern): each session is ONE page inside
 the persistent context, snapshot refs resolved via injected
 ``data-zjs-ref`` attributes, and raw input primitives for the Lightbox

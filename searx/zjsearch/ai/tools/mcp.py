@@ -124,15 +124,30 @@ async def _with_session(name: str, action: t.Callable[[t.Any, t.Any], t.Any]) ->
 
 
 def _server_of(name: str) -> tuple[str, str, dict[str, str]] | None:
-    """The connection config of a namespaced tool's server."""
+    """The connection config of a namespaced tool's server.  LONGEST
+    server name first: ``amap`` must never shadow ``amap_pro`` -- with
+    the prefix-match shape the shorter name would swallow the longer
+    one's tools whenever both are configured."""
     prefix = "mcp_"
     if not name.startswith(prefix):
         return None
     rest = name[len(prefix) :]
-    for server, url, headers in mcp_cfg():
+    for server, url, headers in sorted(mcp_cfg(), key=lambda srv: len(srv[0]), reverse=True):
         if rest == server or rest.startswith(f"{server}_"):
             return server, url, headers
     return None
+
+
+def tool_of(namespaced: str) -> str | None:
+    """The upstream tool name out of a namespaced one
+    (``mcp_<server>_<tool>`` -> ``<tool>``), via the same resolution the
+    call path uses -- the row renderer's replacement for blind string
+    splits (a server name carrying an underscore broke those)."""
+    resolved = _server_of(namespaced)
+    if resolved is None:
+        return None
+    server = resolved[0]
+    return namespaced[len("mcp_") + len(server) + 1 :]
 
 
 _INSTRUCTIONS_CAP = 400
@@ -228,7 +243,7 @@ def _specs_future() -> t.Any:
     return asyncio.run_coroutine_threadsafe(list_tools(), get_loop())
 
 
-SEARCH_TOOL = "mcp_search_tools"
+DISCOVERY_TOOL = "search_mcp_tools"
 
 
 def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
@@ -237,7 +252,7 @@ def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
     matched tools' complete schemas so the next turn can call them
     directly."""
     return {
-        "name": SEARCH_TOOL,
+        "name": DISCOVERY_TOOL,
         "description": (
             "Search the connected MCP servers' tools by keyword (matches"
             " tool names and descriptions; the connected servers are:"

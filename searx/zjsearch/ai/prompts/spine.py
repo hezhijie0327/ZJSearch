@@ -150,7 +150,7 @@ def grounding_fallback(what: str) -> str:
 
 def figures_rule() -> str:
     """The number-honesty rule of the answer side: the researcher computes
-    every derived figure through the calculator tool, but the writer and
+    every derived figure through the calculate tool, but the writer and
     the overview have NO tools -- they must not silently do arithmetic
     the material does not state."""
     return (

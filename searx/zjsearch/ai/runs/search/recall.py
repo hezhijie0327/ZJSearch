@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The live-recall slot registry: the server-side half of the ``recall``
-wire event.  The model's ``past_research`` call parks here while the
+wire event.  The model's ``recall_history`` call parks here while the
 CLIENT answers from its browser-local knowledge base -- the store never
 ships wholesale, the model's own query goes to the data.
 
@@ -32,7 +32,7 @@ _SLOTS: dict[str, "_Slot"] = {}
 
 
 class _Slot:
-    """One pending ``past_research`` call's answer box."""
+    """One pending ``recall_history`` call's answer box."""
 
     def __init__(self) -> None:
         self.event = threading.Event()

@@ -355,7 +355,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
 
   // AI Search auto-run: once per search, after the results settled.  The raw
   // results are NOT fed to the agent as a seed — with reference material in
-  // the prompt the model skips the web_search calls and answers directly
+  // the prompt the model skips the search_web calls and answers directly
   // (live-verified against LM Studio + qwen3.6), defeating the whole "AI
   // drives the searches" point.  The agent runs on the question alone.
   const aiSearchRan = useRef(false);

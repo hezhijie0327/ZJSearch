@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``extract_table`` tool: the report mode's structured-extraction
+"""The ``build_table`` tool: the report mode's structured-extraction
 surface.  While reading, the researcher solidifies scattered figures
 into ONE table artifact -- columns, rows, and the per-row ``refs`` (the
 registry [n]s) -- instead of leaving the numbers in prose for the
@@ -14,7 +14,7 @@ import typing as t
 
 from searx.zjsearch.ai.core.text import raw_args
 
-EXTRACT_TOOL = "extract_table"
+BUILD_TABLE_TOOL = "build_table"
 
 MAX_COLUMNS = 8
 """A report table wider than this does not render; the spec steers to
@@ -24,10 +24,10 @@ MAX_CELL = 160
 """Per-cell cap -- a cell is a figure or a short phrase, never prose."""
 
 
-def extract_spec() -> dict[str, t.Any]:
-    """The ``extract_table`` tool spec."""
+def build_table_spec() -> dict[str, t.Any]:
+    """The ``build_table`` tool spec."""
     return {
-        "name": EXTRACT_TOOL,
+        "name": BUILD_TABLE_TOOL,
         "description": (
             "Record ONE data table you have assembled from the sources you"
             " read -- the report's structured-evidence channel.  Use it"
@@ -82,8 +82,8 @@ def extract_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_extract_call(call: dict[str, t.Any]) -> dict[str, t.Any] | None:
-    """One ``extract_table`` call -> the sanitized artifact dict, or
+def parse_build_table_call(call: dict[str, t.Any]) -> dict[str, t.Any] | None:
+    """One ``build_table`` call -> the sanitized artifact dict, or
     ``None`` when the call is unusable (title/columns/rows missing)."""
     args = raw_args(call)
     title = str(args.get("title") or "").strip()[:120]

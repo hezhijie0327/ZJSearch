@@ -328,7 +328,7 @@ def _surface(block: dict[str, t.Any], account: t.Any = None) -> t.Any:
     dispatch here; both surfaces speak ``decide(state, questions,
     timeout)``).  ``account`` binds the run's spend ledger at FACTORY
     time: the surface records its own usage after every successful
-    answer, so no judge call site ever folds a bucket.  The imports stay
+    answer, so no evaluate call site ever folds a bucket.  The imports stay
     lazy (the SDK packages are optional installs -- the package gate has
     already checked this one)."""
     bound = {**block, "api_key": decision_key(block)}
@@ -340,7 +340,7 @@ def _surface(block: dict[str, t.Any], account: t.Any = None) -> t.Any:
     return factory(bound, base, sdk(block), "decision", account=account)
 
 
-def judge(  # pylint: disable=too-many-return-statements
+def evaluate(  # pylint: disable=too-many-return-statements
     state: t.Any,
     questions: dict[str, dict[str, t.Any]],
     timeout: float | None = None,
@@ -389,5 +389,5 @@ def judge(  # pylint: disable=too-many-return-statements
             images=assets,
         )
     except Exception as exc:  # pylint: disable=broad-except
-        logger.warning("zjsearch_decision: judge failed: %s", exc)
+        logger.warning("zjsearch_decision: evaluate failed: %s", exc)
         return None

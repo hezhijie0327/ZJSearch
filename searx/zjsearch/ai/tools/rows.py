@@ -6,24 +6,26 @@ One ``calls`` wire item -> the client's timeline row (``display_item``).
 page read its url; a row's ``args`` always carries the RAW tool-call
 arguments (``args.raw_args``), so the client's debug expansion shows
 exactly what the model passed.  The single-tool row builders live with
-their tool modules (``judge.decision_row``); the dispatch stays here.
+their tool modules (``evaluate.decision_row``); the dispatch stays here.
 """
 
 import typing as t
 
 from searx.zjsearch.ai.tools import mcp
 from searx.zjsearch.ai.core.text import raw_args
-from searx.zjsearch.ai.tools.ask_user import ASK_TOOL
-from searx.zjsearch.ai.tools.calculator import CALCULATOR_TOOL
-from searx.zjsearch.ai.tools.judge import DECISION_TOOL, decision_row
-from searx.zjsearch.ai.tools.learnings import LEARNINGS_TOOL
-from searx.zjsearch.ai.tools.memory import USER_MEMORY_TOOL
-from searx.zjsearch.ai.tools.past_research import PAST_RESEARCH_TOOL
-from searx.zjsearch.ai.tools.engine_info import ENGINE_INFO_TOOL
-from searx.zjsearch.ai.tools.tasks import TASK_TOOL, parse_task_call
-from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
-from searx.zjsearch.ai.tools.research_subtask import MESSAGE_SUBTASK_TOOL, RESEARCH_SUBTASK_TOOL
-from searx.zjsearch.ai.tools.web_search import TOOL_NAME, parse_call
+from searx.zjsearch.ai.tools.ask_user import ASK_USER_TOOL
+from searx.zjsearch.ai.tools.build_table import BUILD_TABLE_TOOL
+from searx.zjsearch.ai.tools.calculate import CALCULATE_TOOL
+from searx.zjsearch.ai.tools.evaluate import EVALUATE_TOOL, decision_row
+from searx.zjsearch.ai.tools.message_subtask import MESSAGE_SUBTASK_TOOL
+from searx.zjsearch.ai.tools.memory import MEMORY_TOOL
+from searx.zjsearch.ai.tools.recall_history import RECALL_HISTORY_TOOL
+from searx.zjsearch.ai.tools.list_engines import LIST_ENGINES_TOOL
+from searx.zjsearch.ai.tools.record_findings import RECORD_FINDINGS_TOOL
+from searx.zjsearch.ai.tools.update_plan import UPDATE_PLAN_TOOL, parse_plan_call
+from searx.zjsearch.ai.tools.browse import BROWSE_TOOL
+from searx.zjsearch.ai.tools.delegate_research import DELEGATE_RESEARCH_TOOL
+from searx.zjsearch.ai.tools.search_web import SEARCH_WEB_TOOL, parse_call
 
 
 def display_item(  # pylint: disable=too-many-return-statements, too-many-branches
@@ -34,21 +36,21 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
     its url.  Site filters display folded into the query so the row shows
     the operators the engine will enforce."""
     call_name = str(call.get("name") or "")
-    if call_name == TASK_TOOL:
-        items = parse_task_call(call)
+    if call_name == UPDATE_PLAN_TOOL:
+        items = parse_plan_call(call)
         return {
             "id": idx,
-            "tool": TASK_TOOL,
+            "tool": UPDATE_PLAN_TOOL,
             "q": f"{sum(1 for i in items if i.get('status') == 'done')}/{len(items)}",
             "args": raw_args(call),
         }
-    if call_name == LEARNINGS_TOOL:
+    if call_name == RECORD_FINDINGS_TOOL:
         # the findings ledger write: a fixed row label (the settlement's
         # label carries the count); the raw facts ride the debug pane
-        return {"id": idx, "tool": LEARNINGS_TOOL, "q": "", "args": raw_args(call)}
-    if call_name == DECISION_TOOL:
+        return {"id": idx, "tool": RECORD_FINDINGS_TOOL, "q": "", "args": raw_args(call)}
+    if call_name == EVALUATE_TOOL:
         return decision_row(idx, call)
-    if call_name == ASK_TOOL:
+    if call_name == ASK_USER_TOOL:
         # the human-in-the-loop ask: the row's label is the question's
         # intro (falling back to the first question's text) -- the raw
         # arguments ride along like every other row's debug pane
@@ -62,11 +64,11 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             first = str(questions[0].get("q") or "").strip()[:120]
         return {
             "id": idx,
-            "tool": ASK_TOOL,
+            "tool": ASK_USER_TOOL,
             "q": str(ask_args.get("intro") or "").strip()[:120] or first,
             "args": ask_args,
         }
-    if call_name == RESEARCH_SUBTASK_TOOL:
+    if call_name == DELEGATE_RESEARCH_TOOL:
         # the delegation row: the subtask's title is the label (the live
         # sub timeline lives under the open kind:"sub" row beside it)
         try:
@@ -75,7 +77,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             sub_args = {}
         return {
             "id": idx,
-            "tool": RESEARCH_SUBTASK_TOOL,
+            "tool": DELEGATE_RESEARCH_TOOL,
             "q": str(sub_args.get("title") or "")[:80],
             "args": sub_args,
         }
@@ -93,22 +95,22 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": f"{str(follow_args.get('id') or '')} · {str(follow_args.get('message') or '')[:80]}",
             "args": follow_args,
         }
-    if call_name == PAST_RESEARCH_TOOL:
+    if call_name == RECALL_HISTORY_TOOL:
         try:
             memory_args = raw_args(call)
         except Exception:  # pylint: disable=broad-except
             memory_args = {}
         return {
             "id": idx,
-            "tool": PAST_RESEARCH_TOOL,
+            "tool": RECALL_HISTORY_TOOL,
             "q": str(memory_args.get("query") or "")[:120],
             "args": memory_args,
         }
-    if call_name == ENGINE_INFO_TOOL:
+    if call_name == LIST_ENGINES_TOOL:
         # the deployment inventory: a fixed row label (the settlement's
         # n + preview carry the engine count and the listing itself)
-        return {"id": idx, "tool": ENGINE_INFO_TOOL, "q": "", "args": raw_args(call)}
-    if call_name == USER_MEMORY_TOOL:
+        return {"id": idx, "tool": LIST_ENGINES_TOOL, "q": "", "args": raw_args(call)}
+    if call_name == MEMORY_TOOL:
         try:
             memory_args = raw_args(call)
         except Exception:  # pylint: disable=broad-except
@@ -116,12 +118,12 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         action = str(memory_args.get("action") or "search")
         return {
             "id": idx,
-            "tool": USER_MEMORY_TOOL,
+            "tool": MEMORY_TOOL,
             "name": action,
             "q": str(memory_args.get("query") or memory_args.get("content") or "")[:120],
             "args": memory_args,
         }
-    if call_name == mcp.SEARCH_TOOL:
+    if call_name == mcp.DISCOVERY_TOOL:
         # progressive disclosure's discovery call: the row shows the
         # KEYWORD the model searched the tool inventory for (a bare
         # "tools" label reads as noise)
@@ -132,33 +134,33 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         return {
             "id": idx,
             "tool": "mcp",
-            "name": "search_tools",
+            "name": mcp.DISCOVERY_TOOL,
             "q": str(search_args.get("query") or "")[:120],
             "args": search_args,
         }
     if call_name.startswith("mcp_"):
         # an MCP bridge call: the row shows the server-scoped tool name
-        # (everything after the mcp_<server> prefix); the raw args ride
-        # along like every other row's debug pane
+        # (resolved through the same registry the call path uses); the
+        # raw args ride along like every other row's debug pane
         return {
             "id": idx,
             "tool": "mcp",
-            "name": call_name.split("_", 2)[-1] if call_name.count("_") >= 2 else call_name,
+            "name": mcp.tool_of(call_name) or call_name,
             "args": raw_args(call),
         }
-    if str(call.get("name") or "") == WEB_BROWSER_TOOL:
+    if str(call.get("name") or "") == BROWSE_TOOL:
         try:
             browser_args = raw_args(call)
         except Exception:  # pylint: disable=broad-except
             browser_args = {}
         return {
             "id": idx,
-            "tool": WEB_BROWSER_TOOL,
+            "tool": BROWSE_TOOL,
             "q": str(browser_args.get("url") or browser_args.get("action") or "")[:120],
             "url": str(browser_args.get("url") or "")[:200],
             "args": browser_args,
         }
-    if str(call.get("name") or "") == CALCULATOR_TOOL:
+    if str(call.get("name") or "") == CALCULATE_TOOL:
         try:
             calc_args = raw_args(call)
         except Exception:  # pylint: disable=broad-except
@@ -170,7 +172,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             precision = 10
         return {
             "id": idx,
-            "tool": CALCULATOR_TOOL,
+            "tool": CALCULATE_TOOL,
             # the expression IS the row's label (the result rides the right
             # side as "= x") -- the client renders `expr = result`
             "q": expression,
@@ -178,14 +180,14 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "precision": precision if precision != 10 else None,
             "args": raw_args(call),
         }
-    if call_name == "extract_table":
+    if call_name == BUILD_TABLE_TOOL:
         try:
             extract_args = raw_args(call)
         except Exception:  # pylint: disable=broad-except
             extract_args = {}
         return {
             "id": idx,
-            "tool": "extract_table",
+            "tool": BUILD_TABLE_TOOL,
             "q": str(extract_args.get("title") or "")[:120],
             "args": extract_args,
         }
@@ -195,7 +197,7 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         query = f"{query} {operators}"
     return {
         "id": idx,
-        "tool": TOOL_NAME,
+        "tool": SEARCH_WEB_TOOL,
         "q": query,
         "category": category,
         "time_range": time_range or None,

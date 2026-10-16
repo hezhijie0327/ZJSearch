@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The ``POST /zjsearch/ask/run/recall`` endpoint: the live-recall
 answerer.  The client's hybrid recall over its browser-local knowledge
-base lands here and fills the parked ``past_research`` call's slot (the
+base lands here and fills the parked ``recall_history`` call's slot (the
 ``recall`` wire event asked, keyed by the slot id minted for that one
 call).  The slot id IS the capability: random per call, consumed on the
 first answer or the timeout -- unknown/expired ids answer ``ok: false``
@@ -15,7 +15,7 @@ from searx.zjsearch.ai.api import http
 from searx.zjsearch.ai.llm import config as llm_config
 from searx.zjsearch.ai.runs.profile import enabled
 from searx.zjsearch.ai.runs.search import recall as recall_slot
-from searx.zjsearch.ai.tools.past_research import parse_entries
+from searx.zjsearch.ai.tools.recall_history import parse_entries
 
 
 def _gate() -> bool:

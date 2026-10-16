@@ -336,7 +336,7 @@ def make_synthesizer(
         }
         started = time.monotonic()
         try:
-            out = decision.judge(state_str[:6000], questions, timeout=12.0, account=state.account)
+            out = decision.evaluate(state_str[:6000], questions, timeout=12.0, account=state.account)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch report: citation gate failed: %r", exc)
             return

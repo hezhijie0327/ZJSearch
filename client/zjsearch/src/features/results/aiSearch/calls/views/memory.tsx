@@ -3,7 +3,7 @@
 import { BookUser } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
-/** The user_memory view: the save/search action + its label; a settled
+/** The memory view: the save/search action + its label; a settled
     save shows the saved confirmation, a search its hit count (the old empty metric --
     and its orphan `· time` separator -- is gone).  The search recall
     renders as the SAME accent-dot list as the findings row -- they are

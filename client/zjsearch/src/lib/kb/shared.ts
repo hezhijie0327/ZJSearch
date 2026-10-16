@@ -126,7 +126,7 @@ export const ITEM_COLUMNS =
   "id, kind, thread_id, run_id, url, url_hash, host, title, head AS body, tags, meta, status, n, pinned, refs, cited, updated";
 
 /** The corpus columns: the REAL body -- the AI-context paths (the writer
-    corpus, the past_research index) feed ~1500-char heads to the model
+    corpus, the recall_history index) feed ~1500-char heads to the model
     and need the whole text, bounded by their own LIMIT. */
 export const CORPUS_COLUMNS =
   "id, kind, thread_id, run_id, url, url_hash, host, title, body, tags, meta, status, n, pinned, refs, cited, updated";

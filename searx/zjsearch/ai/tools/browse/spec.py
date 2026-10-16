@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``web_browser`` tool -- spec and call parsing.
+"""AI Search: the ``browse`` tool -- spec and call parsing.
 
 One action per call on a persistent interactive session.  The spec
 carries the doctrine: snapshot is the primary read, the screenshot is a
@@ -9,7 +9,7 @@ page content is untrusted input."""
 import typing as t
 from searx.zjsearch.ai.core.text import raw_args
 
-WEB_BROWSER_TOOL = "web_browser"
+BROWSE_TOOL = "browse"
 
 _ACTIONS = (
     "open",
@@ -28,12 +28,12 @@ _ACTIONS = (
 )
 
 
-def web_browser_spec() -> dict[str, t.Any]:
-    """The ``web_browser`` tool: ONE interactive browser session the model
+def browse_spec() -> dict[str, t.Any]:
+    """The ``browse`` tool: ONE interactive browser session the model
     drives and, when a page needs a human (sign-in, verification), the
     user completes through the live mirror."""
     return {
-        "name": WEB_BROWSER_TOOL,
+        "name": BROWSE_TOOL,
         "description": (
             "Drive a browser: read pages in parallel AND operate one\n"
             "interactive session.\n\n"
@@ -138,8 +138,8 @@ def web_browser_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_web_browser_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The sanitized arguments of one ``web_browser`` call: the action
+def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The sanitized arguments of one ``browse`` call: the action
     plus the per-action fields, trimmed to sane bounds (the public-url
     guard runs in the engine's gate)."""
     args = raw_args(call)

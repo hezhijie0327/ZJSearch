@@ -8,7 +8,7 @@ import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 export const mcpView: ToolView = {
   Icon: Plug,
   label: ({ call, t }) =>
-    call.name === "search_tools"
+    call.name === "search_mcp_tools"
       ? `${t("ai_mcp_search_row")}${call.q ? `: ${call.q}` : ""}`
       : (call.name?.replace(/^mcp_/, "").replace(/_/g, " ") ?? t("ai_mcp_tool")),
   metric: ({ call, t }) =>

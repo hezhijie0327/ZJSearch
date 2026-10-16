@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``web_search`` tool -- spec and call parsing.
+"""AI Search: the ``search_web`` tool -- spec and call parsing.
 
 The researcher's primary instrument: one spec function in the
 dialect-neutral llm shape (Vane's researcher/actions split, Morphic's
@@ -17,9 +17,9 @@ import re
 import typing as t
 from searx.zjsearch.ai.core.text import raw_args
 
-from searx.zjsearch.ai.tools.web_browser import WEB_BROWSER_TOOL
+from searx.zjsearch.ai.tools.browse import BROWSE_TOOL
 
-TOOL_NAME = "web_search"
+SEARCH_WEB_TOOL = "search_web"
 
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The fallback verticals -- used only before the instance's engine map
@@ -52,9 +52,9 @@ def available_categories() -> tuple[str, ...]:
     return tuple(usable) if usable else SEARCH_CATEGORIES
 
 
-def tool_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, t.Any]:
-    """The ``web_search`` tool in the dialect-neutral llm shape; with the
-    browser / engine_info tools registered by the caller, the description
+def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, t.Any]:
+    """The ``search_web`` tool in the dialect-neutral llm shape; with the
+    browser / list_engines tools registered by the caller, the description
     cross-references them (a model that never sees a tool must not be
     told about it).  The ``category`` enum is the deployment's real
     verticals (:py:func:`available_categories`).  The
@@ -64,7 +64,7 @@ def tool_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, 
     advanced_search_syntax plugin enforces AUTHORITATIVELY on every result
     regardless of engine support."""
     return {
-        "name": TOOL_NAME,
+        "name": SEARCH_WEB_TOOL,
         "description": (
             "Run one web search on the metasearch engine with specific keywords."
             " Search like a skilled human: short keyword sets (never full"
@@ -85,7 +85,7 @@ def tool_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, 
             ' query with its bang, e.g. "!bocha keywords") -- a category search'
             " already fans out across every enabled engine in that vertical."
             + (
-                "  The engine_info tool lists this deployment's engines --"
+                "  The list_engines tool lists this deployment's engines --"
                 " the categories, and the disabled ones with the bang that"
                 " reaches each; consult it when unsure which vertical fits"
                 " or when searches keep coming back thin."
@@ -101,7 +101,7 @@ def tool_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, 
             " stale)."
             + (
                 "  Snippets are heads: when a result promises the exact"
-                f" missing detail, the {WEB_BROWSER_TOOL} tool's read reads"
+                f" missing detail, the {BROWSE_TOOL} tool's read reads"
                 " that page in full; when the engines are bot-walled /"
                 " captcha'd / all-empty, the same tool is a real interactive"
                 " browser -- open and drive sites with it directly."

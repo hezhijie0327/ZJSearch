@@ -23,7 +23,7 @@ export interface ToolRowProps {
 export interface ToolView {
   /** the row's leading lucide icon (size-3, ink-inherit) */
   Icon: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
-  /** Per-row icon override (web_browser's per-action icons): return the
+  /** Per-row icon override (browse's per-action icons): return the
       row's leading element -- it replaces `Icon` when present. */
   iconFor?(props: ToolRowProps): ReactNode;
   /** the row label (the query / url / table title / fixed verb) */
@@ -44,7 +44,7 @@ export interface ToolView {
   Content?(props: ToolRowProps): ReactNode | null;
   /** Chevron present at all?  Default: the body would not be empty. */
   expandable?(props: ToolRowProps): boolean;
-  /** Content rendered OUTSIDE the fold, unconditionally (calculator's
+  /** Content rendered OUTSIDE the fold, unconditionally (calculate's
       `expr = result` sits on the row itself). */
   alwaysContent?(props: ToolRowProps): ReactNode | null;
 }

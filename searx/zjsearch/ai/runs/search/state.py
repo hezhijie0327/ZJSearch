@@ -347,13 +347,13 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         self.cfg = cfg or {}
         self.round_no = 0
         # the browser's user-memory snapshot (pre-sent with the run): the
-        # user_memory tool searches it; saves flow back as wire events
+        # memory tool searches it; saves flow back as wire events
         self.user_memories = user_memories or []
         # the saves THIS run accepted (the near-dup gate's growing side) --
         # a second save of the same fact within one run reads as duplicate
         # just like a save of a pre-existing stored fact
         self.saved_memories: list[str] = []
-        # LIVE MEMORIES: the snapshot pulls on the first user_memory call
+        # LIVE MEMORIES: the snapshot pulls on the first memory call
         # (the recall wire event, kind=memory) instead of riding the
         # pre-send -- this flag makes that pull happen exactly once
         self.memories_pulled = False
@@ -364,10 +364,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the past-research index (reader pages WITH text heads + corpus
         # sources identity-only): the tool's matches get numbered as real
         # history sources -- full-text matches return their content head,
-        # source-only matches point back at web_browser for a live re-read
+        # source-only matches point back at browse for a live re-read
         self.past_research_entries = past_research_entries or []
         # LIVE RECALL (the recall wire event): the client answers
-        # past_research calls from its browser-local store at ask time --
+        # recall_history calls from its browser-local store at ask time --
         # the index above shrinks to the user's uploaded files (the
         # no-research writer path's only reader) and the model's own
         # query drives the search instead of a pre-shipped snapshot
@@ -397,7 +397,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         self.stalled_rounds = 0
         # whether the CURRENT round queued real gathering work (searches,
         # page reads, MCP calls, past-research lookups) -- a round of pure
-        # bookkeeping (plan writes, learnings, memory saves) is neither
+        # bookkeeping (plan writes, findings, memory saves) is neither
         # progress nor stall for the detector
         self.round_gathered = False
         # the run's model-spend ledger (llm.accounts.ModelAccount): the
@@ -408,12 +408,12 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # merges deltas against the handle's snapshot
         self.account = account if account is not None else ModelAccount()
         # the judgment ledger: EVERY structured verdict the run hands down
-        # (the model-initiated ``judge`` calls today; the framework gates
+        # (the model-initiated ``evaluate`` calls today; the framework gates
         # join in later milestones) -- purpose, the questions asked, the
         # verdicts with their confidences and the latency, folded into the
         # settled run's meta so any decision is explainable and replayable
         self.judgments: list[dict[str, t.Any]] = []
-        # the BELIEF LEDGER (the learnings tool): facts the sources
+        # the BELIEF LEDGER (the record_findings tool): facts the sources
         # ESTABLISHED -- revisable ({id, text, refs, status}) -- and the
         # GAPS partition (the open questions the research still owes).
         # The writer reads the active facts; the next rounds chase the
@@ -424,17 +424,17 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # the plan review's weak-subtask note (one shot per plan write)
         self.weak_tasks: list[str] = []
         # plan_review's plan_complete verdict: the deliverable entities the
-        # current plan still does not cover (consumed by the task_write
+        # current plan still does not cover (consumed by the update_plan
         # feed, then cleared -- one note per plan write)
         self.entity_gap: list[str] = []
         # the deliverable-entity heuristic: entities the FINAL answer
         # depends on understanding that no planned subtask covers (the
         # report outline's screen fills it before the run; the single-write
-        # entity gate fills it on the first task_write).  The researcher's
+        # entity gate fills it on the first update_plan).  The researcher's
         # <deliverable_entities> block and plan_review's plan_complete
         # question consume it.
         self.deliverable_entities: list[str] = []
-        # the single-write entity gate runs ONCE, on the first task_write
+        # the single-write entity gate runs ONCE, on the first update_plan
         self.entity_gate_done = False
         # the run's attachments (sanitized {name, text}), the entity gate's
         # extraction context (the attachment may name the actors the answer
@@ -446,7 +446,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # gates bucket through the route's own accounting
         # THIS round's new source titles (the coverage referee's evidence)
         self.round_new_titles: list[str] = []
-        # whether THIS round recorded learnings (the record-as-you-go note)
+        # whether THIS round recorded findings (the record-as-you-go note)
         self.round_learned = False
         # the run's question (the pre-write evidence check's judgment target;
         # set by route at construction time)
@@ -468,12 +468,12 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # retrievable memory -- every result/page/fact lands here while
         # the research runs; a plain answer run never reads it (zero cost)
         self.corpus = corpus.Corpus(account=self.account)
-        # the report mode's recorded TABLE ARTIFACTS (extract_table):
+        # the report mode's recorded TABLE ARTIFACTS (build_table):
         # snapshot-replace per id on the wire, per-section context at
         # synthesis time
         self.artifacts: list[dict[str, t.Any]] = []
         self._artifact_seq = 0
-        # view_image's injection queue: captured images re-enter the
+        # inspect_image's injection queue: captured images re-enter the
         # conversation as the next round's user message (the tool result
         # channel itself is text-only; routing images through a user turn
         # is the shape every provider accepts)
@@ -568,7 +568,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
                 thread.join(timeout=remaining)
 
     def drain_image_injections(self) -> list[dict[str, t.Any]]:
-        """view_image's fetched pictures, drained into the next model turn
+        """inspect_image's fetched pictures, drained into the next model turn
         as user messages (the loop consults this after each executor batch)."""
         out = self.image_injections
         self.image_injections = []
@@ -584,7 +584,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         return tasks, gaps
 
     def apply_learnings(self, ops: dict[str, t.Any], rnd: int) -> tuple[int, int, int]:
-        """Apply one ``learnings`` call's operations to the belief ledger:
+        """Apply one ``findings`` call's operations to the belief ledger:
         new/superseding/retracting facts and opened/closed gaps.  Returns
         ``(facts_written, gaps_opened, gaps_closed)`` for the row's feed
         echo.  Superseding/retracting RETIRES the old fact (status flips,

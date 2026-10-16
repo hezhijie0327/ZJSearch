@@ -6,7 +6,7 @@ import { Lightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { useT } from "@/lib/i18n.ts";
 
-/** The view_image body: the fetched image on the machine-voice ground
+/** The inspect_image body: the fetched image on the machine-voice ground
     (padded, centered, never edge-to-edge); clicking opens the FAMILY
     lightbox for a closer read (zoom/pan). */
 function ViewImageBody({ url }: { url: string }) {
@@ -32,9 +32,9 @@ function ViewImageBody({ url }: { url: string }) {
   );
 }
 
-/** The view_image view (the researcher's eyes on a result's chart/diagram):
+/** The inspect_image view (the researcher's eyes on a result's chart/diagram):
     the row expands to the fetched image itself. */
-export const viewImageView: ToolView = {
+export const inspectImageView: ToolView = {
   Icon: Eye,
   label: ({ call, t }) => call.q || (call.args?.url ? String(call.args.url).slice(0, 80) : t("attach_files")),
   metric: () => null,

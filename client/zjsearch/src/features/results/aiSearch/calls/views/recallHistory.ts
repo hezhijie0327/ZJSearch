@@ -3,8 +3,8 @@
 import { BookMarked } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
-/** The past_research view: the query and its match count. */
-export const pastResearchView: ToolView = {
+/** The recall_history view: the query and its match count. */
+export const recallHistoryView: ToolView = {
   Icon: BookMarked,
   label: ({ call }) => call.q,
   metric: ({ call, t }) =>

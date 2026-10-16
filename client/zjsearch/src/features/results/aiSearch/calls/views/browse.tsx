@@ -165,7 +165,7 @@ function BrowserShot({ call, t }: ToolRowProps): ReactNode {
   );
 }
 
-export const webBrowserView: ToolView = {
+export const browseView: ToolView = {
   Icon: AppWindow,
   iconFor: ({ call }) => {
     const Icon = ACTION_ICONS[actionOf(call)] ?? AppWindow;
@@ -226,7 +226,7 @@ export const webBrowserView: ToolView = {
       case "close":
         return t("ai_browser_act_close");
       default:
-        return call.label || action || "web_browser";
+        return call.label || action || "browse";
     }
   },
   metric: ({ call, t }) => {

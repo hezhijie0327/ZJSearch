@@ -9,14 +9,14 @@ import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 const BANG_CELLS_CAP = 8;
 
-/** The engine_info view: the row's expansion renders the STRUCTURED
+/** The list_engines view: the row's expansion renders the STRUCTURED
     deployment listing as two calm DIRECTORY BOARDS -- a uniform category
     grid (name + right-aligned engine count, heaviest verticals first)
     and a held-back-engines grid (name over its bang + categories, one
     cell each, cap-and-expand).  No chip cloud, no ragged rows.  The
     summary line carries the totals; pre-inventory replays keep the
     plain-text reading-pane fallback. */
-export const engineInfoView: ToolView = {
+export const listEnginesView: ToolView = {
   Icon: DatabaseSearch,
   label: ({ t }) => t("ai_engine_info_row"),
   metric: ({ call, t }) =>

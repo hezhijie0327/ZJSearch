@@ -17,14 +17,14 @@ import typing as t
 
 from searx.zjsearch.ai.prompts import spine as shared
 from searx.zjsearch.ai.tools import (
-    ASK_TOOL,
-    CALCULATOR_TOOL,
-    LEARNINGS_TOOL,
-    ENGINE_INFO_TOOL,
-    TASK_TOOL,
-    TOOL_NAME,
-    WEB_BROWSER_TOOL,
-    USER_MEMORY_TOOL,
+    ASK_USER_TOOL,
+    CALCULATE_TOOL,
+    RECORD_FINDINGS_TOOL,
+    LIST_ENGINES_TOOL,
+    UPDATE_PLAN_TOOL,
+    SEARCH_WEB_TOOL,
+    BROWSE_TOOL,
+    MEMORY_TOOL,
 )
 
 STALL_NOTE = (
@@ -40,9 +40,9 @@ _DEPTH_RESEARCH: dict[str, str] = {
     "speed": "Depth: SPEED -- the user mostly wants to know WHAT this is."
     "  You get ONE round: cover the core facet with 2-3 targeted searches,"
     " read the one or two pages that carry the answer when the snippets"
-    " are thin, and stop after it.  task_write is optional here -- a"
+    " are thin, and stop after it.  update_plan is optional here -- a"
     " light 2-3 item plan only when the facets are genuinely distinct"
-    " (most speed runs search directly) -- and keep learnings to ONE"
+    " (most speed runs search directly) -- and keep findings to ONE"
     " final call with the facts that survive.  Ask the user only to"
     " avoid a genuinely wrong high-stakes guess (see the ask tool);"
     " otherwise never.",
@@ -64,7 +64,7 @@ _DEPTH_RESEARCH: dict[str, str] = {
     "  Read pages, not just snippets: snippets are 300-character HEADS --"
     " after a search round surfaces the promising hits, spend the NEXT"
     " round reading the 2-4 sources you will actually build on"
-    " (web_browser reads), and read whenever a figure, quote or claim your"
+    " (browse reads), and read whenever a figure, quote or claim your"
     " answer will lean on only exists as a snippet head.  Verify"
     " load-bearing claims against independent sources (see"
     " <how_to_search>).  The research ends when the LEDGER"
@@ -84,25 +84,25 @@ def _examples(page_tool: bool, task_tool: bool) -> str:
 
     RECIPES, not a transcript: a ``User:/You:/Action:`` transcript teaches
     literal imitation -- qwen-family models answer such examples by
-    WRITING the calls into their text (``Action: web_search(...)`` or a
-    prose "Then call web_search ...") instead of making native function
+    WRITING the calls into their text (``Action: search_web(...)`` or a
+    prose "Then call search_web ...") instead of making native function
     calls, which strands the round with zero executed calls (probed on a
     real workspace).  Each recipe states the situation, the one-line note
     and the calls as TOOL semantics."""
-    reader = ", then a web_browser read on the model card url" if page_tool else ""
-    plan = ", and task_write with that round's subtasks" if task_tool else ""
-    reflect_reader = f", reading the two strongest hits with {WEB_BROWSER_TOOL} reads" if page_tool else ""
+    reader = ", then a browse read on the model card url" if page_tool else ""
+    plan = ", and update_plan with that round's subtasks" if task_tool else ""
+    reflect_reader = f", reading the two strongest hits with {BROWSE_TOOL} reads" if page_tool else ""
     lines = [
         "<examples>",
         '- "What is Kimi K3?" (definition, key specs, release status): say one short'
-        " sentence on what the user wants, then web_search twice in the same round"
+        " sentence on what the user wants, then search_web twice in the same round"
         ' ("Kimi K3 AI model", "Kimi K3 specs release date").',
         "",
         '- "What is DeepSeek-V4-Flash\'s context length?": snippets rarely carry exact'
-        ' numbers -- say that, then web_search ("DeepSeek-V4-Flash context length'
+        ' numbers -- say that, then search_web ("DeepSeek-V4-Flash context length'
         f' site:huggingface.co"){reader}.',
         "",
-        f'- "Should I pick A or B?": both sides before any verdict -- web_search ("A pros cons", "B pros cons"){plan}.',
+        f'- "Should I pick A or B?": both sides before any verdict -- search_web ("A pros cons", "B pros cons"){plan}.',
         "",
         "- A second round opens with reflection on the results so far (\"[4] covers"
         " the official specs, but pricing is missing -- this round targets"
@@ -129,7 +129,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     page_tool: bool = False,
     task_tool: bool = False,
     browser_tool: bool = False,
-    engine_info_tool: bool = False,
+    list_engines_tool: bool = False,
     steerable: bool = False,
     subagent_tool: bool = False,
     user_memories: list[dict[str, str]] | None = None,
@@ -155,7 +155,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         "<role>\n"
         f"You are the research agent of {shared.AGENT_PERSONA_NAME}:"
         " the user asks a question, YOU decide which keyword searches"
-        f" answer it and run them with the {TOOL_NAME} tool.  You NEVER"
+        f" answer it and run them with the {SEARCH_WEB_TOOL} tool.  You NEVER"
         " write the final answer yourself: when the research is complete,"
         " simply stop calling tools -- a separate writer writes the answer"
         " from the sources you gathered (their [n] numbers travel with"
@@ -169,7 +169,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " turns. Your new searches continue the numbering from"
             f" [{sources_base + 1}].  Unless the earlier sources already"
             " answer THIS follow-up completely, run at least one fresh"
-            f" {TOOL_NAME} for its specifics.\n</follow_up>"
+            f" {SEARCH_WEB_TOOL} for its specifics.\n</follow_up>"
         )
     how_to_search = "\n".join(
         [
@@ -180,7 +180,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " far -- name the gap they leave and the facet this round"
             " covers.  FINISH that sentence BEFORE the tool calls -- a call"
             " inserted mid-sentence shreds your step notes.  Then call"
-            f" {TOOL_NAME} -- several calls in the same turn are encouraged:"
+            f" {SEARCH_WEB_TOOL} -- several calls in the same turn are encouraged:"
             " they run in parallel.",
             "- ALWAYS run at least one search per question facet -- even for"
             " topics you already know: the user expects live, cited sources,"
@@ -201,18 +201,18 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " category parameter already fans out across every engine in"
             " that vertical.",
             (
-                "- The category enum on web_search is this deployment's"
-                f" REAL verticals; the {ENGINE_INFO_TOOL} tool lists them"
+                "- The category enum on search_web is this deployment's"
+                f" REAL verticals; the {LIST_ENGINES_TOOL} tool lists them"
                 " plus the disabled, bang-reachable engines (API-billed"
                 " ones are often held back).  Consult it once when the"
                 " question smells like a niche vertical or a search"
                 " landscape you do not know yet -- not on every run."
-                if engine_info_tool
+                if list_engines_tool
                 else ""
             ),
             (
                 "- Close a facet with reads, not just hits: when the searches"
-                f" surface the pages that answer it, spend {WEB_BROWSER_TOOL}"
+                f" surface the pages that answer it, spend {BROWSE_TOOL}"
                 " read calls on"
                 " the strongest sources before moving to the next facet --"
                 " snippets are heads, and the answer's depth comes from what"
@@ -221,7 +221,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
                 else ""
             ),
             "- Record what you ESTABLISH with the"
-            f" {LEARNINGS_TOOL} tool as you go (one call, up to 6 facts);"
+            f" {RECORD_FINDINGS_TOOL} tool as you go (one call, up to 6 facts);"
             " do not summarize your findings in prose narration -- the"
             " ledger, not your step notes, is the writer's distillation.",
             "- When the research is done, STOP: just end your turn without"
@@ -244,7 +244,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             )
         page_reader = (
             "<page_reader>\n"
-            f"The {WEB_BROWSER_TOOL} tool's read(url) reads ONE url's current"
+            f"The {BROWSE_TOOL} tool's read(url) reads ONE url's current"
             " full content in a"
             " real browser and returns it as markdown.  SNIPPETS ARE HEADS,"
             " NOT SOURCES: the [n] lines carry ~300 characters, and an"
@@ -259,7 +259,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " across rounds deserves one read.  If the question contains"
             " an explicit URL and asks about that page (summarize it,"
             " read it, extract from it), open it with a"
-            f" {WEB_BROWSER_TOOL} read FIRST -- do not search for what the"
+            f" {BROWSE_TOOL} read FIRST -- do not search for what the"
             " page itself contains.  Do not drown either: skip obviously"
             " thin"
             " results, never open pages just to \"see what is there\""
@@ -277,10 +277,10 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # read path (the first search/save pulls the store's list), so the
         # block teaches WHEN to consult instead of carrying the content
         memory_block = (
-            "<user_memory>\nDurable facts about the user (stored across"
+            "<memory>\nDurable facts about the user (stored across"
             " sessions -- home city, occupation, standing preferences)"
             " live in the"
-            f" {USER_MEMORY_TOOL} tool: SEARCH it (action=search) when the"
+            f" {MEMORY_TOOL} tool: SEARCH it (action=search) when the"
             " user references prior context or a standing preference could"
             " shape the research (a home city grounds weather/local"
             " questions; stated preferences shape source choices) --"
@@ -288,24 +288,24 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " durable fact, SAVE it with action=save during this run --"
             " never one-off conversation details.  The answer must still"
             " answer the question; saving is a silent side"
-            " action.\n</user_memory>"
+            " action.\n</memory>"
         )
     else:
         memory_block = (
-            "<user_memory>\nDurable facts about the user (stored across"
+            "<memory>\nDurable facts about the user (stored across"
             " sessions) -- use them to personalize the research (a home city"
             " grounds weather/local questions, stated preferences shape"
             " source choices):\n"
             + (facts or "(none stored yet)")
             + "\nWhen the user reveals a NEW durable fact (home city,"
             " occupation, a standing preference), SAVE it with the"
-            f" {USER_MEMORY_TOOL} tool (action=save) during this run -- never"
+            f" {MEMORY_TOOL} tool (action=save) during this run -- never"
             " one-off conversation details.  The answer must still answer the"
-            " question; saving is a silent side action.\n</user_memory>"
+            " question; saving is a silent side action.\n</memory>"
         )
     calculator_block = (
-        "<calculator>\n"
-        f"The {CALCULATOR_TOOL} tool evaluates ONE mathematical"
+        "<calculate>\n"
+        f"The {CALCULATE_TOOL} tool evaluates ONE mathematical"
         " expression EXACTLY (python-like syntax: \"2 + 3 * 4\","
         ' \"sqrt(1764)\", \"35 * 1.08\", \"mean([12.5, 13.2, 11.9])\",'
         ' \"round(10 / 3, 4)\").  Route EVERY non-trivial number through'
@@ -317,17 +317,17 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         " financial and forecasting material: revenue multiples, YoY or"
         " CAGR growth, margin and market-share math, per-share figures,"
         " projections built from sourced assumptions -- every derived"
-        " number in an earnings or forecast answer is one calculator"
+        " number in an earnings or forecast answer is one calculate"
         " call, and a figure the sources never stated must never reach"
         " the answer on mental arithmetic alone.  One expression per"
-        " call; substitute variables yourself before calling.\n</calculator>"
+        " call; substitute variables yourself before calling.\n</calculate>"
     )
     task_block = ""
     if task_tool:
         if depth == "speed":
             task_block = (
                 "<task_list>\nYour research is SHORT (one round): a"
-                f" {TASK_TOOL} plan is OPTIONAL -- write one (2-3 items)"
+                f" {UPDATE_PLAN_TOOL} plan is OPTIONAL -- write one (2-3 items)"
                 " only when the facets are genuinely distinct; otherwise"
                 " search directly.  The system still tracks which sources"
                 " landed where.\n</task_list>"
@@ -336,7 +336,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             task_block = (
                 "<task_list>\nYour research is DECOMPOSED, and the plan is a LIVING"
                 " hypothesis, not a contract:\n1. FIRST round: call"
-                f" {TASK_TOOL} with the concrete, independent subtasks the"
+                f" {UPDATE_PLAN_TOOL} with the concrete, independent subtasks the"
                 " question needs (each"
                 " answerable by its own keyword searches).\n2. Work the plan"
                 " EVERY round and keep it TRUE: statuses are YOURS to set"
@@ -355,8 +355,8 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
                 " done or consciously dropped -- not when you feel done.\n</task_list>"
             )
     learnings_block = (
-        "<learnings>\n"
-        f"The {LEARNINGS_TOOL} tool is your findings ledger: whenever a"
+        "<findings>\n"
+        f"The {RECORD_FINDINGS_TOOL} tool is your findings ledger: whenever a"
         " round's sources settled something real, record it (up to 6"
         " facts per call) as ONE self-contained sentence with its [n]"
         " citations -- \"DeepSeek-V4 ships a 256k context window [4]\"."
@@ -371,7 +371,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         " disagreements), never your plans or next steps (the task list"
         " owns those), never a restatement of the question, and never a"
         " fact no source supports.  Skip a round honestly when it"
-        " produced nothing durable.\n</learnings>"
+        " produced nothing durable.\n</findings>"
     )
     # (the one-shot plan tool was superseded by the living task list -- the
     # task_block carries decomposition + progress for quality/goal)
@@ -379,7 +379,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if register_ask:
         ambiguity_escape = (
             "<ambiguity_escape>\n"
-            f"The {ASK_TOOL} tool is your human-in-the-loop escape hatch --"
+            f"The {ASK_USER_TOOL} tool is your human-in-the-loop escape hatch --"
             " available at ANY point during research, not just the start."
             "  Do NOT plow ahead on a guess: the moment you realize -- from"
             " the question itself, the first round's results or"
@@ -395,7 +395,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " that turn and stop.  Do not burn rounds on a guess; do not"
             " ask what a quick search can settle; do not use it for broad"
             " informational topics; do not mix it with"
-            f" {TOOL_NAME} calls.\n</ambiguity_escape>"
+            f" {SEARCH_WEB_TOOL} calls.\n</ambiguity_escape>"
         )
     depth = _DEPTH_RESEARCH.get(depth, _DEPTH_RESEARCH["balanced"])
     # the SYSTEM prompt carries ONLY blocks that are byte-stable per
@@ -426,7 +426,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if subagent_tool:
         lines.append(
             "<subagent_delegation>\nYou may delegate INDEPENDENT research"
-            " facets to subagents via research_subtask -- each call spawns a"
+            " facets to subagents via delegate_research -- each call spawns a"
             " nested researcher with its own context window that searches,"
             " reads pages, and reports a compressed digest back.  Delegate"
             " when the question has 2-4 independent facets worth parallel"
@@ -456,7 +456,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             "<user_steering>\nThe user can steer this run LIVE: a message"
             " wrapped in <user_steering> may arrive between your rounds"
             " (or interrupt one).  It OVERRIDES your current plan -- act on"
-            " it: revise the task list via task_write (drop, add or reshape"
+            " it: revise the task list via update_plan (drop, add or reshape"
             " subtasks), redirect the searches, change the reading"
             " targets.  Earlier steered instructions stay binding for the"
             " rest of the run.  Respond by ACTING, never by re-asking what"
@@ -515,7 +515,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " thread's source registry).  Build on them -- do NOT"
             " re-research an established fact unless genuine"
             " re-verification is needed, and re-affirm the ones you build"
-            " on into your own findings ledger (learnings).\n"
+            " on into your own findings ledger (record_findings).\n"
         )
         if facts:
             thread_ctx += "<established>\n" + "\n".join(f"- {f}" for f in facts[:40]) + "\n</established>\n"
@@ -537,7 +537,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         if listed:
             run_context += (
                 "<mcp_servers>\nThe connected MCP servers (their tools are"
-                " reachable ONLY through the mcp_search_tools discovery"
+                " reachable ONLY through the search_mcp_tools discovery"
                 " tool -- keyword-search it to receive the matching tools'"
                 " full schemas) carry their own usage"
                 f" guidance:\n{listed}\n</mcp_servers>\n"
@@ -560,7 +560,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " recommendations without knowing what each entity is:\n"
             + "\n".join(f"- {name}" for name in deliverable[:5])
             + "\nAdd a subtask for each via "
-            f"{TASK_TOOL} (or delegate a research_subtask) and gather their"
+            f"{UPDATE_PLAN_TOOL} (or delegate a delegate_research) and gather their"
             " basic sourced facts before the research ends.\n</deliverable_entities>\n"
         )
     for file in attached_files or []:

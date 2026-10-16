@@ -23,5 +23,5 @@ def raw_args(call: dict[str, t.Any]) -> dict[str, t.Any]:
 def query_terms(query: str) -> list[str]:
     """The matchable terms of one tool-call query: whitespace/comma-split,
     lowercased, empties dropped -- the one splitter behind the in-run
-    keyword scorers (``tools.memory``, ``tools.past_research``)."""
+    keyword scorers (``tools.memory``, ``tools.recall_history``)."""
     return [term for term in re.split(r"[\s,，]+", str(query or "").lower()) if term]

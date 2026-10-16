@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 """The task card's coverage tracker: which subtask did a search cover?
 
-``task_write`` is the plan's SINGLE writer -- this module only maps
+``update_plan`` is the plan's SINGLE writer -- this module only maps
 every executed search onto that plan for PROVENANCE: returned source
 titles matching a subtask merge their [n] numbers into the card (the
 matching sources' evidence rides the card as provenance).  Statuses are
-NEVER written here -- the model updates them through ``task_write``;
+NEVER written here -- the model updates them through ``update_plan``;
 the round referee only advises via notes.
 
 Terms match by BIDIRECTIONAL CONTAINMENT, not exact equality -- an
@@ -25,7 +25,7 @@ class Coverage:
     """The living task list plus its term-matching tracker."""
 
     def __init__(self) -> None:
-        # the task_write task list (the task_write tool maintains it;
+        # the update_plan task list (the update_plan tool maintains it;
         # the client renders it as the STATUS card)
         self.task_list: list[dict[str, t.Any]] = []
 
@@ -74,7 +74,7 @@ class Coverage:
         """Map one search/page read against the task list for PROVENANCE
         ONLY: source titles matching a subtask merge their [n] numbers
         into the task card's per-subtask source count.  Statuses are
-        NEVER written here -- the task_write TOOL is the plan's single
+        NEVER written here -- the update_plan TOOL is the plan's single
         writer (the model updates statuses; the round referee only
         advises via notes).  Terms match by BIDIRECTIONAL CONTAINMENT,
         not exact equality -- an English query must still light up a

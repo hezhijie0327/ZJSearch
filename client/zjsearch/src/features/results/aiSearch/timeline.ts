@@ -54,7 +54,7 @@ export interface AiAskQuestion {
   options: string[];
 }
 
-/** engine_info's STRUCTURED listing (the settlement's inventory payload):
+/** list_engines's STRUCTURED listing (the settlement's inventory payload):
     the expanded body renders it as category chips + bang rows; absent on
     pre-inventory replays, whose preview text still rides `text`. */
 export interface AiEngineInventory {
@@ -68,58 +68,58 @@ export interface AiSearchCall {
   id: number;
   /** which tool produced the row */
   tool:
-    | "web_search"
-    | "calculator"
+    | "search_web"
+    | "calculate"
     | "mcp"
-    | "user_memory"
-    | "past_research"
-    | "engine_info"
-    | "task_write"
-    | "learnings"
-    | "judge"
+    | "memory"
+    | "recall_history"
+    | "list_engines"
+    | "update_plan"
+    | "findings"
+    | "evaluate"
     | "ask_user"
-    | "extract_table"
-    | "view_image"
-    | "web_browser"
-    | "research_subtask"
+    | "build_table"
+    | "inspect_image"
+    | "browse"
+    | "delegate_research"
     | "message_subtask";
   /** mcp rows: the server-scoped tool label (without the namespace);
-      user_memory rows: "save" | "search" */
+      memory rows: "save" | "search" */
   name?: string;
   label?: string;
-  /** web_search: the keyword query; web_browser rows leave it empty */
+  /** search_web: the keyword query; browse rows leave it empty */
   q: string;
-  /** web_browser read: the page url (the row's label) */
+  /** browse read: the page url (the row's label) */
   url?: string;
   category: string;
   status: "pending" | "ok" | "error" | "interrupted" | "duplicate" | "approval";
-  /** web_search: result count */
+  /** search_web: result count */
   n?: number;
-  /** web_browser read: characters of readable content returned */
+  /** browse read: characters of readable content returned */
   chars?: number;
-  /** web_browser rows: the page state the action left the session on --
+  /** browse rows: the page state the action left the session on --
       the row's expansion renders it as the location line */
   page?: { url: string; title: string };
-  /** web_browser rows: the frame jpeg (data URL) the action captured --
+  /** browse rows: the frame jpeg (data URL) the action captured --
       the screenshot's deliberate shot, the others' mirror frame.  The
       shot PERSISTS (wire mark shot:true, kept by the stream consumer);
       mirror frames are stripped before the event log -- a replay keeps
       the shot, the trail shows the honest placeholder */
   img?: string;
-  /** web_browser rows: the fresh element outline (open / snapshot / a
+  /** browse rows: the fresh element outline (open / snapshot / a
       click-through navigation) -- the expansion renders the session's
       interactive-element list */
   snapshot?: string;
-  /** calculator: the exact evaluated result (the row shows expr = result) */
+  /** calculate: the exact evaluated result (the row shows expr = result) */
   result?: string;
-  /** judge: the STRUCTURED verdict (question name -> choice/score/noul
+  /** evaluate: the STRUCTURED verdict (question name -> choice/score/noul
       answer with its probability distribution) -- the row's expansion
       renders the same probability bars as the rail's decision card */
   answers?: Record<string, unknown>;
-  /** engine_info: the structured deployment listing -- the row's
+  /** list_engines: the structured deployment listing -- the row's
       expansion renders category chips + cap-expandable bang rows */
   inventory?: AiEngineInventory;
-  /** web_browser read: the extracted page content -- the row's expansion is a
+  /** browse read: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
   /** the model's RAW tool-call arguments (q / category / ...) -- the
@@ -133,7 +133,7 @@ export interface AiSearchCall {
       pooled calls time submit -> settlement, inline branches time
       themselves) */
   ms?: number;
-  /** web_search: a RE-search whose hits were all already-numbered
+  /** search_web: a RE-search whose hits were all already-numbered
       produced no new sources -- these are the KNOWN [n]s the row's
       result strip resolves against the run's registry, so the row still
       expands to what it found */
@@ -204,7 +204,7 @@ export interface AiSearchSource {
   /** the result's search category -- the hook for type-aware cards
       (video duration, torrent filesize, ... the classic presentations) */
   category?: string;
-  /** web_browser read this page in full (the card's read-in-full badge) */
+  /** browse read this page in full (the card's read-in-full badge) */
   crawled?: boolean;
   /** the result's snippet from the SearXNG result payload -- the source's
       knowledge-projection body (uncrawled sources stay searchable) */
@@ -301,9 +301,9 @@ export interface AiSearchRun {
   /** the extractor's concept tags (the LATE `tags` wire event) -- the
       settle writes them into the knowledge projections */
   tags?: string[];
-  /** the living task list (the task_write tool maintains it; the task
+  /** the living task list (the update_plan tool maintains it; the task
       card renders it) -- empty for modes that do not decompose */
-  tasks: Array<{
+  plan: Array<{
     title: string;
     /** "missed" (client-side at settle): the run concluded and this
         subtask never gathered a source -- the card shows a warning, not
@@ -316,11 +316,11 @@ export interface AiSearchRun {
     steps: AiSearchStep[];
     findings?: string;
   }>;
-  /** the BELIEF LEDGER's facts (the learnings tool's authoritative
+  /** the BELIEF LEDGER's facts (the findings tool's authoritative
       snapshots): what the researcher recorded as established, WITH the
       revision history (superseded/retracted stay visible on the card) --
       the writer received the active list as <findings> */
-  learnings?: LedgerFact[];
+  findings?: LedgerFact[];
   /** the ledger's gaps partition: the open questions the research still
       owed -- the findings card renders them under the facts */
   gaps?: LedgerGap[];
@@ -330,7 +330,7 @@ export interface AiSearchRun {
   stage?: AiSearchStage;
   /** every stage the run walked, in order -- the run_summary record */
   stages: AiSearchStage[];
-  /** the run's DECISION RESULTS (framework gates + model judge), one
+  /** the run's DECISION RESULTS (framework gates + model evaluate), one
       entry per decision call -- the rail's decisions card renders them
       with click-through raw answers */
   decisions: AiDecision[];
@@ -349,7 +349,7 @@ export interface AiSearchRun {
   sections?: Record<string, string>;
   /** the recorded data tables (the ``artifact`` events, keyed by id) */
   artifacts?: Record<number, AiSearchArtifact>;
-  /** the interactive session's live mirror (the web_browser call's
+  /** the interactive session's live mirror (the browse call's
       viewport frames -- img stripped before persisting; null = no
       session or the run replays).  THE LEAD session's frame.  px/py/pk
       = the MODEL POINTER: the viewport-space landing point of the last
@@ -416,7 +416,7 @@ export interface AiSearchOutline {
   sections: AiSearchOutlineSection[];
 }
 
-/** One recorded data table (the ``extract_table`` tool's ``artifact``
+/** One recorded data table (the ``build_table`` tool's ``artifact``
     event, snapshot-replace per id): the researcher's structured
     evidence with per-row [n] refs resolved against the run's sources. */
 interface AiSearchArtifact {
@@ -427,7 +427,7 @@ interface AiSearchArtifact {
   note?: string;
 }
 
-/** One decision-model call (loop gates or the model's judge tool): the
+/** One decision-model call (loop gates or the model's evaluate tool): the
     question asked, the target it was about, and the RAW answer
     (verdicts + probabilities) for click-through. */
 export interface AiDecision {
@@ -508,7 +508,7 @@ export function settle(core: Core, failed: { error: string } | null, stopped: bo
       ? {
           ...item,
           status: "done" as const,
-          tasks: completeTasks(item.tasks),
+          plan: completeTasks(item.plan),
         }
       : item,
   );
@@ -607,11 +607,11 @@ export function applyEvent(
         status: "streaming",
         // the retry keeps its confirmed direction: the clarify step
         // re-opens the rebuilt timeline.  The LEDGER resets with the
-        // attempt: the server built a fresh Searches (empty learnings, a
+        // attempt: the server built a fresh Searches (empty findings, a
         // fresh task list) -- showing the dead attempt's findings card
         // and task states would present state the writer never received
-        learnings: [],
-        tasks: [],
+        findings: [],
+        plan: [],
         steps: (clarifyText
           ? [{ kind: "clarify" as const, pairs: parseClarifyPairs(clarifyText) }]
           : []) as AiSearchStep[],
@@ -864,7 +864,7 @@ export function applyEvent(
       // ONE settlement shape for the lead AND the subagent timelines: the
       // old copy had drifted (the sub path dropped result/answers/text/
       // dupes/preview/action and the corpus archive -- a subagent's
-      // calculator verdicts and reading panes silently vanished).
+      // calculate verdicts and reading panes silently vanished).
       const callId = Number(event.call) || 0;
       const settled = (call: AiSearchCall): AiSearchCall =>
         call.id === callId
@@ -903,7 +903,7 @@ export function applyEvent(
               ...(event.preview !== undefined ? { text: String(event.preview ?? "") || undefined } : {}),
               ...(event.label !== undefined ? { label: String(event.label ?? "") || undefined } : {}),
               ...(event.action !== undefined ? { name: String(event.action ?? "") } : {}),
-              // web_browser settlements: the page state, the volatile frame
+              // browse settlements: the page state, the volatile frame
               // jpeg and the fresh outline (img stripped from the persisted
               // copy by the stream consumer)
               ...(event.page !== undefined && event.page !== null
@@ -984,13 +984,13 @@ export function applyEvent(
         return patchSub((sub) => ({ ...sub, status: "done" }));
       }
       return core;
-    case "tasks": {
+    case "plan": {
       const items = (event.items as Array<Record<string, unknown>>) ?? [];
-      runs[lastIdx] = { ...run, tasks: mergeTaskSnapshot(run.tasks, items) };
+      runs[lastIdx] = { ...run, plan: mergeTaskSnapshot(run.plan, items) };
       return { ...core, runs };
     }
     case "decisions": {
-      // the run's decision results (framework gates + model judge): the
+      // the run's decision results (framework gates + model evaluate): the
       // rail's decisions card reads them -- raw answers included
       const items = (Array.isArray(event.items) ? event.items : []).map((row) => {
         const record = row as Record<string, unknown>;
@@ -998,7 +998,7 @@ export function applyEvent(
           purpose: String(record.purpose ?? ""),
           question: typeof record.question === "string" ? record.question : undefined,
           target: typeof record.target === "string" ? record.target : undefined,
-          // the judge tool's verdict key is `verdicts` (the others ride
+          // the evaluate tool's verdict key is `verdicts` (the others ride
           // `answers`)
           answer: record.answer ?? record.answers ?? undefined,
           // record_questions (name→question text) folds into the record;
@@ -1013,12 +1013,12 @@ export function applyEvent(
       runs[lastIdx] = { ...run, decisions: [...(run.decisions ?? []), ...items] };
       return { ...core, runs };
     }
-    case "learnings": {
+    case "findings": {
       // the BELIEF LEDGER's AUTHORITATIVE snapshot -- replace, never
       // merge (the server's list is the truth, the writer read the same)
       runs[lastIdx] = {
         ...run,
-        learnings: learningFacts(event.items),
+        findings: learningFacts(event.items),
         gaps: learningGaps(event.gaps),
       };
       return { ...core, runs };
@@ -1298,20 +1298,20 @@ export function applyEvent(
 }
 
 const KNOWN_TOOLS: ReadonlySet<string> = new Set([
-  "web_search",
-  "calculator",
+  "search_web",
+  "calculate",
   "mcp",
-  "user_memory",
-  "past_research",
-  "engine_info",
-  "task_write",
-  "learnings",
-  "judge",
+  "memory",
+  "recall_history",
+  "list_engines",
+  "update_plan",
+  "findings",
+  "evaluate",
   "ask_user",
-  "extract_table",
-  "view_image",
-  "web_browser",
-  "research_subtask",
+  "build_table",
+  "inspect_image",
+  "browse",
+  "delegate_research",
   "message_subtask",
 ]);
 
@@ -1319,7 +1319,7 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
   const tool = String(item.tool ?? "");
   return {
     id: Number(item.id) || 0,
-    tool: (KNOWN_TOOLS.has(tool) ? tool : "web_search") as AiSearchCall["tool"],
+    tool: (KNOWN_TOOLS.has(tool) ? tool : "search_web") as AiSearchCall["tool"],
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
     q: String(item.q ?? ""),
@@ -1345,7 +1345,7 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     galleries: [],
     related: [],
     ask: null,
-    tasks: [],
+    plan: [],
     clarify: undefined,
     wrappingUp: false,
     startedAt: Date.now(),

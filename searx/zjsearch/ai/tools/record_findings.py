@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-"""AI Search: the ``learnings`` tool -- the BELIEF LEDGER's model surface.
+"""AI Search: the ``findings`` tool -- the BELIEF LEDGER's model surface.
 
-v2 turns dzhng's append-only learnings into a ledger the model REvises:
+v2 turns dzhng's append-only findings into a ledger the model REvises:
 facts carry identity (``supersedes`` / ``retracts`` name earlier fact
 ids) and the ledger carries a GAPS partition -- the open questions the
 research still owes an answer to.  Gap-closing is the loop's engine: the
@@ -15,7 +15,7 @@ import typing as t
 
 from searx.zjsearch.ai.core.text import raw_args
 
-LEARNINGS_TOOL = "learnings"
+RECORD_FINDINGS_TOOL = "findings"
 
 LEARNING_MAX_CHARS = 400
 """One recorded finding's cap -- a finding is one self-contained sentence,
@@ -34,11 +34,11 @@ FACT_TAG_CHARS = 24
 """One fact tag's cap -- a concept word, not a sentence."""
 
 
-def learnings_spec() -> dict[str, t.Any]:
-    """The ``learnings`` tool spec: a belief ledger with two partitions --
+def record_findings_spec() -> dict[str, t.Any]:
+    """The ``findings`` tool spec: a belief ledger with two partitions --
     facts (with revision ops) and gaps (with close ops)."""
     return {
-        "name": LEARNINGS_TOOL,
+        "name": RECORD_FINDINGS_TOOL,
         "description": (
             "Maintain the research BELIEF LEDGER -- what the sources"
             " ESTABLISHED, and what the question still OWES.  Two"
@@ -130,8 +130,8 @@ def learnings_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_learnings_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The sanitized ledger operations out of one ``learnings`` call:
+def parse_record_findings_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The sanitized ledger operations out of one ``findings`` call:
     ``{"facts": [...], "open_gaps": [...], "close_gaps": [...]}`` -- every
     entry trimmed, capped and type-checked; malformed shapes drop
     silently (a ledger op must never crash a settlement)."""

@@ -75,7 +75,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             if entities:
                 judge_state["deliverable_entities"] = entities
             started = time.monotonic()
-            out = decision.judge(judge_state, questions, timeout=5.0, account=self.account)
+            out = decision.evaluate(judge_state, questions, timeout=5.0, account=self.account)
             answers = out.get("answers") if isinstance(out, dict) else None
             if not isinstance(answers, dict) or not answers:
                 return
@@ -125,7 +125,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         """Grade OPEN subtasks against THIS round's new source titles -- one
         noul per subtask (did this round's material cover it?) -- and advise
         the model through a feed note (done candidates / thin evidence).
-        NEVER writes statuses: the task_write TOOL is the plan's single
+        NEVER writes statuses: the update_plan TOOL is the plan's single
         writer; the raw nouls land in the Decisions card via the judgment
         ledger."""
         cov = decision_features("coverage")
@@ -137,7 +137,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         questions = self._referee_questions(open_tasks)
         started = time.monotonic()
         try:
-            out = decision.judge(
+            out = decision.evaluate(
                 {
                     "subtasks": [str(t.get("title") or "") for t in open_tasks[:_REFEREE_MAX]],
                     "new_source_titles": self.round_new_titles[:20],
@@ -185,7 +185,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         advice = []
         if done_candidates:
             advice.append(
-                "covered -- suggest marking done via task_write: "
+                "covered -- suggest marking done via update_plan: "
                 + "; ".join('"' + t + '"' for t in done_candidates[:3])
             )
         if thin:
@@ -223,7 +223,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             def _one(n_and_meta: tuple[int, dict[str, str]]) -> tuple[int, float, int]:
                 n, meta = n_and_meta
                 try:
-                    out = decision.judge(
+                    out = decision.evaluate(
                         {
                             "question": self.question_held or "",
                             "source": f"{meta.get('title', '')} - {meta.get('snippet', '')}"[:600],

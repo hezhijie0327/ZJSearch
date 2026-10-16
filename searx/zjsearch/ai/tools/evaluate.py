@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``judge`` tool (the decision model) -- spec, call parsing, row.
+"""AI Search: the ``evaluate`` tool (the decision model) -- spec, call parsing, row.
 
 The decision-model delegation tool: ONE forward pass answers
 NAMED judgment questions about a state -- the tie-breaker for torn
@@ -16,10 +16,10 @@ import typing as t
 from searx.zjsearch.ai.core.text import raw_args
 from searx.zjsearch.ai.llm import decision
 
-DECISION_TOOL = "judge"
+EVALUATE_TOOL = "evaluate"
 
 
-def judge_spec() -> dict[str, t.Any]:
+def evaluate_spec() -> dict[str, t.Any]:
     """The decision-model delegation tool: ONE forward pass
     answers NAMED judgment questions about a state -- the tie-breaker for
     torn calls (which of two sources is more authoritative, does this
@@ -32,7 +32,7 @@ def judge_spec() -> dict[str, t.Any]:
     ordered legend array, 3-7 levels), ``noul`` (criteria optionally
     {"true": ..., "false": ...})."""
     return {
-        "name": DECISION_TOOL,
+        "name": EVALUATE_TOOL,
         "description": (
             "Delegate ONE structured judgment to a fast decision model"
             " (no text generation, one forward pass).  Use it when YOU are"
@@ -108,7 +108,7 @@ def judge_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_judge_call(
+def parse_evaluate_call(
     call: dict[str, t.Any],
 ) -> tuple[str, dict[str, dict[str, t.Any]], list[str]] | None:
     """``(state, wire questions, image urls)`` off the raw call arguments,
@@ -154,7 +154,7 @@ def parse_judge_call(
 
 
 def decision_row(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The ``judge`` timeline row: the label is the judgment STANDARD
+    """The ``evaluate`` timeline row: the label is the judgment STANDARD
     (the questions' instructions -- model-written, usually the user's own
     language), never the raw question ids ("most_worth_first_choice");
     the raw table rides the debug pane."""
@@ -174,7 +174,7 @@ def decision_row(idx: int, call: dict[str, t.Any]) -> dict[str, t.Any]:
                 instructions.append(str(question["instructions"]).strip())
     return {
         "id": idx,
-        "tool": DECISION_TOOL,
+        "tool": EVALUATE_TOOL,
         "q": (" / ".join(instructions) or " / ".join(names))[:120],
         "args": decision_args,
     }

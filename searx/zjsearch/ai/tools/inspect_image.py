@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``view_image`` tool: the researcher's EYES on search results.
+"""The ``inspect_image`` tool: the researcher's EYES on search results.
 
 Result lines carry an ``img=`` token (an image the snippet's page
 published).  Text search cannot read a chart -- this tool lets the model
@@ -12,13 +12,13 @@ model calls it only when a chart/diagram actually matters."""
 import typing as t
 from searx.zjsearch.ai.core.text import raw_args
 
-VIEW_IMAGE_TOOL = "view_image"
+INSPECT_IMAGE_TOOL = "inspect_image"
 
 
-def view_image_spec() -> dict[str, t.Any]:
-    """The ``view_image`` tool spec."""
+def inspect_image_spec() -> dict[str, t.Any]:
+    """The ``inspect_image`` tool spec."""
     return {
-        "name": VIEW_IMAGE_TOOL,
+        "name": INSPECT_IMAGE_TOOL,
         "description": (
             "Look at ONE image from the search results -- charts, diagrams,"
             " product photos, data visuals a snippet cannot show.  Copy the"
@@ -45,7 +45,7 @@ def view_image_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_view_image_call(call: dict[str, t.Any]) -> str:
+def parse_inspect_image_call(call: dict[str, t.Any]) -> str:
     """The tool call's image URL -- sanitized (length + scheme gate; the
     SSRF check happens at fetch time)."""
     args = raw_args(call)

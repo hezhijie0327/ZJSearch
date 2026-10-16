@@ -10,7 +10,7 @@ converts).
 A BROWSER-package module by dependency law: the render engine "RENDERS
 AND EXTRACTS, nothing more" (the engine is the one thing that has the
 rendered markup in hand), and the merged browser tool's read lane
-(``tools.web_browser.read``) consumes it through the legal downward edge -- the old shape had ``browser.session`` reaching
+(``tools.browse.read``) consumes it through the legal downward edge -- the old shape had ``browser.session`` reaching
 UP into tools for this pass."""
 
 import logging

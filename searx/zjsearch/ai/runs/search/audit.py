@@ -94,7 +94,7 @@ def finding_conflict(fact_text: str, established: list[str], account: t.Any = No
         best = _nearest_fact(fact_text, established, account=account)
         if best is None:
             return None
-        out = decision_service.judge(
+        out = decision_service.evaluate(
             {"new_fact": fact_text, "established_fact": established[best]},
             {
                 "consistent": {

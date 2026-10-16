@@ -389,7 +389,7 @@ export async function recallCorpus(
   return ranked.slice(0, limit).map((entry) => entry.item);
 }
 
-/** The past_research index: archived full texts ranked by the query
+/** The recall_history index: archived full texts ranked by the query
     (the tool's feed then points at a live re-read).
     ``opts.rerank: false`` skips the rerank tier -- the classic page's
     eager prewarm path spends nothing beyond the fusion. */

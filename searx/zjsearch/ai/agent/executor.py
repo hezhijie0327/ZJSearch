@@ -4,7 +4,7 @@
 An executor is a generator over ONE round's calls
 (``[{"id", "name", "arguments"}, ...]``, the pumps' flat shape).  It
 yields framework events while the calls run -- ``("call", {...})``
-settlements, ``("sources", {...})``, ``("tasks", {...})`` -- and MUST
+settlements, ``("sources", {...})``, ``("plan", {...})`` -- and MUST
 end with ``("tool_results", [(call, text), ...])`` aligned BY POSITION
 with the input list; the loop feeds those texts back as the tool
 results message.  A missing pair degrades to an error tool result the

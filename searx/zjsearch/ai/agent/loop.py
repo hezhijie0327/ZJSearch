@@ -336,7 +336,7 @@ def _call_sig(calls: list[dict[str, t.Any]]) -> tuple[tuple[str, str], ...] | No
     means the model repeated itself verbatim -- the loop guard warns
     once, then ends the research (the stall detector cannot see this:
     an identical call makes ROUND progress while learning nothing, and
-    the content-level duplicate refusals only cover web_search/reader
+    the content-level duplicate refusals only cover search_web/reader
     keys, not browser/MCP actions).  Arguments are JSON-normalized (key
     order and whitespace are irrelevant); a call whose arguments fail
     to parse rides its raw string.  ``None`` for an empty batch."""
@@ -686,7 +686,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     echo.tool_result_message(call, pair[1] if pair else f"error: the {call.get('name')} tool failed")
                 )
             if post_round_injections is not None:
-                # e.g. view_image's fetched pictures ride the next turn as a
+                # e.g. inspect_image's fetched pictures ride the next turn as a
                 # USER message -- user turns accept image parts on every dialect
                 for message in post_round_injections():
                     messages.append(message)

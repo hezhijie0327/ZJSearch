@@ -2,7 +2,7 @@
 """The run's source registries: the global [n] numbering, the two dedup
 sets and the gallery whitelist.
 
-One object per run -- every ``web_search`` / ``web_browser`` result and
+One object per run -- every ``search_web`` / ``browse`` result and
 every repeat of a known url passes through here, so the numbering stays
 contiguous, exact repeats settle as ``duplicate`` without hitting the
 engines again, and the writer's ``zjs-images`` fence can only cite urls

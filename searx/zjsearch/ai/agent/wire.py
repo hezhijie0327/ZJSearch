@@ -18,7 +18,7 @@ bug and :py:func:`encode` refuses it):
                         ``items`` are the display rows.
 ``call``                ONE call settled: ``{id, call, status, ...}``
                         (n/ms/chars/text/result/preview per tool kind).
-                        ``web_browser`` rows add ``page`` {url,title},
+                        ``browse`` rows add ``page`` {url,title},
                         ``snapshot`` (the fresh outline) and ``img``
                         (the volatile frame jpeg -- the client strips
                         it before persisting, the reading pane of the
@@ -30,14 +30,14 @@ bug and :py:func:`encode` refuses it):
                         coarse spine (Qwen Deep Research's phase
                         design); micro-activity stays with the entries.
 ``decisions``           the run's DECISION RESULTS (framework gates +
-                        model-initiated judge), one batch per
+                        model-initiated evaluate), one batch per
                         round: ``{round, items: [{purpose, question,
                         target, answer, ms}]}`` -- the sources rail's
                         Decisions card; ``answer`` is the RAW model
                         answer (verdicts + probabilities) for
                         click-through.
 ``tasks``               the task card's AUTHORITATIVE snapshot.
-``learnings``           the findings ledger's AUTHORITATIVE snapshot
+``findings``           the findings ledger's AUTHORITATIVE snapshot
                         (``items``: the facts so far) -- what the
                         researcher recorded as established.
 ``sources``             the global [n] registry's new/updated entries.
@@ -57,7 +57,7 @@ bug and :py:func:`encode` refuses it):
                         ``{items: [{u, n}]}``.
 ``browser``             the interactive browser session's MIRROR frame:
                         ``{url, title, img, w, h, wait_left?}`` -- live
-                        while a ``web_browser`` call is pending (the
+                        while a ``browse`` call is pending (the
                         frames double as the stream's heartbeats); the
                         client renders them in the rail's browser card
                         and strips ``img`` before persisting.

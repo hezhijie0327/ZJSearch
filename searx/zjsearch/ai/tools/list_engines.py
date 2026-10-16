@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``engine_info`` tool: one self-contained package -- the model's
+"""The ``list_engines`` tool: one self-contained package -- the model's
 window into WHICH ENGINES this deployment carries.  The ``category``
-enum on ``web_search`` is deployment-derived, but the engines BEHIND the
+enum on ``search_web`` is deployment-derived, but the engines BEHIND the
 verticals (and the deliberately disabled, API-billed ones an explicit
 bang still reaches) stay invisible until a search comes back thin -- so
 the model guesses.  ONE read-only inventory call answers it: the usable
@@ -12,9 +12,9 @@ row's expanded body) -- one builder, two readers."""
 
 import typing as t
 
-from searx.zjsearch.ai.tools.web_search import available_categories
+from searx.zjsearch.ai.tools.search_web import available_categories
 
-ENGINE_INFO_TOOL = "engine_info"
+LIST_ENGINES_TOOL = "list_engines"
 
 _MAX_DISABLED = 80
 """The bangable-engines cap -- a deployment listing more disabled engines
@@ -22,13 +22,13 @@ than this gets a tail note instead of the rest (the inventory is a map,
 not an audit)."""
 
 
-def engine_info_spec() -> dict[str, t.Any]:
-    """The ``engine_info`` tool spec."""
+def list_engines_spec() -> dict[str, t.Any]:
+    """The ``list_engines`` tool spec."""
     return {
-        "name": ENGINE_INFO_TOOL,
+        "name": LIST_ENGINES_TOOL,
         "description": (
             "List the search ENGINES this deployment carries: the enabled"
-            " ones grouped by category (a category search on web_search"
+            " ones grouped by category (a category search on search_web"
             " fans out across every enabled engine in that vertical), and"
             " the engines kept disabled by default -- those are still"
             " reachable by prefixing a query with their bang"
@@ -118,7 +118,7 @@ def build_inventory() -> tuple[str, int, int, dict[str, t.Any]]:
     return "\n".join(lines), enabled, len(categories), inventory
 
 
-def evaluate_call() -> tuple[str, dict[str, t.Any]]:
+def run_call() -> tuple[str, dict[str, t.Any]]:
     """One tool call -> (model feed, settlement extras).  The extras carry
     ``inventory`` (the STRUCTURED listing -- the timeline row's expanded
     body renders it as category chips + bang rows) and ``n`` (the

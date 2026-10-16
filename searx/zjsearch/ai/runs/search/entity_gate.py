@@ -5,7 +5,7 @@ report outline's ``entities`` screen).
 A request like "build the recommendation for Cytiva on RCX's pipelines"
 decomposes naturally into facets about RCX -- the plan never studies
 Cytiva itself, and the answer recommends for an actor it never
-researched.  On the FIRST ``task_write`` this gate (fail-open
+researched.  On the FIRST ``update_plan`` this gate (fail-open
 everywhere) extracts the deliverable entities from question +
 attachment heads (one small json completion), screens them against the
 plan's subtask titles with the task card's term matcher (zero model
@@ -13,7 +13,7 @@ cost), and -- for the uncovered ones -- fills
 ``state.deliverable_entities`` (the plan_review's ``plan_complete``
 question and the next rounds' follow-through read it) and returns a
 feed note telling the model to close the gap itself (add subtasks or
-delegate ``research_subtask`` -- the harness shows the blind spot, the
+delegate ``delegate_research`` -- the harness shows the blind spot, the
 model owns the plan)."""
 
 import logging
@@ -111,7 +111,7 @@ def _uncovered(entities: list[dict[str, str]], task_titles: list[str]) -> list[s
 
 
 def run_once(state: t.Any, items: list[dict[str, str]]) -> str | None:
-    """The handlers' task_write hook: ONCE per run, extract + screen +
+    """The handlers' update_plan hook: ONCE per run, extract + screen +
     note.  Returns the feed note for uncovered entities (``None`` when
     everything is covered or the gate is skipped)."""
     if getattr(state, "entity_gate_done", False):
@@ -168,7 +168,7 @@ def run_once(state: t.Any, items: list[dict[str, str]]) -> str | None:
     return (
         "\n(deliverable coverage: the final answer will make claims about "
         + "; ".join(uncovered[:3])
-        + " -- NO subtask researches them. Add a subtask for each via task_write"
-        " (or delegate a research_subtask): their basic sourced facts must be"
+        + " -- NO subtask researches them. Add a subtask for each via update_plan"
+        " (or delegate a delegate_research): their basic sourced facts must be"
         " among the gathered sources before the research ends.)"
     )

@@ -206,7 +206,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     `virtual` (camoufox Xvfb) for display-less Linux servers,
     `headed` (real window) on desktops — the strongest tier and the
     login stage's interaction carrier.  `session` is the ONE interactive page the
-    ``web_browser`` tool drives (a serialized lane beside the reader's
+    ``browse`` tool drives (a serialized lane beside the reader's
     parallel reads, same cookie store): snapshot refs via injected
     `data-zjs-ref` attributes (interactive elements FIRST, then sizeable
     visible `img` elements — alt/src-basename named — so the aimed
@@ -245,7 +245,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     with a locked profile kills the stale holder of THIS profile and
     retries once; an atexit hook closes the browser on clean exits
     (granian workers skip it — the launch retry is the real net).
-    Tool packages importing this layer: `tools/web_browser` — the ONE
+    Tool packages importing this layer: `tools/browse` — the ONE
     browser tool package (spec + session service + `read.py`, the
     parallel read lane: knobs, guard, TTL cache).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
@@ -297,7 +297,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     ONE loop; the executor splits into `registry` ([n]/dedup/gallery
     whitelist), `coverage` (the task card's bidirectional-containment
     tracker), `feed` (the writer's compact [n] block builder), `rank`
-    (the web_search RANKING CASCADE: engine order → BM25 via the classic
+    (the search_web RANKING CASCADE: engine order → BM25 via the classic
     page's bm25_reranker tokenizer/RRF → the `zjsearch.rerank` endpoint
     re-scoring the head-20 → embedding diversity pruning the
     near-duplicate syndications — Bocha's cascade MINUS the decision
@@ -332,32 +332,32 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     FIXED QUICK TASK: one write turn over the client-assembled context,
     zero separate design), plus `embed_route` and the thread page.  The
     shared prompt spine (identity/citations/markdown/voice/answer
-    contract) is `prompts/spine.py`; the reader/calculator/past_research/user_memory/engine_info/mcp
+    contract) is `prompts/spine.py`; the reader/calculate/recall_history/memory/list_engines/mcp
     tool implementations are self-contained packages under `ai/tools/`
   (one package per tool: spec + sanitizer + service; `core/`, `prompts/`,
   `runs/`, `api/` complete the layout — see NEXTGEN-DESIGN.md).  THE
-  DEPLOYMENT-DERIVED SEARCH SURFACE: `web_search`'s `category` enum is
-  NOT a fixed list — `available_categories()` (tools/web_search.py)
+  DEPLOYMENT-DERIVED SEARCH SURFACE: `search_web`'s `category` enum is
+  NOT a fixed list — `available_categories()` (tools/search_web.py)
   derives it from `searx.engines` at spec-build time (every category ≥1
   enabled-and-not-default-disabled engine serves; default-disabled
   engines never ride category fan-out, so a category only they declare
   is excluded), and `parse_call` validates against the same set — the
   model sees exactly what the deployment serves (35 verticals on the
   prod settings, not the 8 the old static tuple carried).  The ENGINES
-  behind the verticals are the `engine_info` tool (tools/engine_info.py):
+  behind the verticals are the `list_engines` tool (tools/list_engines.py):
   ONE read-only inventory call (categories with engine counts + every
   default-disabled engine with its bang shortcut; the row's expanded body
   renders the STRUCTURED `inventory` payload as two directory grids —
   category cells + bang cells, `paid` engines carry an accent API-billed
   tag — engine count in the metric; the plain text stays feed-only).
   It exists for the API-billed engines a deployment holds back (bocha/tavily/firecrawl/search1api/openfda ship
-  `disabled` by default): the bang doctrine in the web_search spec and
+  `disabled` by default): the bang doctrine in the search_web spec and
   the researcher prompt is deliberately LOOSENED to "bang when the user
   names an engine OR the inventory shows a fitting held-back one" —
-  verified live: the model quoted the rule, called engine_info first,
+  verified live: the model quoted the rule, called list_engines first,
   and ran an entire Tavily-named research through `!tvlyn`/`!tvly`
   bangs discovered from the listing.  THE PAID GATE (bangs cost real
-  money): `paid_engines()` (tools/web_search.py) reads the settings'
+  money): `paid_engines()` (tools/search_web.py) reads the settings'
   per-engine `api_key` — the universal marker of the commercial engines
   (64 on prod) — and `_search_plan` HOLDS a !bang naming one of them
   until the user approves: the search settles as status `approval`
@@ -365,7 +365,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   teaches the ONE ask_user confirmation ("bocha 按调用计费,是否允许?
   "), the run parks `awaiting` on the ask, and the user's yes comes
   back through the normal clarify round-trip; the model then re-runs
-  with `paid_ok: true` (a sanctioned web_search argument), which sets
+  with `paid_ok: true` (a sanctioned search_web argument), which sets
   the STICKY `state.paid_ok` — one confirmation covers the whole run.
   Fail direction is SAFE: a process-restart resume rebuilds state and
   re-asks; children inherit the lead's flag (they have no ask tool);
@@ -385,7 +385,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `sources` emission): the known [n]s let the row still expand to what
   it found; a reader read NEVER emits its own event kind, the closed
   set has no `page` and a stale producer crashes the stream by design).
-  The `web_browser` settlement rides the same event: `page`
+  The `browse` settlement rides the same event: `page`
   {url,title} (where the action left the session), `img` (the action's
   frame jpeg — the screenshot's deliberate shot or the mirror frame),
   `shot` (true on the screenshot settlement: the stream consumer keeps
@@ -399,10 +399,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   model drove; coverage + entries ride along; about:blank mints
   nothing).  The `browser` mirror event ends the wait window with one
   frame WITHOUT `wait_left`: the countdown and the mobile wait bar
-  retire at the window's end, not at the next model action); `tasks` is the task card's AUTHORITATIVE snapshot;
-  `learnings` is the FINDINGS LEDGER's authoritative snapshot (the researcher's
+  retire at the window's end, not at the next model action); `plan` is the task card's AUTHORITATIVE snapshot;
+  `findings` is the FINDINGS LEDGER's authoritative snapshot (the researcher's
   own distillation of what the sources established — same
-  snapshot-replace semantics as `tasks`); `sources` the global [n] registry; `answer` deltas are the writer's
+  snapshot-replace semantics as `plan`); `sources` the global [n] registry; `answer` deltas are the writer's
   OWN buffer (narration never mixes in); `ask` is the clarify gate AND
   the mid-research ask_user (same schema); `settle` declares the
   terminal state (`status: done|awaiting|error` + finish/usage/model/
@@ -410,10 +410,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the research early: `stalled | time_budget | round_budget |
   loop_detected`; the client's halts.ts renders it through i18n beside
   the run footer).  `decisions` batches the run's DECISION RESULTS (framework gates
-  + the model's own judge) once per round — the rail's 决策结果 card
+  + the model's own evaluate tool) once per round — the rail's 决策结果 card
   renders them click-through; every decision speaks the ONE
   NAMED-VERDICT-MAP protocol (`answers: {name: choice|score|noul}` +
-  `record_questions: [{name, instructions}]` — the judge tool's entry
+  `record_questions: [{name, instructions}]` — the evaluate tool's entry
   included; bare numbers normalize to noul), so the client's one generic
   renderer covers every present and future purpose with zero
   per-purpose branches, and the in-card question line only appears when
@@ -452,7 +452,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
 - The AI run's RIGHT RAIL is one uniform surface (five sections plus
   the browser session's TRANSIENT card pinned FIRST while it lives,
   one section language — icon+title+count header, 13px body rows, cap-
-  and-expand): 浏览器实况 (the web_browser mirror — live frames, the
+  and-expand): 浏览器实况 (the browse mirror — live frames, the
   takeover entry, the mobile wait bar; unmounts at the settle) →
   已确认方向 (the clarify archive) → 调研计划 (task card,
   plan order, never capped) → 研究发现 (findings + 未决缺口: open gaps
@@ -586,15 +586,14 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
   `results/` (layout.ts detection, ResultsView, CategoryBlocks, CardList,
   ResultRow, cards/, answers/, image/, grids, infobox/debug/suggestions,
   aiOverview.ts — the AI Overview contract: context assembly, stream
-  splitting, citation meta), `hotkeys.ts`, `calculator.ts`.
+  splitting, citation meta), `hotkeys.ts`, `calculate.ts`.
   PLACEMENT DOCTRINE (ZJBlog DESIGN.md §12): `components/` is cross-page
   ONLY — a component with a single page consumer folds into that page's
   file (AiModeSwitch lives in IndexPage.tsx); `features/<domain>/` owns
   real domains; lib modules are lowercase topics; named exports only,
   zero `export default`; no barrel files.  Legacy-compat shapes are
-  deleted with their era, not carried: the stored-thread `spawn_subtask`
-  tool name and the `"plan"` step kind are gone (old threads degrade to
-  web_search rows / silently drop those steps).
+  deleted with their era, not carried — no old-name mapping survives a
+  rename (old stored threads degrade to the fallback row view).
 - `src/pages/` — thin route composition roots (state + event handlers +
   layout wiring); page-private pieces sit next to the page
   (`preferences/` → PreferencesPage + `usePreferencesForm` + `tabs/`).
@@ -1140,7 +1139,7 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
   "If it clicks, it is 13px" has NO sub-12 exceptions left: the results
   meta toggles and `EnginesLine` chips keep their sanctioned 12px with
   the 24px `min-h-6` box, everything else interactive grew to 13px.
-- Answer values are tiered: `text-4xl` calculator/stat heroes, `text-xl`
+- Answer values are tiered: `text-4xl` calculate/stat heroes, `text-xl`
   time/translation heroes, `text-sm font-mono` copyable values (hash/ip) —
   always with `break-all` on unbreakable payloads.
 
@@ -1357,10 +1356,10 @@ Controls:
 Instant answers (`features/results/answers/`, one file per kind) are tiered
 (the split lives in `Answers.tsx` — `isCarded()`):
 
-- Answers without a source url (calculator, time, ip, hash, random, stats,
+- Answers without a source url (calculate, time, ip, hash, random, stats,
   tor) render uncarded in the results column — gray lead-in expression,
   value at 4xl, `border-b` divider (Google-style).  The client-side
-  calculator (`CalculatorAnswer`) follows the same language.
+  calculate (`CalculatorAnswer`) follows the same language.
 - Rich widgets keep the accent card: weather, translations AND the
   interactive unit/currency converter — `UnitConverterAnswer` renders its
   own single accent card (never nest it inside another), with borderless
@@ -1615,7 +1614,7 @@ the wire; each operation runs inside ONE self-contained connection (open →
 initialize → act → close, a single loop task — the SDK's anyio task groups
 cannot survive the next `run_coroutine_threadsafe` task, so sessions are
 deliberately NOT cached).  Tools are namespaced `mcp_<server>_<tool>`;
-their schemas reach the model ONLY through the `mcp_search_tools`
+their schemas reach the model ONLY through the `search_mcp_tools`
 discovery tool (see below), never injected into the tools array raw.
 Executor dispatch is the `mcp_` prefix branch: blocking on the shared
 loop's result with a 90s budget, the timeline row renders the server-scoped
@@ -1623,7 +1622,7 @@ tool name with a Plug icon.  Unconfigured = silence (no specs, no
 sessions); a dead endpoint contributes nothing (one server failing must
 not take the run down).  The tool surface is ALWAYS progressive
 disclosure (the Agent Skills injection pattern): the run registers ONE
-`mcp_search_tools` discovery tool, never the raw schemas — the model
+`search_mcp_tools` discovery tool, never the raw schemas — the model
 keyword-searches it, receives the matched tools' COMPLETE parameter
 schemas, and calls them by name next turn (a miss returns the
 inventory for re-querying).  One uniform shape however small the
@@ -1645,25 +1644,22 @@ git — dev-settings.yml carries them locally only.
 ## Task decomposition (quality/goal) and the GOAL LOOP
 
 quality/goal decompose: the model writes a LIVING task list
-(`task_write` — as many subtasks as the question needs, no hard cap,
+(`update_plan` — as many subtasks as the question needs, no hard cap,
 with pending/active/done statuses; the
 client renders it as the TASK CARD above the timeline: three-state rows
 + a done/total counter; `Coverage` marks a subtask done only when real
 source titles matched — a subtask that never gathered a source is NOT
-flipped to done).  The old `spawn_subtask` subagent nest and the
-one-shot plan tool are REMOVED — the task list is the only decomposition
-surface; the client's `spawn_subtask` tool name survives solely as a
-stored-legacy thread renderer.
+flipped to done).
 
-SUBAGENTS (`research_subtask`): the delegation gate is the DEPTH PROBE's
+SUBAGENTS (`delegate_research`): the delegation gate is the DEPTH PROBE's
 rung — deep from rung 2, balanced from rung 4 (the four-field brief +
 batch cap + the shared registry make delegation safe; the old deep-only
 rung-3 gate made it nearly unreachable), and `<research_policy>` tells
 the model its grade.  THE CHILD IS A WHOLE RESEARCHER: its toolset
-carries `learnings_spec()` (THE LEDGER IS ITS DIGEST — the delegation
+carries `record_findings_spec()` (THE LEDGER IS ITS DIGEST — the delegation
 contract promises facts + gaps, and `_sub_digest` builds exactly those
 from `child.facts`/`child.gaps`; a child without the tool returned a
-bare 「来源 N 条已入册」 and its report was discarded) and `judge` under
+bare 「来源 N 条已入册」 and its report was discarded) and `evaluate` under
 the lead's decision gate; its SPEND joins the run's account
 (`_promote_child` merges the child's spend-ledger deltas — rerank /
 decision / embedding / gates — its judgments tagged `sub:` —
@@ -1715,7 +1711,7 @@ model stops calling tools) or a stalled run (3 unproductive rounds),
 never on a small count.  `max_rounds: 32` is the runaway guard, not the
 plan (the ceiling is INTERNAL: mode budgets 6/60/120, the depth probe's ladder personalizes it per question — deliberately not a deployment knob; a code-side default ladder keeps the sizing alive when the deployment carries none); the prompt
 tells the researcher to keep working open ledger items and to switch
-tools freely (searches, page reads, the calculator).  THE BUDGET IS
+tools freely (searches, page reads, the calculate).  THE BUDGET IS
 BIDIRECTIONAL (2026-10-15): the depth probe clamps the run at START (a
 trivial question on deep lands on a low rung), and the loop's
 budget-tail gate (`gates.extend_budget_gate`, ONE structured
@@ -1732,7 +1728,7 @@ FAILURE IS RETRYABLE: the dedup registry marks queries/pages at
 COMPLETION, never at plan time — a query whose engines errored and a
 page whose read failed stay re-runnable (an executed query — empty or
 not — is honestly remembered; only an errored one is not).  THE JUDGED
-ESCAPE (2026-10-15): `web_search` accepts `refresh: true` — the model
+ESCAPE (2026-10-15): `search_web` accepts `refresh: true` — the model
 deliberately re-runs an executed query (live material: a score, a
 just-published release, a page the user says updated); the duplicate
 refusal is bypassed while page-level dedup still applies (already-
@@ -1746,7 +1742,7 @@ never settle as a duplicate.  An unproductive round (gathered work,
 zero new sources) appends a change-the-angle note to the round's tool
 results BEFORE the stall detector fires — Jina's diary discipline:
 `stall_rounds: 2` modes get one warning then the halt, goal's 3 get
-two.  Pure bookkeeping rounds (plan writes, learnings, memory saves)
+two.  Pure bookkeeping rounds (plan writes, findings, memory saves)
 are NEITHER progress NOR stall.  The researcher never sees the stall
 halt itself — that note (`STALL_NOTE`) stays the writer's honesty
 context.  A settlement generator guards everything after its future
@@ -1759,7 +1755,7 @@ PLUGIN ANSWERS ARE MODEL-VISIBLE: the AI search runs the real
 FIRST line of that search's feed block ("Direct answers") --
 SearchWithPlugins computed answers all along and the old code dropped
 them at `get_ordered_results()`; an answer-only search also counts as
-productive for the stall detector, and the web_search spec teaches the
+productive for the stall detector, and the search_web spec teaches the
 trigger syntax.  WEB_BROWSER HAS NO BUILT-IN SEARCH ACTION (2026-10-12,
 the ZCode Browser-Use doctrine): the tool is a PURE browser surface
 (open/snapshot/click/type/press/scroll/screenshot/read/wait_user) --
@@ -1768,11 +1764,11 @@ baidu/xiaohongshu in the session and driving the site's own search box
 (snapshot+click+type), the same way it drives any platform; the old
 `search` action (SERP URL templates, the scrape JS, the relevance
 guard) is REMOVED, and the cross-references point at the TOOL, never at
-a search feature (web_search's spec: "a real interactive browser --
+a search feature (search_web's spec: "a real interactive browser --
 open and drive sites with it directly"; the researcher prompt's
 change-the-instrument note says "the browser session").
 
-THE SESSION'S PLATFORM DOCTRINE: the web_browser spec explicitly
+THE SESSION'S PLATFORM DOCTRINE: the browse spec explicitly
 licenses driving the session at ANY public platform (xiaohongshu /
 zhihu / bilibili / weibo / e-commerce / forums) -- open the site's
 on-site search URL (`xiaohongshu.com/search_result?keyword=...`) or
@@ -1782,7 +1778,7 @@ live: it went straight to XHS's search_result page); a login wall is
 reported honestly and the wait_user mirror is the user's way through.
 
 THE BROWSER-USE MERGE (2026-10-12, ONE tool over ONE engine): the old
-`web_reader` / `web_browser` split is GONE — `web_browser` is the single
+`web_reader` / `browse` split is GONE — `browse` is the single
 browser tool, browser-use-style, and `read` is POLYMORPHIC: with a url
 it rides the PARALLEL pool lane unchanged (worker pool, TTL cache, read
 dedup, the read gate, corpus + feed trim — the old web_reader path,
@@ -1799,14 +1795,14 @@ alias anywhere — a pre-merge call replaying from stored history lands
 on the run's unknown-tool fallback, and pre-merge threads' reader rows
 render through the client's unknown-tool fallback; the web_reader
 PACKAGE is gone too (the read lane lives in
-`tools/web_browser/read.py`, one package per tool).  The takeover UX
+`tools/browse/read.py`, one package per tool).  The takeover UX
 contract (the
 rail's live mirror card
 pins FIRST; a `wait_user` window AUTO-OPENS the takeover ONCE per
 window — the run blocks on the user, a prompt hidden behind a rail
 card would stall the run silently; the window-end frame retires the
 countdown; below lg a FIXED bottom bar keeps the window reachable from
-anywhere on the page; the timeline's web_browser rows render the
+anywhere on the page; the timeline's browse rows render the
 ACTION's result — the screenshot shows its shot (click zooms), open/
 snapshot render the session's interactive-element outline, click/type/
 press/scroll render the location line, read/wait_user render the
@@ -1878,19 +1874,19 @@ hatch: exact hosts both SSRF gates (the reader's string-level
 `guard_url` AND the browser's request gate) let through — it is how
 the audit reads its loopback fixture offline.
 
-THE FINDINGS LEDGER (`learnings` tool, dzhng's learnings as a
+THE FINDINGS LEDGER (`findings` tool, dzhng's findings as a
 first-class surface): the researcher records what the sources
 ESTABLISHED (1-6 self-contained [n]-cited facts per call, deduped into
-the run's ledger); the wire `learnings` event is the authoritative
+the run's ledger); the wire `findings` event is the authoritative
 snapshot, the writer receives the same list as a `<findings>` block
 beside the raw sources (support, never substitute — the citation
 contract still binds), and the client renders a findings card under the
 research-plan card (plan above, evidence below; each fact expands
 through the source cards' measured 查看更多 clamp).  Plans/next steps
-belong to `task_write`, narration to the step notes — the prompt says
+belong to `update_plan`, narration to the step notes — the prompt says
 so.  THE FACT TAGS (2026-10-13, the tag graph's evidence layer): each
 fact optionally carries 1-3 SHORT concept tags the model names at write
-time (`tags` in the learnings schema, zero extra calls; dedup merges
+time (`tags` in the findings schema, zero extra calls; dedup merges
 union them, cap 6; the promotion ops carry them over) — the findings
 card renders them as meta chips, and settleRun folds the active facts'
 tags into the run row's tag set (extractor tags win the base, fact tags
@@ -1898,7 +1894,7 @@ fill the tail, cap 12), so a graph tag resolves to the runs whose
 established facts carry it.  THE TAGS ARE TAUGHT, NOT HOPED FOR
 (2026-10-14): an optional schema field's description alone is a coin
 flip on the model noticing it (a balanced run's 20 facts carried zero)
-— the `<learnings>` block carries the binding sentence (every fact
+— the `<findings>` block carries the binding sentence (every fact
 tags, reusing earlier facts' exact words), and the examples speak the
 house vocabulary (DeepSeek-V4, the fact example's own natural tags —
 a biopharma test-run leftover was the one outlier in the prompt
@@ -2035,7 +2031,7 @@ falls back to chars/3; the threshold is `context_window − 21k (output
 reserve) − 13k (buffer)` out of the `zjsearch.compact` settings block
 (`context_window` MUST name the real model limit — it rides cfg, so
 subagent children inherit the policy).  **MICROCOMPACT** (free, no
-model call): old rounds' `web_reader`/`web_browser` result bodies
+model call): old rounds' `web_reader`/`browse` result bodies
 beyond the keep-5 window collapse to their citation head (~240 chars —
 the `Opened {url} … source [n]` line) + a sentinel; the sentinel never
 promises a re-read (the read-dedup registry makes re-reads settle as
@@ -2265,7 +2261,7 @@ loses the event -- shipped bug).
   only on the run row's FIRST insert (`RETURNING (xmax = 0)` -- a
   re-settle stays idempotent and only refreshes preview/recency).
 - RECALL: `recallCorpus` (writer-phase corpus) and `recallPages`
-  (past_research index) fuse THREE dimensions (`fuseRecall`) -- hybrid
+  (recall_history index) fuse THREE dimensions (`fuseRecall`) -- hybrid
   BM25+vector RRF (trigram rescue on zero signal) at 1.0, the TAG GRAPH
   (query matched against the tag vocabulary, shared-tag rows ranked)
   at 0.6, and the HIT-TAG ONE-HOP EXPANSION (`expandByHitTags`: the
@@ -2389,13 +2385,13 @@ loses the event -- shipped bug).
 How runs consume the corpus (the client recalls BEFORE every AI-search
 POST; the server stays stateless):
 
-- `user_memory` — ONE tool, TWO actions, both the model's choice:
+- `memory` — ONE tool, TWO actions, both the model's choice:
   `search` (the read path) and `save` (flowing back as the `memory` wire
   event).  LIVE (2026-10-15): with `live_recall` the snapshot no longer
   rides the pre-send nor injects into the researcher prompt — the
   prompt renders a tool-first block (WHEN to consult: the user
   references prior context or a standing preference could shape the
-  plan — ideally before planning), and the first `user_memory` call of
+  plan — ideally before planning), and the first `memory` call of
   a run (search OR save) pulls the store's list through the recall
   slot (`kind: "memory"`; pull-once per run via
   `state.memories_pulled`).  Both actions and the save near-dup gate
@@ -2408,7 +2404,7 @@ POST; the server stays stateless):
   numbered keeps ITS number).  THE RED LINE: recalled material never
   seeds the researcher's feed — ready-made answers kill the
   live-search incentive.
-- `past_research` — the RAG TOOL index: document entries carry
+- `recall_history` — the RAG TOOL index: document entries carry
   ~1500-char heads, source entries identity only (the tool's feed then
   points at web_reader for a live re-read); registered only when
   non-empty.  UPLOADED FILES ride the same index as url-less FILE
@@ -2425,7 +2421,7 @@ POST; the server stays stateless):
   material (request attachments win when present), so a mis-gated
   recall request still reaches the user's own files.  LIVE RECALL
   (2026-10-15): with `live_recall: true` in the run body the
-  full-text index stays home — the model's `past_research` call
+  full-text index stays home — the model's `recall_history` call
   yields a `recall` wire event (`{id, q}`, the model's OWN query),
   the client searches its live store and answers through
   `POST /zjsearch/ask/run/recall` (the slot registry
@@ -2470,9 +2466,9 @@ redundant, both fused into ONE post-run extractor:
 
 - READ: the run pre-sends every stored fact (`user_memories`, the
   content list) and the researcher prompt injects them in a
-  `<user_memory>` block — ALWAYS rendered (the empty state carries the
+  `<memory>` block — ALWAYS rendered (the empty state carries the
   save guidance; small models never call the tool unprompted).
-- WRITE: the `user_memory` tool (action=save yields a `memory` wire
+- WRITE: the `memory` tool (action=save yields a `memory` wire
   event), AND `extract_insights` (ai/tools/memory.py): one
   json_completion after the settle returns BOTH durable facts and
   concept tags -- the belt-and-braces for small models that never call
@@ -2504,10 +2500,10 @@ redundant, both fused into ONE post-run extractor:
   run_context block AND plan_review's `plan_complete` noul (state
   `deliverable_entities` / `entity_gap`); single-write runs get the same
   via `runs/search/entity_gate.py` (ONE jsongate extraction + term
-  screen on the FIRST task_write, judgment purpose `entity_coverage`).
+  screen on the FIRST update_plan, judgment purpose `entity_coverage`).
   The harness shows the blind spot; the MODEL closes it (add subtasks or
-  delegate research_subtask) -- never auto-dispatch.
-- **THE LIVING PLAN**: task_write is a full-snapshot replace (2-8 items
+  delegate delegate_research) -- never auto-dispatch.
+- **THE LIVING PLAN**: update_plan is a full-snapshot replace (2-8 items
   after the harmonization), and the researcher prompt teaches the plan
   as a LIVING HYPOTHESIS -- revise (add/split/merge/reword/drop) by
   resending the complete list whenever cross-checking proves an earlier
@@ -2551,7 +2547,7 @@ redundant, both fused into ONE post-run extractor:
   repetition earns ONE `<loop_warning>` user message, the second sets
   `_LOOP_NOTE` + `loop_detected` and the writer answers from what was
   gathered; content-level duplicate refusals only cover
-  web_search/reader keys, browser/MCP actions are what the guard catches.  The writer-facing half of the wrap halt is the English
+  search_web/reader keys, browser/MCP actions are what the guard catches.  The writer-facing half of the wrap halt is the English
   `_WRAP_NOTE` (the model never sees a key).  Report-synthesized text
   follows the run language (the summary section title, the section-gap
   note) -- no hardcoded Chinese reaches en users.
@@ -2802,10 +2798,10 @@ pages the reader exists for, not pages to refuse;
 `zjsearch.browser.params: {ignore_https_errors: false}` restores strict
 validation (the params passthrough reaches playwright's
 launch_persistent_context verbatim via launch_options' catch-all
-spread).  SAME DAY, THE TOOL MERGED: web_reader folded into web_browser
+spread).  SAME DAY, THE TOOL MERGED: web_reader folded into browse
 (ONE tool, polymorphic `read` — see THE BROWSER-USE MERGE below), and
-the cross-references name the merged tool only (web_search's spec:
-"the web_browser tool's read reads that page in full … the same tool is
+the cross-references name the merged tool only (search_web's spec:
+"the browse tool's read reads that page in full … the same tool is
 a real interactive browser -- open and drive sites with it directly";
 the researcher prompt's change-the-instrument note says "the browser
 session").
@@ -2814,7 +2810,7 @@ THE THREAD SUB-TOPIC CONTRACT (2026-10-11, layered): a thread is ONE
 main run (root, undeletable) plus sub-topic follow-ups, and the
 follow-ups carry the thread's material in THREE layers --
 (1) LEDGER (default, every follow-up): the client gathers all prior
-runs' active learnings + open gaps (dedup, cap 40+12) into
+runs' active findings + open gaps (dedup, cap 40+12) into
 `thread_ledger` on the request body; the route validates/caps and
 `initial_messages(thread_ledger=...)` renders a `<thread_context>` block
 in the researcher's run_context (`<established>` facts -- build on them,
@@ -2915,15 +2911,15 @@ real-config deck run at 74 calls died to a routine restart.
 - `time_zone`: an unknown location is silence (ValueError swallowed), not a
   plugin error.  The filler word "in" is stripped from the search term, so
   "time in tokyo" resolves like "time tokyo" instead of going silent.
-- `calculator` (AI tool, `searx/zjsearch/ai/tools/calculator.py`):
+- `calculate` (AI tool, `searx/zjsearch/ai/tools/calculate.py`):
   the researcher's NON-NEGOTIABLE number rule — every non-trivial figure
   (ratios, growth, averages, financial/forecast math) goes through the
-  tool, never in-head; the `<calculator>` prompt block names earnings and
+  tool, never in-head; the `<calculate>` prompt block names earnings and
   forecast material explicitly.  The writer/overview have NO tools, so
   the spine's `<figures>` rule does the honest second half: derive only
   from cited inputs, keep the derivation visible, never present a
   computed number as if a source stated it.
-- `view_image`(AI 工具,`searx/zjsearch/ai/tools/view_image.py`):
+- `inspect_image`(AI 工具,`searx/zjsearch/ai/tools/inspect_image.py`):
   研究者的眼睛——feed 来源行带 `img=` 标记,该工具抓取该图并作为下一轮
   user 消息回灌(user turn 全方言接受图片 parts)。SSRF 门校验;图片传输
   遵循 `zjsearch.llm.images` 设置(`base64` 服务端抓取内联,默认;
@@ -3023,7 +3019,7 @@ vendor's own API is their "SystemOne" endpoint, ``/v1/systemone``) and
 through the typed ``client.decisions.create``, openai >= 3.26).  The
 family surfaces follow the embedding service's ``embed()`` pattern: the
 method is ``decide(state, questions, timeout)`` on each family module's
-class, `judge()` resolves the family and returns JSON-safe answers in
+class, `evaluate()` resolves the family and returns JSON-safe answers in
 the SAME canonical shapes whatever the family (the SDKs' typed models
 downgrade through model_dump / the openai wire mapping), so no consumer
 knows which served: noul -> ``predicate`` (the yes probability IS the
@@ -3040,7 +3036,7 @@ absent rides the public endpoint).  A question the Decisions wire
 cannot express (a choice with <2 options, a score with <2 levels) drops
 on the openai family -- its answer stays absent, the consumers'
 fail-open covers it -- because a malformed question would 400 the
-WHOLE request.  IMAGES (both families take pictures): ``judge(...,
+WHOLE request.  IMAGES (both families take pictures): ``evaluate(...,
 images=[urls])`` resolves each URL (data or public http/https through
 ``guard.public_url_rejection`` -- the model names URLs, the server
 fetches) into assets the state/instructions reference as PLAIN
@@ -3055,7 +3051,7 @@ geometry floor) and DOWNSCALES the oversized into the
 caller's ``image-2`` mention keeps pointing at the same picture;
 webp/gif transcode to PNG and in-window PNG/JPEG bytes ride verbatim
 (PIL optional -- without it only the wire-native formats pass,
-unchecked).  The judge TOOL gains ``images`` (url strings off the
+unchecked).  The evaluate TOOL gains ``images`` (url strings off the
 gathered material, cap ``decision.MAX_IMAGES``, parsed as a third
 tuple element); the browser proxy + ``lib/decision.ts``'s ``decide()``
 carry the same optional list.  USAGE COVERAGE (every model spend lands
@@ -3068,7 +3064,7 @@ survive the gather workers, the dispatch pools and the driver thread --
 the flask-context lesson).  The SERVICES parse their own wire usage and
 record (family knowledge stays in the family -- the decision family
 surfaces even bind the account at factory time and self-record, so no
-judge call site folds a bucket): ``rerank`` / ``decision`` /
+evaluate call site folds a bucket): ``rerank`` / ``decision`` /
 ``embedding`` from their endpoints, and the LLM's small structured
 completions (``gates``) from ``jsongate.json_completion``'s ONE choke
 point (``record`` is shape-agnostic -- numeric fields merge per model
@@ -3227,7 +3223,7 @@ LOADED/NOT LOADED).
   `response_format.json_schema.name`, the researcher via `tools` presence,
   the writer via the `<follow_ups>` system marker, everything else the
   overview).  The audited AI pages: `?q=zjaudit+general&ai=1` (the full
-  takeover: reasoning timeline + intent + a web_search AND a web_reader
+  takeover: reasoning timeline + intent + a search_web AND a web_reader
   round -- the browser engine reads the mock's own fixture page
   (`GET /read-fixture`, reachable because audit-settings.yml exempts
   127.0.0.1 via `zjsearch.browser.allow_hosts`), exercising the real

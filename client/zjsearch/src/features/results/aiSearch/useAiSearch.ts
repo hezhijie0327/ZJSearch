@@ -50,7 +50,7 @@ import type { AiCapability } from "@/lib/types.ts";
  *
  * This file is the HOOK: the state owner, the stream consumer and the
  * storage bridge.  The wire-event fold itself (applyEvent + the run/call/
- * source types) lives in timeline.ts; the ledger helpers (tasks/learnings/
+ * source types) lives in timeline.ts; the ledger helpers (plan/findings/
  * clarify grammar) live in ledger.ts -- the public surface is unchanged:
  * everything below re-exports what the rest of the app imports from here.
  *
@@ -67,7 +67,7 @@ import type { AiCapability } from "@/lib/types.ts";
     snapshot) race this budget -- a warm store answers in milliseconds and
     never trips it; a cold one degrades to a recall-less POST exactly like
     the error path already tolerates (the server registers no
-    past_research tool, the metadata fields stay empty) while the boot
+    recall_history tool, the metadata fields stay empty) while the boot
     continues in the background for the run's own recording.  The raced
     work is NEVER cancelled: pgPromise memoizes, so the next submit finds
     the store warm. */
@@ -296,7 +296,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   /** The LIVE RECALL answerer: the run asked through the recall wire
       event -- kind picks the store lane: "memory" returns the user's
       stored memory rows (the server ranks + dedups saves against them),
-      "corpus" (past_research) searches pages with text heads + corpus
+      "corpus" (recall_history) searches pages with text heads + corpus
       identities, the model's query drives the ranking.  Best-effort by
       contract: the slot expires server-side in 6s and the tool fails
       open, so every failure here is silent; the queries race a 5s budget
@@ -379,7 +379,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         }
         return;
       }
-      // LIVE RECALL: the run's past_research call asked -- serve it from
+      // LIVE RECALL: the run's recall_history call asked -- serve it from
       // the local store and fill the server's slot.  NOT a timeline op:
       // nothing persists, nothing reduces (the call's own settlement row
       // renders when the slot answers server-side); an answer for an
@@ -414,7 +414,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         return;
       }
       // VOLATILE BYTES mostly never persist: the browser mirror's frames
-      // and the web_browser rows' settlement images keep their meta in
+      // and the browse rows' settlement images keep their meta in
       // the event log but not the jpeg bytes -- a replay shows the
       // session's trail without the megabytes.  THE EXCEPTION is the
       // screenshot action's deliberate shot (wire mark `shot: true`,
@@ -667,8 +667,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     );
     void (async () => {
       // the pre-POST recall is now METADATA-ONLY: the full-text
-      // past_research index is gone from the send -- the model's
-      // past_research calls go to the LIVE store (the recall wire event;
+      // recall_history index is gone from the send -- the model's
+      // recall_history calls go to the LIVE store (the recall wire event;
       // live_recall below), so what still ships is the cheap identity
       // layer: the corpus titles (history_sources/history_topics), the
       // user's uploaded FILE heads (the no-research writer path's only
@@ -740,11 +740,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         // the thread ledger: the earlier runs' established facts + open
         // gaps (the sub-topic contract -- build on, never re-research)
         thread_ledger: threadLedger,
-        // LIVE RECALL: the model's past_research calls are answered from
+        // LIVE RECALL: the model's recall_history calls are answered from
         // the live store (the recall wire event) -- only the user's own
         // uploaded FILE heads still ride the send (url-less documents:
         // the no-research writer path reads them without any tool)
-        past_research: docFiles.map((hit) => ({ url: "", title: hit.title, text: hit.text })),
+        recall_history: docFiles.map((hit) => ({ url: "", title: hit.title, text: hit.text })),
         live_recall: true,
       };
       // the consumption machinery (the seq guard, the stream watchdog,
@@ -847,7 +847,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     // run) until manually removed from THIS run's picker.
     const seen = new Set<string>();
     const facts = core.runs
-      .flatMap((run) => run.learnings ?? [])
+      .flatMap((run) => run.findings ?? [])
       .filter((fact) => fact.status === "active" && fact.text && !seen.has(fact.text))
       .map((fact) => {
         seen.add(fact.text);
@@ -1133,7 +1133,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       return;
     }
     const runNo = core.runs.length + 1;
-    const text = continueBrief(last.q, last.learnings ?? [], last.gaps ?? []);
+    const text = continueBrief(last.q, last.findings ?? [], last.gaps ?? []);
     appendRunEvents(`${threadIdRef.current}:${runNo}`, [
       { e: "client.start", q: last.q, runNo, mode, startedAt: Date.now(), continued: true },
     ]);

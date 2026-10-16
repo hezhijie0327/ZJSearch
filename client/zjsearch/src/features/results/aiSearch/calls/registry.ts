@@ -2,20 +2,20 @@
 
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { askUserView } from "@/features/results/aiSearch/calls/views/askUser.tsx";
-import { calculatorView } from "@/features/results/aiSearch/calls/views/calculator.tsx";
-import { engineInfoView } from "@/features/results/aiSearch/calls/views/engineInfo.tsx";
-import { extractTableView } from "@/features/results/aiSearch/calls/views/extractTable.tsx";
-import { judgeView } from "@/features/results/aiSearch/calls/views/judge.tsx";
-import { learningsView } from "@/features/results/aiSearch/calls/views/learnings.tsx";
+import { browseView } from "@/features/results/aiSearch/calls/views/browse.tsx";
+import { buildTableView } from "@/features/results/aiSearch/calls/views/buildTable.tsx";
+import { calculateView } from "@/features/results/aiSearch/calls/views/calculate.tsx";
+import { delegateResearchView } from "@/features/results/aiSearch/calls/views/delegateResearch.ts";
+import { evaluateView } from "@/features/results/aiSearch/calls/views/evaluate.tsx";
+import { inspectImageView } from "@/features/results/aiSearch/calls/views/inspectImage.tsx";
+import { listEnginesView } from "@/features/results/aiSearch/calls/views/listEngines.tsx";
 import { mcpView } from "@/features/results/aiSearch/calls/views/mcp.ts";
 import { memoryView } from "@/features/results/aiSearch/calls/views/memory.tsx";
 import { messageSubtaskView } from "@/features/results/aiSearch/calls/views/messageSubtask.ts";
-import { pastResearchView } from "@/features/results/aiSearch/calls/views/pastResearch.ts";
-import { researchSubtaskView } from "@/features/results/aiSearch/calls/views/researchSubtask.ts";
-import { tasksView } from "@/features/results/aiSearch/calls/views/tasks.tsx";
-import { viewImageView } from "@/features/results/aiSearch/calls/views/viewImage.tsx";
-import { webBrowserView } from "@/features/results/aiSearch/calls/views/webBrowser.tsx";
-import { webSearchView } from "@/features/results/aiSearch/calls/views/webSearch.ts";
+import { recallHistoryView } from "@/features/results/aiSearch/calls/views/recallHistory.ts";
+import { recordFindingsView } from "@/features/results/aiSearch/calls/views/recordFindings.tsx";
+import { searchWebView } from "@/features/results/aiSearch/calls/views/searchWeb.ts";
+import { updatePlanView } from "@/features/results/aiSearch/calls/views/updatePlan.tsx";
 import type { AiSearchCall } from "@/features/results/aiSearch/useAiSearch.ts";
 
 /**
@@ -25,19 +25,19 @@ import type { AiSearchCall } from "@/features/results/aiSearch/useAiSearch.ts";
  * shape (the honest default: query + count + result cards).
  */
 export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
-  web_search: webSearchView,
-  web_browser: webBrowserView,
-  calculator: calculatorView,
-  task_write: tasksView,
-  learnings: learningsView,
+  search_web: searchWebView,
+  browse: browseView,
+  calculate: calculateView,
+  update_plan: updatePlanView,
+  findings: recordFindingsView,
   ask_user: askUserView,
-  judge: judgeView,
-  user_memory: memoryView,
-  past_research: pastResearchView,
-  engine_info: engineInfoView,
+  evaluate: evaluateView,
+  memory: memoryView,
+  recall_history: recallHistoryView,
+  list_engines: listEnginesView,
   mcp: mcpView,
-  extract_table: extractTableView,
-  view_image: viewImageView,
-  research_subtask: researchSubtaskView,
+  build_table: buildTableView,
+  inspect_image: inspectImageView,
+  delegate_research: delegateResearchView,
   message_subtask: messageSubtaskView,
 };

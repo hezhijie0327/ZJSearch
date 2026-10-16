@@ -55,7 +55,7 @@ export interface RunSnapshot {
     /** the SearXNG result snippet -- an uncrawled source's searchable body */
     content?: string;
   }>;
-  tasks?: Array<{ title?: string; status?: string }>;
+  plan?: Array<{ title?: string; status?: string }>;
   /** the report shape's per-section texts ({id: markdown}) -- the
       knowledge inspector re-renders the DOCUMENT (DocumentView) from
       these + the outline in meta.report; the deck shape's bodies are
@@ -64,9 +64,9 @@ export interface RunSnapshot {
   /** the SLIDE shape (the outline event's shape: "deck") -- meta.report
       carries it so the inspector renders the deck view */
   deck?: boolean;
-  /** the belief ledger's facts + gaps (the learnings tool's snapshots) --
+  /** the belief ledger's facts + gaps (the findings tool's snapshots) --
       the run row's meta carries them for the inspector */
-  learnings?: unknown[];
+  findings?: unknown[];
   gaps?: unknown[];
   /** the user's answered clarify text ("" = skipped) */
   clarify?: string | null;
@@ -130,7 +130,7 @@ function deriveTags(run: RunSnapshot): string[] {
       raw.add(token);
     }
   }
-  for (const task of run.tasks ?? []) {
+  for (const task of run.plan ?? []) {
     const title = String(task.title ?? "").trim();
     if (title && title.length <= 30) {
       raw.add(title);
@@ -346,7 +346,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       // the LEDGER's fact tags (the model's write-time topic naming) fill
       // the tail: the tag graph's evidence layer, so a topic tag resolves
       // to the runs whose established facts carry it
-      const factTags = (run.learnings ?? []).flatMap((fact) => {
+      const factTags = (run.findings ?? []).flatMap((fact) => {
         const record = fact as { status?: unknown; tags?: unknown } | null;
         if (record?.status !== "active" || !Array.isArray(record.tags)) {
           return [];
@@ -451,7 +451,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         tx,
       );
       // the task card + the clarify archive
-      if ((run.tasks ?? []).length > 0) {
+      if ((run.plan ?? []).length > 0) {
         await pgQuery(
           `INSERT INTO knowledge (id, kind, thread_id, run_id, title, meta, status, search_text, created, updated, occurred_at)
            VALUES ($1, 'task', $2, $3, $4, $5::jsonb, $6, $7, $8, $8, $8)
@@ -461,9 +461,9 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
             threadId,
             runId,
             run.q.slice(0, 300),
-            JSON.stringify({ items: run.tasks ?? [] }),
+            JSON.stringify({ items: run.plan ?? [] }),
             "done",
-            segmentKeywords(run.q, ...(run.tasks ?? []).map((task) => String(task.title ?? ""))).slice(0, 4000),
+            segmentKeywords(run.q, ...(run.plan ?? []).map((task) => String(task.title ?? ""))).slice(0, 4000),
             now,
           ],
           tx,
@@ -547,7 +547,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           tx,
         );
       }
-      // the retrieval-worthy tool calls (web_search queries, browser reads)
+      // the retrieval-worthy tool calls (search_web queries, browser reads)
       for (const step of run.steps ?? []) {
         if (step.kind !== "calls") {
           continue;
@@ -555,8 +555,8 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         for (const call of step.calls ?? []) {
           const tool = String(call.tool ?? "");
           const args = (call.args as Record<string, unknown> | undefined) ?? {};
-          const isRead = tool === "web_browser" && String(args.action ?? "") === "read";
-          if (!["web_search", "calculator"].includes(tool) && !isRead) {
+          const isRead = tool === "browse" && String(args.action ?? "") === "read";
+          if (!["search_web", "calculate"].includes(tool) && !isRead) {
             continue;
           }
           const callId = String(call.id ?? "");
@@ -642,7 +642,7 @@ export function archiveDocument(url: string, title: string, markdown: string): v
     name-addressed id (`doc:att:` prefix, never colliding with the url
     hashes deleteSource cascades by) and joins every surface a read page
     has: the document directory, hybrid + semantic search, the embed
-    pass, and the future runs' past_research recall. */
+    pass, and the future runs' recall_history recall. */
 export function archiveAttachments(
   threadId: string,
   runId: string,

@@ -5,7 +5,7 @@ Three tiers, cheapest first -- the port of ZCode's compact system onto
 the canonical message list:
 
 - **microcompact** (:func:`microcompact`): a pure-local pass that clears
-  the BODIES of ``web_browser`` tool results (the
+  the BODIES of ``browse`` tool results (the
   fail-open page reads are the list's bulk), keeping the citation head
   of each so ``[n]`` identity survives.  No model call.
 - **auto-compact** (:class:`Compactor.maybe_compact`): when the token
@@ -37,9 +37,9 @@ from searx.zjsearch.ai.llm.streaming import LlmStream
 
 logger = logging.getLogger(__name__)
 
-MICROCOMPACT_TOOLS = frozenset({"web_browser"})
+MICROCOMPACT_TOOLS = frozenset({"browse"})
 """Tool results whose BODIES are clearable (the fail-open page reads --
-the conversation's bulk).  ``web_search`` blocks stay: they are small
+the conversation's bulk).  ``search_web`` blocks stay: they are small
 and carry the ``[n]`` identity lines."""
 
 MICRO_KEEP_ROUNDS = 5

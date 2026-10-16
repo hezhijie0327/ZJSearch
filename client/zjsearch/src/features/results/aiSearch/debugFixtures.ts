@@ -89,7 +89,7 @@ function calls(items: Array<Record<string, unknown>>, id = 1): Record<string, un
 }
 
 /** EVERY tool row kind × status, the report document mid-stream, the
-    decision card, sources, learnings, tasks -- the whole surface. */
+    decision card, sources, findings, plan -- the whole surface. */
 const FULL_STAGE: DebugScenario = {
   id: "full",
   label: "all tool rows × states (report in progress)",
@@ -157,21 +157,21 @@ const FULL_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "多肽原料药 全球市场规模 2025",
         status: "pending",
         args: { query: "多肽原料药 全球市场规模 2025" },
       },
       {
         id: 2,
-        tool: "web_search",
+        tool: "search_web",
         q: "深圳 新房成交均价 分片区 2025",
         status: "pending",
         args: { query: "深圳 新房成交均价 分片区 2025", category: "general" },
       },
       {
         id: 3,
-        tool: "web_search",
+        tool: "search_web",
         q: "peptide API CDMO capacity share",
         status: "error",
         ms: 3210,
@@ -180,7 +180,7 @@ const FULL_STAGE: DebugScenario = {
       },
       {
         id: 4,
-        tool: "task_write",
+        tool: "update_plan",
         q: "2/4",
         status: "ok",
         ms: 412,
@@ -192,11 +192,11 @@ const FULL_STAGE: DebugScenario = {
             { title: "风险与机会评估", status: "pending" },
           ],
         },
-        feed: "plan written: 1/4 subtasks covered. Search each subtask's keywords; when a subtask's evidence is in, mark it done yourself via task_write (the card only tracks which sources landed where).",
+        feed: "plan written: 1/4 subtasks covered. Search each subtask's keywords; when a subtask's evidence is in, mark it done yourself via update_plan (the card only tracks which sources landed where).",
       },
       {
         id: 5,
-        tool: "engine_info",
+        tool: "list_engines",
         q: "",
         status: "pending",
         args: {},
@@ -269,7 +269,7 @@ const FULL_STAGE: DebugScenario = {
       feed: 'This deployment searches 361 enabled engines across 28 categories:\n  apps (4) · blogs (8) · books (4) · …\nDisabled engines (12) -- a bang prefix still reaches them, e.g. "!shortcut keywords":\n  bocha (bang: bocha) -- general, web\n  …',
     },
     {
-      e: "tasks",
+      e: "plan",
       items: [
         { title: "全球竞争格局与头部玩家", status: "active", sources: [1, 2] },
         { title: "产能与投资对比", status: "active", sources: [] },
@@ -278,7 +278,7 @@ const FULL_STAGE: DebugScenario = {
       ],
     },
     {
-      e: "learnings",
+      e: "findings",
       items: [
         {
           id: 1,
@@ -327,7 +327,7 @@ const FULL_STAGE: DebugScenario = {
       [
         {
           id: 1,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           url: "https://example.com/peptide-report",
           status: "ok",
@@ -338,7 +338,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 2,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           url: "https://dead.example.com/404",
           status: "error",
@@ -348,7 +348,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 3,
-          tool: "calculator",
+          tool: "calculate",
           q: "41.2 * 1.086",
           result: "44.7432",
           status: "ok",
@@ -358,7 +358,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 4,
-          tool: "judge",
+          tool: "evaluate",
           q: "哪家 CDMO 产能扩张最激进",
           status: "ok",
           ms: 940,
@@ -370,7 +370,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 5,
-          tool: "learnings",
+          tool: "findings",
           q: "",
           status: "ok",
           n: 2,
@@ -385,7 +385,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 6,
-          tool: "past_research",
+          tool: "recall_history",
           q: "深圳 房地产 政策",
           status: "ok",
           n: 3,
@@ -395,7 +395,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 7,
-          tool: "user_memory",
+          tool: "memory",
           q: "深圳",
           name: "search",
           status: "ok",
@@ -407,7 +407,7 @@ const FULL_STAGE: DebugScenario = {
         {
           id: 8,
           tool: "mcp",
-          name: "amap_maps_geo",
+          name: "maps_geo",
           q: "深圳湾",
           status: "ok",
           ms: 460,
@@ -417,7 +417,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 9,
-          tool: "extract_table",
+          tool: "build_table",
           q: "头部多肽 CDMO 产能对比",
           status: "ok",
           n: 4,
@@ -437,7 +437,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 10,
-          tool: "view_image",
+          tool: "inspect_image",
           q: "source [4] 产能图",
           status: "ok",
           ms: 1200,
@@ -450,12 +450,12 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 11,
-          tool: "extract_table",
+          tool: "build_table",
           q: "",
           status: "error",
           ms: 2,
           args: { title: "残缺表" },
-          feed: "error: extract_table needs a title, 2+ columns and at least one row -- a table the writer can cite.",
+          feed: "error: build_table needs a title, 2+ columns and at least one row -- a table the writer can cite.",
         },
         {
           id: 12,
@@ -555,7 +555,7 @@ const FULL_STAGE: DebugScenario = {
       preview: "https://chem.example.com/capacity-chart",
       feed: "image fetched and attached -- it is visible to you in the next turn (source [4]).",
     },
-    { e: "call", id: 2, call: 11, status: "error", ms: 2, feed: "error: extract_table needs a title…" },
+    { e: "call", id: 2, call: 11, status: "error", ms: 2, feed: "error: build_table needs a title…" },
     // ask_user settles TOO: in the real loop a solo ask_user call always
     // ENDS the run (awaiting) -- a permanently-pending ask row mid-timeline
     // is unrealistic and made the replay look stuck at the last row
@@ -586,7 +586,7 @@ const FULL_STAGE: DebugScenario = {
       e: "decisions",
       items: [
         {
-          purpose: "judge",
+          purpose: "evaluate",
           question: "哪家 CDMO 产能扩张最激进?",
           target: "全球竞争格局与头部玩家",
           answers: {
@@ -774,14 +774,14 @@ const AWAITING_STAGE: DebugScenario = {
       items: [
         {
           id: 1,
-          tool: "web_search",
+          tool: "search_web",
           q: "三元锂 固态电池 车型 2025 对比",
           status: "pending",
           args: { query: "三元锂 固态电池 车型 2025 对比" },
         },
         {
           id: 2,
-          tool: "web_search",
+          tool: "search_web",
           q: "新能源车 购置税减免 2025 政策",
           status: "pending",
           args: { query: "新能源车 购置税减免 2025 政策" },
@@ -816,14 +816,14 @@ const AWAITING_STAGE: DebugScenario = {
     { e: "call", id: 2, call: 1, status: "ok", n: 9, ms: 1620, feed: "plan: 5 deep + 5 shallow lines [4][5]" },
     { e: "call", id: 2, call: 2, status: "ok", n: 6, ms: 1735, feed: "plan: 5 deep lines [4]" },
     {
-      e: "learnings",
+      e: "findings",
       items: [
         { id: 1, text: "2025 年购置税减免延续,单车免税额上限 3 万元[4]。", refs: [4], status: "active", round: 2 },
       ],
       gaps: [],
     },
     {
-      e: "tasks",
+      e: "plan",
       items: [
         { title: "电池技术路线对比(购车视角)", status: "done", sources: [4, 5] },
         { title: "政策与成本核算", status: "done", sources: [4] },
@@ -872,7 +872,7 @@ const STOPPED_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "CDMO 药监处罚记录 对比",
         status: "pending",
         args: { query: "CDMO 药监处罚记录 对比" },
@@ -910,7 +910,7 @@ const FAILED_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "CDMO FDA 483 warning letters",
         status: "ok",
         n: 6,
@@ -919,7 +919,7 @@ const FAILED_STAGE: DebugScenario = {
       },
       {
         id: 2,
-        tool: "web_browser",
+        tool: "browse",
         q: "",
         url: "https://fda.example.com/letters",
         status: "ok",
@@ -967,7 +967,7 @@ const DONE_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "Kimi K3 context length",
         status: "ok",
         n: 4,
@@ -976,7 +976,7 @@ const DONE_STAGE: DebugScenario = {
       },
       {
         id: 2,
-        tool: "web_search",
+        tool: "search_web",
         q: "Kimi K3 上下文长度 官方",
         status: "duplicate",
         ms: 1300,
@@ -1053,7 +1053,7 @@ const DECK_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "多肽原料药 全球产能 格局 2025",
         status: "ok",
         n: 3,
@@ -1163,7 +1163,7 @@ const SHAPE_FLIP_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "多肽原料药 市场规模 2025",
         status: "ok",
         n: 3,
@@ -1274,7 +1274,7 @@ const BROWSER_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_browser",
+        tool: "browse",
         q: "",
         url: "https://www.xiaohongshu.com/explore",
         status: "pending",
@@ -1298,7 +1298,7 @@ const BROWSER_STAGE: DebugScenario = {
       [
         {
           id: 1,
-          tool: "web_browser",
+          tool: "browse",
           q: "https://www.xiaohongshu.com/explore",
           url: "https://www.xiaohongshu.com/explore",
           status: "pending",
@@ -1357,7 +1357,7 @@ const BROWSER_STAGE: DebugScenario = {
       [
         {
           id: 1,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           status: "pending",
           args: { action: "wait_user", seconds: 180 },
@@ -1443,35 +1443,35 @@ const BROWSER_STAGE: DebugScenario = {
       [
         {
           id: 1,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           status: "pending",
           args: { action: "screenshot" },
         },
         {
           id: 2,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           status: "pending",
           args: { action: "screenshot", ref: "e3" },
         },
         {
           id: 3,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           status: "pending",
           args: { action: "hover", ref: "f1e4" },
         },
         {
           id: 4,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           status: "pending",
           args: { action: "select", ref: "e8", values: ["热门"] },
         },
         {
           id: 5,
-          tool: "web_browser",
+          tool: "browse",
           q: "",
           status: "pending",
           args: { action: "drag", x1: 640, y1: 700, x2: 980, y2: 700, steps: 20 },
@@ -1579,7 +1579,7 @@ const STEER_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "2025 新能源车企 全球销量 排名",
         status: "ok",
         n: 8,
@@ -1589,7 +1589,7 @@ const STEER_STAGE: DebugScenario = {
       },
       {
         id: 2,
-        tool: "web_search",
+        tool: "search_web",
         q: "新能源 产能布局 工厂 2025 公告",
         status: "ok",
         n: 6,
@@ -1606,7 +1606,7 @@ const STEER_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "比亚迪 2025 销量 同比",
         status: "ok",
         n: 7,
@@ -1616,7 +1616,7 @@ const STEER_STAGE: DebugScenario = {
       },
       {
         id: 2,
-        tool: "learnings",
+        tool: "findings",
         q: "3 条",
         status: "ok",
         ms: 640,
@@ -1689,7 +1689,7 @@ const SUB_STAGE: DebugScenario = {
       items: [
         {
           id: 1,
-          tool: "research_subtask",
+          tool: "delegate_research",
           q: "头部厂商产能与市占率",
           status: "pending",
           args: { title: "头部厂商产能与市占率", objective: "建立 2024-2025 头部电池厂商的产能与市占率矩阵" },
@@ -1723,7 +1723,7 @@ const SUB_STAGE: DebugScenario = {
       e: "calls",
       id: 10000,
       items: [
-        { id: 1, tool: "web_search", q: "global EV battery market share 2025", status: "ok", n: 6, ms: 1640, args: {} },
+        { id: 1, tool: "search_web", q: "global EV battery market share 2025", status: "ok", n: 6, ms: 1640, args: {} },
       ],
     },
     { e: "sources", items: [SOURCES[0], SOURCES[1]] },
@@ -1756,7 +1756,7 @@ const SUB_STAGE: DebugScenario = {
       result:
         "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
     },
-    { e: "learnings", round: 2, items: [], gaps: [] },
+    { e: "findings", round: 2, items: [], gaps: [] },
     { e: "close", id: 1 },
     // the context compaction separator (microcompact pass at a boundary)
     { e: "compact", round: 2, trigger: "micro", pre: 148_000, post: 121_000, summarized: 0, kept: 0 },
@@ -1809,7 +1809,7 @@ const SUB_STAGE: DebugScenario = {
       feed: "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
       result: "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
     },
-    { e: "learnings", round: 3, items: [], gaps: [] },
+    { e: "findings", round: 3, items: [], gaps: [] },
     { e: "close", id: 3 },
     { e: "open", id: 2, kind: "write", round: 0 },
     { e: "phase", name: "write" },
@@ -1859,7 +1859,7 @@ const PANORAMA_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "panorama fixture answers",
         status: "ok",
         n: 6,
@@ -1880,7 +1880,7 @@ const PANORAMA_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_browser",
+        tool: "browse",
         q: "example.com/peptide-report",
         status: "ok",
         ms: 2140,
@@ -1901,7 +1901,7 @@ const PANORAMA_STAGE: DebugScenario = {
     },
     { e: "close", id: 2 },
     {
-      e: "learnings",
+      e: "findings",
       items: [
         {
           id: 9,
@@ -1915,7 +1915,7 @@ const PANORAMA_STAGE: DebugScenario = {
       gaps: [],
     },
     {
-      e: "tasks",
+      e: "plan",
       items: [
         { title: "两条材料到位", status: "done" },
         { title: "答案尾部渲染验证", status: "active" },
@@ -1989,7 +1989,7 @@ const PAID_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "!bocha 国产 GPU 新品发布 2026",
         status: "pending",
         args: { query: "!bocha 国产 GPU 新品发布 2026" },
@@ -2059,7 +2059,7 @@ const PAID_STAGE: DebugScenario = {
     calls([
       {
         id: 1,
-        tool: "web_search",
+        tool: "search_web",
         q: "!bocha 国产 GPU 新品发布 2026",
         status: "ok",
         n: 8,
@@ -2068,7 +2068,7 @@ const PAID_STAGE: DebugScenario = {
       },
       {
         id: 2,
-        tool: "web_search",
+        tool: "search_web",
         q: "国产 GPU 新品发布 2026",
         status: "ok",
         n: 5,

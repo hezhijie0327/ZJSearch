@@ -3,11 +3,11 @@
 import { ListTodo } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
-/** The task_write view: the rendered PLAN ITEMS fold open under the
+/** The update_plan view: the rendered PLAN ITEMS fold open under the
     chevron (the same status-dot + title rows the rail's plan card
     shows); the settled metric is the done/total counter -- the raw plan
     query never sits in the numeric slot. */
-export const tasksView: ToolView = {
+export const updatePlanView: ToolView = {
   Icon: ListTodo,
   label: ({ t }) => t("ai_task_row"),
   metric: ({ call, t }) => {

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``user_memory`` tool: one self-contained package -- the
+"""The ``memory`` tool: one self-contained package -- the
 model-facing spec plus the search/save evaluator it backs, and the
 post-run extractor's executor (its prompt text lives in
 :py:mod:`prompts.extractor`).  Durable facts about the user (their
@@ -23,7 +23,7 @@ from searx.zjsearch.ai.llm import embed as embed_service
 
 logger = logging.getLogger(__name__)
 
-USER_MEMORY_TOOL = "user_memory"
+MEMORY_TOOL = "memory"
 
 MAX_MEMORIES = 50
 """The pre-send cap -- facts beyond this are the oldest's problem (the
@@ -31,10 +31,10 @@ preferences surface prunes; the model is told to update, not append)."""
 MAX_CONTENT = 300
 
 
-def user_memory_spec() -> dict[str, t.Any]:
-    """The ``user_memory`` tool spec."""
+def memory_spec() -> dict[str, t.Any]:
+    """The ``memory`` tool spec."""
     return {
-        "name": USER_MEMORY_TOOL,
+        "name": MEMORY_TOOL,
         "description": (
             "Remember durable facts about the user across sessions"
             " (action=save) or look up what is already stored"
@@ -43,7 +43,7 @@ def user_memory_spec() -> dict[str, t.Any]:
             ' source preferences) -- e.g. {"action": "save", "content":'
             ' "User lives in Shanghai"} -- NEVER one-off conversation'
             " details.  The facts the user already has stored are listed"
-            " in the <user_memory> context block: search is for checking"
+            " in the <memory> context block: search is for checking"
             " before a save that might duplicate, not for re-reading what"
             " you can already see."
         ),
@@ -145,7 +145,7 @@ def _filter_near_dups(facts: list[str], known: list[str], account: t.Any = None)
     """The extractor's facts minus the near-duplicates -- against the
     stored facts AND each other (the extractor's small model loves
     rephrasing one fact three ways).  ONE batch embed; anything it cannot
-    judge passes (fail-open)."""
+    evaluate passes (fail-open)."""
     active, threshold = _dup_gate()
     if not active or (len(facts) < 2 and not known):
         return facts
@@ -231,7 +231,7 @@ def extract_insights(
     return clean_facts, clean_tags[:8]
 
 
-def evaluate_call(
+def run_call(
     call: dict[str, t.Any],
     memories: list[dict[str, str]],
     known: list[str] | None = None,

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``calculator`` tool: one self-contained package -- the model-facing
+"""The ``calculate`` tool: one self-contained package -- the model-facing
 surface (name, spec, call parser) and the evaluator it backs, so the
 model never multiplies three numbers by "reasoning" about them.  ONE
 api (``calculate``): a single mathematical expression evaluated through
@@ -21,7 +21,7 @@ import statistics
 import typing as t
 from searx.zjsearch.ai.core.text import raw_args
 
-CALCULATOR_TOOL = "calculator"
+CALCULATE_TOOL = "calculate"
 
 _MAX_NODES = 200
 """AST size cap: a pathological deep-nesting bomb dies here before it
@@ -34,12 +34,12 @@ value, different layer)."""
 _MAX_PRECISION = 12
 
 
-def calculator_spec() -> dict[str, t.Any]:
-    """The ``calculator`` tool spec -- one api, the model writes ONE
+def calculate_spec() -> dict[str, t.Any]:
+    """The ``calculate`` tool spec -- one api, the model writes ONE
     expression per call (substituting variables itself; no variable
     binding surface)."""
     return {
-        "name": CALCULATOR_TOOL,
+        "name": CALCULATE_TOOL,
         "description": (
             "Evaluate ONE mathematical expression exactly -- arithmetic,"
             " powers, roots, logs, trig (radians), factorials, min/max/sum"
@@ -72,8 +72,8 @@ def calculator_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_calculator_call(call: dict[str, t.Any]) -> tuple[str, int]:
-    """(expression, precision) of one ``calculator`` call -- sanitized:
+def parse_calculate_call(call: dict[str, t.Any]) -> tuple[str, int]:
+    """(expression, precision) of one ``calculate`` call -- sanitized:
     the expression is capped, the precision clamped to the legal range."""
     args = raw_args(call)
     expression = str(args.get("expression") or "").strip()[:_MAX_EXPRESSION]
@@ -226,11 +226,11 @@ def calculate(expression: str, precision: int = 10) -> str:
     return str(result)
 
 
-def evaluate_call(call: dict[str, t.Any], rnd: int, wire_id: int) -> tuple[str, dict[str, t.Any]]:
+def run_call(call: dict[str, t.Any], rnd: int, wire_id: int) -> tuple[str, dict[str, t.Any]]:
     """One tool call -> (model feed, wire event): the expression is
     evaluated HERE (instant, no pool slot) and the ``calc`` event carries
     the exact result to the client's timeline row."""
-    expression, precision = parse_calculator_call(call)
+    expression, precision = parse_calculate_call(call)
     try:
         result = calculate(expression, precision)
     except CalculatorError as exc:

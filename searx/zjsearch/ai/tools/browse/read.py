@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``web_browser`` tool's READ LANE -- the parallel
+"""AI Search: the ``browse`` tool's READ LANE -- the parallel
 one-shot page reads behind ``read(url)``.
 
 The settings knobs, the SSRF guard, the render call and the TTL-cached
@@ -56,7 +56,7 @@ def configured() -> bool:
         return False
     missing = convert_service.missing()
     if missing is not None:
-        _warn_once(f"zjsearch.reader: the {missing} package is missing -- web_browser reads stay unavailable")
+        _warn_once(f"zjsearch.reader: the {missing} package is missing -- browse reads stay unavailable")
         return False
     return browser_config.ready()
 

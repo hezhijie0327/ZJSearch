@@ -3,9 +3,9 @@
 page reads.
 
 :class:`GatherMixin` runs one round's network jobs on a small thread
-pool: ``web_search`` as the REAL ``SearchWithPlugins`` webapp path
+pool: ``search_web`` as the REAL ``SearchWithPlugins`` webapp path
 (plugins, preferences and the site operators included) and
-``web_browser`` read through the built-in browser; each settlement compiles
+``browse`` read through the built-in browser; each settlement compiles
 the compact ``[n]`` feed block and yields the feature events for the
 wire protocol."""
 
@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
-from searx.zjsearch.ai.tools.web_browser import read as reader
+from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.runs.search.feed import FEED_DEEP, RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.llm import rerank as rerank_service
@@ -241,7 +241,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                     " angle or change language)"
                 )
             # the PLUGINS' instant answers ride the same feed block: the
-            # stock/calculator/time answerers' output is exactly the kind
+            # stock/calculate/time answerers' output is exactly the kind
             # of direct fact the researcher should quote -- without this
             # the plugins' work was computed and silently dropped
             # (a `$AAPL` search answered 0 results and the model starved)
@@ -318,7 +318,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             yield ("sources", {"items": entries})
 
     def _read_one(self, url: str) -> tuple[str, str]:
-        """One ``web_browser`` read -- built-in-browser render + extraction;
+        """One ``browse`` read -- built-in-browser render + extraction;
         needs no request context."""
         return reader.read_page(url)
 
