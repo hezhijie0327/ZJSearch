@@ -495,11 +495,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # built-in engine is ready (zjsearch.browser): the reader lane, the
     # login/interaction escape hatch -- one tool surface
     browser_on = browser_config.ready()
-    # the MCP bridge (zjsearch.mcp, streamable-HTTP servers): an
-    # unconfigured or package-less deployment registers nothing; the
-    # surface is ALWAYS progressive disclosure (the ONE discovery tool,
-    # full schemas only on a keyword match)
-    mcp_tools = mcp.tools_surface() if mcp.configured() and mcp.sdk_missing() is None else []
+    # (the MCP bridge (zjsearch.mcp) and the disclosure surface assemble
+    # with the toolset below: the discovery index covers the run's own
+    # niche tools as well as the servers')
     if not research_needed:
         # the no-research run: the writer alone -- the zero-tool case of the
         # shared loop (one streamed write turn whose prose IS the answer).
@@ -674,6 +672,24 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # same detour only because gather clones a context per worker from
     # the state's template)
     images_proxied = bool(sxng_request.preferences.get_value("image_proxy"))
+    # THE DISCLOSED LONG TAIL (the research tiers only -- Search's
+    # AI-Overview surface has no discovery round trip to spend): the
+    # rarely-needed tools leave the inline surface and earn their schemas
+    # through the search_tools discovery index instead.  Everything the
+    # model may need EVERY round stays inline.
+    delegating = mode == "deep" and depth_rung >= 2
+    research_tier = mode in ("balanced", "deep")
+    judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
+    recall_on = bool(recall_entries or live_recall)
+    disclosed_specs: list[dict[str, t.Any]] = []
+    if research_tier:
+        disclosed_specs.append(list_engines_spec())
+        if judge_on:
+            disclosed_specs.append(evaluate_spec())
+        if recall_on:
+            disclosed_specs.append(recall_history_spec())
+        if not image_parts:
+            disclosed_specs.append(inspect_image_spec())
     state = Searches(
         sxng_request.preferences,
         list(sxng_request.user_plugins),
@@ -686,6 +702,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         lang=lang,
         cfg=cfg,
         account=account,
+        disclosed_specs=disclosed_specs,
     )
     state.question_held = research_q
     if resume is not None:
@@ -923,22 +940,19 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # not have.  Tier identity lives here: Search (speed) carries the
     # AI-Overview minimal set (no plan, no ledger, no inventory -- one round
     # has no use for them); Deep Search adds the research machinery; Deep
-    # Research alone earns the delegation tools.
-    delegating = mode == "deep" and depth_rung >= 2
-    research_tier = mode in ("balanced", "deep")
-    judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
-    recall_on = bool(recall_entries or live_recall)
+    # Research alone earns the delegation tools.  (delegating/research_tier/
+    # judge_on/recall_on/disclosed_specs are computed above, beside the
+    # Searches construction.)
+    mcp_tools = mcp.tools_surface(disclosed_specs)
     tool_specs: list[dict[str, t.Any]] = [
-        search_web_spec(browser_on, with_info=True),
+        # with_info: the desc's list_engines pointer is accurate when the
+        # inventory exists (inline OR disclosed) -- Search has neither
+        search_web_spec(browser_on, with_info=research_tier),
         calculate_spec(),
         memory_spec(),
     ]
     if research_tier:
-        tool_specs += [list_engines_spec(), record_findings_spec()]
-        if judge_on:
-            tool_specs.append(evaluate_spec())
-        if recall_on:
-            tool_specs.append(recall_history_spec())
+        tool_specs.append(record_findings_spec())
     if browser_on:
         tool_specs.append(browse_tool.browse_spec())
     tool_specs.append(ask_user_spec())
@@ -953,7 +967,8 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             # the delegation tool (the same depth gate mints both)
             message_subtask_spec(),
         ]
-    tool_specs.append(inspect_image_spec())
+    if image_parts:
+        tool_specs.append(inspect_image_spec())
     tool_specs += mcp_tools
     toolset = frozenset(str(spec["name"]) for spec in tool_specs)
     # the INSTRUCTIONS channel: the registered tools' own doctrine, in

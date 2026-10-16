@@ -947,11 +947,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             if tool_name == mcp.DISCOVERY_TOOL:
                 # progressive disclosure: the discovery tool returns the
                 # matched tools' full schemas (a text result like any
-                # other).  BOOKKEEPING, not gathering: a pure-discovery
-                # round must not eat the stall detector's credits or draw
-                # the no-new-sources nag -- the catalog listing is
-                # metadata, the data starts at the first real mcp_ call.
-                feed_text = mcp.search_mcp_tools(str(raw_args(call).get("query") or ""))
+                # other) over BOTH indexes -- the external MCP servers'
+                # tools and this run's disclosed internal long tail.
+                # BOOKKEEPING, not gathering: a pure-discovery round must
+                # not eat the stall detector's credits or draw the
+                # no-new-sources nag -- the catalog listing is metadata,
+                # the data starts at the first real tool call.
+                feed_text = mcp.search_tools(str(raw_args(call).get("query") or ""), internal_specs=self.disclosed_specs)
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",

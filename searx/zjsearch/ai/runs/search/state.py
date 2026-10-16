@@ -338,6 +338,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         lang: str = "",
         cfg: dict[str, t.Any] | None = None,
         registry: SourcesRegistry | None = None,
+        disclosed_specs: list[dict[str, t.Any]] | None = None,
     ):
         self.prefs = prefs
         self.user_plugins = user_plugins
@@ -372,6 +373,11 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # no-research writer path's only reader) and the model's own
         # query drives the search instead of a pre-shipped snapshot
         self.live_recall = live_recall
+        # THE DISCLOSED LONG TAIL: the run's niche tool specs (they left
+        # the inline surface for the search_tools discovery index) -- the
+        # executor's discovery branch searches them beside the MCP
+        # servers' tools
+        self.disclosed_specs = disclosed_specs or []
         # the run's source registries (the [n] numbering, the two dedup
         # sets, the gallery whitelist) -- one object, see registry.py;
         # parallel SUBAGENTS share the PARENT's registry (injected), so

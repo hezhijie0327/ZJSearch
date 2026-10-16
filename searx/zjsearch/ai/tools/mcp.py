@@ -253,24 +253,33 @@ def _specs_future() -> t.Any:
     return asyncio.run_coroutine_threadsafe(list_tools(), get_loop())
 
 
-DISCOVERY_TOOL = "search_mcp_tools"
+DISCOVERY_TOOL = "search_tools"
 
 
-def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
-    """The progressive-disclosure discovery tool: the model's ONLY
-    visible MCP surface until it searches; the result carries the
-    matched tools' complete schemas so the next turn can call them
-    directly."""
+def discovery_spec(mcp_count: int, mcp_servers: list[str], internal_names: list[str] | None = None) -> dict[str, t.Any]:
+    """The progressive-disclosure discovery tool: the model's ONLY visible
+    surface for the long tail -- external MCP servers' tools AND the
+    deployment's own niche tools -- until it searches; the result carries
+    the matched tools' complete schemas so the next turn can call them
+    directly.  The core instruments (search_web, calculate, ask_user, the
+    ledger, the plan) stay inline every round: the discovery round trip
+    is a tax only the rarely-needed tools should pay."""
+    coverage: list[str] = []
+    if internal_names:
+        coverage.append("this deployment's own niche tools (" + ", ".join(internal_names) + ")")
+    if mcp_count:
+        coverage.append(f"the connected MCP servers' tools ({', '.join(mcp_servers)} -- {mcp_count} in total)")
     return {
         "name": DISCOVERY_TOOL,
         "description": (
-            "Search the connected MCP servers' tools by keyword (matches"
-            " tool names and descriptions; the connected servers are:"
-            f" {', '.join(servers)} -- {count} tools in total).  Returns"
-            " each matching tool's NAME and FULL parameter schema -- call"
-            " the tool by its returned name afterwards.  Try a few broad"
-            " keywords (route, search, weather, geo...) when the first"
-            " search matches nothing."
+            "Search the TOOL INVENTORY by keyword (matches tool names and"
+            " descriptions; it covers "
+            + " and ".join(coverage)
+            + ").  Returns each matching tool's NAME and FULL parameter"
+            " schema -- call the tool by its returned name afterwards.  Try"
+            " a few broad keywords (route, weather, geo, engines, evaluate,"
+            " judge, past research...) when the first search matches"
+            " nothing."
         ),
         "inputSchema": {
             "type": "object",
@@ -279,7 +288,8 @@ def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
                     "type": "string",
                     "description": (
                         "Space-separated keywords for what you want to do"
-                        ' (e.g. "route driving distance", "weather forecast").'
+                        ' (e.g. "route driving distance", "engine inventory",'
+                        ' "judge candidates").'
                     ),
                 },
             },
@@ -289,47 +299,80 @@ def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
     }
 
 
-def search_mcp_tools(query: str, limit: int = 6) -> str:
-    """The discovery tool's execution: keyword-score every spec (name,
-    description, property names), return the top matches WITH their full
-    parameter schemas -- the model can call them on its next turn without
-    a second lookup."""
-    specs = mcp_specs()
-    terms = [term for term in query.lower().replace("，", " ").split() if term]
+def _terms(query: str) -> list[str]:
+    """The query's keywords -- both comma cultures split."""
+    return [term for term in query.lower().replace("，", " ").split() if term]
+
+
+def _spec_score(spec: dict[str, t.Any], terms: list[str]) -> float:
+    """The keyword score of one spec (name hits weigh double)."""
+    haystack = spec["name"].lower() + " " + spec["description"].lower()
+    for prop in (spec.get("inputSchema") or {}).get("properties", {}):
+        haystack += " " + str(prop).lower()
+    return sum(2.0 if term in spec["name"].lower() else 1.0 if term in haystack else 0.0 for term in terms)
+
+
+def search_tools(query: str, limit: int = 6, internal_specs: list[dict[str, t.Any]] | None = None) -> str:
+    """The discovery tool's execution: keyword-score both indexes -- the
+    external MCP servers' tools AND the run's disclosed internal long
+    tail -- and return the top matches WITH their full parameter
+    schemas; an internal row carries the tool's INSTRUCTIONS doctrine
+    beside its schema (an MCP row carries the server's), so the doctrine
+    arrives exactly when the schema does.  The model can call a match on
+    its next turn without a second lookup."""
+    from searx.zjsearch.ai.tools import TOOL_INSTRUCTIONS  # pylint: disable=import-outside-toplevel
+
+    terms = _terms(query)
     if not terms:
         return "error: empty query"
-    scored: list[tuple[float, dict[str, t.Any]]] = []
-    for spec in specs:
-        haystack = spec["name"].lower() + " " + spec["description"].lower()
-        for prop in (spec.get("inputSchema") or {}).get("properties", {}):
-            haystack += " " + str(prop).lower()
-        score = sum(2.0 if term in spec["name"].lower() else 1.0 if term in haystack else 0.0 for term in terms)
+    rows: list[tuple[float, dict[str, t.Any], str]] = []  # (score, spec, instructions)
+    for spec in internal_specs or []:
+        score = _spec_score(spec, terms)
         if score > 0:
-            scored.append((score, spec))
-    scored.sort(key=lambda pair: -pair[0])
-    if not scored:
+            name = str(spec["name"])
+            rows.append((score, {**spec, "server": ""}, TOOL_INSTRUCTIONS.get(name, "")))
+    for spec in mcp_specs():
+        score = _spec_score(spec, terms)
+        if score > 0:
+            resolved = _server_of(str(spec["name"]))
+            server = resolved[0] if resolved else ""
+            rows.append((score, {**spec, "server": server}, _instructions.get(server, "")))
+    if not rows:
+        return _no_match_note(query, internal_specs)
+    rows.sort(key=lambda pair: -pair[0])
+    matches = []
+    for _score, spec, instructions in rows[:limit]:
+        out = dict(spec)
+        if instructions:
+            out["instructions"] = instructions
+        matches.append(out)
+    return (
+        json.dumps(matches, ensure_ascii=False)
+        + '\n\nCall a matched tool by its exact name (the string in "name" above)'
+        " with arguments following its inputSchema."
+    )
+
+
+def _no_match_note(query: str, internal_specs: list[dict[str, t.Any]] | None) -> str:
+    """The empty result: what the inventory DOES hold (a compact
+    directory over both indexes), so the next keyword has a target."""
+    parts = [f"no tool matches {query!r}."]
+    internal = [str(spec["name"]) for spec in internal_specs or []]
+    if internal:
+        parts.append("This deployment's niche tools: " + ", ".join(internal) + ".")
+    specs = mcp_specs()
+    if specs:
         servers = ", ".join(
             f"{server} ({_instructions[server][:120]})" if _instructions.get(server) else server
             for server, _, _ in mcp_cfg()
         )
-        return (
-            f"no MCP tool matches {query!r}.  The connected servers -- {servers}"
-            " -- expose: " + ", ".join(spec["name"] for spec in specs[:40]) + " -- try different keywords."
+        parts.append(
+            f"The connected MCP servers -- {servers} -- expose: "
+            + ", ".join(spec["name"] for spec in specs[:40])
+            + "."
         )
-
-    def _with_server(spec: dict[str, t.Any]) -> dict[str, t.Any]:
-        resolved = _server_of(str(spec["name"]))
-        server = resolved[0] if resolved else ""
-        out = {**spec, "server": server}
-        if _instructions.get(server):
-            out["instructions"] = _instructions[server]
-        return out
-
-    matches = [_with_server(spec) for _, spec in scored[:limit]]
-    return (
-        json.dumps(matches, ensure_ascii=False) + "\n\nCall a matched tool by its exact name (the mcp_... string above)"
-        " with arguments following its parameter schema."
-    )
+    parts.append("Try different keywords.")
+    return "  ".join(parts)
 
 
 def mcp_specs() -> list[dict[str, t.Any]]:
@@ -347,16 +390,25 @@ def mcp_specs() -> list[dict[str, t.Any]]:
         return []
 
 
-def tools_surface() -> list[dict[str, t.Any]]:
+def tools_surface(internal_specs: list[dict[str, t.Any]] | None = None) -> list[dict[str, t.Any]]:
     """What the RUN registers: ALWAYS just the progressive-disclosure
     discovery tool (the Agent Skills pattern) -- however small the
     surface, the model sees ONE search box and earns the full schemas
-    on a keyword match.  One uniform MCP shape to learn, and no schema
-    rides a run that never needs it."""
+    on a keyword match.  The index covers BOTH the external MCP servers'
+    tools and the run's disclosed internal long tail (the niche tools
+    the tier left out of the inline surface).  When neither index has
+    anything, there is nothing to disclose and the run registers no
+    discovery tool at all."""
     specs = mcp_specs()
-    if not specs:
+    if not specs and not internal_specs:
         return []
-    return [discovery_spec(len(specs), [server for server, _, _ in mcp_cfg()])]
+    return [
+        discovery_spec(
+            len(specs),
+            [server for server, _, _ in mcp_cfg()] if specs else [],
+            [str(spec["name"]) for spec in internal_specs or []],
+        )
+    ]
 
 
 def call_mcp_tool_sync(name: str, arguments: dict[str, t.Any]) -> str:
