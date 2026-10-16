@@ -290,7 +290,7 @@ export function RouterProvider({
       configureDecision(parsed.globals?.decision ? { token: parsed.globals.decision.tk } : null);
       const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai;
       configureKnowledge({ aiToken: aiCapLanding?.tk, embedModel: parsed.globals?.embedding?.model });
-      configureBrowserInput(aiCapLanding?.tk);
+      configureBrowserInput(aiCapLanding?.tk, Number(aiCapLanding?.vw), Number(aiCapLanding?.vh));
       setData(parsed);
       setLoading(false);
       document.title = pageTitle(parsed);

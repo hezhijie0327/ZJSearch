@@ -76,7 +76,7 @@ async function bootstrap(): Promise<void> {
   // name recorded on every embedded row
   const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;
   configureKnowledge({ aiToken: aiCap?.tk, embedModel: embeddingCap?.model });
-  configureBrowserInput(aiCap?.tk);
+  configureBrowserInput(aiCap?.tk, Number(aiCap?.vw), Number(aiCap?.vh));
   // boot payloads of the streamed search page: handled before the app takes
   // over (the static boot skeleton is still on screen until this point)
   if (initialData && isRedirectPageData(initialData)) {

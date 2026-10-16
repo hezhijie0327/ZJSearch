@@ -57,13 +57,23 @@ def _capabilities() -> dict[str, dict[str, str] | None]:
     )
     from searx.zjsearch.ai.runs import overview  # pylint: disable=import-outside-toplevel
 
-    return {
+    caps: dict[str, object] = {
         "ai": overview.capability(),
         "ai_search": runs.capability(),
         "embedding": embed_route.capability(),
         "decision": decision_route.capability(),
         "rerank": rerank_route.capability(),
     }
+    # the interactive session's LAUNCH viewport rides the ai capability --
+    # WINDOW stays the single source: the takeover's coordinate math keys
+    # off each frame's own dims, and this boot value is only the client's
+    # fallback for frames that carry none
+    if isinstance(caps.get("ai"), dict):
+        from searx.zjsearch.ai.browser.engine import WINDOW  # pylint: disable=import-outside-toplevel
+
+        caps["ai"]["vw"] = str(WINDOW[0])
+        caps["ai"]["vh"] = str(WINDOW[1])
+    return caps
 
 
 def install(app: flask.Flask) -> None:

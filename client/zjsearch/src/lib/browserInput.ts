@@ -34,11 +34,23 @@ export interface BrowserInputFrame {
 }
 
 let token = "";
+// the session viewport's LAUNCH dimensions (engine WINDOW, riding the ai
+// capability) -- the fallback for frames that carry no w/h; live
+// coordinates always map through the frame's own capture dimensions.
+let viewport = { w: 1920, h: 1080 };
 
 /** Called at boot (and on every landing payload) with the ai capability's
-    page-data token -- absent = the input route will 403. */
-export function configureBrowserInput(t: string | undefined): void {
+    page-data token + the session's launch viewport -- absent token = the
+    input route will 403; absent dims fall back to the launch default. */
+export function configureBrowserInput(t: string | undefined, vw?: number, vh?: number): void {
   token = t ?? "";
+  viewport = { w: vw || 1920, h: vh || 1080 };
+}
+
+/** The session viewport the takeover's coordinate math falls back to
+    (frames carry their own dims -- this only serves frames without). */
+export function sessionViewport(): { w: number; h: number } {
+  return viewport;
 }
 
 /** Forward one user input to the interactive session.  Resolves null on

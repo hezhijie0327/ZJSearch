@@ -25,7 +25,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
-import { postBrowserInput } from "@/lib/browserInput.ts";
+import { postBrowserInput, sessionViewport } from "@/lib/browserInput.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
 import { hostnameOf } from "@/lib/link.ts";
@@ -33,11 +33,14 @@ import { ICON_BTN, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 type MirrorView = NonNullable<AiSearchRun["browser"]>;
 
-// The session viewport's LAUNCH dimensions (engine WINDOW) -- the
-// fallback for frames that carry no w/h; live coordinates always map
-// through the frame's own capture dimensions.
-const VIEWPORT_W = 1920;
-const VIEWPORT_H = 1080;
+// The session viewport's LAUNCH dimensions (engine WINDOW) ride the ai
+// capability at boot (browserInput.sessionViewport) -- the fallback for
+// frames that carry no w/h; live coordinates always map through the
+// frame's own capture dimensions.  NO local constant: a drifted one is
+// exactly the 1.5x-click bug this replaced.
+const viewportDims = () => sessionViewport();
+const VIEWPORT_W = () => viewportDims().w;
+const VIEWPORT_H = () => viewportDims().h;
 
 /** The address bar's compact form: host + path (the browser-chrome anchor
     the mirror was missing -- the bare page title read as a caption, not
@@ -65,8 +68,8 @@ function ActionMark({ view }: { view: MirrorView }) {
   if (!hasPoint && !box && !view.label) {
     return null;
   }
-  const w = view.w || VIEWPORT_W;
-  const h = view.h || VIEWPORT_H;
+  const w = view.w || VIEWPORT_W();
+  const h = view.h || VIEWPORT_H();
   const pct = (v: number, span: number) => `${Math.min(Math.max(v / span, 0), 1) * 100}%`;
   return (
     <div className="pointer-events-none absolute inset-0 z-10 animate-fade-in">
@@ -145,8 +148,8 @@ function frameCoords(
 ): { x: number; y: number } {
   const rect = event.currentTarget.getBoundingClientRect();
   return {
-    x: Math.round(((event.clientX - rect.left) / rect.width) * (spaceW || VIEWPORT_W)),
-    y: Math.round(((event.clientY - rect.top) / rect.height) * (spaceH || VIEWPORT_H)),
+    x: Math.round(((event.clientX - rect.left) / rect.width) * (spaceW || VIEWPORT_W())),
+    y: Math.round(((event.clientY - rect.top) / rect.height) * (spaceH || VIEWPORT_H())),
   };
 }
 
@@ -341,7 +344,7 @@ function BrowserLightbox({
       <div
         aria-label={t("ai_browser_live")}
         aria-modal
-        className="relative z-10 mx-auto my-auto flex h-auto w-full max-w-5xl animate-fade-up flex-col rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4 landscape:h-full"
+        className="relative z-10 mx-auto my-auto flex h-auto w-full max-w-5xl animate-fade-up flex-col overflow-y-auto rounded-2xl border border-line bg-surface p-2 shadow-card outline-none sm:p-4 sm:max-h-[calc(100vh-3rem)]"
         onKeyDown={onDialogKeyDown}
         ref={dialogRef}
         role="dialog"
@@ -429,13 +432,16 @@ function BrowserLightbox({
           }}
           ref={stageRef}
         >
-          <div className="relative">
+          <div
+            className="relative w-full overflow-hidden rounded-lg"
+            style={{ aspectRatio: `${shown.w || VIEWPORT_W()} / ${shown.h || VIEWPORT_H()}` }}
+          >
             {/* biome-ignore lint/a11y/noStaticElementInteractions: the frame
                 IS the interaction surface -- the click forwards as a viewport
                 coordinate; keyboard users use the bar below */}
             <img
               alt={shown.title || shown.url}
-              className={`w-full touch-none landscape:h-auto landscape:max-h-full landscape:w-auto ${isLead ? "cursor-crosshair" : ""}`}
+              className={`h-full w-full touch-none object-contain ${isLead ? "cursor-crosshair" : ""}`}
               onClick={(event) => {
                 if (!isLead) {
                   return;
@@ -491,7 +497,7 @@ function BrowserLightbox({
                 aria-hidden="true"
                 className="pointer-events-none absolute inset-0 z-10 h-full w-full"
                 preserveAspectRatio="none"
-                viewBox={`0 0 ${shown.w || VIEWPORT_W} ${shown.h || VIEWPORT_H}`}
+                viewBox={`0 0 ${shown.w || VIEWPORT_W()} ${shown.h || VIEWPORT_H()}`}
               >
                 <line
                   className="text-accent"
@@ -650,7 +656,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
               alt={activeView.title || activeView.url}
               className="w-full object-contain object-top"
               src={`data:image/jpeg;base64,${activeView.img}`}
-              style={{ aspectRatio: `${activeView.w || VIEWPORT_W} / ${activeView.h || VIEWPORT_H}` }}
+              style={{ aspectRatio: `${activeView.w || VIEWPORT_W()} / ${activeView.h || VIEWPORT_H()}` }}
             />
             <ActionMark view={activeView} />
           </button>
@@ -660,7 +666,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
               alt={activeView.title || activeView.url}
               className="w-full object-contain object-top opacity-90"
               src={`data:image/jpeg;base64,${activeView.img}`}
-              style={{ aspectRatio: `${activeView.w || VIEWPORT_W} / ${activeView.h || VIEWPORT_H}` }}
+              style={{ aspectRatio: `${activeView.w || VIEWPORT_W()} / ${activeView.h || VIEWPORT_H()}` }}
             />
             <ActionMark view={activeView} />
           </div>

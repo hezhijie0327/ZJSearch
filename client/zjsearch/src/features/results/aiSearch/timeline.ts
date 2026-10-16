@@ -44,6 +44,7 @@ export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error"
     only in the event log / fold -- the bytes live in the browser's
     attachment table and are filled in by the resume path (`data`). */
 import type { AiSearchAttachment } from "@/lib/aicontracts.ts";
+import { sessionViewport } from "@/lib/browserInput.ts";
 
 export type { AiSearchAttachment };
 
@@ -951,8 +952,8 @@ export function applyEvent(
         url: String(event.url ?? ""),
         title: String(event.title ?? ""),
         img: String(event.img ?? ""),
-        w: Number(event.w) || 1920,
-        h: Number(event.h) || 1080,
+        w: Number(event.w) || sessionViewport().w,
+        h: Number(event.h) || sessionViewport().h,
         ...(event.wait_left !== undefined ? { waitLeft: Number(event.wait_left) || 0 } : {}),
         ...(event.px !== undefined && event.py !== undefined
           ? { px: Number(event.px), py: Number(event.py), pk: String(event.pk ?? "") }

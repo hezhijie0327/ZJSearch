@@ -268,6 +268,7 @@ async def _read_on(context: "BrowserContext", url: str) -> str:
         _state["pages"] = semaphore
     async with semaphore:
         page = await context.new_page()
+        await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
         try:
             try:
                 await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())

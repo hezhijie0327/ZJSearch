@@ -27,6 +27,10 @@ interface CustomLink {
 export interface AiCapability {
   tk: string;
   model: string;
+  /** the interactive session's launch viewport (engine WINDOW) -- the
+      takeover's coordinate-math fallback; frames carry their own dims */
+  vw?: string;
+  vh?: string;
 }
 
 export interface GlobalData {
