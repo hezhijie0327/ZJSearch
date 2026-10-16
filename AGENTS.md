@@ -92,6 +92,9 @@ lockfile, untouched).
   render raw-text answers.  The reader's render engine ships IN the
   Docker image: `client/zjsearch/Dockerfile` bakes the browser bundle
   at build (installer + font trim + the runtime library set).
+  EVERY push to `zjsearch` triggers an image build -- batch commits
+  and push ONCE per unit of work (a push per commit rebuilds the
+  image N times for one change and races the layer cache).
 
 ## zjsearch architecture (Page-Data pattern)
 

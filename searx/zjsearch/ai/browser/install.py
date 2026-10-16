@@ -16,20 +16,34 @@ build, ~1.3 GB compressed / ~2.4 GB extracted).  One entry, two audiences:
   one build stage, the runtime library set in the dist stage).
 
 ``$XDG_CACHE_HOME`` decides WHERE the bundle lands; whatever is set at
-install time must be set at run time too.  Extra arguments pass
-through to the camoufox CLI verbatim (``camoufox fetch``).  After the
-browser lands, the LAUNCH-TIME downloads are prefetched into the same
-cache -- the fingerprint generator's model, the GeoIP databases and
-uBlock Origin (the default adblock addon) -- so the browser's first
-launch needs none of them on the network.  Every prefetch is
-fail-open (a deployment without them works once online; the GeoIP db
-additionally ages on camoufox's own re-check schedule, so the
-prefetch buys freshness, not permanent independence).
+install time must be set at run time too.  The CHANNEL pin is written
+in-process, together with camoufox's own 0.5-compat marker: the CLI
+``camoufox fetch`` entry rmtree's a flag-less install dir ("Cleaning
+old data...", the config.json holding the pin included) before it
+resolves anything -- without the marker the pin silently reverts to
+the package-paired build.  The fetch itself stays on the CLI (sync,
+channel bounds and cache resolution are upstream machinery).  After
+the browser lands, the LAUNCH-TIME
+downloads are prefetched into the same cache -- the fingerprint
+generator's model, the GeoIP databases and uBlock Origin (the default
+adblock addon) -- so the browser's first launch needs none of them on
+the network.  Every prefetch is fail-open (a deployment without them
+works once online; the GeoIP db additionally ages on camoufox's own
+re-check schedule, so the prefetch buys freshness, not permanent
+independence).
 """
 
 import os
 import subprocess
 import sys
+
+CHANNEL = "official/prerelease"
+"""The install tracks this camoufox channel: releases move fast and stale
+builds carry fixed bugs, so the channel is pinned in-process before the
+resolution and the fetch installs the channel's LATEST (the CLI's own
+spelling is `camoufox set official/prerelease`; the conservative train
+would be official/stable).  Without the pin, the package's PAIRED build
+(the one this camoufox release was tested against) is installed instead."""
 
 
 def main() -> int:
@@ -47,42 +61,52 @@ def main() -> int:
     else:
         print("zjsearch browser: downloading the Camoufox build into the")
         print("user cache (set XDG_CACHE_HOME to relocate)")
-    result = subprocess.call([sys.executable, "-m", "camoufox", "fetch", *sys.argv[1:]])
+    from camoufox.multiversion import (  # pylint: disable=import-outside-toplevel
+        COMPAT_FLAG,
+        load_config,
+        save_config,
+    )
+    from camoufox.pkgman import INSTALL_DIR  # pylint: disable=import-outside-toplevel
+
+    # the CHANNEL pin lives IN-PROCESS, written BEFORE the CLI fetch: the
+    # fetch entry rmtree's a flag-less INSTALL_DIR ("Cleaning old
+    # data...", the config.json holding the pin included) and silently
+    # reverts to the package-paired build.  The 0.5-compat marker (this
+    # dir's data is already 0.5-shaped: a config file) defuses that wipe.
+    INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+    cfg = load_config()
+    cfg["channel"] = CHANNEL
+    cfg.pop("pinned", None)
+    cfg.pop("pinned_sha", None)
+    save_config(cfg)
+    COMPAT_FLAG.touch()
+
+    # the fetch stays on the CLI (sync + channel bounds + cache
+    # resolution are upstream machinery); the prerelease channel's
+    # latest triggers an interactive confirm -- a non-interactive
+    # install answers it through stdin (stable builds never read it)
+    result = subprocess.run(
+        [sys.executable, "-m", "camoufox", "fetch", *sys.argv[1:]],
+        input="y\n",
+        text=True,
+        check=False,
+    ).returncode
     if result != 0:
         return result
-    if not _bundle_landed():
-        # the CLI can exit 0 on a FAILED download (observed when the
-        # github releases API 404s mid-build: the repo cache is written,
-        # the browser never lands) -- a silent no-op here would bake an
-        # image whose every read fails at launch; fail the BUILD loudly
-        # instead so a rerun retries the download
+    try:
+        from camoufox.pkgman import installed_verstr  # pylint: disable=import-outside-toplevel
+
+        print(f"zjsearch browser: installed {installed_verstr()}")
+    except Exception as exc:  # pylint: disable=broad-except
         print(
-            "error: camoufox fetch reported success but no browser bundle"
-            f" landed in {os.environ.get('XDG_CACHE_HOME') or 'the user cache'}"
-            " -- usually the github releases API failing transiently; rerun"
-            " the install",
+            f"error: no browser bundle is active after the fetch ({exc}) --"
+            " rerun the install",
             file=sys.stderr,
         )
         return 1
     _prefetch_fingerprint_model()
     _prefetch_launch_payloads()
     return 0
-
-
-def _bundle_landed() -> bool:
-    """Whether the multiversion layout actually holds a browser build
-    (``INSTALL_DIR/browsers/<repo>/<version>/`` with the executable)."""
-    try:
-        from camoufox.pkgman import INSTALL_DIR  # pylint: disable=import-outside-toplevel
-    except ImportError:
-        return False
-    browsers = INSTALL_DIR / "browsers"
-    if not browsers.is_dir():
-        return False
-    for version_dir in browsers.glob("*/*/"):
-        if any(version_dir.iterdir()):
-            return True
-    return False
 
 
 def _prefetch_fingerprint_model() -> None:
