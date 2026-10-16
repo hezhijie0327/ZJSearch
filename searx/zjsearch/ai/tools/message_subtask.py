@@ -38,7 +38,7 @@ def message_subtask_spec() -> dict[str, t.Any]:
             " (a follow-up costs turns, a new subagent costs a whole"
             " context)."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "id": {

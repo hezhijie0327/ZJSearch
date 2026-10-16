@@ -29,16 +29,31 @@ messages once, every pump converts to its own wire shape):
 - tool results: ``{"role": "tool", "tool_call_id", "name", "content"}``
 
 A turn streams as ``("think"|"delta"|"tool_calls"|"error"|"end", payload)``
-queue events.  ``tools`` -- ``{"name", "description", "parameters"}``
-specs (one or more), converted per dialect -- makes the pumps collect the
-model's tool-call fragments into a single ``("tool_calls", calls)`` event
-that closes a clean turn.  Without a spec no dialect can emit calls at
-all, so single-turn consumers are unaffected.  A clean stream carries one
-``("finish", meta)`` event right before ``end`` (see :py:mod:`..usage`).
+queue events.  ``tools`` -- MCP ``Tool``-shaped specs (``name`` /
+``description`` / ``inputSchema`` / optional ``annotations``; the
+``readOnlyHint`` etc. hints ride along for the executor and the debug
+rows, the wire dialects ignore them), converted per dialect -- makes the
+pumps collect the model's tool-call fragments into a single
+``("tool_calls", calls)`` event that closes a clean turn.  Without a
+spec no dialect can emit calls at all, so single-turn consumers are
+unaffected.  A clean stream carries one ``("finish", meta)`` event right
+before ``end`` (see :py:mod:`..usage`).
 """
 
 import typing as t
 from searx.zjsearch.ai.core.text import raw_args
+
+
+def function_tool(tool: dict[str, t.Any]) -> dict[str, t.Any]:
+    """The neutral MCP-shaped spec as an OpenAI-family function object:
+    the JSON schema rides the spec's ``inputSchema`` and this family
+    wants it under ``parameters`` (the chat-completions ``function``
+    object and the Responses API's flat function tool share the shape)."""
+    return {
+        "name": tool["name"],
+        "description": tool.get("description") or "",
+        "parameters": tool.get("inputSchema"),
+    }
 
 
 def system_of(messages: list[dict[str, t.Any]]) -> str:

@@ -109,7 +109,8 @@ def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict
                 else ""
             )
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "The keyword query to search for."},

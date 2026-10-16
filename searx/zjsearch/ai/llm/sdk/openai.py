@@ -29,7 +29,7 @@ from ..config import (
     reasoning_passback,
 )
 from . import clients
-from .base import system_of
+from .base import function_tool, system_of
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ async def _chat_pump(  # pylint: disable=too-many-branches, too-many-locals
 
     cfg = sdk.cfg
     client = clients.openai_client(cfg, sdk.base, family=sdk.family)
-    extra = {"tools": [{"type": "function", "function": tool} for tool in tools]} if tools else {}
+    extra = {"tools": [{"type": "function", "function": function_tool(tool)} for tool in tools]} if tools else {}
     kwargs: dict[str, t.Any] = {
         "model": str(cfg.get("model")),
         "messages": _chat_wire_messages(cfg, messages),
@@ -254,7 +254,9 @@ async def _responses_pump(  # pylint: disable=too-many-branches, too-many-locals
     ``("finish", meta)`` event (``max_output_tokens`` maps to ``length``)."""
     cfg = sdk.cfg
     client = clients.openai_client(cfg, sdk.base, family=sdk.family)
-    extra: dict[str, t.Any] = {"tools": [dict(tool, type="function") for tool in tools]} if tools else {}
+    extra: dict[str, t.Any] = (
+        {"tools": [dict(function_tool(tool), type="function") for tool in tools]} if tools else {}
+    )
     stream = await client.responses.create(
         model=str(cfg.get("model")),
         input=_responses_input(messages),

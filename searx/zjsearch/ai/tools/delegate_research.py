@@ -44,7 +44,7 @@ def delegate_research_spec() -> dict[str, t.Any]:
             " is that subagent's id for the rest of the run: message_subtask"
             " sends it follow-ups inside the context it already built."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "title": {

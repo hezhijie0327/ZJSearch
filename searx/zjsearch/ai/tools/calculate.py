@@ -51,7 +51,8 @@ def calculate_spec() -> dict[str, t.Any]:
             ' ("2 + 3 * 4", "sqrt(2)**2", "round(10/3, 2)",'
             ' "mean([1, 2, 3, 4])", "35 * 1.08").'
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "expression": {

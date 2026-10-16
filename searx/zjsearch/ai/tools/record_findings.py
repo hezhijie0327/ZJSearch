@@ -58,7 +58,7 @@ def record_findings_spec() -> dict[str, t.Any]:
             " facts; your next rounds chase the gaps; the run ends when"
             " the ledger closes."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "facts": {

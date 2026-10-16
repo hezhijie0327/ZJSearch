@@ -134,7 +134,11 @@ class AnthropicSdk:
         client = clients.anthropic_client(cfg, self.base, family=self.family)
         tool_specs: list[dict[str, t.Any]] = (
             [
-                {"name": tool["name"], "description": tool["description"], "input_schema": tool["parameters"]}
+                {
+                    "name": tool["name"],
+                    "description": tool.get("description") or "",
+                    "input_schema": tool.get("inputSchema"),
+                }
                 for tool in tools
             ]
             if tools

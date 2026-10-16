@@ -42,7 +42,7 @@ def ask_user_spec() -> dict[str, t.Any]:
             " details live sources can settle, or after the user already"
             " confirmed a direction."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "intro": {"type": "string", "description": "One sentence on why you ask."},

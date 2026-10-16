@@ -49,6 +49,7 @@ from ..config import (
     params,
     reasoning_passback,
 )
+from .base import function_tool
 
 JSON_TIERS = 2
 """Two native structured-output attempts: the strict ``json_schema``
@@ -263,7 +264,7 @@ async def _pump(  # pylint: disable=too-many-locals, too-many-branches, too-many
     if headers:
         call["headers"] = headers
     if tools:
-        call["tools"] = [{"type": "function", "function": tool} for tool in tools]
+        call["tools"] = [{"type": "function", "function": function_tool(tool)} for tool in tools]
     # NOTE: the native family has no clean per-call custom-header hook (the
     # other families' extra_headers escape hatch does not map onto the
     # dashscope SDK's request layer) -- a gateway in front of the endpoint

@@ -63,7 +63,8 @@ def recall_history_spec() -> dict[str, t.Any]:
             " arrive as numbered [n] sources you can cite; uploaded files"
             " arrive as named context blocks."
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {

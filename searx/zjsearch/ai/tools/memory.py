@@ -47,7 +47,7 @@ def memory_spec() -> dict[str, t.Any]:
             " before a save that might duplicate, not for re-reading what"
             " you can already see."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "action": {

@@ -39,7 +39,8 @@ def list_engines_spec() -> dict[str, t.Any]:
             " before relying on a niche vertical.  Read-only and instant;"
             " once per run is usually enough."
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {},
         },

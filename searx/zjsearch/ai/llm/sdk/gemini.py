@@ -179,9 +179,20 @@ class GeminiSdk:
         genai_config = _content_config(cfg, system, native_thinking=True)
         if tools:
             # the declarations take an OpenAPI-schema dict; lowercase JSON-schema
-            # type names are accepted by the v1beta API
+            # type names are accepted by the v1beta API.  The neutral spec is
+            # MCP-shaped (inputSchema) -- map the fields explicitly, the
+            # annotations hints are not a Gemini declaration field.
             genai_config.tools = [
-                types.Tool(function_declarations=[types.FunctionDeclaration(**tool) for tool in tools])
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(
+                            name=tool["name"],
+                            description=tool.get("description") or "",
+                            parameters=tool.get("inputSchema"),
+                        )
+                        for tool in tools
+                    ]
+                )
             ]
         stream = await client.aio.models.generate_content_stream(
             model=str(cfg.get("model")), contents=contents, config=genai_config

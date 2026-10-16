@@ -40,7 +40,8 @@ def build_table_spec() -> dict[str, t.Any]:
             " interpret the table instead.  Every row's refs must be [n]"
             " sources from THIS run."
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "title": {

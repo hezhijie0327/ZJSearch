@@ -193,13 +193,23 @@ async def list_tools() -> list[dict[str, t.Any]]:
                     "properties": raw_schema.get("properties") or {},
                     "required": raw_schema.get("required") or [],
                 }
-            specs.append(
-                {
-                    "name": f"mcp_{name}_{tool_name}",
-                    "description": str(tool.description or f"{tool_name} (MCP: {name})")[:800],
-                    "parameters": schema,
-                }
-            )
+            # the server's own hints (readOnlyHint & co) ride along -- the
+            # neutral spec is MCP-shaped, so they pass through untouched
+            annotations: dict[str, t.Any] = {}
+            raw_annotations = getattr(tool, "annotations", None)
+            if raw_annotations is not None:
+                try:
+                    annotations = raw_annotations.model_dump(exclude_none=True)
+                except AttributeError:
+                    annotations = {}
+            spec: dict[str, t.Any] = {
+                "name": f"mcp_{name}_{tool_name}",
+                "description": str(tool.description or f"{tool_name} (MCP: {name})")[:800],
+                "inputSchema": schema,
+            }
+            if annotations:
+                spec["annotations"] = annotations
+            specs.append(spec)
     return specs
 
 
@@ -262,7 +272,7 @@ def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
             " keywords (route, search, weather, geo...) when the first"
             " search matches nothing."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {
@@ -275,6 +285,7 @@ def discovery_spec(count: int, servers: list[str]) -> dict[str, t.Any]:
             },
             "required": ["query"],
         },
+        "annotations": {"readOnlyHint": True},
     }
 
 
@@ -290,7 +301,7 @@ def search_mcp_tools(query: str, limit: int = 6) -> str:
     scored: list[tuple[float, dict[str, t.Any]]] = []
     for spec in specs:
         haystack = spec["name"].lower() + " " + spec["description"].lower()
-        for prop in (spec.get("parameters") or {}).get("properties", {}):
+        for prop in (spec.get("inputSchema") or {}).get("properties", {}):
             haystack += " " + str(prop).lower()
         score = sum(2.0 if term in spec["name"].lower() else 1.0 if term in haystack else 0.0 for term in terms)
         if score > 0:

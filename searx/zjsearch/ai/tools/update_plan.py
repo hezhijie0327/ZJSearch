@@ -40,7 +40,7 @@ def update_plan_spec() -> dict[str, t.Any]:
             " subtask is done or consciously dropped.  The list is rendered"
             " to the user as your research plan -- keep it current."
         ),
-        "parameters": {
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "items": {

@@ -28,7 +28,8 @@ def inspect_image_spec() -> dict[str, t.Any]:
             " when a source's picture is the evidence -- never for decorative"
             " photos."
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "url": {

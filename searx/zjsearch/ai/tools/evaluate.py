@@ -46,7 +46,8 @@ def evaluate_spec() -> dict[str, t.Any]:
             " use it to find information, and cite sources for facts"
             " regardless of its verdict."
         ),
-        "parameters": {
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
             "type": "object",
             "properties": {
                 "state": {
