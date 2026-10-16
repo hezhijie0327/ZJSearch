@@ -23,6 +23,21 @@ from searx.zjsearch.ai.core.text import raw_args
 
 CALCULATE_TOOL = "calculate"
 
+INSTRUCTIONS = """\
+Route EVERY non-trivial number through this tool: sums, differences,
+ratios, percentages, averages, growth rates, unit-less conversions of
+values you already have -- never compute in your head and never copy a
+number you have not verified; a wrong figure in a cited answer is the
+worst failure this agent can produce.  This is NON-NEGOTIABLE for
+financial and forecasting material: revenue multiples, YoY or CAGR
+growth, margin and market-share math, per-share figures, projections
+built from sourced assumptions -- every derived number in an earnings or
+forecast answer is one calculate call, and a figure the sources never
+stated must never reach the answer on mental arithmetic alone.  One
+expression per call; substitute variables yourself before calling."""
+"""The number-honesty discipline -- injected into the system prompt's
+<tool_notes> whenever the tool is registered."""
+
 _MAX_NODES = 200
 """AST size cap: a pathological deep-nesting bomb dies here before it
 can burn cycles."""
@@ -44,10 +59,7 @@ def calculate_spec() -> dict[str, t.Any]:
             "Evaluate ONE mathematical expression exactly -- arithmetic,"
             " powers, roots, logs, trig (radians), factorials, min/max/sum"
             " over lists, and statistics (mean, median, mode, stdev,"
-            " variance, harmonic_mean).  Use it for EVERY non-trivial"
-            " number the answer reports: sums, differences, ratios,"
-            " percentages, averages, growth rates -- never compute in your"
-            " head, the result comes back exact.  Syntax: python-like"
+            " variance, harmonic_mean).  Syntax: python-like"
             ' ("2 + 3 * 4", "sqrt(2)**2", "round(10/3, 2)",'
             ' "mean([1, 2, 3, 4])", "35 * 1.08").'
         ),

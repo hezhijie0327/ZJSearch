@@ -17,12 +17,14 @@ from searx.zjsearch.ai.tools.browse.service import (
 )
 from searx.zjsearch.ai.tools.browse.spec import (
     BROWSE_TOOL,
+    INSTRUCTIONS,
     parse_browse_call,
     browse_spec,
 )
 
 __all__ = [
     "BROWSE_TOOL",
+    "INSTRUCTIONS",
     "final_frame",
     "parse_browse_call",
     "run_action",

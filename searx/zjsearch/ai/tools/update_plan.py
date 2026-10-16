@@ -14,6 +14,24 @@ from searx.zjsearch.ai.core.text import raw_args
 
 UPDATE_PLAN_TOOL = "update_plan"
 
+INSTRUCTIONS = """\
+The plan is a LIVING hypothesis, not a contract.  FIRST round:
+decompose the request into concrete, independent subtasks -- as many as
+the question genuinely needs (each answerable by its own focused
+research).  Work it EVERY round and keep it TRUE: statuses are yours to
+set (done when a subtask's material is gathered), and cross-checking
+often proves an earlier assumption wrong -- when evidence reveals a dead
+end, a missing facet, an entity the final answer depends on, or a
+SURPRISE (an unexpected player, a contradicting number, a facet you had
+not considered -- surprises are plan edits, not footnotes), RESEND the
+COMPLETE list: add, split, merge, reword or drop subtasks (a dropped
+dead end simply leaves the list).  The newest list replaces the card --
+never leave a subtask standing that the evidence has already
+contradicted.  The research ends when the PLAN closes -- every subtask
+done or consciously dropped -- not when you feel done."""
+"""The living-plan doctrine -- injected into the system prompt's
+<tool_notes> whenever the tool is registered."""
+
 
 def update_plan_spec() -> dict[str, t.Any]:
     """The living task list (quality/goal): the model decomposes the
@@ -24,21 +42,12 @@ def update_plan_spec() -> dict[str, t.Any]:
         "name": UPDATE_PLAN_TOOL,
         "description": (
             "Create or update the SUBTASK LIST for this research -- it is"
-            " the ONLY way the plan or its statuses ever change, and the"
-            " plan is a LIVING hypothesis: revise it whenever the evidence"
-            " disagrees with it.  First round: decompose the request into"
-            " concrete, independent subtasks -- as many as the question"
-            " genuinely needs (each answerable by its own focused"
-            " research).  EVERY round afterwards: keep the list"
-            ' TRUE -- set a subtask to {"status": "done"} the moment its'
-            ' sources are gathered, "active" while researching it, and'
-            " RESHAPE it as the findings demand: append an important facet"
-            " you had not planned for, split or merge subtasks, reword one"
-            " that drifted, and DROP a dead end outright (it just leaves"
-            " the list).  THE RESEARCH IS NOT COMPLETE while any subtask is"
-            " pending or active: finish it, or hand over only once every"
-            " subtask is done or consciously dropped.  The list is rendered"
-            " to the user as your research plan -- keep it current."
+            " the ONLY way the plan or its statuses ever change.  The list"
+            " is rendered to the user as your research plan, and the"
+            " coverage tracker records which sources landed on which"
+            " subtask (statuses are never written there).  Send the"
+            " COMPLETE list every time -- the newest call REPLACES the"
+            " card, it is not a diff."
         ),
         "inputSchema": {
             "type": "object",

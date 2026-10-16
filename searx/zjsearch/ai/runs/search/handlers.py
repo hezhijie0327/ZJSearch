@@ -795,7 +795,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     rows = recall_slot.wait(rid)
                     matches = recall_history_cap.parse_entries(rows) if rows else []
                 else:
-                    matches = recall_history_cap.rank(self.past_research_entries, query)
+                    matches = recall_history_cap.rank(self.recall_entries, query)
                 gathered = True
                 if matches:
                     events: list[dict[str, t.Any]] = []
@@ -1122,6 +1122,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
     SUB_MAX_PARALLEL = 4
     """Concurrent subagents per delegation batch (the design's cap)."""
 
+    _sub_tool_notes: list[tuple[str, str]] = []
+    """The last ``_sub_toolset()`` build's INSTRUCTIONS entries (set before
+    the delegation batch registers its handles)."""
+
     def _sub_toolset(self) -> list[dict[str, t.Any]]:
         """The SUBAGENT's toolset: the shared discipline tools -- search,
         calculate, the deployment inventory, the findings ledger (the
@@ -1135,6 +1139,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         structured tie-break is exactly what a worker without the lead's
         context needs."""
         from searx.zjsearch.ai.tools import (  # pylint: disable=import-outside-toplevel
+            TOOL_INSTRUCTIONS,
             calculate_spec,
             record_findings_spec,
             evaluate_spec,
@@ -1144,13 +1149,25 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
 
         browser_on = browser_config.ready()
         judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
-        return (
+        specs = (
             [search_web_spec(browser_on, with_info=True), calculate_spec(), list_engines_spec(), record_findings_spec()]
             + ([browse_tool.browse_spec()] if browser_on else [])
             + ([evaluate_spec()] if judge_on else [])
         )
+        self._sub_tool_notes = [
+            (str(spec["name"]), TOOL_INSTRUCTIONS[str(spec["name"])])
+            for spec in specs
+            if str(spec["name"]) in TOOL_INSTRUCTIONS
+        ]
+        return specs
 
-    def _register_subagent(self, parsed: dict[str, str], lang: str, today: str) -> SubagentHandle:
+    def _register_subagent(
+        self,
+        parsed: dict[str, str],
+        lang: str,
+        today: str,
+        tool_notes: list[tuple[str, str]] | None = None,
+    ) -> SubagentHandle:
         """Mint one delegation's handle: the run's stable key (S1, S2,
         ...), its own child executor on the SHARED registry, its opener
         messages and a fresh control plane.  The handle lives in
@@ -1168,7 +1185,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             key,
             self._sub_seq,
             parsed,
-            subagent_messages(parsed, lang, today),
+            subagent_messages(parsed, lang, today, tool_notes=tool_notes),
             child,
             ChildControl(),
         )
@@ -1307,7 +1324,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     " merge overlapping subtasks and re-delegate."
                 )
                 continue
-            handle = self._register_subagent(parsed, lang, today)
+            handle = self._register_subagent(parsed, lang, today, tool_notes=self._sub_tool_notes)
             handle.busy = True
             settled_jobs.append((wire_id, handle))
             handles_by_seq[handle.seq] = handle

@@ -23,6 +23,26 @@ from searx.zjsearch.ai.core.text import raw_args
 
 DELEGATE_RESEARCH_TOOL = "delegate_research"
 
+INSTRUCTIONS = """\
+Delegate when the question has 2-4 INDEPENDENT facets worth parallel
+depth; do NOT delegate a quick lookup you can search yourself.  Use it
+too when ONE facet needs many reads (a broad landscape scan) that would
+flood your own context -- the subagent reads wide and returns only the
+digest.  Brief each subagent with the four fields: vague briefs produce
+duplicated work.  Batch the independent subtasks in ONE round so they
+run in parallel; do not delegate more than 3-4 subtasks per round.
+Their digests arrive as tool results -- aggregate them, never
+re-research what a digest already settled.  Every digest opens with its
+[Subtask Sn] tag: Sn is that subagent's id for the REST of the run --
+message_subtask(id, message) sends it a follow-up it executes INSIDE the
+context it built (its sources, ledger and reads are kept).  A digest
+that was close-but-incomplete, a gap its digest reported, a correction
+after you learned something new -- message it, don't re-delegate (a new
+subagent would re-search the facet from zero)."""
+"""The delegation doctrine -- injected into the system prompt's
+<tool_notes> whenever the delegation tools are registered (Deep
+Research only)."""
+
 
 def delegate_research_spec() -> dict[str, t.Any]:
     """The delegation tool's spec: the four-field contract plus the
@@ -33,16 +53,11 @@ def delegate_research_spec() -> dict[str, t.Any]:
             "Delegate ONE independent research subtask to a subagent -- a"
             " nested researcher with its own context window that searches"
             " and reads pages, then reports a compressed digest back to"
-            " you.  Use it when a question has INDEPENDENT facets worth"
-            " parallel depth (a delegation round), not for a quick lookup"
-            " you can search yourself.  Brief it like a colleague: objective"
-            " (what to establish), output_format (what the digest must"
-            " contain), tool_guidance (where to look, what to skip),"
-            " boundaries (what is OUT of scope).  One call = one subagent;"
-            " batch independent subtasks in one round to run them in"
-            " parallel.  Every digest opens with its [Subtask Sn] tag -- Sn"
-            " is that subagent's id for the rest of the run: message_subtask"
-            " sends it follow-ups inside the context it already built."
+            " you.  One call = one subagent; batch independent subtasks in"
+            " one round to run them in parallel.  Brief it like a"
+            " colleague: objective (what to establish), output_format (what"
+            " the digest must contain), tool_guidance (where to look, what"
+            " to skip), boundaries (what is OUT of scope)."
         ),
         "inputSchema": {
             "type": "object",

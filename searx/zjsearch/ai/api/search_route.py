@@ -68,6 +68,7 @@ from searx.zjsearch.ai.prompts.researcher import initial_messages
 from searx.zjsearch.ai.runs.search.writer import writer_messages
 from searx.zjsearch.ai.tools import (
     ASK_USER_TOOL,
+    TOOL_INSTRUCTIONS,
     inspect_image_spec,
     ask_user_spec,
     calculate_spec,
@@ -315,7 +316,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # first memory call pulls the store's list through the recall
     # slot (handlers); both actions and the save near-dup gate read it
     user_memories = None if live_recall else parse_memories(payload.get("user_memories"))
-    past_research_entries = parse_recall_history(payload.get("recall_history"))
+    recall_entries = parse_recall_history(payload.get("recall_history"))
     image_parts, attached_files = ([], []) if degraded else uploads.parse_uploads(payload.get("attachments"))
     # the conversion receipt: the client shipped BYTES, only the server's
     # converter can read PDFs/Office documents -- the extracted markdown
@@ -513,10 +514,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         recalled_files = (
             [
                 {"name": entry["title"], "text": entry["text"]}
-                for entry in past_research_entries
+                for entry in recall_entries
                 if not entry["url"] and entry["text"]
             ]
-            if past_research_entries
+            if recall_entries
             else []
         )
         writer_files = attached_files or (recalled_files or None)
@@ -680,7 +681,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         search_language=raw_search_language,
         max_rounds=max_rounds,
         user_memories=user_memories,
-        past_research_entries=past_research_entries,
+        recall_entries=recall_entries,
         live_recall=live_recall,
         lang=lang,
         cfg=cfg,
@@ -926,7 +927,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     delegating = mode == "deep" and depth_rung >= 2
     research_tier = mode in ("balanced", "deep")
     judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
-    recall_on = bool(past_research_entries or live_recall)
+    recall_on = bool(recall_entries or live_recall)
     tool_specs: list[dict[str, t.Any]] = [
         search_web_spec(browser_on, with_info=True),
         calculate_spec(),
@@ -955,6 +956,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     tool_specs.append(inspect_image_spec())
     tool_specs += mcp_tools
     toolset = frozenset(str(spec["name"]) for spec in tool_specs)
+    # the INSTRUCTIONS channel: the registered tools' own doctrine, in
+    # registration order, injected as the system prompt's <tool_notes>
+    tool_notes = [
+        (str(spec["name"]), TOOL_INSTRUCTIONS[str(spec["name"])])
+        for spec in tool_specs
+        if str(spec["name"]) in TOOL_INSTRUCTIONS
+    ]
 
     if resume is not None:
         # THE CONTINUE REPLAY: the dead attempt's exact conversation (its
@@ -996,6 +1004,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             deliverable_entities=state.deliverable_entities,
             thread_ledger=thread_ledger,
             mcp_servers=(mcp.server_instructions() or None) if mcp_tools else None,
+            tool_notes=tool_notes or None,
         )
 
     events = engine.run(

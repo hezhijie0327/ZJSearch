@@ -20,6 +20,23 @@ RECORD_FINDINGS_TOOL = "record_findings"
 pre-rename wire name "findings" survives only inside stored threads'
 event logs, which render historical rows verbatim)."""
 
+INSTRUCTIONS = """\
+The ledger is what the WRITER reads alongside the raw sources, and the
+user watches it grow as your evidence trail.  Record what the sources
+ESTABLISH (figures, definitions, verdicts, disagreements) as ONE
+self-contained sentence with its [n] citations -- "DeepSeek-V4 ships a
+256k context window [4]" -- never your plans or next steps (the task
+list owns those), never a restatement of the question, never a fact no
+source supports.  Give EVERY fact its tags: 1-3 SHORT concept words
+naming its topics ("DeepSeek-V4", "context window"), reusing the exact
+words earlier facts used over inventing new ones -- the tags are not
+decoration, they place the fact in the knowledge graph and decide which
+topic searches resurface it.  Revise honestly: supersede or retract a
+fact the moment better evidence overturns it.  Skip a round honestly
+when it produced nothing durable."""
+"""The ledger doctrine -- injected into the system prompt's
+<tool_notes> whenever the tool is registered."""
+
 LEARNING_MAX_CHARS = 400
 """One recorded finding's cap -- a finding is one self-contained sentence,
 not a paragraph (the writer reads them alongside the full sources)."""

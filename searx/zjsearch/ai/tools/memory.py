@@ -25,6 +25,22 @@ logger = logging.getLogger(__name__)
 
 MEMORY_TOOL = "memory"
 
+INSTRUCTIONS = """\
+Durable facts about the user (stored across sessions -- home city,
+occupation, standing preferences) live here.  When the run injects the
+stored facts in a <memory> context block, search is for checking before
+a save that might duplicate.  When nothing is injected, search IS the
+read path: consult it (action=search) when the user references prior
+context or a standing preference could shape the research (a home city
+grounds weather/local questions; stated preferences shape source
+choices) -- ideally before planning.  Save ONLY lasting facts
+(action=save) -- the user's city, occupation, standing preferences --
+never one-off conversation details.  The answer must still answer the
+question; saving is a silent side action."""
+"""The memory doctrine -- injected into the system prompt's
+<tool_notes> whenever the tool is registered (the snapshot variant's
+facts ride <run_context> as data; this carries the WHEN-to-consult)."""
+
 MAX_MEMORIES = 50
 """The pre-send cap -- facts beyond this are the oldest's problem (the
 preferences surface prunes; the model is told to update, not append)."""
@@ -38,14 +54,8 @@ def memory_spec() -> dict[str, t.Any]:
         "description": (
             "Remember durable facts about the user across sessions"
             " (action=save) or look up what is already stored"
-            " (action=search).  Save ONLY lasting facts -- the user's"
-            " city, occupation, standing preferences (answer style,"
-            ' source preferences) -- e.g. {"action": "save", "content":'
-            ' "User lives in Shanghai"} -- NEVER one-off conversation'
-            " details.  The facts the user already has stored are listed"
-            " in the <memory> context block: search is for checking"
-            " before a save that might duplicate, not for re-reading what"
-            " you can already see."
+            " (action=search).  One save = ONE self-contained fact in the"
+            " user's language; never a one-off conversation detail."
         ),
         "inputSchema": {
             "type": "object",

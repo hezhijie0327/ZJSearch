@@ -9,10 +9,10 @@ export const recallHistoryView: ToolView = {
   label: ({ call }) => call.q,
   metric: ({ call, t }) =>
     call.status === "pending"
-      ? t("ai_past_research_running")
+      ? t("ai_recall_running")
       : call.status === "ok"
         ? (call.n ?? 0) > 0
-          ? t("ai_past_research_hits", { n: String(call.n ?? 0) })
+          ? t("ai_recall_hits", { n: String(call.n ?? 0) })
           : null
         : null,
 };

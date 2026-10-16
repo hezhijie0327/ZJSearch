@@ -21,6 +21,33 @@ from searx.zjsearch.ai.tools.browse import BROWSE_TOOL
 
 SEARCH_WEB_TOOL = "search_web"
 
+INSTRUCTIONS = """\
+Search like a skilled human: short keyword sets (never full sentences),
+distinct facets as separate calls, alternative phrasings or translations
+when the wording is uncertain -- several parallel calls beat one broad
+query.  Precision operators are applied authoritatively by the engine
+and are welcome when they sharpen the results: site: / -site:,
+filetype:, "exact phrase", before:YYYY-MM-DD / after:YYYY-MM-DD.
+Never repeat a query you already ran (refresh is for deliberate re-reads
+of time-sensitive material only).  Optional filters (time_range, site
+filters) are not supported by every engine: when a filtered search comes
+back EMPTY, retry the same intent once without the filter before
+concluding there is nothing to find.
+Bangs: never use one unless the user explicitly names an engine OR you
+know this deployment keeps a fitting engine disabled (then prefix the
+query with its bang, e.g. !bocha) -- a category search already fans out
+across every enabled engine in that vertical; the list_engines tool
+names the held-back ones.  API-billed (paid) engines cost real money: a
+bang on one is HELD until the user approves the ask_user confirmation --
+re-run with paid_ok only after that yes.
+Instant answers: a query of exactly "$SYMBOL" (e.g. "$AAPL") or ending
+in " stock" / " quote" triggers the stock-quote plugin -- the live
+quote rides the results as a Direct answer; prefer it for ticker
+questions (finance pages are often JS-walled or stale)."""
+"""The search craft: strategy and policy, injected into the system
+prompt's <tool_notes> whenever the tool is registered (the desc keeps
+only the call semantics -- one doctrine, one home)."""
+
 SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
 """The fallback verticals -- used only before the instance's engine map
 exists (bare imports, probes); the live enum is deployment-derived."""
@@ -66,45 +93,24 @@ def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict
     return {
         "name": SEARCH_WEB_TOOL,
         "description": (
-            "Run one web search on the metasearch engine with specific keywords."
-            " Search like a skilled human: short keyword sets (never full"
-            " sentences), distinct facets of the question, alternative phrasings"
-            " or translations when the wording is uncertain. Prefer several"
-            " parallel calls over one broad query. Precision operators are"
-            " applied authoritatively by the engine and are welcome when they"
-            " sharpen the results: site: / -site:, filetype:, \"exact phrase\","
-            " before:YYYY-MM-DD / after:YYYY-MM-DD. Optional filters"
-            " (time_range) are not supported by every engine: when a filtered"
-            " search comes back EMPTY, retry the same intent once without the"
-            " filter before concluding. Results are pre-ranked for relevance to"
-            " your query and near-duplicate syndications of already-seen stories"
-            " are suppressed -- trust the top of the list, and few results usually"
-            " means the topic is exhausted, not that your keywords were bad. Never"
-            " use bangs unless the user explicitly names an engine OR you know"
-            " this deployment keeps a fitting engine disabled (then prefix the"
-            ' query with its bang, e.g. "!bocha keywords") -- a category search'
-            " already fans out across every enabled engine in that vertical."
+            "Run one web search on the metasearch engine with specific"
+            " keywords.  Results arrive as globally numbered [n] sources to"
+            " cite in the final answer -- pre-ranked for relevance, with"
+            " near-duplicate syndications of already-seen stories"
+            " suppressed: trust the top of the list, and few results"
+            " usually means the topic is exhausted, not that your keywords"
+            " were bad."
             + (
                 "  The list_engines tool lists this deployment's engines --"
                 " the categories, and the disabled ones with the bang that"
-                " reaches each; consult it when unsure which vertical fits"
-                " or when searches keep coming back thin."
+                " reaches each."
                 if with_info
                 else ""
             )
-            + " Results arrive as globally numbered [n]"
-            " sources to cite in the final answer.  Instant answers: a query"
-            ' of exactly "$SYMBOL" (e.g. "$AAPL") or ending in " stock" /'
-            ' " quote" (e.g. "AAPL stock") triggers the stock-quote plugin --'
-            " the live quote rides the results as a Direct answer. Prefer it"
-            " for ticker questions (finance pages are often JS-walled or"
-            " stale)."
             + (
                 "  Snippets are heads: when a result promises the exact"
-                f" missing detail, the {BROWSE_TOOL} tool's read reads"
-                " that page in full; when the engines are bot-walled /"
-                " captcha'd / all-empty, the same tool is a real interactive"
-                " browser -- open and drive sites with it directly."
+                f" missing detail, the {BROWSE_TOOL} tool's read fetches"
+                " that page in full."
                 if with_browser
                 else ""
             )

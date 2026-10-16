@@ -4,16 +4,27 @@
 The researcher half of the researcher/writer split (the writer's
 conversation contract lives in :py:mod:`runs.search.writer`), composed
 from the SHARED fragments in :py:mod:`searx.zjsearch.ai.prompts.spine`:
-the researcher gets the round policy and the tool-capability blocks,
-never the answer contract -- the researcher never writes the answer.
+the researcher gets the round policy and the cross-tool METHOD, never
+the answer contract -- the researcher never writes the answer.
+
+THE TWO PROMPT CHANNELS: this builder owns only what spans tools -- the
+persona, the method, the tier's round policy, the few-shot recipes.
+Each tool's own doctrine (how to search like a human, the reading
+rhythm, the ledger semantics, the delegation rules) lives in its
+package's ``INSTRUCTIONS`` constant and arrives here as ``tool_notes``
+(the registered tools' entries from ``tools.TOOL_INSTRUCTIONS``, in
+registration order) -- the MCP server-instructions pattern applied to
+the internal tools, so a tool's doctrine exists in exactly one place
+and disappears from the prompt exactly when the tool leaves the
+surface.
 
 The three research tiers are three PRODUCTS on one engine -- Search
 (the AI Overview feel), Deep Search, Deep Research -- and ``_DEPTH_RESEARCH``
 is where each tier's round policy speaks its identity.  Which blocks
 appear is derived from the RUN'S REGISTERED TOOLSET (one ``toolset``
 frozenset instead of a boolean per tool: registering a tool is what
-makes its block, examples and doctrine appear -- the gate can never
-drift from the surface).
+makes its block and examples appear -- the gate can never drift from
+the surface).
 
 The system prompt carries ONLY blocks that are byte-stable per
 (lang, mode, toolset): the per-run variable material (the memory
@@ -28,12 +39,7 @@ import typing as t
 
 from searx.zjsearch.ai.prompts import spine as shared
 from searx.zjsearch.ai.tools import (
-    ASK_USER_TOOL,
     BROWSE_TOOL,
-    CALCULATE_TOOL,
-    DELEGATE_RESEARCH_TOOL,
-    LIST_ENGINES_TOOL,
-    MEMORY_TOOL,
     RECORD_FINDINGS_TOOL,
     SEARCH_WEB_TOOL,
     UPDATE_PLAN_TOOL,
@@ -67,15 +73,11 @@ _DEPTH_RESEARCH: dict[str, str] = {
     open-questions list (gaps) current, and let the gaps pick the next
     round's angle -- definition, mechanics, comparisons, recent
     developments, use cases, limitations, expert and community reception,
-    whatever the question actually needs.  Read pages, not just snippets:
-    snippets are 300-character HEADS -- after a search round surfaces the
-    promising hits, spend the NEXT round reading the 2-4 sources you will
-    actually build on (browse reads), and read whenever a figure, quote
-    or claim your answer will lean on only exists as a snippet head.
-    Verify load-bearing claims against independent sources (see
-    <how_to_search>).  The research ends when the LEDGER closes -- every
-    subtask covered, every gap answered or explicitly abandoned -- not
-    when you feel done.""",
+    whatever the question actually needs.  Read pages, not just snippets
+    (the browse tool's doctrine says when); verify load-bearing claims
+    against independent sources (see <how_to_search>).  The research ends
+    when the LEDGER closes -- every subtask covered, every gap answered
+    or explicitly abandoned -- not when you feel done.""",
 }
 
 
@@ -139,66 +141,32 @@ def _examples(toolset: t.AbstractSet[str]) -> str:
     )
 
 
-def _how_to_search(toolset: t.AbstractSet[str]) -> str:
-    """The research METHOD: cross-tool strategy only -- the per-tool
-    mechanics live with the tools and arrive as the run's tool notes."""
-    list_engines_tool = LIST_ENGINES_TOOL in toolset
-    page_tool = BROWSE_TOOL in toolset
-    ledger = RECORD_FINDINGS_TOOL in toolset
-    lines = [
-        "- First write ONE short sentence.  On the FIRST round state how you"
-        " read the question's intent (the UI shows it as the lead of your"
-        " search plan); on LATER rounds reflect on the results so far -- name"
-        " the gap they leave and the facet this round covers.  FINISH that"
-        " sentence BEFORE the tool calls -- a call inserted mid-sentence"
-        f" shreds your step notes.  Then call {SEARCH_WEB_TOOL} -- several"
-        " calls in the same turn are encouraged: they run in parallel.",
-        "- ALWAYS run at least one search per question facet -- even for"
-        " topics you already know: the user expects live, cited sources, not"
-        " your memory.",
-        "- A load-bearing figure or claim only ONE snippet carries is"
-        " UNVERIFIED: confirm it in a second independent source (search the"
-        " claim's own wording) or read the first source -- one source is a"
-        " lead, two are a fact.",
-        "- Optional filters (time_range) are not supported by every engine:"
-        " when a filtered search comes back EMPTY, retry the same intent once"
-        " without the filter before concluding there is nothing to find.",
-        "- Never repeat a query you already ran; never use !bangs unless the"
-        " user explicitly names an engine OR you know this deployment keeps a"
-        " fitting engine disabled (then prefix the query with its bang, e.g."
-        " !bocha) -- without one, the category parameter already fans out"
-        " across every engine in that vertical.",
-    ]
-    if list_engines_tool:
-        lines.append(
-            "- The category enum on search_web is this deployment's REAL"
-            f" verticals; the {LIST_ENGINES_TOOL} tool lists them plus the"
-            " disabled, bang-reachable engines (API-billed ones are often held"
-            " back).  Consult it once when the question smells like a niche"
-            " vertical or a search landscape you do not know yet -- not on"
-            " every run."
-        )
-    if page_tool:
-        lines.append(
-            "- Close a facet with reads, not just hits: when the searches"
-            f" surface the pages that answer it, spend {BROWSE_TOOL} read"
-            " calls on the strongest sources before moving to the next facet"
-            " -- snippets are heads, and the answer's depth comes from what"
-            " you read,"
-        )
-    if ledger:
-        lines.append(
-            "- Record what you ESTABLISH with the"
-            f" {RECORD_FINDINGS_TOOL} tool as you go (one call, up to 6"
-            " facts); do not summarize your findings in prose narration --"
-            " the ledger, not your step notes, is the writer's distillation."
-        )
-    lines.append(
-        "- When the research is done, STOP: just end your turn without tool"
-        " calls.  Do not draft the answer -- the writer has your sources,"
-        " your plan and your findings ledger."
+def _how_to_search() -> str:
+    """The research METHOD: what spans every tool -- the step-note
+    language, the facet discipline, the verification bar, the stop
+    condition.  Per-tool craft lives in the tools' own INSTRUCTIONS and
+    arrives as <tool_notes>."""
+    return shared.block(
+        "how_to_search",
+        f"""\
+        - First write ONE short sentence.  On the FIRST round state how you
+          read the question's intent (the UI shows it as the lead of your
+          search plan); on LATER rounds reflect on the results so far -- name
+          the gap they leave and the facet this round covers.  FINISH that
+          sentence BEFORE the tool calls -- a call inserted mid-sentence
+          shreds your step notes.  Then call {SEARCH_WEB_TOOL} -- several
+          calls in the same turn are encouraged: they run in parallel.
+        - ALWAYS run at least one search per question facet -- even for
+          topics you already know: the user expects live, cited sources, not
+          your memory.
+        - A load-bearing figure or claim only ONE snippet carries is
+          UNVERIFIED: confirm it in a second independent source (search the
+          claim's own wording) or read the first source -- one source is a
+          lead, two are a fact.
+        - When the research is done, STOP: just end your turn without tool
+          calls.  Do not draft the answer -- the writer has your sources,
+          your plan and your findings ledger.""",
     )
-    return shared.block("how_to_search", "\n".join(lines))
 
 
 def _follow_up(sources_base: int) -> str:
@@ -216,212 +184,19 @@ def _follow_up(sources_base: int) -> str:
     )
 
 
-def _page_reader(toolset: t.AbstractSet[str]) -> str:
-    """The read-lane doctrine (registered with the browse tool)."""
-    if BROWSE_TOOL not in toolset:
-        return ""
-    return shared.block(
-        "page_reader",
-        f"""\
-        The {BROWSE_TOOL} tool's read(url) reads ONE url's current full
-        content in a real browser and returns it as markdown.  SNIPPETS ARE
-        HEADS, NOT SOURCES: the [n] lines carry ~300 characters, and an
-        answer assembled only from them stays shallow -- its numbers are
-        unverified and its claims rest on out-of-context fragments.  Make
-        reading a rhythm, not an exception: after a search round surfaces
-        promising hits, READ the 2-4 sources you will actually build on
-        before chasing new facets; read on sight of a figure, quote, table,
-        spec or claim your answer will lean on; read to resolve two snippets
-        that disagree; a source that keeps reappearing across rounds
-        deserves one read.  If the question contains an explicit URL and
-        asks about that page (summarize it, read it, extract from it), open
-        it with a {BROWSE_TOOL} read FIRST -- do not search for what the
-        page itself contains.  Do not drown either: skip obviously thin
-        results, never open pages just to "see what is there" once you hold
-        the detail, and for long documents prefer one targeted site:-search
-        over opening page after page.  A failed or empty page is a dead
-        end: search a different source instead of retrying it.  Opened
-        content carries the source's [n] label -- the number it already had
-        among your sources, or a fresh one appended for a url that was not
-        among the results.  For pages a plain read cannot see through --
-        sign-in walls, interactive apps, platforms like xiaohongshu or
-        zhihu -- the same tool's session actions go further: it opens the
-        site, clicks and screenshots like a user.""",
-    )
-
-
-def _memory_block(user_memories: list[dict[str, str]] | None, memories_live: bool) -> str:
-    """The memory block, two variants: LIVE (the tool IS the read path --
-    teach WHEN to consult) and SNAPSHOT (the facts are injected)."""
+def _memory_block(user_memories: list[dict[str, str]] | None) -> str:
+    """The memory SNAPSHOT (data, not doctrine -- the tool's own
+    INSTRUCTIONS carry the when-to-consult/save rules): the user's stored
+    facts as injected by the client, or the live variant's notice that
+    the store must be searched."""
     facts = "\n".join(f"- {item['content']}" for item in user_memories or [])
-    if memories_live:
-        return shared.block(
-            "memory",
-            f"""\
-            Durable facts about the user (stored across sessions -- home
-            city, occupation, standing preferences) live in the
-            {MEMORY_TOOL} tool: SEARCH it (action=search) when the user
-            references prior context or a standing preference could shape
-            the research (a home city grounds weather/local questions;
-            stated preferences shape source choices) -- ideally before
-            planning.  When the user reveals a NEW durable fact, SAVE it
-            with action=save during this run -- never one-off conversation
-            details.  The answer must still answer the question; saving is
-            a silent side action.""",
-        )
     return shared.block(
         "memory",
         f"""\
         Durable facts about the user (stored across sessions) -- use them
         to personalize the research (a home city grounds weather/local
         questions, stated preferences shape source choices):
-        {facts or "(none stored yet)"}
-        When the user reveals a NEW durable fact (home city, occupation, a
-        standing preference), SAVE it with the {MEMORY_TOOL} tool
-        (action=save) during this run -- never one-off conversation
-        details.  The answer must still answer the question; saving is a
-        silent side action.""",
-    )
-
-
-def _calculator_block() -> str:
-    """The number-honesty doctrine of the research side."""
-    return shared.block(
-        "calculate",
-        f"""\
-        The {CALCULATE_TOOL} tool evaluates ONE mathematical expression
-        EXACTLY (python-like syntax: "2 + 3 * 4", "sqrt(1764)", "35 *
-        1.08", "mean([12.5, 13.2, 11.9])", "round(10 / 3, 4)").  Route
-        EVERY non-trivial number through it: sums, differences, ratios,
-        percentages, averages, growth rates, unit-less conversions of
-        values you already have -- never compute in your head and never
-        copy a number you have not verified; a wrong figure in a cited
-        answer is the worst failure this agent can produce.  This is
-        NON-NEGOTIABLE for financial and forecasting material: revenue
-        multiples, YoY or CAGR growth, margin and market-share math,
-        per-share figures, projections built from sourced assumptions --
-        every derived number in an earnings or forecast answer is one
-        calculate call, and a figure the sources never stated must never
-        reach the answer on mental arithmetic alone.  One expression per
-        call; substitute variables yourself before calling.""",
-    )
-
-
-def _task_block(mode: str, toolset: t.AbstractSet[str]) -> str:
-    """The living task list, two variants by tier (the one-shot plan tool
-    was superseded by the living task list)."""
-    if UPDATE_PLAN_TOOL not in toolset:
-        return ""
-    if mode == "speed":
-        return shared.block(
-            "task_list",
-            f"""\
-            Your research is SHORT (one round): a {UPDATE_PLAN_TOOL} plan is
-            OPTIONAL -- write one (2-3 items) only when the facets are
-            genuinely distinct; otherwise search directly.  The system still
-            tracks which sources landed where.""",
-        )
-    return shared.block(
-        "task_list",
-        f"""\
-        Your research is DECOMPOSED, and the plan is a LIVING hypothesis,
-        not a contract:
-        1. FIRST round: call {UPDATE_PLAN_TOOL} with the concrete,
-        independent subtasks the question needs (each answerable by its own
-        keyword searches).
-        2. Work the plan EVERY round and keep it TRUE: statuses are YOURS
-        to set (done when a subtask's material is gathered), and
-        cross-checking often proves an earlier assumption wrong -- when
-        evidence reveals a dead end, a missing facet, an entity the final
-        answer depends on, or a SURPRISE (an unexpected player, a
-        contradicting number, a facet you had not considered -- surprises
-        are plan edits, not footnotes), RESEND the COMPLETE list: add,
-        split, merge, reword or drop subtasks (a dropped dead end simply
-        leaves the list). The newest list replaces the card -- never leave
-        a subtask standing that the evidence has already contradicted.
-        3. The research ends when the PLAN closes -- every subtask done or
-        consciously dropped -- not when you feel done.""",
-    )
-
-
-def _learnings_block() -> str:
-    """The findings-ledger doctrine (registered with record_findings)."""
-    return shared.block(
-        "findings",
-        f"""\
-        The {RECORD_FINDINGS_TOOL} tool is your findings ledger: whenever a
-        round's sources settled something real, record it (up to 6 facts
-        per call) as ONE self-contained sentence with its [n] citations --
-        "DeepSeek-V4 ships a 256k context window [4]".  Give EVERY fact its
-        tags: 1-3 SHORT concept words naming the topics it belongs to
-        ("DeepSeek-V4", "context window"), reusing the exact words earlier
-        facts used over inventing new ones -- the tags are not decoration,
-        they place the fact in the knowledge graph and decide which topic
-        searches resurface it.  The ledger is what the WRITER reads
-        alongside the raw sources, and the user watches it grow as your
-        evidence trail: record what the sources ESTABLISH (figures,
-        definitions, verdicts, disagreements), never your plans or next
-        steps (the task list owns those), never a restatement of the
-        question, and never a fact no source supports.  Skip a round
-        honestly when it produced nothing durable.""",
-    )
-
-
-def _ambiguity_escape(toolset: t.AbstractSet[str]) -> str:
-    """The ask tool as the mid-research escape hatch."""
-    if ASK_USER_TOOL not in toolset:
-        return ""
-    return shared.block(
-        "ambiguity_escape",
-        f"""\
-        The {ASK_USER_TOOL} tool is your human-in-the-loop escape hatch --
-        available at ANY point during research, not just the start.  Do NOT
-        plow ahead on a guess: the moment you realize -- from the question
-        itself, the first round's results or mid-research -- that the run
-        could miss what the user actually wants, ask INSTEAD of researching
-        the wrong thing.  That covers a genuinely ambiguous subject (an
-        acronym matching several UNRELATED products, a code name), a scope
-        or success criterion only the user can state, and any high-stakes
-        deliverable whose assumptions would change the answer -- a
-        forecast, an investment or purchase question, a health or legal
-        matter: guessing wrong there is the worst outcome this agent can
-        produce.  Call it as the only call of that turn and stop.  Do not
-        burn rounds on a guess; do not ask what a quick search can settle;
-        do not use it for broad informational topics; do not mix it with
-        {SEARCH_WEB_TOOL} calls.""",
-    )
-
-
-def _subagent_block(toolset: t.AbstractSet[str]) -> str:
-    """The delegation + follow-up contract (registered with the
-    delegation tools)."""
-    if DELEGATE_RESEARCH_TOOL not in toolset:
-        return ""
-    return shared.block(
-        "subagent_delegation",
-        f"""\
-        You may delegate INDEPENDENT research facets to subagents via
-        delegate_research -- each call spawns a nested researcher with its
-        own context window that searches, reads pages, and reports a
-        compressed digest back.  Delegate when the question has 2-4
-        independent facets worth parallel depth; do NOT delegate a quick
-        lookup you can search yourself.  Use it too when ONE facet needs
-        many reads (a broad landscape scan) that would flood your own
-        context -- the subagent reads wide and returns only the digest.
-        Brief each subagent with the four fields (objective / output_format
-        / tool_guidance / boundaries): vague briefs produce duplicated
-        work.  Batch the independent subtasks in ONE round so they run in
-        parallel; their digests arrive as tool results -- aggregate them,
-        never re-research what a digest already settled.  Do not delegate
-        more than 3-4 subtasks per round.
-
-        Every digest opens with its [Subtask Sn] tag -- Sn is that
-        subagent's id for the REST of the run: message_subtask(id, message)
-        sends it a follow-up it executes INSIDE the context it built (its
-        sources, ledger and reads are kept) and a fresh digest comes back.
-        A digest that was close-but-incomplete, a gap its digest reported,
-        a correction after you learned something new -- message it, don't
-        re-delegate (a new subagent would re-search the facet from zero).""",
+        {facts or "(none stored yet -- the memory tool's search is the read path)"}""",
     )
 
 
@@ -429,7 +204,7 @@ def _user_steering() -> str:
     """The live-steering contract (registered when the run is attachable)."""
     return shared.block(
         "user_steering",
-        f"""\
+        """\
         The user can steer this run LIVE: a message wrapped in
         <user_steering> may arrive between your rounds (or interrupt one).
         It OVERRIDES your current plan -- act on it: revise the task list
@@ -468,6 +243,21 @@ def _research_policy(max_rounds: int, depth_rung: int) -> str:
     )
 
 
+def _tool_notes(notes: list[tuple[str, str]] | None) -> str:
+    """The registered tools' own doctrine (the MCP server-instructions
+    pattern for internal tools): each entry is (tool name, instructions)
+    in registration order.  Byte-stable per toolset, so it lives in the
+    cached system prompt."""
+    if not notes:
+        return ""
+    sections = "\n\n".join(f"[{name}]\n{text}" for name, text in notes)
+    return shared.block(
+        "tool_notes",
+        "Each registered tool carries its usage doctrine below -- how to"
+        " work it well (the schemas say when to call it):\n\n" + sections,
+    )
+
+
 def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
     question: str,
     lang: str,
@@ -487,17 +277,19 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     depth_rung: int = 0,
     memories_live: bool = False,
     mcp_servers: dict[str, str] | None = None,
+    tool_notes: list[tuple[str, str]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
     answer), ``<today>``, ``<step_notes>`` language, ``<how_to_search>``,
-    ``<examples>`` (few-shot), the tool-capability blocks, ``<depth>``
-    (the round policy half -- output shape belongs to the writer),
-    ``<research_policy>`` and the clarify round-trip blocks.  Every
-    tool-conditional block keys off ``toolset`` -- the names of the specs
-    this run actually registered -- so the prompt can never promise a
-    tool the model does not have.  The SHARED answer contract (citations,
-    markdown, grounding, voice) is the WRITER's."""
+    ``<examples>`` (few-shot), ``<tool_notes>`` (the registered tools'
+    own doctrine), ``<depth>`` (the round policy half -- output shape
+    belongs to the writer), ``<research_policy>`` and the clarify
+    round-trip blocks.  Every tool-conditional block keys off
+    ``toolset`` -- the names of the specs this run actually registered
+    -- so the prompt can never promise a tool the model does not have.
+    The SHARED answer contract (citations, markdown, grounding, voice)
+    is the WRITER's."""
     lines: list[str] = [
         _role(),
         shared.today_line(),
@@ -509,32 +301,21 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             tool calls through your tools; never continue the note with a
             written-out call.""",
         ),
-        _how_to_search(toolset),
+        _how_to_search(),
         _examples(toolset),
     ]
-    page_reader = _page_reader(toolset)
-    if page_reader:
-        lines.append(page_reader)
-    lines.append(_calculator_block())
-    task_block = _task_block(mode, toolset)
-    if task_block:
-        lines.append(task_block)
-    if RECORD_FINDINGS_TOOL in toolset:
-        lines.append(_learnings_block())
-    if DELEGATE_RESEARCH_TOOL in toolset:
-        lines.append(_subagent_block(toolset))
-    if steerable:
-        lines.append(_user_steering())
+    tool_notes_block = _tool_notes(tool_notes)
+    if tool_notes_block:
+        lines.append(tool_notes_block)
     lines.append(shared.block("depth", _DEPTH_RESEARCH.get(mode, _DEPTH_RESEARCH["balanced"])))
     research_policy = _research_policy(max_rounds, depth_rung)
     if research_policy:
         lines.append(research_policy)
-    ambiguity_escape = _ambiguity_escape(toolset)
-    if ambiguity_escape:
-        lines.append(ambiguity_escape)
+    if steerable:
+        lines.append(_user_steering())
 
     # ---- the USER message's per-run <run_context> ----
-    run_context = f"{_memory_block(user_memories, memories_live)}\n"
+    run_context = f"{_memory_block(None if memories_live else user_memories)}\n"
     if clarifications:
         run_context += (
             "<clarified>\nThe user already confirmed the research direction"
@@ -558,8 +339,14 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             " established the facts below (their [n] marks refer to this"
             " thread's source registry).  Build on them -- do NOT"
             " re-research an established fact unless genuine"
-            " re-verification is needed, and re-affirm the ones you build"
-            " on into your own findings ledger (record_findings).\n"
+            " re-verification is needed"
+            + (
+                ", and re-affirm the ones you build on into your own"
+                " findings ledger (record_findings)"
+                if RECORD_FINDINGS_TOOL in toolset
+                else ""
+            )
+            + ".\n"
         )
         if facts:
             thread_ctx += "<established>\n" + "\n".join(f"- {f}" for f in facts[:40]) + "\n</established>\n"
@@ -576,7 +363,9 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # the MCP servers' own usage guidance (the initialize results'
         # ``instructions``, captured during the memoized specs pass) --
         # per-process variable material, so it rides the USER message
-        # with the rest of <run_context>, never the cached system prompt
+        # with the rest of <run_context>, never the cached system prompt.
+        # (The internal tools' instructions are registry constants --
+        # they live in the system prompt's <tool_notes> instead.)
         listed = "\n".join(f"- {name}: {text}" for name, text in mcp_servers.items() if text)
         if listed:
             run_context += (
