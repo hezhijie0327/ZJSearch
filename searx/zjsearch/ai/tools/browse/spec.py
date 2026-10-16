@@ -115,16 +115,11 @@ drove.""",
                 },
                 "url": {
                     "type": "string",
-                    "description": """\
-open/read: the absolute http(s) URL.  read: omit it to read the page
-the session is currently on.""",
+                    "description": 'open/read: the absolute http(s) URL.  read: omit it to read the page the session is currently on.',
                 },
                 "ref": {
                     "type": "string",
-                    "description": """\
-click/type/hover/select: the snapshot ref (e12; child-frame elements
-are f1e5).  screenshot: capture that ONE element as a close-up instead
-of the whole viewport.""",
+                    "description": 'click/type/hover/select: the snapshot ref (e12; child-frame elements are f1e5).  screenshot: capture that ONE element as a close-up instead of the whole viewport.',
                 },
                 "text": {"type": "string", "description": "type: the text to fill."},
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},

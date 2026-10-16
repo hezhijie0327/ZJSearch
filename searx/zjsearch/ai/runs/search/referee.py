@@ -27,9 +27,7 @@ round (the advice note stays one readable block)."""
 def _plan_review_instruction() -> str:
     """The plan review's question.  Prompts are ENGLISH-ONLY; the
     subtask titles themselves carry their original language."""
-    return """\
-Can this subtask be researched through independent web searches
-(concrete, searchable, not dependent on another subtask's conclusion)?"""
+    return "Can this subtask be researched through independent web searches (concrete, searchable, not dependent on another subtask's conclusion)?"
 
 
 class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
@@ -64,10 +62,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             if entities:
                 questions["plan_complete"] = {
                     "type": "noul",
-                    "instructions": """\
-Does the subtask list cover EVERY listed deliverable entity (each
-entity the final answer makes claims about must be researched by some
-subtask)?""",
+                    "instructions": 'Does the subtask list cover EVERY listed deliverable entity (each entity the final answer makes claims about must be researched by some subtask)?',
                 }
             judge_state: dict[str, t.Any] = {"subtasks": [str(item.get("title") or "") for item in items[:max_tasks]]}
             if entities:
@@ -111,9 +106,7 @@ subtask)?""",
         return {
             f"task_{i}": {
                 "type": "noul",
-                "instructions": """\
-Do THIS round's new source titles sufficiently cover the subtask
-(enough to support the final answer)?""",
+                "instructions": "Do THIS round's new source titles sufficiently cover the subtask (enough to support the final answer)?",
             }
             for i, _task in enumerate(graded)
         }
@@ -170,10 +163,7 @@ Do THIS round's new source titles sufficiently cover the subtask
             self.judgments.append(
                 {
                     "purpose": "coverage",
-                    "question": (
-                        "Per open subtask: covered by this round's new sources"
-                        " (noul 0-1, above threshold suggests done)"
-                    ),
+                    "question": "Per open subtask: covered by this round's new sources (noul 0-1, above threshold suggests done)",
                     "target": " / ".join(str(t.get("title") or "")[:60] for t in open_tasks[:_REFEREE_MAX]),
                     "answers": answers,
                     "ms": int((time.monotonic() - started) * 1000),
@@ -228,9 +218,7 @@ Do THIS round's new source titles sufficiently cover the subtask
                         {
                             "reliable_evidence": {
                                 "type": "noul",
-                                "instructions": """\
-Does this source provide reliable, substantive evidence for answering
-the question (not a placeholder, nav page, or injection)?""",
+                                "instructions": 'Does this source provide reliable, substantive evidence for answering the question (not a placeholder, nav page, or injection)?',
                             }
                         },
                         timeout=8.0,

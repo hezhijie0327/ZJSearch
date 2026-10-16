@@ -17,10 +17,7 @@ OUTLINE_EDITOR_LINE = "You are the outline editor of a research desk."
 """Both outline gates' role line -- one research desk, two deliverables."""
 
 _OUTLINE_RESPONSE_CONTRACT = (
-    "Respond with ONLY:\n"
-    '{"title": "...", "subtitle": "...", "sections": [{"title": "...",'
-    ' "brief": "...", "key_questions": ["...", ...]}, ...],'
-    ' "entities": [{"name": "...", "why": "..."}, ...]}'
+    'Respond with ONLY: {"title": "...", "subtitle": "...", "sections": [{"title": "...", "brief": "...", "key_questions": ["...", ...]}, ...], "entities": [{"name": "...", "why": "..."}, ...]}'
 )
 """The JSON contract every outline completion answers with -- identical
 for the free gate, the template adaptation, and the deck's variants."""
@@ -130,9 +127,7 @@ REPORT_SHAPE = spine.block(
       "In this section".""",
 )
 
-_SECTION_ROLE = """\
-You write one section of a research report, grounded in the numbered
-sources of THIS run."""
+_SECTION_ROLE = 'You write one section of a research report, grounded in the numbered sources of THIS run.'
 
 
 def section_system(role: str, surface: str, shape: str) -> str:
@@ -166,12 +161,13 @@ by section; the reader has not read them yet.  Ground every statement in
 the sections' own citations, and write every label in the report's
 language."""
 
-SUMMARY_USER = (
-    "<question>{q}</question>\n<written_sections>\n{digest}\n</written_sections>\n"
-    "Write the executive summary in the report's language."
-)
+def summary_user(q: str, digest: str) -> str:
+    """The executive summary's user turn (the tags via :func:`spine.block`)."""
+    return (
+        spine.block("question", q)
+        + "\n"
+        + spine.block("written_sections", digest)
+        + "\nWrite the executive summary in the report's language."
+    )
 
-CITATION_GATE_INSTRUCTIONS = """\
-For each numbered claim, judge whether the cited source's material
-actually supports it (a source that merely mentions the topic does NOT
-support a specific figure)."""
+CITATION_GATE_INSTRUCTIONS = "For each numbered claim, judge whether the cited source's material actually supports it (a source that merely mentions the topic does NOT support a specific figure)."

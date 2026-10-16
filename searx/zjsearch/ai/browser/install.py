@@ -87,7 +87,7 @@ def main() -> int:
     # install answers it through stdin (stable builds never read it)
     result = subprocess.run(
         [sys.executable, "-m", "camoufox", "fetch", *sys.argv[1:]],
-        input="y\n",
+        input='y\n',
         text=True,
         check=False,
     ).returncode

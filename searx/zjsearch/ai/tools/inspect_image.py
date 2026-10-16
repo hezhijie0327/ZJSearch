@@ -28,10 +28,7 @@ def inspect_image_spec() -> dict[str, t.Any]:
     """The ``inspect_image`` tool spec."""
     return {
         "name": INSPECT_IMAGE_TOOL,
-        "description": """\
-Look at ONE image from the search results: copy the img= URL from a
-source line in the feed and the image becomes visible to you in the
-next turn (pass n to bind it to its [n] source).""",
+        "description": 'Look at ONE image from the search results: copy the img= URL from a source line in the feed and the image becomes visible to you in the next turn (pass n to bind it to its [n] source).',
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

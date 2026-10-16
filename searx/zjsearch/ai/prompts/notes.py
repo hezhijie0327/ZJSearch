@@ -10,17 +10,12 @@ blocks.  The agent ENGINE's own notes (loop/compact) stay next to their
 mechanism by design; this module is the run layer's set.
 """
 
-STALL_NOTE = """\
-The research went STALE and ended early: the latest rounds only repeated
-earlier queries or returned nothing new.  Where the sources are silent,
-apply the grounding rule above."""
+STALL_NOTE = 'The research went STALE and ended early: the latest rounds only repeated earlier queries or returned nothing new.  Where the sources are silent, apply the grounding rule above.'
 """The stall detector's verdict, handed to the writer as the research
 note: the gathering ended on unproductive rounds (the honest framing --
 the writer answers from what exists and names the gaps)."""
 
-BUDGET_NOTE = """\
-The research budget ended the gathering early -- the sources above are
-everything that was found."""
+BUDGET_NOTE = 'The research budget ended the gathering early -- the sources above are everything that was found.'
 """The writer's research note when the run spent its round budget
 without stalling (the loop's own halt message covers the reason; this is
 the plain budget-exhausted case)."""

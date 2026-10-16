@@ -101,18 +101,12 @@ def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict
                 "category": {
                     "type": "string",
                     "enum": list(available_categories()),
-                    "description": """\
-Optional vertical -- the enum is exactly what this deployment serves
-(every listed category has enabled engines; each has its own client
-layout: images render as a masonry, videos as a grid); general when
-unsure.""",
+                    "description": 'Optional vertical -- the enum is exactly what this deployment serves (every listed category has enabled engines; each has its own client layout: images render as a masonry, videos as a grid); general when unsure.',
                 },
                 "time_range": {
                     "type": "string",
                     "enum": list(_TIME_RANGES),
-                    "description": """\
-Optional freshness window -- use it when the question is about recent
-material (news, releases, changelogs); omit otherwise.""",
+                    "description": 'Optional freshness window -- use it when the question is about recent material (news, releases, changelogs); omit otherwise.',
                 },
                 "included_sites": {
                     "type": "array",
@@ -129,9 +123,7 @@ thin, run one more without it.""",
                 "excluded_sites": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": """\
-Bare domains to EXCLUDE (at most 3), only when the user signals an
-aversion: "not pinterest" -> ["pinterest.com"].""",
+                    "description": 'Bare domains to EXCLUDE (at most 3), only when the user signals an aversion: "not pinterest" -> ["pinterest.com"].',
                 },
                 "refresh": {
                     "type": "boolean",

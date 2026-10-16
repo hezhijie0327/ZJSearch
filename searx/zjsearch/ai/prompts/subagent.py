@@ -41,10 +41,7 @@ def subagent_messages(
     system_parts = [
         shared.block(
             "role",
-            """\
-            You are a research SUBAGENT. A lead researcher delegated one
-            subtask to you; you have your own context window and report a
-            compressed digest back.  Research ONLY your subtask.""",
+            'You are a research SUBAGENT. A lead researcher delegated one subtask to you; you have your own context window and report a compressed digest back.  Research ONLY your subtask.',
         ),
         shared.block("today", today),
         shared.block(
@@ -84,14 +81,10 @@ def subagent_messages(
             then report a fresh digest in the same shape.""",
         ),
     ]
-    if tool_notes:
-        sections = "\n\n".join(f"[{name}]\n{text}" for name, text in tool_notes)
-        system_parts.append(
-            "<tool_notes>\nEach registered tool carries its usage doctrine"
-            " below -- how to work it well (the schemas say when to call"
-            f" it):\n\n{sections}\n</tool_notes>"
-        )
-    user = f"<subtask>\n{parsed['objective']}\n</subtask>"
+    tool_notes_block = shared.tool_notes(tool_notes or [])
+    if tool_notes_block:
+        system_parts.append(tool_notes_block)
+    user = shared.block("subtask", parsed["objective"])
     return [
         {"role": "system", "content": "\n".join(system_parts)},
         {"role": "user", "content": user},

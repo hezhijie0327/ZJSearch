@@ -62,10 +62,7 @@ with 2-4 concrete options (the user can always add free text).""",
                             "type": {
                                 "type": "string",
                                 "enum": ["single", "multi"],
-                                "description": """\
-single = pick one option; multi = pick any.  The user can always add
-free text on every question -- a yes/no question is a single with
-options ["Yes", "No"].""",
+                                "description": 'single = pick one option; multi = pick any.  The user can always add free text on every question -- a yes/no question is a single with options ["Yes", "No"].',
                             },
                             "options": {
                                 "type": "array",

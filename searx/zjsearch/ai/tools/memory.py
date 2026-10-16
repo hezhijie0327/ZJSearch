@@ -51,11 +51,7 @@ def memory_spec() -> dict[str, t.Any]:
     """The ``memory`` tool spec."""
     return {
         "name": MEMORY_TOOL,
-        "description": """\
-Remember durable facts about the user across sessions (action=save) or
-look up what is already stored (action=search).  One save = ONE
-self-contained fact in the user's language; never a one-off
-conversation detail.""",
+        "description": "Remember durable facts about the user across sessions (action=save) or look up what is already stored (action=search).  One save = ONE self-contained fact in the user's language; never a one-off conversation detail.",
         "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
@@ -115,7 +111,7 @@ def search_memories(query: str, memories: list[dict[str, str]]) -> str:
             scored.append((score, memory))
     scored.sort(key=lambda pair: -pair[0])
     if not scored:
-        return "(no stored fact matches -- the full list follows)\n" + "\n".join(
+        return '(no stored fact matches -- the full list follows)' + "\n".join(
             f"- {memory['content']}" for memory in memories
         )
     return "\n".join(f"- {memory['content']}" for _, memory in scored[:10])
@@ -199,7 +195,7 @@ def extract_insights(
     if not question or not answer.strip():
         return [], []
     from searx.zjsearch.ai.llm import jsongate  # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.prompts import extractor  # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.prompts import extractor, spine  # pylint: disable=import-outside-toplevel
 
     value, _usage = jsongate.json_completion(
         cfg,
@@ -208,7 +204,7 @@ def extract_insights(
                 "role": "system",
                 "content": extractor.USER_MEMORY_EXTRACT_SYSTEM,
             },
-            {"role": "user", "content": f"<question>{question[:500]}</question>\n<answer>{answer[:3000]}</answer>"},
+            {"role": "user", "content": spine.block("question", question[:500]) + "\n" + spine.block("answer", answer[:3000])},
         ],
         "user_memory_extract",
         {

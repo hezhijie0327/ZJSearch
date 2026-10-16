@@ -13,6 +13,7 @@ shape.
 import typing as t
 
 from searx.zjsearch.ai.llm import jsongate
+from searx.zjsearch.ai.prompts import spine
 
 _CLARIFY_SCHEMA: dict[str, t.Any] = {
     "type": "object",
@@ -107,7 +108,10 @@ material gap, never a blanket doubling).  Output ONLY a JSON object:
 {"extend": true, "rounds": <int>, "reason": "<one line>"} or {"extend":
 false, "reason": "<one line>"}."""
         },
-        {"role": "user", "content": f"<q>{question}</q>\n<ledger>\n{ledger}\n</ledger>"},
+        {
+            "role": "user",
+            "content": spine.block("q", question) + "\n" + spine.block("ledger", ledger),
+        },
     ]
     value, _usage = jsongate.json_completion(cfg, messages, "extend_budget", _EXTEND_SCHEMA, account=account)
     if not value or not isinstance(value.get("extend"), bool) or not value["extend"]:
@@ -162,7 +166,7 @@ research, an uploaded file) ALSO needs research: the research loop
 carries the recall tools that reach it.  Output ONLY a JSON object, no
 prose, no code fences: {"research": true} or {"research": false}."""
         },
-        {"role": "user", "content": f"<q>{question}</q>"},
+        {"role": "user", "content": spine.block("q", question)},
     ]
     value, _usage = jsongate.json_completion(cfg, messages, "research_gate", _RESEARCH_SCHEMA, account=account)
     if not value or not isinstance(value.get("research"), bool):
@@ -190,7 +194,10 @@ Output ONLY a JSON object, no prose, no code fences: {{"question":
 "<the rewritten question>"}} -- or {{"question": ""}} when it is already
 self-contained.  Write in {lang}."""
         },
-        {"role": "user", "content": f"<conversation>\n{convo}\n</conversation>\n<follow_up>{question}</follow_up>"},
+        {
+            "role": "user",
+            "content": spine.block("conversation", convo) + "\n" + spine.block("follow_up", question),
+        },
     ]
     value, _usage = jsongate.json_completion(cfg, messages, "standalone_question", _STANDALONE_SCHEMA, account=account)
     return str((value or {}).get("question") or "").strip()[:300]
@@ -288,11 +295,7 @@ def related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: s
     messages = [
         {
             "role": "system",
-            "content": """\
-Suggest follow-up questions for a search session. Output ONLY a JSON
-object, no prose, no markdown, no code fences: {"questions":
-["<question 1>", "<question 2>", "<question 3>"]} -- exactly 3 short
-question strings."""
+            "content": 'Suggest follow-up questions for a search session. Output ONLY a JSON object, no prose, no markdown, no code fences: {"questions": ["<question 1>", "<question 2>", "<question 3>"]} -- exactly 3 short question strings.'
         },
         {
             "role": "user",

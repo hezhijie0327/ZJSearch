@@ -261,11 +261,11 @@ def make_synthesizer(
                     break
                 shown.append(f"- {fact}")
                 used += len(fact) + 2
-            ledger_block = (
-                "<findings_ledger>\nThe research agent's distillation of what"
-                " the sources established (active facts only; their [n] labels"
-                " refer to the run's source registry):\n" + "\n".join(shown) + "\n</findings_ledger>"
-            )  # a data wrapper (facts list), not a prose blob
+            facts_text = "\n".join(shown)
+            ledger_block = spine.block(
+                "findings_ledger",
+                f"The research agent's distillation of what the sources established (active facts only; their [n] labels refer to the run's source registry):\n{facts_text}",
+            )
         user = _section_user(
             sec, outline, prev_tail, written, material, state.artifacts, state.attached_files or None, ledger_block
         )
@@ -411,7 +411,7 @@ def make_synthesizer(
             digest_parts.append(block)
             used += len(block)
         system = "\n".join([report_prompts.SUMMARY_SYSTEM, lang_directive])
-        user = report_prompts.SUMMARY_USER.format(q=question[:1000], digest="\n".join(digest_parts))
+        user = report_prompts.summary_user(question[:1000], "\n".join(digest_parts))
         yield from stream([{"role": "system", "content": system}, {"role": "user", "content": user}], "summary", tally)
 
     return synthesizer
@@ -431,16 +431,18 @@ def _section_user(
     the previous section's tail (continuity), the findings ledger, the
     packed key material and the recorded tables."""
     title_line = outline["title"] + (f" -- {outline['subtitle']}" if outline.get("subtitle") else "")
-    parts = [f"<question>{title_line}</question>"]
+    parts = [spine.block("question", title_line)]
     toc = "\n".join(
         f"- {'[done] ' if s['id'] in written else ('[this one] ' if s['id'] == sec['id'] else '')}{s['title']}"
         for s in outline["sections"]
     )
-    parts.append(f"<report_outline>\n{toc}\n</report_outline>")
-    parts.append(f"<this_section>\ntitle: {sec['title']}\nbrief: {sec['brief']}")
+    parts.append(spine.block("report_outline", toc))
+    section_body = f"title: {sec['title']}\nbrief: {sec['brief']}"
     if sec["key_questions"]:
-        parts.append("key questions:\n" + "\n".join(f"- {q}" for q in sec["key_questions"]))
-    parts.append("</this_section>")
+        # the join rides its own line under the label (the old inline
+        # concat glued the first question to the colon)
+        section_body += "\nkey questions:\n" + "\n".join(f"- {q}" for q in sec["key_questions"])
+    parts.append(spine.block("this_section", section_body))
     if written:
         # the EARLIER sections' opening theses (the IterResearch-style
         # workspace refinement): every written section except the
@@ -461,34 +463,40 @@ def _section_user(
         if rows:
             rows_text = "\n".join(rows)
             parts.append(
-                f"""\
-<earlier_sections_digest>
-What the EARLIER sections already established (their openings; stay
-consistent with their judgments and never re-argue them):
-{rows_text}
-</earlier_sections_digest>"""
+                spine.block(
+                    "earlier_sections_digest",
+                    f"""\
+                    What the EARLIER sections already established (their
+                    openings; stay consistent with their judgments and never
+                    re-argue them):
+                    {rows_text}""",
+                )
             )
     if prev_tail:
-        parts.append(f"<previous_section_tail>\n{prev_tail}\n</previous_section_tail>")
+        parts.append(spine.block("previous_section_tail", prev_tail))
     if ledger_block:
         parts.append(ledger_block)
     if material:
-        header = "<key_material>\nThe numbered lines are this run's sources; cite them by their [n]."
+        key_body = "The numbered lines are this run's sources; cite them by their [n]."
         if attachments:
-            header += f"""\
+            key_body += f"""\
 
 Lines WITHOUT a [n] that begin with a file name are the USER'S ATTACHED
 FRAMEWORK -- its rules are BINDING for this section's judgments: apply
 them by their rule ID (e.g. [RULE-CCM-02]) right after the claim they
 support, and never invent a rule ID the framework does not contain."""
-        parts.append(header + "\n" + "\n".join(material) + "\n</key_material>")
+        parts.append(spine.block("key_material", key_body + "\n" + "\n".join(material)))
         if attachments:
             names = ", ".join(f'\"{str(f.get("name") or "attachment")}\"' for f in attachments[:3])
             parts.append(
-                "<attachments>\nThe user attached framework file(s) "
-                + names
-                + " -- the report's conclusions must FOLLOW the framework's rule set, and every"
-                " opportunity/recommendation cites the rule IDs it applies.\n</attachments>"
+                spine.block(
+                    "attachments",
+                    f"""\
+                    The user attached framework file(s) {names} -- the
+                    report's conclusions must FOLLOW the framework's rule
+                    set, and every opportunity/recommendation cites the rule
+                    IDs it applies.""",
+                )
             )
     if artifacts:
         tables = []

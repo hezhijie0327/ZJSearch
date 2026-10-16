@@ -54,10 +54,7 @@ about the material (noul) -- each with probabilities.""",
             "properties": {
                 "state": {
                     "type": "string",
-                    "description": """\
-The material to judge, COMPACT (a few hundred words at most): a
-source's title + snippet, the two candidate options side by side, the
-claim plus the passage that supports it.""",
+                    "description": "The material to judge, COMPACT (a few hundred words at most): a source's title + snippet, the two candidate options side by side, the claim plus the passage that supports it.",
                 },
                 "images": {
                     "type": "array",
@@ -85,6 +82,7 @@ claim plus the passage that supports it.""",
                             "type": {
                                 "type": "string",
                                 "enum": ["choice", "score", "noul"],
+                                "description": "choice = pick among the criteria's named options; score = a 0-N grade against the criteria's ordered legend; noul = a yes/no (1 or 0) judgment.",
                             },
                             "instructions": {
                                 "type": "string",

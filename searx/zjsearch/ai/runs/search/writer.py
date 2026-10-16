@@ -117,11 +117,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             role,
             shared.block(
                 "role_note",
-                """\
-                This request needs NO web research -- it is a greeting, a
-                chat or a writing task.  Answer directly and naturally in
-                prose; ignore every source and citation rule (no [n] marks,
-                no [*]); do not invent sources.""",
+                'This request needs NO web research -- it is a greeting, a chat or a writing task.  Answer directly and naturally in prose; ignore every source and citation rule (no [n] marks, no [*]); do not invent sources.',
             ),
             shared.identity(),
             shared.today_line(),
@@ -136,11 +132,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             shape=shared.shape_ladder(mode),
             sources_note=shared.block(
                 "sources_note",
-                f"""\
-                The numbered sources gathered for this question follow the
-                question below.  [n] labels are global and contiguous;
-                sources [1]..[{sources_base}] predate this thread's question;
-                cite only sources visible in the context.""",
+                f"The numbered sources gathered for this question follow the question below.  [n] labels are global and contiguous; sources [1]..[{sources_base}] predate this thread's question; cite only sources visible in the context.",
             ),
         )
     if attached_files:
@@ -170,9 +162,9 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     if galleries_on:
         lines.append(_answer_images_block(images_proxied))
     if halt:
-        lines.append(f"<research_note>\n{halt}\n</research_note>")
+        lines.append(shared.block("research_note", halt))
     elif budget_truncated:
-        lines.append(f"<research_note>\n{notes.BUDGET_NOTE}\n</research_note>")
+        lines.append(shared.block("research_note", notes.BUDGET_NOTE))
     active = [fact for fact in findings or [] if fact.get("status") == "active"]
     if active:
         # the researcher's own distillation (dzhng's writeFinalReport
@@ -242,13 +234,15 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # a single oversized block: the last-resort slice the eviction
         # cannot fix
         context = context[:cap] + "\n\n[... the feed was truncated ...]"
-    user = (
-        f"<question>{question}</question>\n<context>\n"
-        f"{context if not direct else 'No sources: this answer does not need them.'}\n</context>"
+    user = shared.block("question", question) + "\n" + shared.block(
+        "context", context if not direct else "No sources: this answer does not need them."
     )
     for file in attached_files or []:
         text = str(file.get("text") or "")[:60_000]
-        user += f'\n<attached_file name="{file.get("name") or "attachment.md"}">\n' f"{text}\n</attached_file>"
+        user += (
+            "\n"
+            + shared.block("attached_file", text, name=file.get("name") or "attachment.md")
+        )
     if image_parts:
         user = shared.user_message(user, image_parts)
     return shared.build_messages("\n".join(lines), user, history)

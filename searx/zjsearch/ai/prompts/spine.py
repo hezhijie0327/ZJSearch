@@ -41,13 +41,29 @@ _CATALOG_LANGUAGE_NAMES: dict[str, str] = {
 _FALLBACK_CATALOG = "en"
 
 
-def block(tag: str, body: str) -> str:
+def block(tag: str, body: str, **attrs: str) -> str:
     """One XML block: the body dedented to the margin and wrapped in
-    ``<tag>...</tag>``.  The ONE way this package and the tool
-    instructions wrap prompt material -- the tag is data, the body is a
-    readable document, and a missing closer is impossible by
-    construction."""
-    return f"<{tag}>\n{textwrap.dedent(body).strip()}\n</{tag}>"
+    ``<tag ...>...</tag>`` (keyword arguments become attributes).  The
+    ONE way this package and the tool instructions wrap prompt material
+    -- the tag is data, the body is a readable document, and a missing
+    closer is impossible by construction."""
+    attr_text = "".join(f' {k.replace("_", "-")}="{v}"' for k, v in attrs.items())
+    return f"<{tag}{attr_text}>\n{textwrap.dedent(body).strip()}\n</{tag}>"
+
+
+def tool_notes(notes: list[tuple[str, str]]) -> str:
+    """The registered tools' doctrine as ONE ``<tool_notes>`` block: each
+    entry is (tool name, instructions) in registration order.  Shared by
+    the lead researcher's and the subagent's system prompts (and byte
+    -stable per toolset in both)."""
+    if not notes:
+        return ""
+    sections = "\n\n".join(f"[{name}]\n{text}" for name, text in notes)
+    return block(
+        "tool_notes",
+        "Each registered tool carries its usage doctrine below -- how to"
+        " work it well (the schemas say when to call it):\n\n" + sections,
+    )
 
 
 def language_directive(catalog_tag: str) -> str:
@@ -162,9 +178,7 @@ def grounding_fallback(what: str) -> str:
     ("sources" for the Overview and AI Search's writer alike)."""
     return block(
         "grounding",
-        f"""\
-        If the {what} do not answer the question, say so in one short line
-        and answer from common knowledge marked with [*].""",
+        f"If the {what} do not answer the question, say so in one short line and answer from common knowledge marked with [*].",
     )
 
 
@@ -216,9 +230,7 @@ def opening_rule() -> str:
     """Answer hygiene shared by every answer surface."""
     return block(
         "opening",
-        """\
-        Get to the point in the first sentence.  No preamble, no closing
-        remark, and never end on a question.""",
+        'Get to the point in the first sentence.  No preamble, no closing remark, and never end on a question.',
     )
 
 

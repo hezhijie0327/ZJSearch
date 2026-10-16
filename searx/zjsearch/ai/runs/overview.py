@@ -93,9 +93,6 @@ def cap_lines(context: str) -> str:
     return context[: cut if cut > 0 else _CONTEXT_MAX_CHARS]
 
 
-_ANSWER_USER_PROMPT = "<q>{q}</q>\n<sources>\n{context}\n</sources>"
-
-
 def build_answer_messages(
     query: str, context: str, lang: str, image_parts: list[dict[str, t.Any]]
 ) -> list[dict[str, t.Any]]:
@@ -119,11 +116,9 @@ def build_answer_messages(
     if image_parts:
         system += "\n" + spine.block(
             "images",
-            """\
-            Images are attached after this text; they come from the numbered
-            sources and may carry relevant visual information.""",
+            'Images are attached after this text; they come from the numbered sources and may carry relevant visual information.',
         )
-    user_text = _ANSWER_USER_PROMPT.format(q=query, context=context)
+    user_text = spine.block("q", query) + "\n" + spine.block("sources", context)
     return spine.build_messages(system, spine.user_message(user_text, image_parts))
 
 

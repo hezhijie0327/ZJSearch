@@ -63,7 +63,9 @@ def _extract(
 ) -> list[dict[str, str]]:
     """One small json completion: the deliverable entities of this
     request.  ``[]`` on any failure (fail-open)."""
-    user = f"<question>{question[:1500]}</question>"
+    from searx.zjsearch.ai.prompts import spine  # pylint: disable=import-outside-toplevel
+
+    user = spine.block("question", question[:1500])
     for file in attached_files or []:
         text = str(file.get("text") or "")[:_ATTACH_HEAD]
         if text:

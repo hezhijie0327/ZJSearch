@@ -245,17 +245,10 @@ def _research_policy(max_rounds: int, depth_rung: int) -> str:
 
 def _tool_notes(notes: list[tuple[str, str]] | None) -> str:
     """The registered tools' own doctrine (the MCP server-instructions
-    pattern for internal tools): each entry is (tool name, instructions)
-    in registration order.  Byte-stable per toolset, so it lives in the
-    cached system prompt."""
-    if not notes:
-        return ""
-    sections = "\n\n".join(f"[{name}]\n{text}" for name, text in notes)
-    return shared.block(
-        "tool_notes",
-        "Each registered tool carries its usage doctrine below -- how to"
-        " work it well (the schemas say when to call it):\n\n" + sections,
-    )
+    pattern for internal tools) -- the shared renderer in
+    :func:`spine.tool_notes`.  Byte-stable per toolset, so it lives in
+    the cached system prompt."""
+    return shared.tool_notes(notes or [])
 
 
 def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
@@ -295,11 +288,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         shared.today_line(),
         shared.block(
             "step_notes",
-            f"""\
-            Write your step notes (the narration before tool calls) in
-            {lang}.  A note is ONE short sentence -- after it, make the
-            tool calls through your tools; never continue the note with a
-            written-out call.""",
+            f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",
         ),
         _how_to_search(),
         _examples(toolset),
@@ -320,10 +309,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         run_context += (
             shared.block(
                 "clarified",
-                f"""\
-                The user already confirmed the research direction before
-                this run (honor it; do not re-ask):
-                {clarifications}""",
+                f"The user already confirmed the research direction before this run (honor it; do not re-ask):\n{clarifications}",
             )
             + "\n"
         )
@@ -331,9 +317,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         run_context += (
             shared.block(
                 "clarified",
-                """\
-                The user declined to clarify the direction: proceed with
-                your best interpretation and cover the plausible facets.""",
+                'The user declined to clarify the direction: proceed with your best interpretation and cover the plausible facets.',
             )
             + "\n"
         )
@@ -357,11 +341,12 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         them -- do NOT re-research an established fact unless genuine
         re-verification is needed.{ledger_note}"""
         if facts:
-            body += f"\n<established>\n{established}\n</established>"
+            body += "\n" + shared.block("established", established)
         if gaps:
-            body += (
-                "\n<open_gaps>\nThe earlier runs left these questions open"
-                f" -- cover the ones THIS question touches:\n{gap_lines}\n</open_gaps>"
+            body += "\n" + shared.block(
+                "open_gaps",
+                f"The earlier runs left these questions open -- cover the"
+                f" ones THIS question touches:\n{gap_lines}",
             )
         run_context += shared.block("thread_context", body) + "\n"
     if mcp_servers:
@@ -439,5 +424,5 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         )
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"
-    user_text = f"{run_context}<q>{question}</q>"
+    user_text = f"{run_context}{shared.block('q', question)}"
     return shared.build_messages("\n".join(lines), shared.user_message(user_text, image_parts), history)

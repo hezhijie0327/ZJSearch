@@ -61,7 +61,7 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
             spine.language_directive(lang),
         ]
     )
-    user = f"<question>{question[:2000]}</question>"
+    user = spine.block("question", question[:2000])
     if clarified:
         user += f"\n<clarified_direction>{clarified}</clarified_direction>"
     user += _prior_topics_block(prior_topics)
@@ -206,7 +206,7 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
             spine.language_directive(lang),
         ]
     )
-    user = f"<question>{question[:2000]}</question>"
+    user = spine.block("question", question[:2000])
     if clarified:
         user += f"\n<clarified_direction>{clarified}</clarified_direction>"
     template_json = json.dumps({"name": template["name"], "sections": template["sections"]}, ensure_ascii=False)
