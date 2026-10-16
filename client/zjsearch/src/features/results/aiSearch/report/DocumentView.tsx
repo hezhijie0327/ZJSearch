@@ -124,7 +124,7 @@ export function DocumentView({
   })();
   return (
     // the long-form reading scale (DESIGN.md §4, the blog's .prose 17px/1.8
-    // -- 中文衬线长文, headings/tables ride em so they follow the root)
+    // -- the CJK serif long-form voice, headings/tables ride em so they follow the root)
     <div className="zjs-answer-body text-[17px] font-serif leading-[1.8] text-ink">
       {/* the document header: title + subtitle (the report cover's text
           half -- the classification chip and meta window are the outline's
@@ -224,7 +224,9 @@ export function DocumentView({
           the paper (export/print contract) */}
       {settled && stampDate ? (
         <p className="paper-postmark mt-10 ms-auto size-24 rotate-12 text-ink-3">
-          {/* 负右距抵消 tracking 尾隙，戳文在圆环里光学居中（blog SEALED 同款） */}
+          {/* negative end margin cancels the tracking's trailing gap, so the
+              stamp text optically centers in the ring (same as the blog's
+              SEALED postmark) */}
           <span className="-me-[0.14em] font-mono text-[10px] leading-none tracking-[0.14em] tabular-nums">
             {stampDate}
           </span>

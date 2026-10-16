@@ -128,7 +128,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     };
   }, [debounced]);
 
-  // ── view tab: the overview archive (the classic page's AI 概览) leads,
+  // ── view tab: the overview archive (the classic page's AI overview) leads,
   // then the research threads, sources, documents, memories; the graph is
   // a VIEW (global, memory rows carry no tags) and admin closes the bar ──
   const [kind, setKind] = useState<KindFilter | "graph" | "templates" | "admin">("answer");
@@ -314,7 +314,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   };
 
   /** A thread's inspector item: the answer loads from the evt log and the
-      查看研究 pill jumps to the full thread page. */
+      view-research pill jumps to the full thread page. */
   const openThreadInspector = (threadId: string, title: string) => {
     setView({
       body: "",

@@ -388,7 +388,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     if (handoff) {
       window.sessionStorage.removeItem("zjs-attach-handoff");
     }
-    // the template PICK is the run rail's 输出结构 control -- the start
+    // the template PICK is the run rail's output-structure control -- the start
     // request carries no template (the run-time pick rides run/control)
     aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language, handoffAttachments);
   });
@@ -477,7 +477,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     }
     // ONE logic for every citation: locate the source card in this run's
     // grid and flash it.  A card behind the reveal cap is not in the DOM
-    // yet -- KEEP expanding that run's sources (one batch per 查看更多
+    // yet -- KEEP expanding that run's sources (one batch per show-more
     // click; [40] can sit several batches deep) until the card surfaces
     // or the grid is exhausted.  Only a truly missing card opens the
     // page instead.
@@ -548,8 +548,8 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   }, []);
   const onRunGapsFollowup = useCallback(
     (gaps: { q: string }[]) => {
-      // the 未决缺口 card's 继续调研: a follow-up run on the run's open
-      // gaps (the thread ledger hands them over)
+      // the open-gaps card's continue-research action: a follow-up run on
+      // the run's open gaps (the thread ledger hands them over)
       const view = aiViewStateRef.current;
       setFollowupQuery("");
       aiSearchRef.current.followup(
@@ -763,8 +763,8 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       indices: new Set([...cited].map((n) => n - 1)),
     });
     // the overview archives itself into the browser-local knowledge base
-    // (the 答案 kind) together with the sources it actually cites -- they
-    // join the 来源 corpus ref-counted per query
+    // (the answer kind) together with the sources it actually cites -- they
+    // join the sources corpus ref-counted per query
     if (answer.trim()) {
       const { meta: runMeta } = extractRunMeta(aiAnswer.text);
       saveOverview({
@@ -1015,7 +1015,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                             setFollowupQuery(event.target.value);
                           }}
                           onKeyDown={(event) => {
-                            // Shift+Enter = 立即打断并引导 (the preempt lane:
+                            // Shift+Enter = interrupt now and steer (the preempt lane:
                             // the in-flight turn cancels, the run continues
                             // on the steered course)
                             if (event.key === "Enter" && event.shiftKey && steering) {

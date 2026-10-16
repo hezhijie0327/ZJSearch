@@ -1,16 +1,22 @@
-/* Marpit 主题「zjsearch」：deck 幻灯片的运行时主题（src/lib/deck/compile.ts
- * 经 themeSet.add 注册为默认主题）。ZJBlog tools/deckTheme.css 的孪生文件
- * （DESIGN.md §5.2 家族契约——主题改动两侧同步）；token 名两站完全一致，
- * 差异只有两处：zjsearch 无 shiki（代码块走本站 ink 色），引用锚点
- * （citeToLinks 产出的 #ref-n 链接）在此获得 chip 外观。颜色/字体一律引用
- * 站点 token 变量（src/styles/tokens.css），deck 自动跟随站点明暗主题交叉
- * 淡化。
+/* Marpit theme "zjsearch": the runtime theme of the deck slides
+ * (registered as the default theme by src/lib/deck/compile.ts's
+ * themeSet.add).  Twin file of ZJBlog's tools/deckTheme.css
+ * (DESIGN.md §5.2 family contract -- theme changes land on both sides
+ * together); token names are identical on both sites, the only two
+ * differences: zjsearch has no shiki (code blocks use this site's ink
+ * color), and citation anchors (the #ref-n links citeToLinks emits) get
+ * a chip look here.  Colors/fonts always reference the site token
+ * variables (src/styles/tokens.css), so the deck automatically follows
+ * the site's light/dark palette cross-fade.
  *
- * 注意 marpit 会把本文件的选择器 scoping 到 `div.marpit > section` 下
- * （实测产物），因此这里只写「亮态默认值」；依赖 html.dark 祖先的选择器
- * 会被 scoping 改写破坏，一律放 DeckView 的宿主 CSS。字号用 px（画布
- * 1280×720 固定，整体由播放器 transform 缩放）。
- * 选择器按特异性升序排列（biome noDescendingSpecificity）：.lead 覆盖放最后。 */
+ * Note that marpit scopes this file's selectors under `div.marpit >
+ * section` (verified against its output), so only "light-mode defaults"
+ * are written here; selectors relying on an html.dark ancestor would be
+ * broken by the scoping rewrite and always live in DeckView's host CSS.
+ * Font sizes use px (the canvas is a fixed 1280×720, scaled as a whole by
+ * the player's transform).
+ * Selectors are ordered by ascending specificity (biome
+ * noDescendingSpecificity): the .lead overrides come last. */
 
 /* @theme zjsearch */
 
@@ -25,9 +31,10 @@ section {
   line-height: 1.65;
 }
 
-/* 页题层级说明：deck.ts 构建期把标题整体降一级（h1 让给文章题），因此
- * `#` 页题渲染为 h2、`##` 子标题渲染为 h3——主题按降级后的真实层级配置
- * 字号（60/44/32），不要按源码层级思维调这里。 */
+/* Heading-level note: deck.ts demotes every heading one level at build
+ * time (h1 goes to the article title), so a `#` page title renders as h2
+ * and a `##` subtitle as h3 -- the theme sizes by the DEMOTED real levels
+ * (60/44/32); do not tune this file thinking in source levels. */
 h1,
 h2,
 h3,
@@ -112,7 +119,7 @@ hr {
   margin: 1em 0;
 }
 
-/* 行内代码 */
+/* Inline code */
 section code {
   font-family: var(--font-mono);
   font-size: 0.82em;
@@ -122,7 +129,7 @@ section code {
   padding: 0.08em 0.35em;
 }
 
-/* 键位芯片（raw HTML <kbd>） */
+/* Key chips (raw HTML <kbd>) */
 section kbd {
   font-family: var(--font-mono);
   font-size: 0.8em;
@@ -134,9 +141,12 @@ section kbd {
   padding: 0.1em 0.5em;
 }
 
-/* mermaid 图表（站内同款占位容器，DeckViewer 挂 MermaidRenderer 惰性渲染）：
-   保持 block（flex 会外层 shrink-to-fit，svg 的 width:100% 循环依赖回落
-   300px 默认宽）+ 撑满版心，限高 430px 防顶碎 720px 定高幻灯片 */
+/* mermaid charts (the site's placeholder container; DeckViewer mounts
+   MermaidRenderer for lazy rendering):
+   keep display block (flex would shrink-to-fit the outer box, and the svg's
+   width:100% circular dependency falls back to the 300px default width) +
+   fill the content measure, height-capped at 430px so the 720px fixed-height
+   slide never gets pushed apart */
 section .mermaid-placeholder {
   margin: 0 auto 0.8em;
 }
@@ -148,7 +158,8 @@ section .mermaid-placeholder svg {
   max-height: 430px !important;
 }
 
-/* Callouts（deckCallouts 移植，类别配色对齐 prose.css 的 token 映射） */
+/* Callouts (deckCallouts port; category colors align with prose.css's
+   token mapping) */
 section .callout {
   --callout-color: var(--accent-strong);
   margin: 0 0 0.8em;
@@ -199,14 +210,15 @@ section .callout-quote {
   --callout-color: var(--ink-3);
 }
 
-/* KaTeX：块级公式居中限宽，防止溢出画布 */
+/* KaTeX: display math is centered and width-capped so it never overflows
+   the canvas */
 section .katex-display {
   margin: 0.4em 0 0.8em;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-/* 定义列表 */
+/* Definition lists */
 section dl {
   margin: 0 0 0.8em;
 }
@@ -222,13 +234,14 @@ section dd {
   color: var(--ink-2);
 }
 
-/* 任务清单：复选框为纯装饰（构建期 aria-hidden），隐藏原生列表标记 */
+/* Task lists: checkboxes are pure decoration (aria-hidden added at build
+   time), hide the native list marker */
 section li:has(> input[type="checkbox"]) {
   list-style: none;
   margin-inline-start: -1.1em;
 }
 
-/* 行内标签（raw HTML）：<mark>/<u>/<del>/<sup>/<sub> */
+/* Inline labels (raw HTML): <mark>/<u>/<del>/<sup>/<sub> */
 section mark {
   background: var(--highlight-bg);
   color: var(--ink);
@@ -251,7 +264,8 @@ section sub {
   font-size: 0.7em;
 }
 
-/* raw <hr>（markdown 层的 ---/*** 全是分页符，分隔线只能显式写 HTML） */
+/* raw <hr> (at the markdown layer ---/*** are all page breaks; a divider
+   can only be written as explicit HTML) */
 section hr {
   height: 3px;
   border: none;
@@ -260,8 +274,9 @@ section hr {
   margin: 1em 0;
 }
 
-/* 代码块（zjsearch 无 shiki：转义代码块走本站代码底色；暗态由 token 自身
- * 翻转，无需宿主切换） */
+/* Code blocks (zjsearch has no shiki: escaped code blocks ride the site's
+ * code ground; dark mode flips via the tokens themselves -- no host
+ * switching needed) */
 section pre {
   margin: 0 0 0.8em;
   padding: 20px 26px;
@@ -286,8 +301,9 @@ section pre span {
   color: var(--ink);
 }
 
-/* 引用 chip（citeToLinks 把 [n] 重写成 #ref-n 链接，DeckView 以委托点击接
- * 引用定位链）——幻灯片上的小号 accent 方片 */
+/* Citation chip (citeToLinks rewrites [n] into #ref-n links, and DeckView
+ * wires the citation-locate chain through delegated clicks) -- the small
+ * accent square chip on slides */
 section a[href^="#ref-"] {
   display: inline-block;
   transform: translateY(-0.2em);
@@ -329,21 +345,25 @@ td {
 
 img {
   max-width: 100%;
-  /* 幻灯片画布定高：图片不许把内容顶出 720px（超出部分会被裁掉） */
+  /* the slide canvas has a fixed height: images must not push content past
+     720px (anything beyond it would be clipped) */
   max-height: 480px;
   object-fit: contain;
   border-radius: 12px;
 }
 
-/* 页码：marpit 归一化已给 section::after 定位（右下、padding: inherit），
- * 主题只负责外观；指令默认关闭，deck 里写 <!-- paginate: true --> 开启 */
+/* Page numbers: marpit normalization already positions section::after
+ * (bottom-right, padding: inherit); the theme only styles its look.  The
+ * directive is off by default -- write <!-- paginate: true --> in the deck
+ * to enable */
 section::after {
   font-family: var(--font-mono);
   font-size: 17px;
   color: var(--ink-3);
 }
 
-/* 标题页变体：<!-- _class: lead -->（放最后，覆盖上面的元素默认值） */
+/* Title-page variant: <!-- _class: lead --> (kept last, overrides the
+ * element defaults above) */
 section.lead {
   display: flex;
   flex-direction: column;

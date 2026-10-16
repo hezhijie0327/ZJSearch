@@ -152,13 +152,13 @@ export type AiSearchStep =
   | { kind: "clarify"; pairs: Array<{ q: string; a: string }> }
   | {
       kind: "steer";
-      /** the user's steered course correction (the 引述行) */
+      /** the user's steered course correction (the quoted-steer line) */
       text: string;
       /** guide = injected at the round boundary; preempt = interrupted
           the in-flight turn and injected immediately */
       delivery: "guide" | "preempt";
       /** discarded = the write phase had already closed the guide lane
-          (the composer's pending chip flips to 未送达) */
+          (the composer's pending chip flips to not-sent) */
       status: "drained" | "discarded";
     }
   | {
@@ -248,7 +248,7 @@ export interface AiSearchRun {
   ask: { intro: string; questions: AiAskQuestion[] } | null;
   /** the user's answer text after submitClarify ("" = skipped) */
   clarify: string | undefined;
-  /** the write phase opened (the 撰写 line covers its silence) */
+  /** the write phase opened (the write line covers its silence) */
   wrappingUp: boolean;
   /** client clock when the run's RESEARCH began (reset on clarify
       submit -- the question wait is not research time) */
@@ -331,7 +331,7 @@ export interface AiSearchRun {
   /** every stage the run walked, in order -- the run_summary record */
   stages: AiSearchStage[];
   /** the run's DECISION RESULTS (framework gates + model judge), one
-      entry per decision call -- the rail's 决策结果 card renders them
+      entry per decision call -- the rail's decisions card renders them
       with click-through raw answers */
   decisions: AiDecision[];
   /** the user's attached images for THIS question (metadata; `data`
@@ -408,9 +408,10 @@ export interface AiSearchOutline {
   title: string;
   subtitle?: string;
   /** the template the structure was written to (the wire's ``template``
-      name, stamped by the server's template gates) -- the 输出结构 card's
+      name, stamped by the server's template gates) -- the output-structure
+      card's
       identity face names it once the pick lane closes; undefined = the
-      free auto-designed structure (智能报告 / 智能PPT) */
+      free auto-designed structure (the smart-report / smart-deck picks) */
   template?: string;
   sections: AiSearchOutlineSection[];
 }
@@ -438,7 +439,8 @@ export interface AiDecision {
   /** the wire entry verbatim (structured renderers read purpose-specific
       fields off it -- verdicts/citations/counts) */
   record?: Record<string, unknown>;
-  /** the name→题文 map the generic verdict renderer labels rows with
+  /** the name→question-text map the generic verdict renderer labels rows
+      with
       (server judgments carry it beside `answers`) */
   record_questions?: Array<{ name?: unknown; instructions?: unknown }>;
 }
@@ -717,7 +719,7 @@ export function applyEvent(
         return { ...core, runs };
       }
       if (String(event.kind) === "write") {
-        // the writer phase opened: the 撰写 line covers its silence
+        // the writer phase opened: the write line covers its silence
         runs[lastIdx] = { ...run, wrappingUp: true };
         return { ...core, runs };
       }
@@ -738,7 +740,7 @@ export function applyEvent(
         // the child's reasoning STREAMS in deltas: merge into the entry's
         // open segment (the top-level path's stepIndexFor rule) -- one
         // inner row per delta once shredded a child's think into
-        // one-word 思考过程 toggles
+        // one-word think-process toggles
         return patchSub((sub) => {
           const inner = [...sub.inner];
           const last = inner[inner.length - 1];
@@ -790,7 +792,8 @@ export function applyEvent(
       return { ...core, runs };
     }
     case "steer": {
-      // a user steering of the live run: the 引述行 rides the timeline
+      // a user steering of the live run: the quoted-steer line rides the
+      // timeline
       // (the record shows WHERE the course changed)
       const steps = [...run.steps];
       steps.push({
@@ -988,17 +991,18 @@ export function applyEvent(
     }
     case "decisions": {
       // the run's decision results (framework gates + model judge): the
-      // rail's 决策结果 card reads them -- raw answers included
+      // rail's decisions card reads them -- raw answers included
       const items = (Array.isArray(event.items) ? event.items : []).map((row) => {
         const record = row as Record<string, unknown>;
         return {
           purpose: String(record.purpose ?? ""),
           question: typeof record.question === "string" ? record.question : undefined,
           target: typeof record.target === "string" ? record.target : undefined,
-          // judge 工具的裁决键是 verdicts(其余是 answers)
+          // the judge tool's verdict key is `verdicts` (the others ride
+          // `answers`)
           answer: record.answer ?? record.answers ?? undefined,
-          // record_questions(name→题文)并入 record,通用渲染器的
-          // 标签解析链由此读取
+          // record_questions (name→question text) folds into the record;
+          // the generic renderer's label resolution chain reads it here
           ...(Array.isArray(record.record_questions)
             ? { record_questions: record.record_questions as AiDecision["record_questions"] }
             : {}),

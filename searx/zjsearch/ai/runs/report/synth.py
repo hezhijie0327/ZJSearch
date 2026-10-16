@@ -107,28 +107,27 @@ def make_synthesizer(
 ) -> t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]]:
     """Bind the run's state and outline; returns the synthesizer the loop
     calls with the tally at write-phase time.  The citation gate's
-    verdicts land in ``state.judgments`` (the 决策结果 card).  ``take_template`` is
-    the rail's 输出结构 channel: ONE pending template consumed at the write
-    boundary -- a template the user picked while the research ran REPLACES
+    verdicts land in ``state.judgments`` (the Decisions card).
+    ``take_template`` is the rail's output-structure channel: ONE pending
+    template consumed at the write boundary -- a template the user picked
+    while the research ran REPLACES
     the route-time outline before the first section streams (the rebuilt
     skeleton arrives as the first ``outline`` snapshot; the client's TOC
     follows automatically); it receives the boundary-resolved shape (a
     run-time shape flip re-mints in the flipped dialect).  ``take_deck``
-    is the shape-flip half of the same channel: the pending 报告|演示文稿
+    is the shape-flip half of the same channel: the pending report|deck
     pick rebinds the section dialect at the boundary (slide vs prose, the
     executive summary added/dropped, the snapshot's ``shape`` field).
     ``deck`` is the request-time shape the flips default from -- the
     machinery (packed context, streaming, citation gate + rewrite) is the
     report's own either way."""
     lang_directive = spine.language_directive(lang)
-    # the run's own two languages (the client renders the catalog tag
-    # verbatim into TOC entries): the synthesized sections' identity
-    # text follows the run language, never a hardcoded default.  THIS
-    # scope, not the synthesizer's -- the sibling `stream` closure below
-    # yields it (a synthesizer-local was a NameError on the first real
-    # report's first section)
-    zh = lang.strip().lower().startswith("zh")
-    gap_text = "本节生成失败" if zh else "Section generation failed upstream"
+    # the section-gap placeholder is English-only (server strings never
+    # branch on the run language; the model's own content follows the
+    # language_directive above).  THIS scope, not the synthesizer's --
+    # the sibling `stream` closure below yields it (a synthesizer-local
+    # was a NameError on the first real report's first section)
+    gap_text = "Section generation failed upstream"
     section_system = deck_prompts.DECK_SECTION_SYSTEM if deck else report_prompts.SECTION_SYSTEM
     claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
 
@@ -140,7 +139,7 @@ def make_synthesizer(
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
         nonlocal outline, deck, section_system, claim_re
         tally.phase = "write"
-        # the write boundary's shape consume: the rail's last 输出结构
+        # the write boundary's shape consume: the rail's last output-structure
         # flip (if any) rebinds the dialect HERE -- the section prompt,
         # the claim gate's sampling window, the executive summary and the
         # snapshot's shape field all follow the flipped value
@@ -152,18 +151,17 @@ def make_synthesizer(
             deck = flipped
             section_system = deck_prompts.DECK_SECTION_SYSTEM if deck else report_prompts.SECTION_SYSTEM
             claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
-        # the boundary's template consume: the rail's last 输出结构 pick
-        # (if any) re-mints the skeleton HERE -- the research ran on
+        # the boundary's template consume: the rail's last output-structure
+        # pick (if any) re-mints the skeleton HERE -- the research ran on
         # its own ledger either way, only the document's shape changes
         rebuilt = take_template(deck) if take_template is not None else None
         if rebuilt is not None:
             logger.info("zjsearch report: outline re-minted from a run-time template pick")
             outline = rebuilt
-        summary_meta = (
-            ("执行摘要", "全文最重要的判断与依据")
-            if zh
-            else ("Executive Summary", "The report's key judgments and the basis for them")
-        )
+        # the fixed lead section's structural identity is English-only
+        # (machine contract; the section CONTENT is the model's, in the
+        # run language via language_directive)
+        summary_meta = ("Executive Summary", "The report's key judgments and the basis for them")
         sections: list[dict[str, t.Any]] = [
             *(
                 []

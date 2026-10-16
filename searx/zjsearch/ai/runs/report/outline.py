@@ -137,8 +137,9 @@ def restored_outline(value: t.Any, question: str) -> dict[str, t.Any] | None:
     sanitizer -- the interrupted report's TOC travels back with the
     resume payload and the document keeps the skeleton the user already
     saw, instead of a fresh gate completion minting a different one
-    mid-thread.  The stored template NAME (the 输出结构 card's identity
-    face) rides along when the client sent it.  ``None`` (re-mint) on
+    mid-thread.  The stored template NAME (the output-structure card's
+    identity face) rides along when the client sent it.  ``None``
+    (re-mint) on
     anything malformed."""
     outline = _parse_outline(value, question)
     if outline is not None:
@@ -229,9 +230,10 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
         return None
     outline = _parse_outline(value, question)
     if outline is not None:
-        # the structure's IDENTITY rides the skeleton: the rail's 输出结构
-        # card names the template it was written to after the pick lane
-        # closes (the outline event carries it; the client's TOC face)
+        # the structure's IDENTITY rides the skeleton: the rail's
+        # output-structure card names the template it was written to after
+        # the pick lane closes (the outline event carries it; the client's
+        # TOC face)
         outline["template"] = str(template.get("name") or "").strip()[:80] or "template"
     return outline
 

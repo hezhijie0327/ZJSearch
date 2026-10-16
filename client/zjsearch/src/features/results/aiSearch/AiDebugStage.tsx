@@ -249,7 +249,7 @@ export function AiDebugStage() {
         }}
         onSetTemplate={() => {
           // the simulator has no run host behind the pick: resolving ok
-          // lets the 输出结构 card's picked state (preview rows + the
+          // lets the output-structure card's picked state (preview rows + the
           // settle note) be QA'd here, where every report run's most
           // consequential control lives
           return Promise.resolve(true);
@@ -427,7 +427,7 @@ export function AiOverviewDebugStage() {
         <AiAnswerCard q={scenario.q} sourceMeta={scenario.sources} state={state} />
         {scenario.sources.length > 0 ? (
           <p className="text-xs text-ink-3">
-            {scenario.sources.length} 个 fixture 来源 riding the card's citation chips
+            {scenario.sources.length} fixture sources riding the card's citation chips
           </p>
         ) : null}
       </div>

@@ -52,9 +52,9 @@ import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import { DocumentView } from "@/features/results/aiSearch/report/DocumentView.tsx";
 import {
   type ReportTemplate,
-  TEMPLATE_PRESETS,
   TEMPLATE_SHAPE_ICONS,
   type TemplateShape,
+  templatePresets,
 } from "@/features/results/aiSearch/reportTemplates.ts";
 import type { AiSearchOutline } from "@/features/results/aiSearch/timeline.ts";
 import type {
@@ -76,7 +76,7 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { buildAnswerMarkdown, buildReportMarkdown } from "@/lib/exporters.ts";
 import { formatDuration } from "@/lib/format.ts";
-import { useT } from "@/lib/i18n.ts";
+import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { listTemplates } from "@/lib/kb/templates.ts";
 import { holdBackTail } from "@/lib/markdownParts.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
@@ -144,14 +144,14 @@ function TaskCard({ tasks, live }: { tasks: AiSearchRun["tasks"]; live: boolean 
   );
 }
 
-/** The BELIEF LEDGER card (研究发现): active facts carry the accent dot,
+/** The BELIEF LEDGER card (Findings): active facts carry the accent dot,
     superseded facts stay visible (retired, struck) and retracted ones
     drop their claim (struck, warning) -- the revision history IS the
     honesty.  Each fact renders through the SAME measured clamp+expand as
     a source card's snippet, with inline [n] marks as accent chip buttons
     that locate the source in the rail.  The list reads NEWEST-FIRST and
     caps at four entries (one chip unfolds both the facts and the gaps
-    partition); 未决缺口 renders under the facts: an OPEN gap is a
+    partition); open gaps render under the facts: an OPEN gap is a
     colored dot (an owed question, not an achievement), a closed one
     settles as a check + its answer. */
 function factHtml(text: string): string {
@@ -161,7 +161,7 @@ function factHtml(text: string): string {
       return `[${n}]`;
     }
     return (
-      `<button type="button" data-cite-n="${num}" title="来源 [${num}]"` +
+      `<button type="button" data-cite-n="${num}" title="Source [${num}]"` +
       ` class="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded bg-accent-soft px-1 align-baseline text-xs font-medium leading-4 text-accent transition-colors hover:text-accent-hover">[${num}]</button>`
     );
   });
@@ -228,7 +228,7 @@ function citeHandlers(onCiteN: (n: number) => void) {
   };
 }
 
-/** The BELIEF LEDGER card (研究发现): what the sources ESTABLISHED --
+/** The BELIEF LEDGER card (Findings): what the sources ESTABLISHED --
     active facts carry the accent dot, superseded stay struck, retracted
     ones drop their claim; each fact renders through the SAME measured
     clamp-and-reveal with inline [n] chip buttons, NEWEST-FIRST, capped
@@ -252,7 +252,7 @@ function FindingsCard({
   const active = learnings.filter((fact) => fact.status === "active");
   const factsHidden = Math.max(0, learnings.length - 4);
   // the newest four lead; the OLDER tail sits inside a Collapse so the
-  // +N reveal (and the 收起) plays as a height animation
+  // +N reveal (and the collapse) plays as a height animation
   const factView = [...learnings.slice(-4)].reverse();
   const factExtra = [...learnings.slice(0, Math.max(0, learnings.length - 4))].reverse();
   return (
@@ -318,7 +318,7 @@ function FindingsCard({
   );
 }
 
-/** The OPEN QUESTIONS card (未决缺口): the ledger's gap partition as its
+/** The OPEN QUESTIONS card (open gaps): the ledger's gap partition as its
     own section beside the findings -- an open gap is a colored dot (an
     owed question, not an achievement), a closed one settles as a check
     with its answer as a muted tail.  The SAME row machinery as a fact:
@@ -611,7 +611,7 @@ function StepSegment({
   if (step.kind === "clarify") {
     // the confirmed direction OPENS the process record: the questions the
     // clarify gate asked and the answers that steered the research --
-    // parsed from the same "1. Question：Answer" lines the rail segment
+    // parsed from the same "1. Question<sep>Answer" lines the rail segment
     // shows (how this report's direction was decided)
     return (
       <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
@@ -621,7 +621,10 @@ function StepSegment({
           <ul className="mt-0.5 space-y-0.5">
             {step.pairs.map((pair, pi) => (
               <li className="text-xs leading-relaxed text-ink-2" dir="auto" key={pi}>
-                <span className="text-ink-3">{pair.q}：</span>
+                <span className="text-ink-3">
+                  {pair.q}
+                  {t("ai_clarify_pair_sep")}
+                </span>
                 {pair.a}
               </li>
             ))}
@@ -631,9 +634,9 @@ function StepSegment({
     );
   }
   if (step.kind === "steer") {
-    // the user's live course correction: an 引述行 in the record (WHERE
+    // the user's live course correction: a quote line in the record (WHERE
     // the run changed direction and why); a discarded steer (the write
-    // phase had closed the guide lane) reads dimmed with the 未送达 mark
+    // phase had closed the guide lane) reads dimmed with the undelivered mark
     return (
       <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
         <Compass
@@ -647,7 +650,9 @@ function StepSegment({
           dir="auto"
         >
           {step.text}
-          {step.status === "discarded" ? <span className="ms-1.5 text-xs text-ink-3 no-underline">未送达</span> : null}
+          {step.status === "discarded" ? (
+            <span className="ms-1.5 text-xs text-ink-3 no-underline">{t("ai_steer_undelivered")}</span>
+          ) : null}
         </p>
       </div>
     );
@@ -701,7 +706,7 @@ function StepSegment({
   );
 }
 
-/** Live research duration ("已调研 X 秒" while running, "已调研 X 秒"
+/** Live research duration ("researched X s" while running, "researched X s"
     settled): ticks once a second off the run's own clock -- the honest
     substitute for the removed time budgets (the stop button is the
     control, the elapsed time is the visibility). */
@@ -873,7 +878,7 @@ function AskCard({
   );
 }
 
-/** The clarify round-trip archive (已确认方向): the confirmed direction
+/** The clarify round-trip archive (confirmed direction): the confirmed direction
     (or the skip) the research below is built on.  The SAME section
     language as every rail card -- icon + title + count header, one
     settled row per answered question (check + answer + the question in
@@ -988,17 +993,17 @@ function RunDeleteButton({ onConfirm }: { onConfirm: () => void }) {
   );
 }
 
-/** The rail's 输出结构 control (report/deck runs, RESEARCH phase only):
+/** The rail's output-structure control (report/deck runs, RESEARCH phase only):
     the run-time pick rides run/control to the write boundary -- the
     synthesizer re-mints the outline from it before the first section
-    streams.  ONE MERGED LIST: the two free options (智能报告 / 智能PPT,
+    streams.  ONE MERGED LIST: the two free options (smart report / smart deck,
     pinned top, each wearing its shape icon) lead, then every preset and
     user template -- report and deck side by side, the locked
     FileText|Presentation icons are the only shape signal (no category
     filter).  EVERYTHING IS TWO-STEP: clicking an option only PREVIEWS
     (the trigger + section rows mirror it, nothing is sent -- users
     clicking around to look must never fire a control); the explicit
-    确认切换 pill submits, and a pick whose shape differs from the run's
+    confirm-switch pill submits, and a pick whose shape differs from the run's
     also flips the output format (the server pairs the pending shape with
     a canonical steer notice, so the researcher's remaining rounds
     adapt).  Picking a free option withdraws a previously-picked template
@@ -1018,6 +1023,7 @@ function OutputStructureCard({
   shape: TemplateShape;
 }) {
   const t = useT();
+  const locale = useLocale();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   // the SUBMITTED pick's id (free:<shape> or a template id)
   const [current, setCurrent] = useState(() => `free:${shape}`);
@@ -1037,7 +1043,7 @@ function OutputStructureCard({
       cancelled = true;
     };
   }, []);
-  const all: ReportTemplate[] = [...TEMPLATE_PRESETS, ...templates];
+  const all: ReportTemplate[] = [...templatePresets(themeLocaleTag(locale)), ...templates];
   const options: Array<{
     id: string;
     label: string;
@@ -1246,7 +1252,7 @@ function OutputStructureCard({
 }
 
 /** The structure's FIXED identity face -- icon + what this run's output
-    structure IS (the template's own name, or the free 智能报告/智能PPT
+    structure IS (the template's own name, or the free smart-report/smart-deck
     shape) with its one-line description.  Non-interactive by design: the
     pick lane is consumed ONCE at the write boundary, so a structure
     change past it is a new run, not a hidden control.  Shared by the
@@ -1270,7 +1276,7 @@ function StructureFace({ deck, templateName }: { deck: boolean; templateName?: s
   );
 }
 
-/** The rail's 输出结构 card AFTER the outline landed -- the run's ACTIVE
+/** The rail's output-structure card AFTER the outline landed -- the run's ACTIVE
     structure: the fixed identity face (what it is) over the numbered
     rows (what it looks like), living through the write phase (per-
     section status marks) and the settled record alike.  READ-ONLY by
@@ -1313,7 +1319,7 @@ function ActiveStructureCard({ deck, outline }: { deck: boolean; outline: AiSear
   );
 }
 
-/** The no-outline record's 输出结构 card: a report/deck run whose writer
+/** The no-outline record's output-structure card: a report/deck run whose writer
     answered WITHOUT a minted skeleton (the outline gate fell back to the
     single write), an interrupted research, a settled replay -- the shape
     identity stays visible where the picker would hide it.  While the run
@@ -1367,7 +1373,7 @@ function AiSearchRunSectionImpl({
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
-  /** the 未决缺口 card's 继续调研 action: launch a follow-up run on this
+  /** the open-questions card's continue-research action: launch a follow-up run on this
       run's open gaps (the host composes the message) */
   onGapsFollowup?: (gaps: { q: string }[]) => void;
   onStop?: () => void;
@@ -1375,13 +1381,13 @@ function AiSearchRunSectionImpl({
   onSetTemplate?: (template: ReportTemplate) => Promise<boolean>;
   /** withdraw a previously-picked template (the picker's free options) */
   onClearTemplate?: () => Promise<boolean>;
-  /** the report rail's shape flip (报告|演示文稿, research phase only):
+  /** the report rail's shape flip (report|deck, research phase only):
       the server pairs the pending write-boundary shape with a canonical
       steer notice that adapts the researcher's remaining rounds */
   onSetShape?: (shape: TemplateShape) => Promise<boolean>;
   /** delete THIS run (storage + timeline fold) -- settled runs only */
   onDeleteRun?: (runNo: number) => void;
-  /** 收尾: the run finishes its round and the writer answers from the
+  /** Wrap-up: the run finishes its round and the writer answers from the
       material gathered (the graceful end beside the hard stop) */
   onWrap?: () => void;
   /** the awaiting run's clarify card was answered (null = skipped) */
@@ -1490,7 +1496,7 @@ function AiSearchRunSectionImpl({
   // AI Overview draws on the classic page (data-ai-cited in base.css)
   const citedSet = useMemo(() => new Set(citedSourceNumbers(run.answer)), [run.answer]);
   const totalCalls = run.steps.reduce((sum, step) => sum + (step.kind === "calls" ? step.calls.length : 0), 0);
-  // the round counter (第 N 轮): the executed steps' count -- while a
+  // the round counter (round N): the executed steps' count -- while a
   // round streams, its calls step already exists, so N names the round
   // in flight
   const roundCount = run.steps.filter((step) => step.kind === "calls").length;
@@ -1560,7 +1566,7 @@ function AiSearchRunSectionImpl({
       </div>
 
       {/* the run's macro-stage spine: the RUN's own line under the title --
-          it covers 撰写/核验 which live outside the research box, so it
+          it covers write/verify which live outside the research box, so it
           must not read as part of the collapsible */}
       <PhaseStrip
         stage={run.stage}
@@ -1724,7 +1730,7 @@ function AiSearchRunSectionImpl({
               run's whole life (expanded live while the think streams,
               folded once the answer takes over, re-openable after the
               settle -- the machine-voice content never folds back into
-              the 研究过程 record).  Report/deck runs surface it at the
+              the research-process record).  Report/deck runs surface it at the
               document's top once SETTLED; while they write, the document
               is the progress surface. */}
           {writeThinkVisible ? (
@@ -1914,7 +1920,7 @@ function AiSearchRunSectionImpl({
               writer-died-without-output case: a run that gathered real
               material but produced NO answer has no [retry|copy|print]
               footer (those require an answer) and no failed box (it did
-              not fail) -- 「让 Writer 重新撰写」 resumes the stored
+              not fail) -- "regenerate with the writer" resumes the stored
               conversation straight into the write (the research survives,
               only the writing re-runs). */}
           {!streaming && !failed && !run.answer.trim() && totalCalls > 0 && isLast && onContinue ? (
@@ -1951,7 +1957,7 @@ function AiSearchRunSectionImpl({
                   </p>
                 ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {/* an INTERRUPTED research keeps its ledger: 继续 resumes
+                  {/* an INTERRUPTED research keeps its ledger: continue resumes
                       THE SAME RUN in place -- the stored conversation replays
                       as the request's context, numbering and findings stay,
                       the researcher continues the open ledger items (the
@@ -2015,7 +2021,7 @@ function AiSearchRunSectionImpl({
                 run.browser ?? Object.values(run.browserSessions ?? {}).find((item) => item.img) ?? null;
               return mirror ? <BrowserMirrorSection sessions={run.browserSessions} view={mirror} /> : null;
             })()}
-            {/* the 输出结构 card lives through the WHOLE report/deck run,
+            {/* the output-structure card lives through the WHOLE report/deck run,
                 and the structure is FIXED once the writer takes over:
                 before that the card is the run-time template pick (the
                 write boundary is the last chance to re-mint -- research

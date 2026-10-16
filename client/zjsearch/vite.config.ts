@@ -33,11 +33,13 @@ export default {
   resolve: {
     alias: [
       { find: "@", replacement: fileURLToPath(new URL("./src", import.meta.url)) },
-      // marp-core（deck 编译内核，lib/deck/ 懒加载）把 mathjax-full 与
-      // highlight.js 全语言注册表静态 require 在模块顶层；deck 配置钉死
-      // math: "katex" + highlight: () => ""，两条路径永不执行——alias 指到
-      // Proxy 替身（tools/deck-stubs/empty-dep.cjs），deck 懒加载 chunk 不背
-      // 这两棵依赖树。升级 marp-core 时与替身文件头注一起核对。
+      // marp-core (the deck compilation kernel, lazy-loaded by lib/deck/)
+      // statically requires mathjax-full and highlight.js's full language
+      // registry at module top level; the deck config pins
+      // math: "katex" + highlight: () => "" so those two paths never run --
+      // the aliases point at the Proxy stub (tools/deck-stubs/empty-dep.cjs)
+      // and the deck lazy chunk never carries those two dependency trees.
+      // When upgrading marp-core, re-check this alongside the stub's header.
       {
         find: /^mathjax-full.*/,
         replacement: fileURLToPath(new URL("./tools/deck-stubs/empty-dep.cjs", import.meta.url)),

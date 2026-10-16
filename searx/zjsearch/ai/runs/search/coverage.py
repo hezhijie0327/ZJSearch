@@ -10,11 +10,11 @@ the round referee only advises via notes.
 
 Terms match by BIDIRECTIONAL CONTAINMENT, not exact equality -- an
 English query must still light up a Chinese subtask title ("Next.js" vs
-"Next.js 16 发布与特性调研") and CJK phrases have no word boundaries to
-intersect on; a long CJK token additionally contributes its 4-gram
-windows (unspaced Chinese phrases reach the matcher as ONE token per
-sentence and whole-token containment would never fire across
-paraphrases).
+a Chinese title like "Next.js 16 release-and-feature research") and CJK
+phrases have no word boundaries to intersect on; a long CJK token
+additionally contributes its 4-gram windows (unspaced Chinese phrases
+reach the matcher as ONE token per sentence and whole-token containment
+would never fire across paraphrases).
 """
 
 import re
@@ -78,8 +78,9 @@ class Coverage:
         writer (the model updates statuses; the round referee only
         advises via notes).  Terms match by BIDIRECTIONAL CONTAINMENT,
         not exact equality -- an English query must still light up a
-        Chinese subtask title ("Next.js" vs "Next.js 16 发布与特性调研")
-        and CJK phrases have no word boundaries to intersect on."""
+        Chinese subtask title ("Next.js" vs a Chinese title like "Next.js
+        16 release-and-feature research") and CJK phrases have no word
+        boundaries to intersect on."""
         if not self.task_list:
             return
         source_terms: list[str] = []

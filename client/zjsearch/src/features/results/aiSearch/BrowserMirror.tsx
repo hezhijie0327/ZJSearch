@@ -587,7 +587,7 @@ function BrowserLightbox({
     lg) so the same window stays reachable from anywhere on the page.
     R3B: with PARALLEL SESSIONS (the lead + delegating subagents) the
     card grows a tab strip -- the ACTIVE tab streams, the background
-    tabs freeze on their last frame with the 后台 badge (bandwidth
+    tabs freeze on their last frame with the background badge (bandwidth
     economy); the takeover stays the LEAD tab's surface (its wait_user
     is what blocks on the human). */
 export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; sessions?: Record<string, MirrorView> }) {

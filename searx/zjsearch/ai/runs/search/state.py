@@ -83,7 +83,7 @@ class ChildControl:
 
 class SubagentHandle:
     """One delegation's LIVE record in the run's registry: the stable
-    identity (``key`` = the digest's 【子任务 Sn】 tag, the wire id space
+    identity (``key`` = the digest's [Subtask Sn] tag, the wire id space
     slot ``seq``), the child's OWN conversation (``messages`` mutates in
     place as the loop runs -- a follow-up appends and re-runs it), its
     control plane, and the PROMOTION MARKS that keep the parent-side
@@ -446,7 +446,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # gates bucket through the route's own accounting
         # THIS round's new source titles (the coverage referee's evidence)
         self.round_new_titles: list[str] = []
-        # whether THIS round recorded learnings (the 边做边记 discipline note)
+        # whether THIS round recorded learnings (the record-as-you-go note)
         self.round_learned = False
         # the run's question (the pre-write evidence check's judgment target;
         # set by route at construction time)
@@ -460,7 +460,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # pre-write evidence check's source pool
         self.entries: dict[int, dict[str, str]] = {}
         # the coverage referee's last verdict bands ((title, band) per
-        # judged subtask): the 决策结果 entry only re-emits when a band
+        # judged subtask): the Decisions entry only re-emits when a band
         # CHANGES -- identical per-round verdicts are not news (the feed
         # advice keeps its cadence, the card does not)
         self._referee_signature: tuple[tuple[str, str], ...] = ()
@@ -473,8 +473,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # synthesis time
         self.artifacts: list[dict[str, t.Any]] = []
         self._artifact_seq = 0
-        # view_image 的注入队列:抓到的图作为下一轮的 user 消息回灌对话
-        # (工具结果本身是文本通道,图走 user turn 是全供应商通用的形态)
+        # view_image's injection queue: captured images re-enter the
+        # conversation as the next round's user message (the tool result
+        # channel itself is text-only; routing images through a user turn
+        # is the shape every provider accepts)
         self.image_injections: list[dict[str, t.Any]] = []
         # the browser screenshots already injected this run (viewport +
         # element shots share the budget) -- a captcha retry loop must not

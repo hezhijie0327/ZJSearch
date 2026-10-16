@@ -13,7 +13,7 @@ export function NoResults({
 }: {
   pageno: number;
   hasInfobox: boolean;
-  /** wired by ResultsPage: a real 「previous page」 action on later pages */
+  /** wired by ResultsPage: a real "previous page" action on later pages */
   onPrev?: () => void;
 }) {
   const t = useT();

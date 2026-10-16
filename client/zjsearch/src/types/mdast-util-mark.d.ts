@@ -1,6 +1,8 @@
-// mdast-util-mark@1.0.0 直接以未编译 .ts 为入口发布 —— tsc 顺着 import 会
-// 检查第三方源码并因 verbatimModuleSyntax 报错。经 tsconfig paths 重定向到
-// 本 shim（仅类型层；运行时 vite 仍解析真实包）。ZJBlog tools/types 同款。
+// mdast-util-mark@1.0.0 publishes uncompiled .ts as its entry point -- tsc
+// following the import would typecheck the third-party source and error
+// under verbatimModuleSyntax.  tsconfig paths redirects to this shim
+// (type level only; at runtime vite still resolves the real package).
+// Same pattern as ZJBlog's tools/types.
 declare module "mdast-util-mark" {
   type Extension = {
     canContainEols?: string[];

@@ -508,14 +508,14 @@ def _tencent_as_of(qt_fields: list[str]) -> tuple[str, str]:
 
 def _tx_market_label(tx_symbol: str) -> str:
     if tx_symbol.startswith("sh"):
-        return "沪A"
+        return "SH-A"
     if tx_symbol.startswith("sz"):
-        return "深A"
+        return "SZ-A"
     if tx_symbol.startswith("bj"):
-        return "北A"
+        return "BJ-A"
     if tx_symbol.startswith("hk"):
-        return "港股"
-    return "美股"
+        return "HK"
+    return "US"
 
 
 def exchange_of(tx_symbol: str) -> str:

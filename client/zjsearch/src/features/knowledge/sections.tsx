@@ -152,7 +152,8 @@ export function ThreadRows({
   threads,
   /** the store subscription is still resolving — hold the directory's
       shape with the boot-ghost rows instead of the final empty state (a
-      cold store's boot can take seconds; "知识库为空" during it lies) */
+      cold store's boot can take seconds; "knowledge base empty" during it
+      lies) */
   loading = false,
 }: {
   threads: ThreadSummary[];
@@ -166,7 +167,7 @@ export function ThreadRows({
   loading?: boolean;
 }) {
   const t = useT();
-  // the directory's 报告 filter: only threads carrying report-mode runs
+  // the directory's report filter: only threads carrying report-mode runs
   const [reportsOnly, setReportsOnly] = useState(false);
   // the inline rename: one thread at a time, Enter saves, Escape cancels
   const [renaming, setRenaming] = useState<{ id: string } | null>(null);
@@ -216,7 +217,7 @@ export function ThreadRows({
         </div>
       ) : null}
       {shown.length === 0 ? (
-        // the 报告 filter emptied the list (threads exist, none carries a
+        // the report filter emptied the list (threads exist, none carries a
         // report) -- the same paper empty, the filter chip above stays so
         // the user can toggle it off
         <PaperEmpty
@@ -386,7 +387,7 @@ export function SearchResults({
   onRemove,
 }: {
   groups: Map<string, KnowledgeItem[]>;
-  /** the hybrid search is still in flight — row ghosts, not "无匹配" */
+  /** the hybrid search is still in flight — row ghosts, not "no matches" */
   loading?: boolean;
   onOpen: (item: KnowledgeItem) => void;
   onOpenThread: (item: KnowledgeItem) => void;
@@ -483,7 +484,8 @@ export function MemorySection({
   }
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* the ONE band language: 「记忆 · N」 with the add action at its
+      {/* the ONE band language: a "memory · N" label band with the add
+          action at its
           right edge -- the floating pill above a bare timeline read as a
           different tab design */}
       {adding ? (
@@ -792,7 +794,8 @@ export function InspectorView({
   })();
   // THE DOCUMENT-LOCAL citation map (the run page's contract): bodies read
   // [1..N] in first-citation order -- InspectorMarkdown's chips, the
-  // 来源 card below and the print tail share this one map; the report/deck
+  // sources card below and the print tail share this one map; the
+  // report/deck
   // renderers build their own from the same texts.
   const answerBody = body ?? item.body;
   const docTexts = reportDoc ? reportDoc.sections.map((section) => section.text) : [answerBody];
@@ -826,7 +829,7 @@ export function InspectorView({
   }));
   const answerText = item.kind === "answer" ? (body ?? item.body) : (body ?? "");
   const exportLabels = { sources: t("knowledge_inspector_sources") };
-  // one document shape for BOTH markdown paths (⬇ download + 复制为
+  // one document shape for BOTH markdown paths (the download + copy-as-
   // Markdown clipboard -- the ZJBlog copy-as-markdown contract); a DECK
   // exports its slide SOURCE (Marpit markdown, drop-in deck:true post)
   const exportMarkdown = (): string =>
@@ -847,8 +850,9 @@ export function InspectorView({
             exportLabels,
           )
         : buildAnswerMarkdown(item.title || item.url || t("knowledge_title"), answerText, exportSources, exportLabels);
-  // 复制为 Markdown：ZJBlog CopyMarkdownButton 的孪生实现——Copy 图标，
-  // 落剪后换 Check 1.6s（图标即反馈，不弹 toast），失败静默。
+  // copy-as-markdown: the twin of ZJBlog's CopyMarkdownButton -- the Copy
+  // glyph swaps to Check for 1.6s once the clipboard write lands (the icon
+  // IS the feedback, no toast); a failed write stays silent.
   const [copied, setCopied] = useState(false);
   const copyMd = () => {
     navigator.clipboard
@@ -1100,7 +1104,7 @@ export function InspectorView({
           {/* the cited set in the document's OWN local numbers (first-
               citation order) -- the tail agrees with the body; a row the
               document never cited stays out (the full registry lives in
-              the 来源 tab) */}
+              the sources tab) */}
           {(citedRows.length > 0
             ? citedRows.map((source) => ({
                 key: `${source.n}:${source.url}`,
@@ -1261,7 +1265,7 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
         if (!llm && !embed) {
           return null;
         }
-        // 思考 only reports on SDKs that break reasoning out (openai's
+        // think only reports on SDKs that break reasoning out (openai's
         // reasoning_tokens; the anthropic protocol folds it into output
         // and reports nothing) -- a misleading 0 hides itself
         const llmTiles = stats?.usage
@@ -1304,8 +1308,9 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
                 </>
               ) : null}
               {embed || stats?.usage?.rerank || rerankUsage?.calls || stats?.usage?.decision ? (
-                // 嵌入 / 重排 / 决策: the LLM group's language -- one group
-                // title per model, ONE 输入 tile inside (the score
+                // embed / rerank / decision: the LLM group's language -- one
+                // group
+                // title per model, ONE input tile inside (the score
                 // endpoints are input-only); the three groups share ONE
                 // row (they stack below sm).  The rerank tile sums BOTH
                 // pools: the runs' cascade spend (run meta) AND the

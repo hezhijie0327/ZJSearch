@@ -170,10 +170,10 @@ function citedNumbers(answer: string): Set<number> {
 }
 
 /** The classic page's AI Overview archives itself here at settle: the
-    答案 kind IS this store (run answers replay from the evt log instead --
-    they duplicated the thread's 研究 row).  The id is the query's hash, so
+    answers kind IS this store (run answers replay from the evt log instead --
+    they duplicated the thread's research row).  The id is the query's hash, so
     re-asking the same query refreshes the row.  The sources the overview
-    actually cites join the 来源 corpus: one source_ref per (query,
+    actually cites join the Sources corpus: one source_ref per (query,
     source) + the canonical source row ref/cited-counted, exactly the
     settleRun identity pattern -- a regenerate re-runs the upserts but the
     DO NOTHING guards keep the counters honest. */

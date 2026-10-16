@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-/** The knowledge store's shared foundation (知识库): the pieces every kb
+/** The knowledge store's shared foundation (the knowledge base): the pieces every kb
     module builds on -- the ordered write queue, the capability tokens,
     the knowledge-row shape and its SQL mapping, the JSON decode helper
     and the thread url.  The store's full picture lives across the kb/

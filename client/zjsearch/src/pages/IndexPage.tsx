@@ -123,15 +123,18 @@ export function IndexPage({ data }: { data: IndexData }) {
 
   // the hero's greeting: ONE line, by time of day (computed at mount --
   // the hero is a transient landing, nobody needs it to roll over live).
-  // Five buckets on the Chinese convention: 凌晨/早上/中午/下午/晚上 --
-  // 中午 (11-13) and 下午 (13-18) are DIFFERENT greetings in zh.
+  // Five buckets on the Chinese convention: night/morning/noon/afternoon/
+  // evening -- noon (11-13) and afternoon (13-18) are DIFFERENT greetings
+  // in zh.
   const hour = new Date().getHours();
   const period = hour < 5 ? "night" : hour < 11 ? "morning" : hour < 13 ? "noon" : hour < 18 ? "afternoon" : "evening";
   const greeting = t(`hero_greeting_${aiMode ? "ask" : "search"}_${period}` as StringKey);
   // the family marker highlight (DESIGN.md §7) sweeps the greeting's leading
-  // hello ("早上好" / "Good morning") — always the short head before the first
-  // separator (zh 「，」 / en 「 — 」, other locales inherit en); no separator,
-  // no marker.  Deterministic — derived from the string, never random.
+  // hello (the good-morning head: the zh greeting's first words / en "Good
+  // morning") — always the short head before the first separator (the zh
+  // fullwidth comma / the en em-dash pair, other locales inherit en); no
+  // separator, no marker.  Deterministic — derived from the string, never
+  // random.
   const greetingSep = /\s*[—，]/.exec(greeting);
   const greetIdx = greetingSep && greetingSep.index > 0 ? greetingSep.index : null;
   const greetHead = greetIdx === null ? null : greeting.slice(0, greetIdx);

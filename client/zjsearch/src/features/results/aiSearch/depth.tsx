@@ -8,9 +8,9 @@ import { useT } from "@/lib/i18n.ts";
 
 /** The valid research depths, in wire order -- the single source of
     truth for parsing the `mode` URL param.  THREE user-facing tiers
-    (极速/均衡/深度调研): the deep tier's output FORMAT (报告=outline
-    document / 演示文稿=slide deck) is decided INSIDE the run at the
-    rail's 输出结构 picker, not in the composer.  The wire forms are
+    (quick/balanced/deep): the deep tier's output FORMAT (report=outline
+    document / deck=slide deck) is decided INSIDE the run at the
+    rail's output-structure picker, not in the composer.  The wire forms are
     `mode: "deep"` + `report: true` / `deck: true` (see useAiSearch's
     body); legacy `?mode=deck` URLs keep parsing.  Server-side mirror:
     SEARCH_MODES in runs/profile.py (the three research depths; the
@@ -45,10 +45,11 @@ function depthOptions(t: Translate) {
 
 /**
  * The research-depth dropdown shared by the homepage hero and the
- * follow-up composers: THREE tiers (极速/均衡/深度调研).  The output
- * FORMAT (报告|演示文稿) is NOT a composer concern anymore -- it is
- * decided inside the run at the rail's 输出结构 picker (智能报告 /
- * 智能PPT / deck templates flip the shape with a confirmed steer), so
+ * follow-up composers: THREE tiers (quick/balanced/deep).  The output
+ * FORMAT (report|deck) is NOT a composer concern anymore -- it is
+ * decided inside the run at the rail's output-structure picker (the
+ * smart-report / smart-deck picks and deck templates flip the shape with
+ * a confirmed steer), so
  * the composer asks only HOW DEEP.  The wire mode union and the `mode`
  * URL param are unchanged -- legacy `?mode=deck` still lands on a deck
  * run. */

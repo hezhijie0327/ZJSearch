@@ -13,7 +13,7 @@ const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_
 };
 
 /**
- * The run's macro-stage spine (规划 → 检索 → 撰写): ONE strip under the
+ * The run's macro-stage spine (plan → research → write): ONE strip under the
  * run title, the task card's own status language at strip scale --
  * done = check, active = the accent ping, pending = the hollow dot.
  * ``done`` (the run settled) turns EVERY segment green.  Hidden entirely
@@ -28,8 +28,9 @@ export function PhaseStrip({
   state = "streaming",
 }: {
   stage?: AiSearchStage;
-  /** streaming = 实时;done = 全绿;stopped/error = 已达段绿 + 当前段警示
-      (终止不是完成,全绿会撒谎);awaiting = 停在当前段等待 */
+  /** streaming = live;done = all green;stopped/error = reached segments
+      green + the current segment warned (a halt is not completion -- all
+      green would lie);awaiting = parked on the current segment */
   state?: PhaseStripState;
 }) {
   const t = useT();
@@ -40,7 +41,8 @@ export function PhaseStrip({
   const failed = state === "stopped" || state === "error";
   // only a SETTLED run paints every segment green; a stopped/errored one
   // keeps its real position -- the segments before it read done, the
-  // segment it died in wears the warning icon (终止不是完成,全绿会撒谎)
+  // segment it died in wears the warning icon (a halt is not completion --
+  // all green would lie)
   const active = done ? ORDER.length : ORDER.indexOf(stage);
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs" role="status">

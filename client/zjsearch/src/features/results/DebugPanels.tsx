@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 /**
- * The results meta line: 「found N results」 and 「took X s」 toggles, each
+ * The results meta line: "found N results" and "took X s" toggles, each
  * expanding its own strip in place (shared Collapse animation) — the result
  * strip carries the utility actions (copy the shareable URL, machine-
  * readable download formats), the engine strip the per-engine timings and

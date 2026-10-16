@@ -119,7 +119,7 @@ export function BootRunHead({ title }: { title?: string }) {
         <span className="zjs-skeleton zjs-boot-ai-label" />
         <span className="zjs-skeleton zjs-boot-ai-count" />
       </div>
-      {/* the phase strip's ghost: THREE segments (规划→检索→撰写) */}
+      {/* the phase strip's ghost: THREE segments (plan→search→write) */}
       <div aria-hidden="true" className="zjs-boot-ai-phases">
         {[0, 1, 2].map((i) => (
           <span className="zjs-boot-ai-phase" key={i}>

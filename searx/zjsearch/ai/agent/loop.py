@@ -392,7 +392,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
       the settle event).
     - ``pre_write()``: the PRE-WRITE verification pass -- runs AFTER the
       research ends and BEFORE the write opens; the returned events
-      stream as-is (evidence checks land in the 决策结果 card), so the
+      stream as-is (evidence checks land in the Decisions card), so the
       writer only consumes verified material.
     - ``continuation()``: the LEDGER-CLOSE contract -- consulted when a
       turn ends with ZERO calls (the model "stopped researching").
@@ -743,8 +743,8 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             return
         if control is not None:
             # the guide lane CLOSES at the write phase: the leftovers die
-            # VISIBLY (the client's pending chips flip to 未送达), never
-            # silently
+            # VISIBLY (the client's pending chips flip to "not delivered"),
+            # never silently
             try:
                 leftovers = control.drain_steers()
             except Exception as exc:  # pylint: disable=broad-except
@@ -768,9 +768,9 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 messages.extend(lane_messages)
 
         if synthesizer is not None or writer is not None:
-            # the PRE-WRITE verification pass (核验): runs under its own
-            # phase BEFORE the write opens -- the writer consumes verified
-            # material only
+            # the PRE-WRITE verification pass (the verification stage):
+            # runs under its own phase BEFORE the write opens -- the
+            # writer consumes verified material only
             if pre_write is not None:
                 try:
                     pre_events = pre_write()

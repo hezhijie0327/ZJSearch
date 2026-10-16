@@ -30,7 +30,7 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
       }
 
       const src = path.resolve(PATH.brand, "favicon.svg");
-      // transparent full-bleed rasters (DESIGN.md §2.2: 透明底，明暗背景直接可用)
+      // transparent full-bleed rasters (DESIGN.md §2.2: transparent ground, usable on light and dark backgrounds as-is)
       const sizes: Array<[string, number]> = [
         ["favicon.png", 512],
         ["192.png", 192],
@@ -40,7 +40,7 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
         await sharp(src, { density: 300 }).resize(size, size).png().toFile(path.join(imgDir, file));
       }
       // apple-touch gets the family fixed light base + safe margin (iOS fills
-      // transparent areas with black — DESIGN.md §2.2 实底 + 安全边距)
+      // transparent areas with black — DESIGN.md §2.2 solid base + safe margin)
       const glyph = await sharp(src, { density: 300 }).resize(138, 138).png().toBuffer();
       await sharp({ create: { width: 180, height: 180, channels: 4, background: "#faf9f6" } })
         .composite([{ input: glyph, gravity: "centre" }])
@@ -82,7 +82,7 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
       // falls back to the MAIN-THREAD engine -- every store write (the live
       // run's 1.5s evt flush above all) then runs WASM Postgres + the
       // IndexedDB fsync on the main thread, the research page's ~1s freezes
-      // (the「页面没有响应」jam).  REBUILT from scratch like chunk/: a hash
+      // (the "page unresponsive" jam).  REBUILT from scratch like chunk/: a hash
       // change must not leave stale artifacts at the static root.
       const workerArtifact = /^(pglite|initdb|vector|pg_trgm|pg_textsearch).*\.(wasm|data|gz|br)$/;
       for (const file of await fs.readdir(rootStatic)) {

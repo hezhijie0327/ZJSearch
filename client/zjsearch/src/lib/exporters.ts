@@ -368,11 +368,11 @@ export interface ExportLabels {
   sources?: string;
 }
 
-/** One archived answer as markdown (the knowledge inspector's 复制为
+/** One archived answer as markdown (the knowledge inspector's copy-as-
     Markdown): the
     same shape as a thread export's single run -- title, the answer, the
     numbered source tail.  The text builder is shared with the inspector's
-    复制为 Markdown action (the family contract's copy-as-markdown, same
+    copy-as-Markdown action (the family contract's copy-as-markdown, same
     document either way).  The body and tail read the DOCUMENT-LOCAL
     citation numbers ([1..N] in first-citation order) -- the exported file
     is self-contained, not registry-littered. */
@@ -384,7 +384,7 @@ export function buildAnswerMarkdown(
 ): string {
   const map = buildCitationMap([markdown], new Set(sources.map((source) => source.n)));
   const lines: string[] = [`# ${title}`, "", `_zjsearch · ${new Date().toLocaleString()}_`, ""];
-  // the tail heading doubles as the body cites' anchor target: [1](#引用来源)
+  // the tail heading doubles as the body cites' anchor target: [1](#sources)
   // jumps to the source list in every renderer that slugs headings
   const sourcesLabel = labels?.sources || "Sources";
   const sourcesAnchor = sourcesLabel.trim().toLowerCase().replace(/\s+/g, "-");
@@ -400,7 +400,7 @@ export function buildAnswerMarkdown(
 
 /** One REPORT document as Markdown: the outline's section titles become
     `## ` headings in order (the same document the research page rendered)
-    with each section's body verbatim -- the knowledge inspector's 复制为
+    with each section's body verbatim -- the knowledge inspector's copy-as-
     Markdown for a report run, mirroring buildThreadMarkdown's source-list
     footing.  The whole document shares ONE citation map (sections in
     reading order): bodies and the source tail read the same local
@@ -440,7 +440,7 @@ export function buildReportMarkdown(
 }
 
 /** One DECK as Marpit slide-source Markdown (the knowledge inspector's
-    复制为 Markdown for a deck run): the gray-matter head makes the text a
+    copy-as-Markdown for a deck run): the gray-matter head makes the text a
     drop-in `deck: true` ZJBlog post (the blog's build re-renders it
     with the SAME marp-core kernel -- the family contract's payoff), the
     cover slide is minted from the outline exactly like the live view, and

@@ -186,8 +186,8 @@ zjsearch:
     # surface: multimodal               # mm-native models (qwen3.8/3.7
     #                                   # plus/flash) need this even for
     #                                   # text-only chat
-    # reasoning echo-back (interleaved thinking; kimi/minimax/mimo 等
-    # 家族拒绝没有回传思考的工具循环):
+    # reasoning echo-back (interleaved thinking; the kimi/minimax/mimo
+    # family rejects tool loops without thought pass-back):
     # reasoning_passback: true
 
     # ── provider escape hatches (EVERY dialect, 1:1) ──────────────────
@@ -204,8 +204,8 @@ zjsearch:
     #   chat_template_kwargs:
     #     enable_thinking: false     # mutually exclusive with
     #                                # reasoning_effort above
-    # reasoning echo-back (interleaved thinking; kimi/minimax/mimo 等
-    # 家族拒绝没有回传思考的工具循环):
+    # reasoning echo-back (interleaved thinking; the kimi/minimax/mimo
+    # family rejects tool loops without thought pass-back):
     # reasoning_passback: true
     # prompt caching needs no config: prompt_cache_key rides every
     # openai-dialect request; anthropic marks cache_control breakpoints

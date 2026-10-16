@@ -13,7 +13,7 @@ import { pg, pgQuery, urlHash } from "@/lib/pg.ts";
 
 export interface ThreadAnswer {
   answer: string;
-  /** the run's cited sources in citation order (the inspector's 引用来源) */
+  /** the run's cited sources in citation order (the inspector's Sources tail) */
   sources: Array<{ n: number; url: string; title: string; host: string; favicon: string }>;
   /** the run's token usage (the run_summary rollup) */
   usage: OverviewUsage | null;

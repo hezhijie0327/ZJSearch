@@ -13,9 +13,10 @@
     "ci": "pnpm run lint && pnpm run build",
     "clean": "rm -Rf node_modules",
     "fix": "biome check --write",
-    "lint": "pnpm run lint:biome && pnpm run lint:tsc",
+    "lint": "pnpm run lint:biome && pnpm run lint:tsc && pnpm run lint:cjk",
     "lint:biome": "biome check",
     "lint:tsc": "tsc --noEmit",
+    "lint:cjk": "node scripts/audit-cjk.mjs",
     "audit:diff": "node scripts/audit-diff.mjs"
   },
   "browserslist": [

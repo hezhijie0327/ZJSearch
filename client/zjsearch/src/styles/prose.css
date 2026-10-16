@@ -6,7 +6,7 @@
   /* server-rendered info/about pages (markdown-generated HTML);
      serif body + headings — the family editorial track for long-form
      content, on the §4 long-form scale (the blog's .prose 17px/1.8 —
-     中文衬线长文; headings ride em so they follow the root) */
+     serif long-form Chinese text; headings ride em so they follow the root) */
   .prose-basic {
     font-family: var(--font-serif);
     line-height: 1.8;

@@ -40,24 +40,18 @@ logger = logging.getLogger(__name__)
 _MAX_TEXT = 2000
 """One steering message's character budget."""
 
-_SHAPE_STEER: dict[str, dict[str, str]] = {
-    # the shape flip's canonical steer notice (server-worded -- the UI is
-    # a toggle, never a text box): tells the RESEARCHER how its remaining
-    # rounds should adapt; the gathered material itself need not be redone
-    "deck": {
-        "zh": "输出格式已切换为演示文稿:接下来若仍在调研,请侧重可直接上页面的要点、"
-        "数字对比与适合图表化的素材;已收集的材料不必重做。",
-        "en": "The output format switched to a presentation deck: for any remaining"
-        " research, favor slide-ready points, numeric comparisons and chart-able"
-        " material; gathered material need not be redone.",
-    },
-    "report": {
-        "zh": "输出格式已切换为书面报告:接下来若仍在调研,请侧重论据链、机制与因果的叙述素材;"
-        "已收集的材料不必重做。",
-        "en": "The output format switched to a written report: for any remaining"
-        " research, favor narrative evidence -- argument chains, mechanisms and"
-        " cause-effect material; gathered material need not be redone.",
-    },
+_SHAPE_STEER: dict[str, str] = {
+    # the shape flip's canonical steer notice (server-worded, English-only:
+    # it steers the RESEARCHER's remaining rounds -- the model's REPLY
+    # language is the language_directive's job, never a per-locale string
+    # table): slide-ready points vs narrative evidence; the gathered
+    # material itself need not be redone
+    "deck": "The output format switched to a presentation deck: for any remaining"
+    " research, favor slide-ready points, numeric comparisons and chart-able"
+    " material; gathered material need not be redone.",
+    "report": "The output format switched to a written report: for any remaining"
+    " research, favor narrative evidence -- argument chains, mechanisms and"
+    " cause-effect material; gathered material need not be redone.",
 }
 
 
@@ -95,15 +89,15 @@ def _control_view() -> t.Any:
         elif not handle.control.steer(text[:_MAX_TEXT], preempt=action == "preempt"):
             error = "the steer queue is full"
     elif action == "wrap":
-        # the graceful end (收尾): the run finishes its round, then walks
-        # into the writer with the material gathered -- the same halt the
-        # detach grace uses
+        # the graceful end (wrap-up): the run finishes its round, then
+        # walks into the writer with the material gathered -- the same
+        # halt the detach grace uses
         handle.wrap()
     elif action == "template":
-        # the rail's 输出结构 control: ONE pending template the write
-        # boundary consumes -- the synthesizer re-mints the outline from
-        # it before the first section streams (writer-not-started only by
-        # construction: the control carries nothing once the write phase
+        # the rail's output-structure control: ONE pending template the
+        # write boundary consumes -- the synthesizer re-mints the outline
+        # from it before the first section streams (writer-not-started only
+        # by construction: the control carries nothing once the write phase
         # owns the loop, and a consumed slot is a no-op).  An ABSENT
         # template payload CLEARS a previous pick (the unified two-step
         # picker's free options withdraw the template and re-open the
@@ -119,10 +113,10 @@ def _control_view() -> t.Any:
             else:
                 handle.control.set_template(template)
     elif action == "shape":
-        # the rail's 输出结构 SHAPE flip (报告|演示文稿), TWO lanes one
-        # action: the pending shape rebinds the synthesizer's dialect at
-        # the write boundary, and -- the same moment -- a canonical steer
-        # notice joins the guide queue so the RESEARCHER adapts its
+        # the rail's output-structure SHAPE flip (report|deck), TWO lanes
+        # one action: the pending shape rebinds the synthesizer's dialect
+        # at the write boundary, and -- the same moment -- a canonical
+        # steer notice joins the guide queue so the RESEARCHER adapts its
         # remaining rounds (slide-ready points / narrative evidence).
         # Latest flip wins; a no-op flip (same pending shape) does not
         # burn a guide slot.
@@ -132,10 +126,7 @@ def _control_view() -> t.Any:
         elif handle.control.set_shape(shape):
             # best-effort: a full guide queue must not block the flip --
             # the write boundary honors the pending shape either way
-            handle.control.steer(
-                _SHAPE_STEER[shape]["zh" if str(payload.get("lang") or "").strip().lower().startswith("zh") else "en"],
-                preempt=False,
-            )
+            handle.control.steer(_SHAPE_STEER[shape], preempt=False)
     else:
         error = "action must be stop / steer / preempt / wrap / template / shape"
     if error:

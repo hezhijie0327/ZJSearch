@@ -12,7 +12,7 @@ parent registry is SHARED so an overlapping search settles as
 (facts + gaps + the source lines) -- the compression is the point: the
 lead keeps the conclusions, the child's raw reads never reach it.
 
-The digest's ``【子任务 Sn】`` tag is the subagent's stable handle: the
+The digest's ``[Subtask Sn]`` tag is the subagent's stable handle: the
 lead's ``message_subtask(id, message)`` resumes THAT subagent -- its
 conversation (sources, ledger, reads) is kept verbatim -- with a
 correction, a new angle or a gap-closing instruction, and a fresh
@@ -57,7 +57,7 @@ def research_subtask_spec() -> dict[str, t.Any]:
             " contain), tool_guidance (where to look, what to skip),"
             " boundaries (what is OUT of scope).  One call = one subagent;"
             " batch independent subtasks in one round to run them in"
-            " parallel.  Every digest opens with its 【子任务 Sn】 tag -- Sn"
+            " parallel.  Every digest opens with its [Subtask Sn] tag -- Sn"
             " is that subagent's id for the rest of the run: message_subtask"
             " sends it follow-ups inside the context it already built."
         ),
@@ -111,7 +111,7 @@ def message_subtask_spec() -> dict[str, t.Any]:
         "name": MESSAGE_SUBTASK_TOOL,
         "description": (
             "Send a FOLLOW-UP to a subagent you already delegated to (its"
-            " digest's 【子任务 Sn】 tag is the id).  It resumes with its"
+            " digest's [Subtask Sn] tag is the id).  It resumes with its"
             " full research context still in place -- the sources it"
             " numbered, its findings ledger, the pages it read -- works"
             " your message (a correction, a refinement of the digest, a"

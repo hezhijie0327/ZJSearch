@@ -458,7 +458,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     feed_text += (
                         "\n(plan review: these subtasks look hard to research independently --"
                         " sharpen them into concrete searchable questions: "
-                        + "; ".join(f"『{t}』" for t in self.weak_tasks[:3])
+                        + "; ".join(f'"{t}"' for t in self.weak_tasks[:3])
                         + ")"
                     )
                     self.weak_tasks = []
@@ -490,7 +490,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 )
                 continue
             if tool_name == VIEW_IMAGE_TOOL:
-                # 研究者的眼睛:抓一张结果图,注入下一轮的 user 消息
+                # the researcher's eyes: fetch one result image and inject
+                # it as the next round's user message
                 url = str(parse_view_image_call(call))
                 started_vi = time.monotonic()
                 if not url:
@@ -521,7 +522,9 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     )
                     continue
                 if images_mode == "url":
-                    # URL 直传:公开网图把引用交给端点自取(不落服务器)
+                    # URL passthrough: a public web image hands the
+                    # reference to the endpoint to fetch itself (nothing
+                    # lands on the server)
                     image_ref = url
                     how = "as a URL reference"
                 else:
@@ -590,7 +593,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     continue
                 self._artifact_seq += 1
                 artifact = {"id": self._artifact_seq, **parsed}
-                # 每行 refs 校验:未在本次 run 铸出的 [n] 剔除(gallery 白名单同一信任模型)
+                # per-row refs validation: drop any [n] not minted in this
+                # run (the gallery whitelist's same trust model)
                 valid_rows = []
                 for row in artifact["rows"]:
                     refs = [ref for ref in row.get("refs") or [] if self.entries.get(ref)]
@@ -805,8 +809,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                             # THE WRITER FEEDS TOO: the tool result feeds the
                             # RESEARCHER only -- without the append below the
                             # single-write writer never sees the file (its
-                            # <context> is state.feed) and answers "取不到"
-                            # over material the run just recalled.
+                            # <context> is state.feed) and answers "cannot
+                            # access it" over material the run just recalled.
                             file_block = f'<user_file name="{entry["title"]}">\n{entry["text"]}\n</user_file>'
                             blocks.append(file_block)
                             if fed_files < 3:
@@ -1051,8 +1055,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         # plan's single writer): grades open subtasks against this round's
         # new sources; the model writes statuses via task_write itself
         self._coverage_referee(feeds)
-        # the 边做边记 discipline: material arrived but the ledger stayed
-        # untouched -- nudge BEFORE the next round so facts/gaps are
+        # the record-as-you-go discipline: material arrived but the ledger
+        # stayed untouched -- nudge BEFORE the next round so facts/gaps are
         # recorded while fresh (end-of-run summaries lose the in-flight
         # context that produced them)
         if self.round_gathered and self.round_new_hits > 0 and not self.round_learned:
@@ -1105,7 +1109,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         yield ("tasks", {"items": [dict(t) for t in self.coverage.task_list]})
         # the run's DECISION RESULTS (framework gates + model judge
         # summaries gathered THIS round): one wire batch per round -- the
-        # sources rail's 决策结果 card reads it, raw answers included
+        # sources rail's Decisions card reads it, raw answers included
         round_judgments = self.judgments[judgment_mark:]
         if round_judgments:
             yield (
@@ -1534,7 +1538,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             feed_text = ""
             if handle is None:
                 live = ", ".join(sorted(self.subagents)) or "none"
-                feed_text = f"error: no subagent 『{parsed['id']}』 -- live ids: {live}."
+                feed_text = f"error: no subagent \"{parsed['id']}\" -- live ids: {live}."
             elif not parsed["message"]:
                 feed_text = "error: empty message -- say what the subagent should do next."
             elif handle.followups >= subtask_tool.FOLLOWUP_MAX:
@@ -1558,7 +1562,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         "call": wire_id,
                         "status": "ok",
                         "ms": 0,
-                        "label": f"{handle.key} · 跟进(排队)",
+                        "label": f"{handle.key} · follow-up (queued)",
                         "feed": feed_text[:800],
                     },
                 )
@@ -1572,7 +1576,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     {
                         "call": wire_id,
                         "status": "error",
-                        "label": f"{parsed['id']} · 跟进",
+                        "label": f"{parsed['id']} · follow-up",
                         "ms": 0,
                         "feed": feed_text[:800],
                     },
@@ -1616,7 +1620,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 {
                     "call": wire_id,
                     "status": "ok",
-                    "label": f"{handle.key} · 跟进",
+                    "label": f"{handle.key} · follow-up",
                     "ms": 0,
                     "feed": parsed["message"][:800],
                 },
@@ -1633,7 +1637,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     "call": wire_id,
                     "status": "ok",
                     "ms": 0,
-                    "label": f"{handle.key} · 跟进",
+                    "label": f"{handle.key} · follow-up",
                     "chars": len(digest),
                     "feed": digest[:800],
                     "result": digest,
@@ -1694,7 +1698,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             self.apply_learnings(ops, rnd)
         new_feed = child.feed[handle.feed_mark :]
         if new_feed:
-            block = f"【子任务材料 · {handle.key}】\n" + "\n".join(str(line) for line in new_feed)
+            block = f"[Subtask material · {handle.key}]\n" + "\n".join(str(line) for line in new_feed)
             self.feed.append(block[:6000])
             self.feed_chars += min(len(block), 6000)
         handle.feed_mark = len(child.feed)
@@ -1714,18 +1718,18 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
     def _sub_digest(self, handle: SubagentHandle) -> str:
         """The compressed report-back: established facts (each [n]-cited),
         the open gaps, the source line count -- the lead aggregates many
-        digests, so this stays under ~2k characters.  The 【子任务 Sn】
+        digests, so this stays under ~2k characters.  The ``[Subtask Sn]``
         tag is the subagent's stable id: message_subtask addresses it."""
         child = handle.child
-        lines: list[str] = [f"【子任务 {handle.key}】{handle.parsed['title']}"]
+        lines: list[str] = [f"[Subtask {handle.key}] {handle.parsed['title']}"]
         if handle.stopped:
-            lines.append("（已被提前终止 -- 以下仅是终止前确认的材料）")
+            lines.append("(terminated early -- only the material confirmed before the stop follows)")
         if child is None:
             lines.append("the subagent did not report")
             return "\n".join(lines)[:2000]
         active = [fact for fact in child.facts if fact.get("status") == "active"]
         if active:
-            lines.append("已确认:")
+            lines.append("Confirmed:")
             for fact in active[:8]:
                 refs = ",".join(str(n) for n in (fact.get("refs") or [])[:4])
                 mark = f" [{refs}]" if refs else ""
@@ -1733,10 +1737,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         if child.gaps:
             open_gaps = [gap for gap in child.gaps if gap.get("status") != "closed"][:4]
             if open_gaps:
-                lines.append("未决:")
+                lines.append("Open:")
                 for gap in open_gaps:
                     lines.append(f"- {str(gap.get('q') or gap.get('text') or '')[:160]}")
-        lines.append(f"来源 {len(child.entries)} 条已入册")
+        lines.append(f"Sources registered: {len(child.entries)}")
         return "\n".join(lines)[:2000]
 
     def _search_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, tuple | None]:

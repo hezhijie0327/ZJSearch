@@ -25,7 +25,7 @@ import typing as t
 # table is the only thing language_directive reads, so it scales with
 # the catalog registry instead of growing hand-written branches.
 _CATALOG_LANGUAGE_NAMES: dict[str, str] = {
-    "zh-cn": "Simplified Chinese (简体中文)",
+    "zh-cn": "Simplified Chinese",
     "en": "English",
 }
 _FALLBACK_CATALOG = "en"
@@ -167,11 +167,12 @@ def reader_voice() -> str:
     """The anti-parroting rule: the answer is reader-facing prose, never a
     description of the machinery behind it.  Models that receive grounding
     or review instructions love opening with a fidelity disclaimer that
-    repeats them ("以下内容只依据检索来源撰写...", "based on the sources
-    provided...") -- this rule forbids that voice outright.  The same
-    discipline covers SILENT PERSONALIZATION: user memory may shape what
-    the answer contains, but the answer never narrates the remembering
-    ("根据您的偏好...", "我记得您在...") -- that voice is a chat
+    repeats them ("the following is written solely from the retrieved
+    sources...", "based on the sources provided...") -- this rule forbids
+    that voice outright.  The same discipline covers SILENT
+    PERSONALIZATION: user memory may shape what the answer contains, but
+    the answer never narrates the remembering ("as per your
+    preferences...", "I remember you...") -- that voice is a chat
     assistant's, and this product's output is a research document."""
     return (
         "<reader_voice>\nWrite for the reader in your own words: a direct,"

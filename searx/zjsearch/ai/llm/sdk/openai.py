@@ -56,7 +56,7 @@ def _chat_wire_messages(cfg: dict[str, t.Any], messages: list[dict[str, t.Any]])
             if isinstance(tc, dict):
                 tc.pop("thought_signature", None)
         if wire.get("role") == "assistant" and message.get("encrypted_content"):
-            # doubao's encrypted 思考原文: tool loops MUST echo it back
+            # doubao's encrypted raw reasoning: tool loops MUST echo it back
             # verbatim, and it takes priority over the summary text
             wire["encrypted_content"] = message["encrypted_content"]
         if passback and wire.get("role") == "assistant" and wire.get("tool_calls") and message.get("reasoning_blocks"):
@@ -130,8 +130,9 @@ async def _chat_pump(  # pylint: disable=too-many-branches, too-many-locals
             delta = choice.delta
             if delta is None:
                 continue
-            # doubao's 思考内容加密原文 (the encrypted reasoning that tool
-            # loops MUST echo back verbatim) rides the reasoning deltas
+            # doubao's encrypted reasoning content (the encrypted reasoning
+            # that tool loops MUST echo back verbatim) rides the reasoning
+            # deltas
             enc = getattr(delta, "encrypted_content", None)
             if enc:
                 encrypted += str(enc)
@@ -566,7 +567,7 @@ class OpenaiSdk:
         """One embeddings-API batch in input order (the embedding column
         width rides the ``params.dimensions`` key -- llm.embed owns the
         width resolution).  The API's ``usage.prompt_tokens`` rides along
-        when the upstream reports it (the embeddings用量 stats)."""
+        when the upstream reports it (the embeddings usage stats)."""
         cfg = self.cfg
         client = clients.openai_client(cfg, self.base, family=self.family)
         call: dict[str, t.Any] = {

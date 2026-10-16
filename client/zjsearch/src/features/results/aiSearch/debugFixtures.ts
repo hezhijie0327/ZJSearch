@@ -92,7 +92,7 @@ function calls(items: Array<Record<string, unknown>>, id = 1): Record<string, un
     decision card, sources, learnings, tasks -- the whole surface. */
 const FULL_STAGE: DebugScenario = {
   id: "full",
-  label: "全部工具行 × 状态(报告进行中)",
+  label: "all tool rows × states (report in progress)",
   q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研",
   mode: "report",
   events: [
@@ -741,7 +741,7 @@ const FULL_STAGE: DebugScenario = {
 
 const AWAITING_STAGE: DebugScenario = {
   id: "awaiting",
-  label: "澄清门(awaiting)",
+  label: "clarify gate (awaiting)",
   q: "帮我调研一下新能源车的电池",
   mode: "balanced",
   events: [
@@ -861,7 +861,7 @@ const AWAITING_STAGE: DebugScenario = {
 
 const STOPPED_STAGE: DebugScenario = {
   id: "stopped",
-  label: "停止态(标题键化)",
+  label: "stopped state (title keying)",
   q: "深度对比三家 CDMO 的合规记录",
   mode: "report",
   events: [
@@ -899,7 +899,7 @@ const STOPPED_STAGE: DebugScenario = {
 
 const FAILED_STAGE: DebugScenario = {
   id: "failed",
-  label: "失败态(receipt + 继续)",
+  label: "failed state (receipt + continue)",
   q: "深度对比三家 CDMO 的合规记录",
   mode: "report",
   events: [
@@ -956,7 +956,7 @@ const FAILED_STAGE: DebugScenario = {
 
 const DONE_STAGE: DebugScenario = {
   id: "done",
-  label: "单写完成(balanced)",
+  label: "single-write done (balanced)",
   q: "Kimi K3 的上下文长度是多少?",
   mode: "balanced",
   events: [
@@ -1042,7 +1042,7 @@ const DONE_STAGE: DebugScenario = {
     write-think toggle at the deck's top (hidden while it writes). */
 const DECK_STAGE: DebugScenario = {
   id: "deck",
-  label: "演示文稿完成(deck)",
+  label: "deck done (deck)",
   q: "多肽原料药产业格局 × 深圳置业价格锚点速览",
   mode: "deck",
   events: [
@@ -1152,7 +1152,7 @@ const DECK_STAGE: DebugScenario = {
     top once settled. */
 const SHAPE_FLIP_STAGE: DebugScenario = {
   id: "shape-flip",
-  label: "形状切换(引导干预 · 边界翻转)",
+  label: "shape flip (guide injection · boundary flip)",
   q: "多肽原料药产业格局速览",
   mode: "report",
   events: [
@@ -1185,7 +1185,7 @@ const SHAPE_FLIP_STAGE: DebugScenario = {
       // the shape flip's canonical notice: the control endpoint queued it
       // as a guide AND parked the pending shape for the write boundary
       e: "steer",
-      text: "输出格式已切换为演示文稿:接下来若仍在调研,请侧重可直接上页面的要点、数字对比与适合图表化的素材;已收集的材料不必重做。",
+      text: "The output format switched to a presentation deck: for any remaining research, favor slide-ready points, numeric comparisons and chart-able material; gathered material need not be redone.",
       delivery: "guide",
       status: "drained",
     },
@@ -1259,7 +1259,7 @@ const TINY_JPEG =
     log, the screenshot's shot bytes persist). */
 const BROWSER_STAGE: DebugScenario = {
   id: "browser",
-  label: "浏览器登录协作(镜像帧 × 等待用户 × 截图)",
+  label: "browser login collaboration (mirror frame × wait user × screenshot)",
   q: "打开小红书的探索页,登录后看看首页热门内容",
   mode: "balanced",
   events: [
@@ -1568,7 +1568,7 @@ const BROWSER_STAGE: DebugScenario = {
     (the guide lane's visible death). */
 const STEER_STAGE: DebugScenario = {
   id: "steer",
-  label: "引导(边界注入 · 抢占 · 未送达)",
+  label: "guide (boundary injection · preempt · undelivered)",
   q: "对比主流新能源品牌 2025 年的销量与产能布局",
   mode: "balanced",
   events: [
@@ -1668,7 +1668,7 @@ const STEER_STAGE: DebugScenario = {
     a SUBAGENT browser frame (agent-tagged -- the rail card's tab strip). */
 const SUB_STAGE: DebugScenario = {
   id: "sub",
-  label: "子代理(委派行 · 折叠子时间线 · 浏览器多标签)",
+  label: "subagents (delegation row · folded sub-timeline · browser tabs)",
   q: "调研全球动力电池产业:头部厂商产能;固态电池路线;钠离子进展",
   mode: "deep",
   events: [
@@ -1752,9 +1752,9 @@ const SUB_STAGE: DebugScenario = {
       ms: 0,
       label: "S1 · 头部厂商产能与市占率",
       chars: 320,
-      feed: "【子任务 S1】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
+      feed: "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
       result:
-        "【子任务 S1】头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
+        "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- 宁德时代市占率 ~37%[1]\n- 比亚迪自供 + 外供双线[2]\n未决:\n- LG 新增产能口径",
     },
     { e: "learnings", round: 2, items: [], gaps: [] },
     { e: "close", id: 1 },
@@ -1783,7 +1783,7 @@ const SUB_STAGE: DebugScenario = {
       call: 1,
       status: "ok",
       ms: 0,
-      label: "S1 · 跟进",
+      label: "S1 · follow-up",
       feed: "LG 新增产能口径未决:补一个带数字的口径对比",
     },
     // the resumed child re-opens its row (same id, back to active)
@@ -1804,10 +1804,10 @@ const SUB_STAGE: DebugScenario = {
       call: 1,
       status: "ok",
       ms: 0,
-      label: "S1 · 跟进",
+      label: "S1 · follow-up",
       chars: 180,
-      feed: "【子任务 S1】头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
-      result: "【子任务 S1】头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
+      feed: "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
+      result: "[Subtask S1] 头部厂商产能与市占率\n已确认:\n- LG 新增产能口径:GWh/年,与 [1] 同口径 [4]",
     },
     { e: "learnings", round: 3, items: [], gaps: [] },
     { e: "close", id: 3 },
@@ -1848,7 +1848,7 @@ const SUB_STAGE: DebugScenario = {
     would have shipped unnoticed. */
 const PANORAMA_STAGE: DebugScenario = {
   id: "panorama",
-  label: "全景(画廊 · 追问 · 标题 · 记忆 · 标签 · gates)",
+  label: "panorama (gallery · follow-up · title · memory · tags · gates)",
   q: "全景模拟:答案尾部的每个面",
   mode: "balanced",
   events: [
@@ -1978,7 +1978,7 @@ const PANORAMA_STAGE: DebugScenario = {
     paid_ok: true (the sticky approval) and real results flow. */
 const PAID_STAGE: DebugScenario = {
   id: "paid",
-  label: "计费引擎确认(扣下 · ask_user · 批准重跑)",
+  label: "paid engine confirmation (hold · ask_user · approved re-run)",
   q: "用 bocha 查一下 2026 年的国产 GPU 新品发布",
   mode: "balanced",
   events: [
@@ -2175,7 +2175,7 @@ const META_SENTINEL =
 
 const OVERVIEW_STREAMED: AiOverviewDebugScenario = {
   id: "ov-streamed",
-  label: "完整流(思考 · 引用 · 尾部 meta)",
+  label: "full stream (think · citations · tail meta)",
   q: "2026 年国产 GPU 有哪些新进展?",
   chunks: [
     "<think>用户问国产 GPU 的 2026 进展。检索材料集中在摩尔线程与壁仞两条线:",
@@ -2192,7 +2192,7 @@ const OVERVIEW_STREAMED: AiOverviewDebugScenario = {
 
 const OVERVIEW_FENCES: AiOverviewDebugScenario = {
   id: "ov-fences",
-  label: "fence 密集(切分器)",
+  label: "fence-dense (splitter)",
   q: "给一个对比表和 mermaid 图",
   chunks: [
     "<think>带表格与 mermaid 的回答:splitAnswerStream 不能把 fence 里的内容当 think。</think>",
@@ -2205,7 +2205,7 @@ const OVERVIEW_FENCES: AiOverviewDebugScenario = {
 
 const OVERVIEW_ERROR: AiOverviewDebugScenario = {
   id: "ov-error",
-  label: "失败态(receipt)",
+  label: "failed state (receipt)",
   q: "AI 回答失败了长什么样",
   chunks: ["<think>正在整理来源…"],
   sources: [],

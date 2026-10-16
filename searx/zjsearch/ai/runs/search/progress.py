@@ -97,10 +97,10 @@ def continuation_note(open_tasks: list[str], open_gaps: list[str]) -> str:
         " ledger is not closed -- the question is not fully covered yet.",
     ]
     if open_tasks:
-        shown = "; ".join(f"『{title}』" for title in open_tasks[:4])
+        shown = "; ".join(f'"{title}"' for title in open_tasks[:4])
         lines.append(f"Open subtasks: {shown}.")
     if open_gaps:
-        shown = "; ".join(f"『{q}』" for q in open_gaps[:4])
+        shown = "; ".join(f'"{q}"' for q in open_gaps[:4])
         lines.append(f"Open gaps: {shown}.")
     lines.append(
         "Pick the most important one and run this round against it --"

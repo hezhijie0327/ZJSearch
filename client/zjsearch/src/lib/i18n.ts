@@ -54,7 +54,7 @@ const CATALOGS: Record<string, Partial<Record<StringKey, string>>> = {
   "zh-CN": ZH_CN,
 };
 
-type CatalogTag = keyof typeof CATALOGS;
+export type CatalogTag = keyof typeof CATALOGS;
 
 /** Resolve any BCP-47 tag the server may send onto a catalog we ship.
     Simplified Chinese only (zh-CN, zh-Hans-CN, zh); Traditional stays

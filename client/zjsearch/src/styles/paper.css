@@ -173,8 +173,10 @@
     position: relative;
     display: grid;
     place-content: center;
-    /* 条目在轨道内也要居中：place-content 只居中轨道组，图标会在最宽
-       子项（戳文）的轨道里 start 对齐，看起来整体偏歪（§17 两侧同配方） */
+    /* items must center inside the track too: place-content only centers the
+       track group, so the icon would start-align in the track of the widest
+       child (the stamp text) and the whole thing reads skewed (§17, same
+       recipe on both sides) */
     place-items: center;
     gap: 0.125rem;
     border-radius: 9999px;

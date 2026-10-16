@@ -126,7 +126,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         noul per subtask (did this round's material cover it?) -- and advise
         the model through a feed note (done candidates / thin evidence).
         NEVER writes statuses: the task_write TOOL is the plan's single
-        writer; the raw nouls land in the 决策结果 card via the judgment
+        writer; the raw nouls land in the Decisions card via the judgment
         ledger."""
         cov = decision_features("coverage")
         if not cov.get("enabled") or not decision.enabled() or not decision.configured():
@@ -165,7 +165,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             covered = noul >= done_min
             signature.append((title, "done" if covered else "thin"))
             (done_candidates if covered else thin).append(title)
-        # the 决策结果 card only learns of a verdict when it CHANGED: the
+        # the Decisions card only learns of a verdict when it CHANGED: the
         # referee re-grades the same open subtasks every round, and eleven
         # identical rows read as noise, not assurance
         if tuple(signature) != self._referee_signature:
@@ -198,12 +198,13 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             self._append_note(feeds, "(plan referee: " + " | ".join(advice) + ")")
 
     def evidence_check(self) -> list[dict[str, t.Any]]:
-        """The PRE-WRITE evidence verification (the strip's 核验 stage): the
-        deep sources the writer will lean on get one noul each -- does this
-        source materially contribute reliable evidence for the question?
-        Failing sources are flagged DO-NOT-CITE in the feed and the whole
-        pass lands in the 决策结果 card.  Fail-open: no decision model, no
-        candidates -- an empty list, the writer writes from everything."""
+        """The PRE-WRITE evidence verification (the strip's verification
+        stage): the deep sources the writer will lean on get one noul each
+        -- does this source materially contribute reliable evidence for
+        the question?  Failing sources are flagged DO-NOT-CITE in the feed
+        and the whole pass lands in the Decisions card.  Fail-open: no
+        decision model, no candidates -- an empty list, the writer writes
+        from everything."""
         gate = decision_features("evidence_check")
         if not gate.get("enabled") or not decision.enabled() or not decision.configured():
             return []

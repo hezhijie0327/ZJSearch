@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- ZJSearch 品牌标：签名图形「放大镜」+ 品牌句号（DESIGN.md §2.2 家族语言：
-       圆头描边 stroke-width 14、金渐变 #f5c84c→#e09f0a 透明底、右下句号 (85,85) r7） -->
+  <!-- ZJSearch brand mark: the signature "magnifier" glyph + the brand period
+       (DESIGN.md §2.2 family language: round-cap strokes at stroke-width 14,
+       gold gradient #f5c84c→#e09f0a on transparent ground, period at (85,85) r7) -->
   <defs>
     <linearGradient id="lens" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#f5c84c"/>

@@ -51,11 +51,15 @@ async function mermaidFor(dark: boolean) {
   return mermaid;
 }
 
-/** 基础 remark 插件集 —— 共享链 SHARED_REMARK（lib/markdownParts.ts，DESIGN.md
-    §5.1 家族契约）：prompt 教的语法与这里渲染的语法严格互为镜像 —— 教了的语
-    法渲染不了会裸奔，渲染得了但 prompt 不教的路径是给不可信输出白开的口子
-    （GFM / ==mark== / 表情 shortcode / callouts / 定义列表）；KaTeX 数学管
-    线因体积懒加载，见 MarkdownAnswer。 */
+/** The base remark plugin set -- the shared chain SHARED_REMARK
+    (lib/markdownParts.ts, DESIGN.md
+    §5.1 family contract): the syntax the prompt teaches and the syntax
+    rendered here must mirror each other exactly -- a taught-but-unrendered
+    construct bleeds raw into the page, a rendered-but-unteached path is an
+    open door for untrusted output
+    (GFM / ==mark== / emoji shortcode / callouts / definition lists); the
+    KaTeX math
+    pipeline lazy-loads for size, see MarkdownAnswer. */
 
 /**
  * The whole-page AI Overview.  The server puts an {@link AiCapability}
@@ -233,7 +237,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
   return { error, open, phase, query: lastAskRef.current?.q ?? "", regenerate, reset, start, text, toggle };
 }
 
-/** Meta-row entry (the 12px toggle tier of 「found N results · took X s」). */
+/** Meta-row entry (the 12px toggle tier of "found N results · took X s"). */
 export function AiAnswerTrigger({
   phase,
   open,
@@ -567,7 +571,8 @@ export function MermaidBlock({ chart, lightbox = false }: { chart: string; light
   );
   const [theme, setTheme] = useState(() => isDarkTheme());
 
-  // 进入视口(含 300px 缓冲)才触发加载 —— 长答案里屏外的图不白白付费
+  // Load only once in the viewport (with a 300px buffer) -- offscreen
+  // figures in a long answer never pay for nothing
   useEffect(() => {
     const el = containerRef.current;
     if (!el || nearViewport) {
@@ -587,7 +592,8 @@ export function MermaidBlock({ chart, lightbox = false }: { chart: string; light
     };
   }, [nearViewport]);
 
-  // 打印时未滚动到的图是空占位 —— 尽力触发一次渲染
+  // A figure never scrolled to prints as an empty placeholder -- best
+  // effort, trigger one render
   useEffect(() => {
     const onBeforePrint = () => {
       setNearViewport(true);
@@ -598,7 +604,8 @@ export function MermaidBlock({ chart, lightbox = false }: { chart: string; light
     };
   }, []);
 
-  // 主题切换(html class 翻转,含 auto 跟随系统)后以新主题重渲
+  // Re-render in the new palette after a theme flip (html class swap,
+  // including auto following the system)
   useEffect(() => {
     const mo = new MutationObserver(() => {
       setTheme(isDarkTheme());
@@ -635,8 +642,10 @@ export function MermaidBlock({ chart, lightbox = false }: { chart: string; light
   }, [nearViewport, chart, theme]);
   if (svg) {
     return (
-      // data-zjs-figure 是图元灯箱委托的入口标记（figureLightbox 阅读面才有，
-      // deck 等自管面不带）；整卡命中（含留白）比只命中 svg 好点
+      // data-zjs-figure is the delegation entry marker of the figure
+      // lightbox (only the figureLightbox reading panes carry it,
+      // self-managed surfaces like the deck do not); matching the whole
+      // card (whitespace included) beats matching just the svg
       <div
         aria-label={t("ai_figure")}
         className={cn("zjs-mermaid mt-2 overflow-x-auto rounded-xl bg-surface-2 p-3", lightbox && "cursor-zoom-in")}
@@ -760,8 +769,10 @@ function markdownComponents(
         if (!settled) {
           return <pre className={CODE_BLOCK}>{props?.children}</pre>;
         }
-        // lightbox 随阅读面开 —— data-zjs-figure 标记是 FigureLightboxRoot
-        // 委托的入口（blog 侧同款接线：Prose 挂载点传 lightbox）
+        // the lightbox follows the reading pane -- the data-zjs-figure
+        // marker is FigureLightboxRoot
+        // delegation's entry (the blog side's same wiring: the Prose mount
+        // passes lightbox)
         return <MermaidBlock chart={textOf(props?.children)} lightbox={figureLightbox} />;
       }
       return <CodeBlock>{children}</CodeBlock>;
@@ -787,9 +798,12 @@ function markdownComponents(
     the answer (and any diagram) for as long as the content height kept
     changing.  Stable props (markdown text, per-result meta, settled) keep
     the subtree untouched by measurement churn.
-    KaTeX 数学管线（ZJBlog 同款 remark-math + rehype-katex）：体积可观，仅在
-    答案里出现 $ / $$ 定界符时才懒加载；加载完成前先按纯 markdown 渲染
-    （定界符短暂裸奔，与 mermaid 占位符同一模式）。 */
+    The KaTeX math pipeline (the ZJBlog remark-math + rehype-katex pair):
+    a sizable dependency, lazy-loaded only when the
+    answer actually carries $ / $$ delimiters; until it loads the body
+    renders as plain markdown
+    (the delimiters flash raw for a beat -- the mermaid placeholder's own
+    pattern). */
 const MATH_FENCE = /\$\$[\s\S]+?\$\$|\$[^\s$][^$\n]*\$/;
 
 export const MarkdownAnswer = memo(function MarkdownAnswer({
@@ -807,8 +821,10 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
   /** the run's validated inline image groups -- the answer's
       {{zjs-gallery:i}} placeholders render these in place */
   galleries?: AiSearchGallery[][];
-  /** 阅读面开启图元灯箱（ZJBlog Prose 同款家族机制）：正文图片 + 已出图的
-      mermaid 图卡按文档序混排画廊。deck 等自管翻页语义的面不传 */
+  /** The reading pane turns ON the figure lightbox (the ZJBlog Prose
+      family mechanism): body images + rendered
+      mermaid cards form one document-order mixed gallery.  Self-managed
+      surfaces (the deck's own paging semantics) do not pass it */
   figureLightbox?: boolean;
 }) {
   const needsMath = MATH_FENCE.test(markdown);
@@ -847,16 +863,21 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
   return <FigureLightboxRoot>{content}</FigureLightboxRoot>;
 });
 
-/** 图元灯箱容器（ZJBlog Prose 同款家族机制，DESIGN.md §5.1）：委托点击正文
-    图片与已出图的 mermaid 图卡（data-zjs-figure），按文档序混排画廊——
-    prev/next 顺一遍全部图元。SVG 必须内联克隆进灯箱的 svg 条目（点击瞬间
-    序列化，与当前主题一致）：<img src> 的 secure static mode 不渲染
-    htmlLabels 的 foreignObject。AnswerGallery 缩略块是按钮、点击走引用
-    跳转语义，双保险排除。 */
+/** The figure lightbox container (the ZJBlog Prose family mechanism,
+    DESIGN.md §5.1): delegates clicks on body
+    images and rendered mermaid cards (data-zjs-figure) into one
+    document-order mixed gallery--
+    prev/next walks every figure.  SVG must be inline-cloned into the
+    lightbox's svg item (serialized at click
+    time, consistent with the current theme): <img src>'s secure static
+    mode does not render
+    htmlLabels' foreignObject.  AnswerGallery thumbnail blocks are buttons
+    with citation-jump click semantics -- doubly excluded. */
 function FigureLightboxRoot({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [preview, setPreview] = useState<{ items: LightboxItem[]; index: number } | null>(null);
-  // 关闭灯箱后焦点归还给触发元素（键盘/读屏用户回到原位）
+  // Focus returns to the trigger element after the lightbox closes
+  // (keyboard/screen-reader users land back where they started)
   const lastTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -870,15 +891,16 @@ function FigureLightboxRoot({ children }: { children: ReactNode }) {
         return;
       }
       if (target.closest("button")) {
-        return; // 画廊缩略块 / 引用 chips 的点击语义不进灯箱
+        return; // gallery thumbnails / citation chips keep their own click semantics, out of the lightbox
       }
       const image = target.closest("img");
       const figure = image ? null : target.closest<HTMLElement>("[data-zjs-figure]");
       if (!image && !figure) {
         return;
       }
-      // 画廊 = 全部图片 + 已出图的 mermaid（未进视口的还是占位，无 svg 跳过）；
-      // querySelectorAll 按文档序返回混排序列
+      // Gallery = every image + every rendered mermaid (not-yet-rendered
+      // ones are still placeholders, no svg -- skipped);
+      // querySelectorAll returns the mixed sequence in document order
       const items: LightboxItem[] = [];
       let index = -1;
       for (const node of container.querySelectorAll("img, [data-zjs-figure]")) {
@@ -918,7 +940,8 @@ function FigureLightboxRoot({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // dialog 的 close 事件触发（此时顶层已释放）：焦点先归还触发元素，再卸载
+  // The dialog's close event fires (top layer already released): return
+  // focus to the trigger first, then unmount
   const closePreview = () => {
     const trigger = lastTriggerRef.current;
     if (trigger) {
@@ -981,7 +1004,7 @@ export function ThinkScroll({ active, text }: { active: boolean; text: string })
     header instead of a tinted box: accent stays punctuation (icon, bullets,
     citation chips), not fill.  The reasoning renders as a block expanded
     live while the model thinks and folded once the answer starts
-    (Google behaviour); a long overview settles truncated with a 展开 pill.
+    (Google behaviour); a long overview settles truncated with a show-more pill.
     The header's refresh chip re-runs the question. */
 export function AiAnswerCard({
   state,
@@ -1120,7 +1143,7 @@ export function AiAnswerCard({
                 onCite={onCite}
                 settled={state.phase === "done"}
               />
-              {/* the run's meta line folds INTO 查看更多 (the transport
+              {/* the run's meta line folds INTO show-more (the transport
                 outcome is detail, not headline) */}
               {!streaming && !failed && meta ? (
                 <div className="mt-2">

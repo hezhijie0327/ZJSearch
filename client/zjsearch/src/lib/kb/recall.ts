@@ -154,7 +154,7 @@ async function graphRecall(query: string, kinds: string[], limit: number, fullBo
   return rowsByTags(kinds, seeds, limit, fullBody);
 }
 
-/** The HIT-TAG EXPANSION (the graph's one-hop recall, the 感冒→退烧药
+/** The HIT-TAG EXPANSION (the graph's one-hop recall, the cold→remedy
     effect): the hybrid hits' OWN tags seed one more `tags ?|` lookup --
     a tag that is semantically related but lexically absent from the
     query still pulls its neighbour rows.  The seeds cap at the top
@@ -195,7 +195,7 @@ export interface ThreadSummary {
   runs: number;
   sources: number;
   /** the thread's REPORT-mode runs (run.meta.report settles it) -- the
-      directory's 报告 badge + filter read it */
+      directory's Reports badge + filter read it */
   reports: number;
   updated: number;
   pinned: boolean;

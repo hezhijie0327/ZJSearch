@@ -390,7 +390,7 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
         // the SECOND task_write (the status update): a proper declaration
         // plus the full done-list args in two chunks -- the previous tail
         // chunks never declared the tool and parsed as garbage, leaving a
-        // bogus 失败 row on the audited timeline
+        // bogus failed row on the audited timeline
         tool_calls: [
           {
             index: 5,

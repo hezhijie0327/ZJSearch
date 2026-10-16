@@ -228,7 +228,7 @@ export function DebugPanes({ call, rawArgs }: { call: AiSearchCall; rawArgs: str
 
 /** A tool row's content pane (a read's page markdown, an MCP
     result) under PROGRESSIVE DISCLOSURE: a fixed-height preview first --
-    bottom-faded, one 展开全文 pill -- expanding into the scroll-capped
+    bottom-faded, one expand-full-text pill -- expanding into the scroll-capped
     full text on demand.  Short content skips the staging entirely.
     The corner chips (hover, the CodeBlock pattern) carry the
     external-open and copy paths. */

@@ -23,7 +23,8 @@ const PURPOSE_LABELS: Record<string, string> = {
   clarify_gate: "ai_dec_clarify_gate",
 };
 
-/** 概率条:label + 轨道填充 + 百分比(选中/过半用强调色)。 */
+/** Probability bar: label + track fill + percentage (the chosen/majority
+    option takes the accent). */
 function ProbBar({ label, pct, highlight = false }: { label: string; pct: number; highlight?: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -43,9 +44,11 @@ function ProbBar({ label, pct, highlight = false }: { label: string; pct: number
   );
 }
 
-/** 三原语答案渲染器(决策模型只有 choice / score / noul 三种返回):
-    choice = 选项分布条 + 选中高亮;score = 档位分布 + 加权值;
-    noul = 是/否概率条;未知形状回退原始 JSON。 */
+/** The three-primitive answer renderer (the decision model returns only
+    choice / score / noul):
+    choice = option distribution bars + chosen highlight;score = level
+    distribution + weighted value;
+    noul = yes/no probability bars;unknown shapes fall back to raw JSON. */
 export function AnswerValue({ answer }: { answer: unknown }) {
   const t = useT();
   if (!answer || typeof answer !== "object") {
@@ -112,14 +115,21 @@ function pctOf(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
 
-/** 决策条目的展开:「命名裁决映射」形状(judge / plan_review / coverage /
-    read_gate / evidence / citation_gate …—— 任何答案为 {名字: 原语裁决}
-    的决策)统一走通用逐行渲染器,标签按 record_questions 题文 → target
-    标题序列 → 键名 解析,卡内题文行只在行标签退化为裸键名时兜底(协议
-    原文对用户是机器噪音);单答案原语直接渲染;真正未知的形状才退到原始
-    JSON。新增 decision 用途时,只要答案遵守 {名字: choice|score|noul}
-    协议就自动获得结构化渲染,零分支。*/
-/** 单答案原语:noul / choice / score 之一(顶层直接渲染的形状)。 */
+/** A decision entry's expansion: the NAMED-VERDICT-MAP shape (judge /
+    plan_review / coverage /
+    read_gate / evidence / citation_gate ... -- any decision whose answer
+    is {name: primitive verdict})
+    all ride the ONE generic per-row renderer; labels resolve through
+    record_questions question text → target
+    title chain → key name, and the card's question line only appears as a
+    fallback when a row's label degraded to its bare key (the protocol
+    text is machine noise to the user); a single-answer primitive renders
+    directly; only a truly unknown shape falls back to raw
+    JSON.  New decision purposes get structured rendering for free as long
+    as the answer obeys the {name: choice|score|noul}
+    protocol -- zero branches.*/
+/** A single-answer primitive: one of noul / choice / score (the
+    top-level-rendered shapes). */
 function isPrimitiveAnswer(value: Record<string, unknown>): boolean {
   return "noul" in value || value.type === "noul" || value.type === "choice" || value.type === "score";
 }
@@ -127,9 +137,12 @@ function isPrimitiveAnswer(value: Record<string, unknown>): boolean {
 function DecisionBody({ decision }: { decision: AiDecision }) {
   const asObject =
     decision.answer && typeof decision.answer === "object" ? (decision.answer as Record<string, unknown>) : null;
-  // 题文行(卡内上下文):仅当展开内容自身带不给出处时兜底 ——
-  // 映射形状的行标签已解析(题文/标题)时协议原文是机器噪音,不渲染;
-  // 原语与原始 JSON 没有行标签,题文行始终渲染。
+  // The question line (the card's context): only a fallback for expanded
+  // content that carries no labeling of its own --
+  // when a map shape's row labels are already resolved (question text /
+  // title) the protocol text is machine noise and does not render;
+  // primitives and raw JSON have no row labels, the question line always
+  // renders.
   const questionLine =
     decision.question && asObject && !isPrimitiveAnswer(asObject) ? null : decision.question ? (
       <div className="flex items-start gap-1.5">
@@ -140,12 +153,18 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       </div>
     ) : null;
 
-  // ── 命名裁决映射(万能形态): judge / plan_review / coverage /
-  //    read_gate 的答案都是同一种形状 —— {名字: choice|score|noul 裁决}。
-  //    一个渲染器覆盖全部现有与未来的这类决策:逐条渲染「标签 + 概率条」,
-  //    标签按 最佳可用来源 解析 —— record_questions 的题文映射、target 的
-  //    " / " 标题序列(task_N 约定)、退回键名本身;裸键名行在题文行在场时
-  //    隐藏(题文已是上下文,键名只是噪音)。裸数值归一为 noul。 ──
+  // ── The named verdict map (the universal shape): judge / plan_review /
+  //    coverage /
+  //    read_gate answers all share ONE shape -- {name: choice|score|noul
+  //    verdict}.
+  //    ONE renderer covers every present and future decision of this
+  //    family: per-row "label + probability bar",
+  //    labels resolved from the BEST AVAILABLE SOURCE -- the
+  //    record_questions question-text map, the target's
+  //    " / " title chain (the task_N convention), falling back to the key
+  //    itself; bare-key rows hide while the question line is present
+  //    (the question is already context, the key is only noise).  Bare
+  //    numbers normalize to noul. ──
   if (asObject && !isPrimitiveAnswer(asObject)) {
     const questions = Array.isArray(decision.record_questions) ? decision.record_questions : [];
     const titles = typeof decision.target === "string" && decision.target ? decision.target.split(" / ") : [];
@@ -180,7 +199,7 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
       </div>
     );
   }
-  // ── 单答案原语(noul / choice / score)直接渲染 ──
+  // ── Single-answer primitives (noul / choice / score) render directly ──
   if (asObject && isPrimitiveAnswer(asObject)) {
     return (
       <div className="rounded-lg bg-surface-2/50 px-2.5 py-2 text-[13px] leading-relaxed">
@@ -207,12 +226,12 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
 }
 
 /**
- * The run's DECISION RESULTS card (决策结果): EVERY decision-model call --
+ * The run's DECISION RESULTS card: EVERY decision-model call --
  * loop gates (depth probe / plan review / coverage referee / read gate /
  * pre-write evidence) and the model's own judge tool -- one row each.
  * A row shows purpose + target + ms; CLICK expands the structured result
  * (per-question nouls with probabilities / verdict counts), unknown shapes
- * fall back to the raw JSON -- 问题与结果都可溯源.  The list reads
+ * fall back to the raw JSON -- both question and result stay traceable.  The list reads
  * NEWEST-FIRST and caps at four rows (cap-and-expand), so a long run's
  * latest verdicts lead and the history stays one click away.
  */
@@ -261,7 +280,7 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
     return null;
   }
   // the newest four lead; the OLDER tail sits inside a Collapse so the
-  // +N reveal (and the 收起) plays as a height animation
+  // +N reveal (and the show-less) plays as a height animation
   const view = [...decisions.slice(-4)].reverse();
   const extraView = [...decisions.slice(0, Math.max(0, decisions.length - 4))].reverse();
   return (

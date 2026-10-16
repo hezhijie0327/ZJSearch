@@ -33,7 +33,7 @@ bug and :py:func:`encode` refuses it):
                         model-initiated judge), one batch per
                         round: ``{round, items: [{purpose, question,
                         target, answer, ms}]}`` -- the sources rail's
-                        决策结果 card; ``answer`` is the RAW model
+                        Decisions card; ``answer`` is the RAW model
                         answer (verdicts + probabilities) for
                         click-through.
 ``tasks``               the task card's AUTHORITATIVE snapshot.

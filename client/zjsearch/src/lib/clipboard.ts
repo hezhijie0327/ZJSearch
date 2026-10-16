@@ -5,7 +5,7 @@ import { flashToast } from "@/lib/toast.ts";
 
 /** Raw clipboard write shared by every copy path (buttons, wrappers,
     hotkeys).  Copy confirmation is rendered by `flashToast` in
-    `lib/toast.ts` — one green 「已复制」 pill app-wide. */
+    `lib/toast.ts` — one green "Copied" pill app-wide. */
 function writeClipboard(value: string): Promise<boolean> {
   return navigator.clipboard
     .writeText(value)
@@ -13,7 +13,7 @@ function writeClipboard(value: string): Promise<boolean> {
     .catch(() => false);
 }
 
-/** React flavour of the copy idiom: write + the shared green 「已复制」
+/** React flavour of the copy idiom: write + the shared green "Copied"
     toast.  Every copy action goes through this (or writeClipboard directly
     when it confirms some other way) so the feedback never drifts. */
 export function useCopyToast(): (value: string) => void {

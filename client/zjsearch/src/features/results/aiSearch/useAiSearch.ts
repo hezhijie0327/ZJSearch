@@ -61,7 +61,7 @@ import type { AiCapability } from "@/lib/types.ts";
  * continues after the existing sources (sources_base).
  */
 
-/** THE 提交即 POST BUDGET: the knowledge store's boot (wasm compile,
+/** THE SUBMIT-POSTS-IMMEDIATELY BUDGET: the knowledge store's boot (wasm compile,
     election, DDL) must never hold the run's POST hostage.  The two
     pre-POST store reads (the attachment inheritance and the recall
     snapshot) race this budget -- a warm store answers in milliseconds and
@@ -141,7 +141,7 @@ export interface AiSearchState extends Core {
       write boundary consumes (research phase only -- the synthesizer
       re-mints the outline from it before the first section streams) */
   setTemplate(template: ReportTemplate): Promise<boolean>;
-  /** the rail's shape flip (报告|演示文稿, research phase only): ONE
+  /** the rail's shape flip (report|deck, research phase only): ONE
       pending shape the write boundary honors AND a canonical steer notice
       that adapts the researcher's remaining rounds (both server-composed) */
   setShape(shape: TemplateShape): Promise<boolean>;
@@ -154,7 +154,8 @@ export interface AiSearchState extends Core {
   deleteRun(runNo: number): void;
   /** re-run the last run IN PLACE (the failed box's retry / regenerate) */
   retry(lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
-  /** continue an INTERRUPTED research IN PLACE (the failed box's 继续):
+  /** continue an INTERRUPTED research IN PLACE (the failed box's continue
+      button):
       the dead attempt's stored conversation replays as the request's
       context -- same run, same timeline, numbering continues; a
       checkpoint-less run falls back to a fresh run seeded with the
@@ -166,9 +167,9 @@ export interface AiSearchState extends Core {
   /** steer the LIVE run: guide = inject at the next round boundary;
       preempt = interrupt the in-flight turn and inject immediately.
       Resolves false when the run host rejects it (unknown run, steer
-      queue full) -- the composer flips its pending chip to 未送达. */
+      queue full) -- the composer flips its pending chip to not-sent. */
   steer(text: string, preempt?: boolean): Promise<boolean>;
-  /** 收尾: end the research gracefully and let the writer answer from
+  /** wrap-up: end the research gracefully and let the writer answer from
       the material gathered */
   wrap(): void;
   reset(): void;
@@ -470,7 +471,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     }
     const apply = makeApply(threadId, runNo, refCounts);
     // the store wakes WITH the stream -- off the submit path since the
-    // 提交即 POST budget: the run's own recording needs it within ~1.5s
+    // submit-posts-immediately budget: the run's own recording needs it
+    // within ~1.5s
     // anyway (the evt flush), and an early boot means the model's first
     // live-recall call finds a warm store instead of the 5s race
     void pg().catch(() => {});
@@ -671,7 +673,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       // layer: the corpus titles (history_sources/history_topics), the
       // user's uploaded FILE heads (the no-research writer path's only
       // reader -- url-less document rows), and the memory snapshot.
-      // 提交即 POST: the reads race the budget -- a cold store's boot
+      // SUBMIT-POSTS-IMMEDIATELY: the reads race the budget -- a cold
+      // store's boot
       // degrades to a metadata-less POST (the server tolerates every
       // field missing) instead of holding the submit hostage; the boot
       // keeps running for the run's own recording.
@@ -861,7 +864,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       .slice(0, 12);
     const threadLedger = facts.length || gaps.length ? { facts, gaps } : undefined;
     let merged = attachments;
-    // 提交即 POST: the attachment inheritance races the same budget -- a
+    // SUBMIT-POSTS-IMMEDIATELY: the attachment inheritance races the same
+    // budget -- a
     // cold store skips the inherited files for THIS run (the manual
     // attachments still ride; nothing is lost from the store)
     const prior = await withBudget(
@@ -974,7 +978,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     );
   };
 
-  /** Continue an INTERRUPTED research (the failed box's 继续 button): the
+  /** Continue an INTERRUPTED research (the failed box's continue button): the
       SAME run resumes in place -- the dead attempt's ctx checkpoint (its
       EXACT conversation) rides the request back and the server rebuilds
       its loop state from it (the [n] registry reseeds from the stored
@@ -1004,7 +1008,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     // stopped pill's primary action (the buttons show on totalCalls > 0,
     // which a called-but-unanswered research satisfies).
     continuingRef.current = true;
-    // 继续 resumes THE RUN's own shape
+    // the continue path resumes THE RUN's own shape
     const mode: AiSearchMode = last.mode;
     void (async () => {
       const runId = `${threadIdRef.current}:${last.runNo}`;
@@ -1088,8 +1092,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       if ((mode === "report" || mode === "deck") && last.outline?.sections.length) {
         // the interrupted report/deck's TOC travels back: the server
         // restores it instead of re-minting a different skeleton mid-thread
-        // (the template name rides along -- the 输出结构 card keeps its
-        // identity face across the resume)
+        // (the template name rides along -- the output-structure card keeps
+        // its identity face across the resume)
         resume.outline = {
           title: last.outline.title,
           subtitle: last.outline.subtitle,
@@ -1342,7 +1346,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       background run may still be researching), then the journal (the
       run settled unattended).  Both consume through the shared fold, so
       the interrupted run wakes up live and completes in place; both
-      missing leaves the interrupted state as it was (the 继续 path's
+      missing leaves the interrupted state as it was (the continue path's
       business).  Runs whose stored rows predate the wire-seq persistence
       cannot be recovered -- there is no dedup base for a replay. */
   const recoverAfterReload = (

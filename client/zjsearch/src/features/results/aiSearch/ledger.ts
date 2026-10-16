@@ -12,7 +12,8 @@ import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
  * (and changed) without wading through the wire plumbing.
  */
 
-/** Parse the clarify answer text ("1. Question：Answer" lines + a trailing
+/** Parse the clarify answer text ("1. Question<sep>Answer" lines -- the separator
+    may be a fullwidth colon -- plus a trailing
     free-text note) into Q/A pairs -- the same grammar the rail's
     ClarifySegment renders. */
 export function parseClarifyPairs(text: string): Array<{ q: string; a: string }> {
@@ -189,8 +190,8 @@ export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGa
   ).slice(0, 2000);
 }
 
-/** The gap-driven follow-up's composed message (the 未决缺口 card's
-    继续调研 action): the localized lead line + one bullet per open gap.
+/** The gap-driven follow-up's composed message (the open-gaps card's
+    continue-research action): the localized lead line + one bullet per open gap.
     A plain string -- the follow-up POST takes free text, and the new
     run's thread_ledger handoff (useAiSearch.followup already harvests
     the thread's open gaps) carries the questions into the server's

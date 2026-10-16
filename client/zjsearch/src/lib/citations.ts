@@ -14,7 +14,7 @@
     renumbers its citations [1..N] in FIRST-CITATION order -- the human-
     report convention -- via `buildCitationMap` + the map-taking
     `citeToLinks`; the tail rows come from `citedSourceRows` in the SAME
-    order, so body and 引用来源 always agree.  The stored event log keeps
+    order, so body and the Sources tail always agree.  The stored event log keeps
     global numbers (replays, the continue contract and the rail's #n
     cards are untouched); the map is a render-time view, and the
     local→global translation is the call site's one lambda
@@ -114,7 +114,7 @@ export function citedOrder(map: CitationMap): number[] {
 
 /** The cited rows in first-citation order, each carrying its local
     label -- the document tail's own data (print, markdown exports, the
-    inspector's 来源 card).  Rows match by their `n` field, falling back
+    inspector's Sources card).  Rows match by their `n` field, falling back
     to the positional index for n-less arrays; an unmatched slot drops. */
 export function citedSourceRows<C extends { n?: number }>(map: CitationMap, rows: C[]): Array<C & { local: number }> {
   const out: Array<C & { local: number }> = [];

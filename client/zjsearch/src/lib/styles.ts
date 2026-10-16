@@ -55,7 +55,7 @@ export const SEGMENT_IDLE = "text-ink-2 hover:bg-surface-2 hover:text-ink";
 export const SEGMENT_SM =
   "flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] transition-colors";
 
-/** Results meta-row toggle (12px tier: 「found N results」, 「took X s」, the
+/** Results meta-row toggle (12px tier: "found N results", "took X s", the
     AI trigger): a borderless text button that raises its ink on hover. */
 export const META_TOGGLE = "inline-flex min-h-6 items-center gap-1 transition-colors hover:text-ink";
 

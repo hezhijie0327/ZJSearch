@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-// 幻灯片编译（marp-core，Marpit 方言的超集）——ZJBlog tools/deck.ts 的孪生
-// 文件（DESIGN.md §5.2 家族契约：同一编译管线跑两个站点，内核版本对钉，
-// 主题 = deckTheme.css 孪生）。本侧差异即「站点缝」的取值：模型内容
-// （html: false——raw HTML 转义为可见文本，注入的标签不会执行）、无 shiki
-// （代码 fence 保留转义代码块）、无本地文件系统（imageSizes 关）、独立
-// deck（标题不降级）。方言边界与产物约定见 ZJBlog 侧文件头注：已桥接
-// mermaid（占位容器 + 播放器挂渲染器）、数学 KaTeX、callouts、==mark==、
-// emoji、任务清单、定义列表；Typora sequence/flow 翻译是博客构建期专属，
-// 本侧方言不教也不接。
+// Slide compilation (marp-core, a superset of the Marpit dialect) — the twin
+// of ZJBlog's tools/deck.ts (DESIGN.md §5.2 family contract: one compilation
+// pipeline runs on both sites, kernel versions pinned in lockstep, theme =
+// the deckTheme.css twin).  This side's differences are exactly the "site
+// seam" values: model content (html: false -- raw HTML is escaped into
+// visible text, injected tags never execute), no shiki (code fences stay
+// escaped code blocks), no local filesystem (imageSizes off), standalone
+// deck (headings are not demoted).  See the ZJBlog side's file header for
+// the dialect boundary and output contract: bridged already are mermaid
+// (placeholder container + the player mounting a renderer), KaTeX math,
+// callouts, ==mark==, emoji, task lists, definition lists; the Typora
+// sequence/flow translation is blog-build-time only -- this side's dialect
+// neither teaches nor accepts it.
 //
-// 产物约定（与 DeckView.tsx、printDocument 三方对齐）：
-//   - section 的 id 一律剥掉换成 data-slide（多个 part 同页会撞
-//     duplicate-id 审计）；演讲者备注（HTML 注释）注入每页 .deck-notes；
-//   - 模型内容禁 raw HTML：html:false 下 marpit 指令注释与备注解析不受
-//     影响（实测确认），注入的标签渲染为可见转义文本——信任模型。
+// Output contract (three-way alignment with DeckView.tsx and printDocument):
+//   - every section id is stripped and replaced with data-slide (multiple
+//     parts on one page would trip the duplicate-id audit); speaker notes
+//     (HTML comments) are injected into each page's .deck-notes;
+//   - model content forbids raw HTML: with html:false the marpit directive
+//     comments and notes parsing are unaffected (verified live), injected
+//     tags render as visible escaped text -- trust the model.
 
 import { Marp } from "@marp-team/marp-core";
 import { mark } from "@mdit/plugin-mark";
@@ -24,40 +30,51 @@ import { deckCallouts } from "./deckCallouts.ts";
 import deckThemeCss from "./deckTheme.css?raw";
 
 export interface DeckResult {
-  /** 逐页 section HTML（含 data-slide 标号，无容器） */
+  /** Per-page section HTML (with data-slide numbering, no wrapper) */
   slides: string[];
-  /** marpit 生成的完整样式（主题 scoping 到 div.marpit > section + 归一化，
-   *  含 @page 1280×720——打印纸面据此逐页 break） */
+  /** The full stylesheet marpit generated (theme scoped to div.marpit > section
+   *  + normalization, including @page 1280×720 -- the print paper breaks
+   *  per page on it) */
   css: string;
   count: number;
 }
 
-/** 站点缝（DESIGN.md §5.2 家族契约，ZJBlog tools/deck.ts DeckCompileOptions
- *  的孪生）：缺省值 = 本站行为（模型内容、无 shiki、无图尺寸、标题保留）。 */
+/** The site seam (DESIGN.md §5.2 family contract, the twin of ZJBlog
+ *  tools/deck.ts's DeckCompileOptions): defaults = this site's behavior
+ *  (model content, no shiki, no image sizes, headings kept). */
 export interface DeckCompileOptions {
-  /** 源内 raw HTML：true = 可信作者直通（博客侧）；false = 转义为可见文本
-   *  （模型内容——指令注释与演讲者备注的解析不受影响，实测确认） */
+  /** Raw HTML in the source: true = trusted-author passthrough (blog side);
+   *  false = escaped into visible text (model content -- the directive
+   *  comments and speaker notes parsing is unaffected, verified live) */
   html?: boolean;
-  /** 代码 fence 高亮器（吃解码后的代码，返回 HTML）；缺省保留 markdown-it
-   *  默认形态（转义代码块）——博客侧传站内 shiki 双主题 pass */
+  /** Code fence highlighter (takes decoded code, returns HTML); the default
+   *  keeps markdown-it's default shape (escaped code blocks) -- the blog
+   *  side passes its in-site shiki dual-theme pass */
   highlight?: (lang: string, code: string) => string;
-  /** 站内图注入固有尺寸（博客侧的 unsized-images 审计）；运行时渲染器
-   *  没有本地文件系统，本站恒关 */
+  /** Inject intrinsic sizes for in-site images (the blog side's
+   *  unsized-images audit); the runtime renderer has no local filesystem,
+   *  always off on this site */
   imageSizes?: boolean;
-  /** 标题整体降一级（博客侧 h1 让给文章标题）；独立 deck 保留作者层级 */
+  /** Demote every heading one level (the blog side gives h1 to the article
+   *  title); a standalone deck keeps the author's hierarchy */
   demoteHeadings?: boolean;
 }
 
-// 内核参数把 marp-core 调高的默认值全部钉回 Marpit 语义——DeckView 与打印
-// 契约建立在普通 <section> 流上：inlineSVG 关、breaks/linkify 关、标题不产
-// id（duplicate-id 审计）、不注入浏览器 helper <script>；fence 高亮让回
-// markdown-it 默认形态（内置 hljs 的 class 形态吃不进占位桥接正则）。
+// The kernel options pin every default marp-core raised back to Marpit
+// semantics -- the DeckView and print contracts are built on a plain
+// <section> flow: inlineSVG off, breaks/linkify off, headings produce no
+// id (duplicate-id audit), no browser helper <script> injected; fence
+// highlighting falls back to markdown-it's default shape (the built-in
+// hljs class shape does not fit the placeholder bridging regex).
 //
-// 双实例：开数学的实例产 HTML；marp-core 只要开着数学就会把整套 KaTeX CSS
-// （@font-face 指向 jsDelivr CDN）追加进渲染 css，而页面已随结果页样式装入
-// katex.min.css（AiSummary 的静态 import），deck css 不需要也不该重复背它
-// ——css 与内容无关，用 math:false 的孪生实例空渲染取纯主题 css。实例按
-// (math × html) 组合惰性缓存，工厂保证同组合配置不漂移。
+// Two instances: the math-enabled instance produces HTML; as soon as math
+// is on, marp-core appends the whole KaTeX CSS (@font-face pointing at the
+// jsDelivr CDN) to the rendered css, while the page already loads
+// katex.min.css with the results-page styles (AiSummary's static import) --
+// the deck css neither needs nor should carry it twice.  CSS is
+// content-independent, so an empty render on the math:false twin instance
+// yields the pure theme css.  Instances are lazily cached per (math × html)
+// combination; the factory keeps the same combination's config drift-free.
 function createMarp(math: boolean, html: boolean): Marp {
   const marp = new Marp({
     inlineSVG: false,
@@ -108,8 +125,9 @@ function decodeEntities(text: string): string {
   return el.value;
 }
 
-/** 单页后处理：标题降级（可选）→ mermaid 占位 / fence 高亮 → 剥 id 加
- *  data-slide → 注入演讲者备注。站点缝经 options 生效。 */
+/** Per-slide post-processing: heading demotion (optional) → mermaid
+ *  placeholder / fence highlight → strip ids, add data-slide → inject
+ *  speaker notes.  The site seam applies via options. */
 function postProcessSlide(
   page: string,
   index: number,
@@ -118,7 +136,8 @@ function postProcessSlide(
 ): string {
   let html = page;
   if (options.demoteHeadings) {
-    // 页面 h1 属文章标题，幻灯片页题从 h2 起（博客侧；本站独立 deck 保留层级）
+    // the page h1 belongs to the article title, slide page titles start at
+    // h2 (blog side; this site's standalone decks keep the hierarchy)
     html = html.replace(
       /<(\/?)h([1-5])(?=[\s>])/g,
       (_match, slash: string, level: string) => `<${slash}h${Number(level) + 1}`,
@@ -128,23 +147,27 @@ function postProcessSlide(
     /<pre><code(?: class="language-([\w#+.-]+)")?>([\s\S]*?)<\/code><\/pre>/g,
     (match, lang: string | undefined, code: string) => {
       const decoded = decodeEntities(code);
-      // mermaid 走站内同款占位容器：DeckView 挂 MermaidBlock 惰性渲染，
-      // 打印浅色联动自动生效（语法与答案词汇表一致）
+      // mermaid rides the site's placeholder container: DeckView mounts
+      // MermaidBlock for lazy rendering, and the print light-mode coupling
+      // applies automatically (same grammar as the answer pipeline's)
       if (lang === "mermaid") {
         return `<div class="mermaid-placeholder" data-chart="${escapeAttr(decoded)}"></div>`;
       }
       return options.highlight ? options.highlight(lang ?? "", decoded) : match;
     },
   );
-  // 任务清单复选框纯装饰，补 aria-hidden（与答案管线 remark 链同款）
+  // task-list checkboxes are pure decoration, add aria-hidden (same as the
+  // answer pipeline's remark chain)
   html = html.replace(/<input((?:(?!aria-hidden)[^>]*)?type="checkbox"[^>]*)>/g, '<input aria-hidden="true"$1>');
   html = html.replace(/^<section\b([^>]*)>/, (_match, attrs: string) => {
     const cleaned = attrs.replace(/\s+id="[^"]*"/g, "");
     return `<section data-slide="${index + 1}"${cleaned}>`;
   });
-  // 正文包一层 .deck-body：DeckView 的溢出适配（deckFit，ZJBlog 孪生）对它
-  // 做等比缩放 + 宽度补偿——固定 720px 画布上超高的页整页缩小落进画布，
-  // 而不是被 overflow 裁掉。备注 aside 在 wrapper 之外（注入发生在其后）。
+  // the body is wrapped in .deck-body: DeckView's overflow adaptation
+  // (deckFit, the ZJBlog twin) applies uniform scaling + width compensation
+  // to it -- an over-tall page shrinks whole into the fixed 720px canvas
+  // instead of being clipped by overflow.  The notes aside sits outside the
+  // wrapper (injection happens after it).
   html = html.replace(
     /^(<section\b[^>]*>)([\s\S]*)<\/section>\s*$/,
     (_match, open: string, inner: string) => `${open}<div class="deck-body">${inner}</div></section>`,
@@ -156,9 +179,10 @@ function postProcessSlide(
   return html;
 }
 
-/** Markdown（Marpit 方言）→ 逐页 HTML + 主题 CSS。模型输出是半可信的：本
- *  函数 fail-closed（编译错误上抛），DeckView 捕获后降级为 markdown 视图，
- *  不让一张坏卡片杀掉整个回答。 */
+/** Markdown (Marpit dialect) → per-page HTML + theme CSS.  Model output is
+ *  semi-trusted: this function fails closed (compile errors propagate),
+ *  DeckView catches and degrades to the markdown view -- one bad card never
+ *  kills the whole answer. */
 export function compileDeck(markdown: string, options: DeckCompileOptions = {}): DeckResult {
   const resolved: {
     html: boolean;
@@ -171,8 +195,10 @@ export function compileDeck(markdown: string, options: DeckCompileOptions = {}):
     imageSizes: options.imageSizes ?? false,
     demoteHeadings: options.demoteHeadings ?? false,
   };
-  // marpit 的 front-matter 插件要求指令块位于文档第 0 个字符——前导空白
-  // 会让指令块漏解析，`---` 被当成 markdown 渲染（ZJBlog 侧实测）
+  // marpit's front-matter plugin requires the directive block at the
+  // document's very first character -- leading whitespace makes the
+  // directive block miss parsing and `---` render as markdown (verified on
+  // the ZJBlog side)
   const source = markdown.replace(/^\s+/, "");
   const marp = getMarp(true, resolved.html);
   const { html: pages, comments } = marp.render(source, { htmlAsArray: true });

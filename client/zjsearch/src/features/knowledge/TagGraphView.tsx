@@ -679,8 +679,8 @@ export function TagGraphView({
         />
       ) : (
         <div className="relative mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
-          {/* the ONE band language: 「图谱 · N」 over the canvas (the tabs'
-              bodies all open with a labeled band) */}
+          {/* the ONE band language: a "graph · N" label band over the canvas
+              (the tabs' bodies all open with a labeled band) */}
           <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
             <p className="text-xs font-medium text-ink-3">
               {t("knowledge_graph")} · {graph.nodes.length}

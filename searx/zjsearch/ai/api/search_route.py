@@ -435,7 +435,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # perfectly clear and still must not run on a guess -- one bundled
     # noul let clear-but-risky queries through.  The gate itself stays as
     # the second opinion for everything ambiguous enough to reach it; the
-    # pre-screen's verdict + spend join the 决策结果 card either way.
+    # pre-screen's verdict + spend join the Decisions card either way.
     clarify_worth_asking = True
     pre_entry: dict[str, t.Any] | None = None
     if research_needed and clarify_state == "ask" and not history:
@@ -528,8 +528,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # shared loop (one streamed write turn whose prose IS the answer).
         # THE RECALL FALLBACK: the client's pre-run recall may have surfaced
         # the user's OWN uploaded files (url-less file entries) -- a
-        # write-classified question that actually points at them ("从我的
-        # 框架文件里找 X" misread as writing) still reaches the material:
+        # write-classified question that actually points at them ("find X
+        # in my framework files" misread as writing) still reaches the
+        # material:
         # the recalled heads ride the writer's <attached_file> channel,
         # the same block a real request attachment uses.  Request
         # attachments win when present (no mixing of the two channels).
@@ -573,9 +574,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             return _search(degraded=True)
         return response
 
-    # 万物皆工具: the task list registers for EVERY mode -- the mode's
-    # BEHAVIOR note (speed's "do not bother") shapes its use, the surface
-    # never gates it
+    # everything is a tool: the task list registers for EVERY mode -- the
+    # mode's BEHAVIOR note (speed's "do not bother") shapes its use, the
+    # surface never gates it
     register_tasks = True
     research_q = (standalone_question(cfg, q, history, lang, account=account) if history else "") or q
     depth_probe_entry: dict[str, t.Any] | None = None
@@ -745,7 +746,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # see the researcher's prompt blocks, so every attached file ALSO
         # lands in the RUN CORPUS as uncited chunks -- the per-section pack
         # then retrieves exactly the rule lines that section needs (a
-        # RULE-CCM-02 row matches the 管线/Spec-in section's query).  The
+        # RULE-CCM-02 row matches the pipeline/Spec-in section's query).  The
         # single-write writer already carried the binding note; without this
         # the report body could never apply the framework it was built on.
         for file in state.attached_files:
@@ -763,7 +764,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # retrieve them again; the inline [n]s resolve against the reseeded
         # registry) and give the single-write writer a bounded feed.
         # Without this a write-direct resume (an interrupted WRITER phase
-        # continued, or a settled run's 重新生成) writes from nothing.
+        # continued, or a settled run's regenerate) writes from nothing.
         fed = 0
         for message in resume["messages"]:
             if message.get("role") != "tool":
@@ -797,7 +798,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     else:
         outline_entry = None
     # the PRE-FLIGHT verdicts surface BEFORE the loop's first event (the
-    # 决策结果 card opens with them): the clarify pre-screen, the depth
+    # Decisions card opens with them): the clarify pre-screen, the depth
     # probe and the outline gate -- each already judged while the client
     # watched the boot skeleton
     preflight = [entry for entry in (pre_entry, depth_probe_entry, outline_entry) if entry]
@@ -811,7 +812,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     past_ref: list[dict[str, t.Any]] = []
 
     def _take_deck() -> bool | None:
-        """The rail's shape-flip channel: the pending 报告|演示文稿 pick
+        """The rail's shape-flip channel: the pending report|deck pick
         consumed at the write boundary (``None`` = no flip -- the
         request-time shape stands)."""
         if handle is None:
@@ -820,10 +821,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         return None if shape is None else shape == "deck"
 
     def _take_template(deck: bool) -> dict[str, t.Any] | None:
-        """The rail's 输出结构 channel: consume the ControlBox's pending
-        template and RE-MINT the outline from it right here (the same
-        adaptation gate the route-time outline used -- question, clarified
-        direction and attachment heads all apply); ``deck`` is the
+        """The rail's output-structure channel: consume the ControlBox's
+        pending template and RE-MINT the outline from it right here (the
+        same adaptation gate the route-time outline used -- question,
+        clarified direction and attachment heads all apply); ``deck`` is the
         boundary-resolved shape (a run-time flip re-mints in the flipped
         dialect).  ``None`` = no pick."""
         if handle is None:
@@ -910,7 +911,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the same run).  EVERY research run LINGERS (the owner's default,
     # 2026-10-14): a closed tab never wraps it -- the run researches
     # until the ledger closes (the stall/runaway guards still bound it),
-    # only the explicit stop/收尾 directives end it early, and the
+    # only the explicit stop/wrap-up directives end it early, and the
     # journal keeps the ending for the late collector across restarts
     # and beyond the terminal TTL.
     handle = run_host.register(linger=True)
@@ -1070,7 +1071,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         outline_title=str(outline["title"]) if outline else None,
     )
     # the pre-flight verdicts + the attachment receipt precede the loop's
-    # first event (the 决策结果 card opens with them) -- a FLAT event list:
+    # first event (the Decisions card opens with them) -- a FLAT event list:
     # every element is ONE wire event dict (the decisions batch is an
     # element, not a wrapper)
     driver_preamble = ([{"e": "decisions", "items": preflight}] if preflight else []) + (

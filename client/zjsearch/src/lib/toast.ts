@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 /**
- * Imperative floating feedback pill — the shared 「已复制」/「已保存」 language:
+ * Imperative floating feedback pill — the shared "Copied"/"Saved" language:
  * a rounded pill fixed at the bottom of the viewport, stacked when several
  * fire together, auto-dismissed after a beat.  Every copy action confirms
  * through `tone: "ok"`; `accent` covers neutral notices and `danger` the

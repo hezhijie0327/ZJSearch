@@ -20,17 +20,17 @@ interface EditingTemplate {
   sections: Array<{ title: string; brief: string; questions: string; optional: boolean }>;
 }
 
-/** The template MANAGER (the knowledge drawer's 模板 tab): user
+/** The template MANAGER (the knowledge drawer's template tab): user
     templates live as PGlite kind=template rows (lib/kb/templates.ts) --
     this edits them with a STRUCTURED form (name + shape + section rows),
-    not a JSON dump: pick the output shape (报告=FileText /
-    演示文稿=Presentation, the locked icon split), add a section, retitle,
+    not a JSON dump: pick the output shape (report=FileText /
+    deck=Presentation, the locked icon split), add a section, retitle,
     mark optional, remove.  The saved shape is exactly what the request
     body carries, so an edited template and a preset reach the server
     through the same adaptation gate.  (The PICK itself is the run rail's
-    输出结构 card -- management is library work, the pick is a run-time
-    decision.)  The list filters by shape and searches names AND section
-    titles. */
+    output-structure card -- management is library work, the pick is a
+    run-time decision.)  The list filters by shape and searches names AND
+    section titles. */
 export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => void; search?: string }) {
   const t = useT();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
@@ -78,7 +78,7 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
       sections: template.sections.map((section) => ({
         title: section.title,
         brief: section.brief,
-        questions: section.key_questions.join("、"),
+        questions: section.key_questions.join(", "),
         optional: Boolean(section.optional),
       })),
     });
@@ -113,8 +113,8 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
     return (
       <div className="space-y-6 animate-fade-in">
         <Card>
-          {/* the band carries the actions: a long form keeps 保存 reachable
-              without scrolling to its tail */}
+          {/* the band carries the actions: a long form keeps the save action
+              reachable without scrolling to its tail */}
           <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
             <p className="text-xs font-medium text-ink-3">{editing.id ? t("template_edit") : t("template_new")}</p>
             <div className="ms-auto flex items-center gap-2">
@@ -290,8 +290,9 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
   return (
     <div className="space-y-6 animate-fade-in">
       <Card>
-        {/* the ONE band language: 「模板 · N」 with the action at its right
-            edge -- same anatomy as the memory tab's band */}
+        {/* the ONE band language: a "templates · N" label band with the
+            action at its right edge -- same anatomy as the memory tab's
+            band */}
         <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
           <p className="text-xs font-medium text-ink-3">
             {t("knowledge_tab_templates")} · {shown.length}

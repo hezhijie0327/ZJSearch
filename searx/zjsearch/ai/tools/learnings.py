@@ -5,7 +5,7 @@
 v2 turns dzhng's append-only learnings into a ledger the model REvises:
 facts carry identity (``supersedes`` / ``retracts`` name earlier fact
 ids) and the ledger carries a GAPS partition -- the open questions the
-research still owes an answer to.  查缺补漏 is the loop's engine: the
+research still owes an answer to.  Gap-closing is the loop's engine: the
 writer reads the facts, the next rounds chase the gaps, and the run
 ends when the ledger closes (subtasks covered, gaps answered or
 explicitly abandoned), not when the model got bored.

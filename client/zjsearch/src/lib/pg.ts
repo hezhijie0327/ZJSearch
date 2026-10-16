@@ -188,7 +188,7 @@ async function bootMemory(): Promise<Pg> {
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_textsearch");
   await db.query("CREATE EXTENSION IF NOT EXISTS pg_trgm");
   // the degraded store serves the SAME surfaces (the whole app reads the
-  // one schema) -- without this its first query answers 「no such table」
+  // one schema) -- without this its first query answers "no such table"
   await createSchema(db);
   return db;
 }
@@ -358,7 +358,7 @@ async function createSchema(db: Pg): Promise<void> {
     updated   double precision NOT NULL DEFAULT 0,
     pinned    integer NOT NULL DEFAULT 0
   )`);
-  // v5.1: the thread directory carries its report count (the 报告 badge +
+  // v5.1: the thread directory carries its report count (the Reports badge +
   // the directory's report filter read it; idempotent for existing DBs)
   await db.query("ALTER TABLE thread_head ADD COLUMN IF NOT EXISTS reports integer NOT NULL DEFAULT 0");
   // the manual-rename lock: a user-renamed thread's title survives every

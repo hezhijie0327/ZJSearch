@@ -75,7 +75,7 @@ export function CategoryTabs({ globals, selected, onSelectionChange, onSearch, w
   const overflowTabs = tabs.length <= FLAT_TAB_LIMIT ? [] : tabs.slice(FLAT_TAB_LIMIT - 1);
   const foldedSelected = overflowTabs.filter((category) => selected.includes(category));
   const label = (category: string) => categoryLabel(category, t);
-  // trigger mirrors the folded selection: "更多" -> "科学" -> "科学 +1" (the
+  // trigger mirrors the folded selection: "More" -> "Science" -> "Science +1" (the
   // same +N language as the engine pills), accent while anything is selected
   const firstFolded = foldedSelected[0];
   const moreLabel =

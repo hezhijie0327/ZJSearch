@@ -323,7 +323,8 @@ export interface StockAnswerPayload {
   kind: "stock";
   symbol: string;
   name: string;
-  /** human market label from the data source (美股 / 沪深A股 / 港股 ...) */
+  /** market label (data-source pass-through for suggestion quotes; the
+      tx-symbol path mints SH-A / SZ-A / BJ-A / HK / US) */
   market: string;
   /** exchange acronym from the data source (NASDAQ / SH / ...) */
   exchange: string;

@@ -209,15 +209,16 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                 onDeleteRun={(runNo) => aiSearch.deleteRun(runNo)}
                 onFallback={onRunFallback}
                 onGapsFollowup={(gaps) => {
-                  // the 未决缺口 card's 继续调研: a follow-up run on the
-                  // run's open gaps (the thread ledger hands them over)
+                  // the open-gaps card's continue-research action: a
+                  // follow-up run on the run's open gaps (the thread ledger
+                  // hands them over)
                   setFollowupQuery("");
                   aiSearch.followup(composeGapsFollowup(gaps, t("ai_gaps_followup_body")), aiLang, researchMode);
                 }}
                 onRegenerate={() => {
                   // in-place re-run of the last run -- the same semantic the
-                  // takeover's 重新生成 carries (the button was a silent
-                  // no-op here once)
+                  // takeover's regenerate action carries (the button was a
+                  // silent no-op here once)
                   aiSearch.retry(aiLang, researchMode, "");
                 }}
                 onRelated={(question) => {

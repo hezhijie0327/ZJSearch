@@ -73,7 +73,7 @@ export function useHotkeys(layout: "default" | "vim", target: HotkeyTarget, onHe
         return;
       }
 
-      // the CJK punctuation mode of Chinese IMEs emits the full-width "？"
+      // the CJK punctuation mode of Chinese IMEs emits the full-width question mark
       if (key === "?" || key === "？") {
         event.preventDefault();
         helpRef.current();

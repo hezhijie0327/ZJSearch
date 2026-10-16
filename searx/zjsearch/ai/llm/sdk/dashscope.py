@@ -459,7 +459,7 @@ class DashscopeSdk:
         ``params.dimension``, DashScope's own name for it; the passthrough
         block carries ``text_type`` / ``output_type`` / ``instruct`` when a
         model wants them).  The usage ``total_tokens`` rides along (the
-        embeddings用量 stats).  ``surface: multimodal`` routes through
+        embeddings usage stats).  ``surface: multimodal`` routes through
         MultiModalEmbedding instead -- its input items are
         ``{"text": ...}`` parts and its results key on ``index`` (the text
         class keys on ``text_index``); there the dimension kwarg goes out

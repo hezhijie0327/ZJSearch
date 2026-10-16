@@ -15,7 +15,7 @@ keeps going, and the run can be reattached with
 Detach policy (2026-10-14): EVERY research run LINGERS -- a run with
 zero subscribers is never auto-wrapped; a closed tab means "collect
 later", and the run researches until the ledger closes (the stall and
-runaway guards still bound it) or the user's explicit stop/收尾 lands.
+runaway guards still bound it) or the user's explicit stop/wrap-up lands.
 Only a ``linger=False`` caller (none today) gets the old grace-window
 auto-wrap back.  A terminal handle is retained for a short TTL so a
 late attacher can still fetch the true ending; then the sweep drops it
@@ -51,7 +51,7 @@ so the grace never fires (the knob remains for a non-linger caller)."""
 
 TERMINAL_TTL = 3600.0
 """How long a finished handle stays fetchable for a late attach (the
-断点继续 upgrade: the true ending instead of a findings-handoff
+resume upgrade: the true ending instead of a findings-handoff
 restart)."""
 
 POLL_SLICE = 1.0
@@ -153,10 +153,10 @@ class ControlBox:
             return out
 
     def set_template(self, template: dict) -> None:
-        """The rail's 输出结构 control: one PENDING template for the write
-        boundary -- the synthesizer re-mints the outline from it before
-        the first section streams.  The latest write wins (a second set
-        before the boundary simply replaces it)."""
+        """The rail's output-structure control: one PENDING template for
+        the write boundary -- the synthesizer re-mints the outline from it
+        before the first section streams.  The latest write wins (a second
+        set before the boundary simply replaces it)."""
         with self._lock:
             self._pending_template = template
 
@@ -174,12 +174,12 @@ class ControlBox:
             self._pending_template = None
 
     def set_shape(self, shape: str) -> bool:
-        """The rail's 输出结构 shape flip (报告|演示文稿): one PENDING
-        output shape for the write boundary -- the synthesizer rebinds its
-        slide/report dialect before the first section streams.  Returns
-        whether the pending value CHANGED (the control endpoint steers the
-        researcher only on a real flip -- flip-flops must not burn guide
-        queue slots)."""
+        """The rail's output-structure shape flip (report|deck): one
+        PENDING output shape for the write boundary -- the synthesizer
+        rebinds its slide/report dialect before the first section streams.
+        Returns whether the pending value CHANGED (the control endpoint
+        steers the researcher only on a real flip -- flip-flops must not
+        burn guide queue slots)."""
         with self._lock:
             changed = self._pending_shape != shape
             self._pending_shape = shape
@@ -354,7 +354,7 @@ class RunHandle:
         return out
 
     def wrap(self) -> None:
-        """The user's 收尾 (wrap-up): the run finishes its round, then
+        """The user's wrap-up: the run finishes its round, then
         walks into the writer with the material gathered -- the same
         graceful exit the detach grace takes."""
         with self._lock:

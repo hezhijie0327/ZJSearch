@@ -3,63 +3,24 @@
 import { MapPin } from "lucide-react";
 import { CapChip } from "@/components/CapChip.tsx";
 import { cap } from "@/lib/format.ts";
-import { useLocale, useT } from "@/lib/i18n.ts";
+import { type StringKey, translateFor, useLocale, useT } from "@/lib/i18n.ts";
 import { CHIP, CHIP_HOVER, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import type { AnswerData, WeatherItem } from "@/lib/types.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 const MAX_SOURCES_SHOWN = 3;
 
-/** zh labels for the upstream weather condition ids (WeatherConditionType in
-    searx/weather.py); other locales render the prettified id.  The theme owns
-    these — the server ships the raw id only. */
-const WEATHER_CONDITION_ZH: Record<string, string> = {
-  "clear sky": "晴",
-  fair: "晴朗",
-  "partly cloudy": "局部多云",
-  cloudy: "多云",
-  fog: "雾",
-  "light rain": "小雨",
-  rain: "雨",
-  "heavy rain": "大雨",
-  "light rain showers": "小阵雨",
-  "rain showers": "阵雨",
-  "heavy rain showers": "强阵雨",
-  "light rain and thunder": "小雨有雷",
-  "rain and thunder": "雷雨",
-  "heavy rain and thunder": "大雨有雷",
-  "light rain showers and thunder": "小阵雨有雷",
-  "rain showers and thunder": "雷阵雨",
-  "heavy rain showers and thunder": "强雷阵雨",
-  "light sleet": "小雨夹雪",
-  sleet: "雨夹雪",
-  "heavy sleet": "大雨夹雪",
-  "light sleet showers": "小阵雨夹雪",
-  "sleet showers": "阵雨夹雪",
-  "heavy sleet showers": "强阵雨夹雪",
-  "light sleet and thunder": "小雨夹雪有雷",
-  "sleet and thunder": "雨夹雪有雷",
-  "heavy sleet and thunder": "大雨夹雪有雷",
-  "light sleet showers and thunder": "小阵雨夹雪有雷",
-  "sleet showers and thunder": "雷阵雨夹雪",
-  "heavy sleet showers and thunder": "强阵雨夹雪有雷",
-  "light snow": "小雪",
-  snow: "雪",
-  "heavy snow": "大雪",
-  "light snow showers": "小阵雪",
-  "snow showers": "阵雪",
-  "heavy snow showers": "强阵雪",
-  "light snow and thunder": "小雪有雷",
-  "snow and thunder": "雪有雷",
-  "heavy snow and thunder": "大雪有雷",
-  "light snow showers and thunder": "小阵雪有雷",
-  "snow showers and thunder": "雷阵雪",
-  "heavy snow showers and thunder": "强阵雪有雷",
-};
-
+/** zh labels ride the i18n catalogs (weather_cond_*); other locales render
+    the prettified condition id.  The theme owns the keys — the server ships
+    the raw id only; an id outside the catalog falls back to the prettified
+    form. */
 function conditionLabel(condition: string, locale: string): string {
   if (locale.startsWith("zh")) {
-    return WEATHER_CONDITION_ZH[condition] ?? condition;
+    const key = `weather_cond_${condition.replace(/ /g, "_")}` as StringKey;
+    const label = translateFor(locale)(key);
+    if (label !== key) {
+      return label;
+    }
   }
   return cap(condition);
 }
