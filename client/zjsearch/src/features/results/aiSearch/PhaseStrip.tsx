@@ -4,9 +4,10 @@ import { Check, CircleAlert, CircleStop } from "lucide-react";
 import type { AiSearchStage } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
 
-const ORDER: readonly AiSearchStage[] = ["plan", "research", "write"];
+const ORDER: readonly AiSearchStage[] = ["ideate", "plan", "research", "write"];
 
-const LABELS: Record<AiSearchStage, "ai_phase_plan" | "ai_phase_research" | "ai_phase_write"> = {
+const LABELS: Record<AiSearchStage, "ai_phase_ideate" | "ai_phase_plan" | "ai_phase_research" | "ai_phase_write"> = {
+  ideate: "ai_phase_ideate",
   plan: "ai_phase_plan",
   research: "ai_phase_research",
   write: "ai_phase_write",
@@ -43,10 +44,14 @@ export function PhaseStrip({
   // keeps its real position -- the segments before it read done, the
   // segment it died in wears the warning icon (a halt is not completion --
   // all green would lie)
-  const active = done ? ORDER.length : ORDER.indexOf(stage);
+  // the ideate run's strip is ITS OWN single segment -- rendering the
+  // three-segment research spine with two dead segments would read as a
+  // search that never searched
+  const order = stage === "ideate" ? (["ideate"] as readonly AiSearchStage[]) : ORDER;
+  const active = done ? order.length : order.indexOf(stage);
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs" role="status">
-      {ORDER.map((name, index) => {
+      {order.map((name, index) => {
         const isDone = done || (failed && index < active);
         const isFailedCurrent = failed && index === active;
         const isActive = !done && !failed && index === active;

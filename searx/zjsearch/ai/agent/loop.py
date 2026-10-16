@@ -487,6 +487,13 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         # entries; this spine only tells the user where they are)
         current_phase = "plan"
         yield {"e": "phase", "name": current_phase}
+    else:
+        # the DIRECT run's phase (the zero-tool case -- greeting, chat, a
+        # writing task): ONE ideate segment, the non-search path's own
+        # identity (Vane's "Brainstorming..." borrow) -- without it the
+        # run would show no strip at all and read as a broken search
+        current_phase = "ideate"
+        yield {"e": "phase", "name": current_phase}
         # the FIRST resume checkpoint: the seeded conversation is the only
         # copy of itself -- a process death before the first round
         # completes must still be continuable

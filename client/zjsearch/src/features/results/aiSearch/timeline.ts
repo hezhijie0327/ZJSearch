@@ -35,7 +35,7 @@ export type AiSearchMode = "speed" | "balanced" | "deep" | "report" | "deck";
 /** The run's macro stages (the wire's ``phase`` events -- Qwen Deep
     Research's spine): one value active at a time, the history kept for
     the run_summary record. */
-export type AiSearchStage = "plan" | "research" | "write";
+export type AiSearchStage = "ideate" | "plan" | "research" | "write";
 /** "awaiting": the clarify gate asked for the user's direction -- the run
     lives on until they answer (or skip) via submitClarify. */
 export type AiSearchPhase = "idle" | "streaming" | "awaiting" | "done" | "error";
@@ -686,7 +686,7 @@ export function applyEvent(
       // the macro-stage spine: one value active, the history kept (the
       // run_summary record replays it); unknown names ignore
       const name = String(event.name ?? "") as AiSearchStage;
-      if (!["plan", "research", "write"].includes(name)) {
+      if (!["ideate", "plan", "research", "write"].includes(name)) {
         return core;
       }
       const stages = run.stages[run.stages.length - 1] === name ? run.stages : [...run.stages, name];
