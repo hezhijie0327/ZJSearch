@@ -168,10 +168,10 @@ run 跑在 driver 线程,事件发布进 per-run handle(seq 戳缓冲 + 订阅�
 HTTP 响应只是第一个订阅者。
 
 - **detach ≠ 死亡**:断连后 run 完成本轮、停在轮边界;`POST
-  /zjsearch/ai/run/attach?after_seq=N` 重放同一个 run;超宽限窗
+  /zjsearch/ask/run/attach?after_seq=N` 重放同一个 run;超宽限窗
   (`detach_grace`,默认 90s,后台页 keepalive 心跳续期)优雅收尾——
   halt 注记进 settle,每个 run 都有真实终态;
-- **停止是指令**:`POST /zjsearch/ai/run/control {action}`;loop 以 1s
+- **停止是指令**:`POST /zjsearch/ask/run/control {action}`;loop 以 1s
   切片观察标志,被中断的 turn 是 `interrupted` 结局(不是 `died`);
 - **引导**:Enter 入队轮边界注入(`steer` 事件 drained,`<user_steering>`
   user 消息,优先于 continuation 注记);⚡/Shift+Enter 抢占(在飞 turn
@@ -205,7 +205,7 @@ HTTP 响应只是第一个订阅者。
 - **知识库**:PGlite worker(WASM Postgres + IndexedDB,主线程回退有
   预算护栏);schema v5 把 wire 日志(`run_event`)与查询面(投影)分
   表;混合召回 = BM25×向量 RRF + 标签图 0.6 + 命中标签一跳 0.4,头部过
-  rerank;标签三层(机械 derive → 运行后抽取器 → `/zjsearch/ai/tags`
+  rerank;标签三层(机械 derive → 运行后抽取器 → `/zjsearch/knowledge/tags`
   概念折叠)。经典搜索历史刻意不入库——知识库只记 AI 研究与 AI
   Overview 归档。
 
@@ -234,7 +234,7 @@ flowchart TB
   end
   ENG["搜索引擎"]
   LLMX["LLM 供应商"]
-  UI -- "POST /zjsearch/ai/search(NDJSON 事件流返回)" --> API
+  UI -- "POST /zjsearch/ask/search(NDJSON 事件流返回)" --> API
   API --> RUNS
   RUNS --> TOOLS
   RUNS --> AGENT

@@ -2189,7 +2189,7 @@ loses the event -- shipped bug).
   mode + task titles) at settle; the post-run extractor
   (`extract_insights` in ai/tools/memory.py -- ONE completion
   returns {facts, tags}); and `POST /zjsearch/knowledge/tags`
-  (api/tag_route.py, the AI Search token, embed-route shape) which
+  (api/tags_route.py, the AI Search token, embed-route shape) which
   folds batches of raw tags into 2-6 concept tags per row (language
   merge, host/noise drop).  Rows carry `meta.tnormed`; a failed
   normalization keeps raw tags.  Tags are a jsonb column + segmented

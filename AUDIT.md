@@ -87,7 +87,7 @@ pnpm add -D @biomejs/biome@<new pin>         # for exactly-pinned dev deps
 python — the three AI SDK transports live in requirements.txt as exact
 pins; bump only when the index is actually ahead, then reinstall, restart,
 and re-run the live AI test (their only consumers are the SDK factories in
-`searx/zjsearch/ai/infra/sdk/`).  The theme's other own pins (bm25s =
+`searx/zjsearch/ai/llm/sdk/`).  The theme's other own pins (bm25s =
 the reranker plugin, mcp = the tool-server bridge, html-to-markdown =
 the reader) follow the same rule, each with its area's regression: the
 §4 plugin matrix for bm25s, one real MCP tool call for mcp, one
@@ -144,7 +144,7 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | AI clarify / ask_user | an ambiguous query in quality/goal (live), or the mock's clarify fixture | the clarify modal with the 2-question form (提交 / 跳过); answering seeds a clarify step at the timeline head; a mid-research ask_user renders as a call row + the same modal |
 | AI memory | any researched run (live model) | stored facts ride the run's `<user_memory>` block; a `user_memory` save renders a memory row AFTER settle; the extractor's saves appear in the drawer's 记忆 tab |
 | Knowledge base (知识库) | header LibraryBig icon (`KnowledgeDrawer`) | four tabs (搜索 会话 来源 记忆); source rows carry favicons + ↗ open + the reading pane when web_reader read them + the ×N cross-session badge (N = past runs that referenced the url, from the PRE-run recall); EVERY delete (source/search/thread/memory) goes through one confirm dialog; the search box filters its tab; the keyword/semantic/hybrid modes come from the deployment (`history_search`) |
-| Thread page | `/zjsearch/ai/thread/<id>` direct boot + REFRESH | the run replays with its timeline; a refresh must NEVER flash 找不到该会话 (resume awaits the store fallback, not just the per-tab mirror) |
+| Thread page | `/zjsearch/ask/thread/<id>` direct boot + REFRESH | the run replays with its timeline; a refresh must NEVER flash 找不到该会话 (resume awaits the store fallback, not just the per-tab mirror) |
 | Print view | 📄 on a settled run, in EVERY theme (light/dark/black) | the print dialog opens IMMEDIATELY (no preview hop); the sheet is light on pure white in all themes; the live page never re-renders (no mermaid flash); the saved filename mirrors the MD export |
 | MD thread export | the export action on the run actions row | valid markdown: one `## ` per question, sources at the foot, `{{zjs-gallery:i}}` NEVER appears (each becomes its images' markdown figures) |
 | AI failure UX (overview) | point `zjsearch.llm.base_url` at a dead port | 502 body reason readable under the card's failed label |
@@ -264,7 +264,7 @@ import sys, re, json
 html = sys.stdin.read()
 m = re.search(r'<script id=\"page-data\" type=\"application/json\">(.*?)</script>', html, re.DOTALL)
 print(json.loads(m.group(1))['globals']['ai_search']['tk'])")
-curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ai/search' -H 'Content-Type: application/json' \
+curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ask/search' -H 'Content-Type: application/json' \
   -d "{\"q\":\"<question>\",\"tk\":\"$TOKEN\",\"mode\":\"balanced\",\"lang\":\"zh-CN\",
   \"past_research\":[{\"url\":\"https://example.com/a\",\"title\":\"A past page\",\"text\":\"remembered body\"}]}"
 
@@ -293,7 +293,7 @@ curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ai/search' -H 'Content-Type: app
   the ask branch emits the tool's call row BEFORE the ask event.
 - A greeting-style run skips research: `open` (kind write) → `answer`
   deltas → `settle`.
-- The overview endpoint `/zjsearch/ai/answer` streams the SAME event set
+- The overview endpoint `/zjsearch/ask/overview` streams the SAME event set
   (its token is `globals.ai.tk`); the `<think>` markers and the tail
   meta sentinel its card renders are synthesized CLIENT-side.
 - A stream that dies before its first content event answers plain-text
@@ -386,14 +386,14 @@ rules and the shared-token inventory from AGENTS.md, covering:
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped,
    `alt` on images, keyboard reachability.
 10. **Prompts (agentic)** — the shared prompt spine is
-   `searx/zjsearch/ai/runtime/spine.py` (identity / citation grammar / the
+   `searx/zjsearch/ai/prompts/spine.py` (identity / citation grammar / the
    full markdown surface / language directive / grounding fallback /
    opening rule / answer contract); the search preset's assembly lives in
-   `runtime/prompts.py` (`initial_messages`) — the spine fragments must be
+   `prompts/researcher.py` (`initial_messages`) — the spine fragments must be
    COMPOSED, never hand-copied (the drift this once caught: the search
    copy was missing task lists / strikethrough / the once-only LaTeX
    rule).  Round policy lives ONLY in the depth branches of
-   `runtime/profile.py` (a base-level round cap contradicts quality/goal —
+   `runs/profile.py` (a base-level round cap contradicts quality/goal —
    the four modes are budget/decomposition/output-shape differences on ONE
    loop, `SEARCH_MODES`/`CLARIFY_MODES` are the single facts).  The reply
    language follows the ACTIVE UI locale: the client resolves it to the
@@ -407,7 +407,7 @@ rules and the shared-token inventory from AGENTS.md, covering:
    (user-named engines only, e.g. `!baidu`), and the empty-result
    fallback (retry once without the filter).  Verify with composition
    asserts over `spine.build_messages` / `runtime.prompts.initial_messages`
-   / the tool spec in `runtime/tools.py`.
+   / the tool specs in `tools/web_search.py` + `tools/web_browser/spec.py`.
 
 ## 7.1 Round record — 2026-10 (post-multimodal-deferred full sweep)
 
