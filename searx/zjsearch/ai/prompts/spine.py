@@ -28,6 +28,7 @@ English, for the AI reply as much as for the interface.
 import datetime
 import textwrap
 import typing as t
+from zoneinfo import ZoneInfo
 
 # One row per SHIPPED i18n catalog (mirror of the client's CATALOGS
 # registry in src/lib/i18n/i18n.ts): catalog tag -> reply language name.
@@ -85,19 +86,35 @@ and a CJK-locale deployment would leak non-English weekdays into the
 English-only prompt layer."""
 
 
-def today_text() -> str:
-    """The date + weekday sentence body ("Friday, 2026-10-17") -- shared
-    by :func:`today_line` and the subagent's opener so every surface
-    speaks the date identically."""
-    now = datetime.date.today()
-    return f"{_WEEKDAYS[now.weekday()]}, {now.isoformat()}"
+def today_text(tz: str | None = None) -> str:
+    """The date + weekday sentence body ("Saturday, 2026-10-17 (Asia/
+    Shanghai, UTC+08:00)") -- shared by :func:`today_line` and the
+    subagent's opener so every surface speaks the date identically.
+    ``tz`` is the USER'S IANA zone (the browser's
+    ``Intl.DateTimeFormat().resolvedOptions().timeZone``): "today" is
+    the USER'S today -- a UTC server's Friday night is the CST user's
+    Saturday.  An unknown/absent zone falls back to the server's local
+    clock and says so, never pretending."""
+    zone = None
+    name = (tz or "").strip()[:64]
+    if name:
+        try:
+            zone = ZoneInfo(name)
+        except Exception:  # pylint: disable=broad-except
+            zone = None
+    now = datetime.datetime.now(zone) if zone else datetime.datetime.now()
+    day = f"{_WEEKDAYS[now.weekday()]}, {now.date().isoformat()}"
+    if zone:
+        offset = now.strftime("%z")
+        return f"{day} ({name}, UTC{offset[:3]}:{offset[3:]})"
+    return f"{day} (the server's local time)"
 
 
-def today_line() -> str:
+def today_line(tz: str | None = None) -> str:
     """The deterministic date block: the model must never guess the date
-    -- and the WEEKDAY grounds "this week" / business-day reasoning the
-    bare ISO date cannot."""
-    return block("today", f"Today is {today_text()}.")
+    -- and the WEEKDAY + USER'S TIMEZONE ground "this week" /
+    business-day / market-hours reasoning the bare ISO date cannot."""
+    return block("today", f"Today is {today_text(tz)}.")
 
 
 def citation_rules() -> str:
@@ -325,6 +342,7 @@ def answer_contract(
     role: str,
     shape: str | None = None,
     sources_note: str | None = None,
+    tz: str | None = None,
 ) -> list[str]:
     """The reader-facing answer spine EVERY answer surface speaks, in the
     cache-friendly order: the byte-stable blocks (role, identity, date,
@@ -334,7 +352,7 @@ def answer_contract(
     without a tier omit the shape.  Callers append their feature-specific
     blocks (follow-up fences, gallery contracts, research notes) and the
     conversation around it -- the spine is what must not drift."""
-    lines: list[str] = [role, identity(), today_line(), language_directive(lang)]
+    lines: list[str] = [role, identity(), today_line(tz), language_directive(lang)]
     if shape:
         lines.append(shape)
     lines.append(citation_rules())

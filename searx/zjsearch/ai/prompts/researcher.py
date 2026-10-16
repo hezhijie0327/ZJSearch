@@ -271,6 +271,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     memories_live: bool = False,
     mcp_servers: dict[str, str] | None = None,
     tool_notes: list[tuple[str, str]] | None = None,
+    tz: str | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -285,7 +286,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     is the WRITER's."""
     lines: list[str] = [
         _role(),
-        shared.today_line(),
+        shared.today_line(tz),
         shared.block(
             "step_notes",
             f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",

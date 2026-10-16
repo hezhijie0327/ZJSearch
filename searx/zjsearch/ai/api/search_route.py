@@ -485,6 +485,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # built-in engine is ready (zjsearch.browser): the reader lane, the
     # login/interaction escape hatch -- one tool surface
     browser_on = browser_config.ready()
+    # the USER'S IANA timezone (the browser's Intl API): "today" is the
+    # user's today -- every <today> block anchors to it; unknown/absent
+    # values degrade to the server's local clock (spine labels it)
+    user_tz = str(payload.get("timezone") or "").strip()[:64] or None
     # (the MCP bridge (zjsearch.mcp) and the disclosure surface assemble
     # with the toolset below: the discovery index covers the run's own
     # niche tools as well as the servers')
@@ -523,6 +527,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 direct=True,
                 image_parts=image_parts or None,
                 attached_files=writer_files,
+                tz=user_tz,
             ),
         )
         stream = _Ndjson(
@@ -637,6 +642,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 account=account,
                 attachments=outline_attachments,
                 deck=deck_requested,
+                tz=user_tz,
             )
         else:
             outline = report_outline.build_outline(
@@ -648,6 +654,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 attachments=outline_attachments,
                 prior_topics=prior_topics,
                 deck=deck_requested,
+                tz=user_tz,
             )
         if outline is None:
             logger.info("zjsearch_ask_search: outline gate failed -- falling back to the single write")
@@ -690,6 +697,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         cfg=cfg,
         account=account,
         disclosed_specs=disclosed_specs,
+        tz=user_tz,
     )
     state.question_held = research_q
     if resume is not None:
@@ -823,6 +831,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             attachments=outline_attachments,
             prior_topics=prior_topics,
             deck=deck,
+            tz=user_tz,
         )
 
     def assign_past_sources() -> list[dict[str, t.Any]]:
@@ -862,6 +871,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             relevance=await _relevance_order(research_q, state.feed, account=state.account),
             findings=state.facts,
             gaps=state.gaps,
+            tz=user_tz,
         )
 
     def continuation() -> str | None:
@@ -1007,6 +1017,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             thread_ledger=thread_ledger,
             mcp_servers=(mcp.server_instructions() or None) if mcp_tools else None,
             tool_notes=tool_notes or None,
+            tz=user_tz,
         )
 
     events = engine.run(

@@ -130,7 +130,7 @@ REPORT_SHAPE = spine.block(
 _SECTION_ROLE = 'You write one section of a research report, grounded in the numbered sources of THIS run.'
 
 
-def section_system(role: str, surface: str, shape: str) -> str:
+def section_system(role: str, surface: str, shape: str, tz: str | None = None) -> str:
     """The per-section synthesizer's system prompt, composed from the
     SHARED spine fragments -- a hand-copied <citations> here once drifted
     away from the citation grammar (the placement examples and the [*]
@@ -140,7 +140,7 @@ def section_system(role: str, surface: str, shape: str) -> str:
     return "\n".join(
         [
             role,
-            spine.today_line(),
+            spine.today_line(tz),
             spine.citation_rules(),
             spine.citation_discipline(surface),
             spine.figures_rule(),

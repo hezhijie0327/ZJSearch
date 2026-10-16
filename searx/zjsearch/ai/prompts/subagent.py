@@ -28,6 +28,7 @@ research goal)."""
 def subagent_messages(
     parsed: dict[str, str],
     lang: str,
+    tz: str | None = None,
     tool_notes: list[tuple[str, str]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The SUBAGENT's conversation opener: a compact researcher -- the
@@ -42,7 +43,7 @@ def subagent_messages(
             "role",
             'You are a research SUBAGENT. A lead researcher delegated one subtask to you; you have your own context window and report a compressed digest back.  Research ONLY your subtask.',
         ),
-        shared.today_line(),
+        shared.today_line(tz),
         shared.block(
             "delegation",
             f"""\

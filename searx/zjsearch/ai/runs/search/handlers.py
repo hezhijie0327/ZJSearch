@@ -1171,7 +1171,7 @@ section, do not re-type the numbers."""
             key,
             self._sub_seq,
             parsed,
-            subagent_messages(parsed, lang, tool_notes=tool_notes),
+            subagent_messages(parsed, lang, tz=getattr(self, "tz", None), tool_notes=tool_notes),
             child,
             ChildControl(),
         )

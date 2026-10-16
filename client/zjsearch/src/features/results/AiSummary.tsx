@@ -172,7 +172,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     };
     void fetchStream(
       "/zjsearch/ask/overview",
-      { context, images, lang, q, tk: capability.tk },
+      { context, images, lang, q, tk: capability.tk, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       (chunk) => {
         lineBuffer += chunk;
         const lines = lineBuffer.split("\n");

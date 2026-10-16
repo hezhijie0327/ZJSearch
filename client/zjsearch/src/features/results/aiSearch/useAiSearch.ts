@@ -704,6 +704,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         tk: capability.tk,
         q,
         lang,
+        // the browser's IANA zone: the server's <today> anchors to the
+        // USER'S clock (a UTC server's Friday night is the CST user's
+        // Saturday); the server falls back to its own clock when absent
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         // the UI's "report"/"deck" depths are the wire's deep mode + the
         // output-shape flag (the server's SEARCH_MODES stay the three
         // research depths; deck is the report machinery on the slide

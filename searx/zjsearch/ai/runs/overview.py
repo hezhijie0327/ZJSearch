@@ -94,7 +94,11 @@ def cap_lines(context: str) -> str:
 
 
 def build_answer_messages(
-    query: str, context: str, lang: str, image_parts: list[dict[str, t.Any]]
+    query: str,
+    context: str,
+    lang: str,
+    image_parts: list[dict[str, t.Any]],
+    tz: str | None = None,
 ) -> list[dict[str, t.Any]]:
     """The zero-tool single-turn conversation: the shared answer spine
     (plus the images note when attachments ride) and the user turn with
@@ -112,7 +116,7 @@ def build_answer_messages(
         them.  Synthesize ACROSS the sources -- never one summary per
         source, never a source list -- and lead with the answer.""",
     )
-    system = "\n".join(spine.answer_contract(lang, role, shape=spine.shape_ladder("speed")))
+    system = "\n".join(spine.answer_contract(lang, role, shape=spine.shape_ladder("speed"), tz=tz))
     if image_parts:
         system += "\n" + spine.block(
             "images",

@@ -91,6 +91,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     gaps: list[dict[str, t.Any]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
+    tz: str | None = None,
 ) -> list[dict[str, t.Any]]:
     """The WRITER's fresh conversation (Vane's writer): a system prompt of
     XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
@@ -130,6 +131,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             lang,
             role,
             shape=shared.shape_ladder(mode),
+            tz=tz,
             sources_note=shared.block(
                 "sources_note",
                 f"The numbered sources gathered for this question follow the question below.  [n] labels are global and contiguous; sources [1]..[{sources_base}] predate this thread's question; cite only sources visible in the context.",

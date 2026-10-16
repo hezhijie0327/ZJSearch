@@ -339,6 +339,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         cfg: dict[str, t.Any] | None = None,
         registry: SourcesRegistry | None = None,
         disclosed_specs: list[dict[str, t.Any]] | None = None,
+        tz: str | None = None,
     ):
         self.prefs = prefs
         self.user_plugins = user_plugins
@@ -378,6 +379,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # executor's discovery branch searches them beside the MCP
         # servers' tools
         self.disclosed_specs = disclosed_specs or []
+        # the USER'S IANA timezone (the report synthesizer's <today> and
+        # the subagents' openers anchor to the user's clock, not the
+        # server's)
+        self.tz = tz
         # the run's source registries (the [n] numbering, the two dedup
         # sets, the gallery whitelist) -- one object, see registry.py;
         # parallel SUBAGENTS share the PARENT's registry (injected), so

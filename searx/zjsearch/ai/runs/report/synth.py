@@ -122,6 +122,8 @@ def make_synthesizer(
     machinery (packed context, streaming, citation gate + rewrite) is the
     report's own either way."""
     lang_directive = spine.language_directive(lang)
+    tz = getattr(state, "tz", None)
+    today = spine.today_line(tz)
     # the section-gap placeholder is English-only (server strings never
     # branch on the run language; the model's own content follows the
     # language_directive above).  THIS scope, not the synthesizer's --
@@ -243,7 +245,7 @@ def make_synthesizer(
             except Exception:  # pylint: disable=broad-except
                 avoid_vectors = []
         material = state.corpus.pack(query, k=14, budget=PACK_BUDGET_DEFAULT, avoid=avoid_vectors)
-        system = "\n".join([section_system, lang_directive])
+        system = "\n".join([today, section_system, lang_directive])
         # the findings ledger rides EVERY section (the same distillation
         # the single-write writer gets, bounded): facts retire from the
         # corpus as it evicts, the ledger is the run's authoritative
@@ -410,7 +412,7 @@ def make_synthesizer(
                 break
             digest_parts.append(block)
             used += len(block)
-        system = "\n".join([spine.today_line(), report_prompts.SUMMARY_SYSTEM, lang_directive])
+        system = "\n".join([today, report_prompts.SUMMARY_SYSTEM, lang_directive])
         user = report_prompts.summary_user(question[:1000], "\n".join(digest_parts))
         yield from stream([{"role": "system", "content": system}, {"role": "user", "content": user}], "summary", tally)
 

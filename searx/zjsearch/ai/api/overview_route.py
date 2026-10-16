@@ -50,7 +50,10 @@ def _overview_view() -> flask.Response:  # pylint: disable=too-many-locals
     lang = http.answer_lang(payload)
     image_parts = attach_images(payload, cfg)
 
-    events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, image_parts)), account)
+    user_tz = str(payload.get("timezone") or "").strip()[:64] or None
+    events = _merge_spend(
+        engine.run(cfg, overview.build_answer_messages(q, context, lang, image_parts, tz=user_tz)), account
+    )
     stream = _Ndjson(events)  # type: ignore[assignment]
     try:
         stream.prime()
@@ -60,7 +63,7 @@ def _overview_view() -> flask.Response:  # pylint: disable=too-many-locals
         # the endpoint rejected the multimodal request (no vision support,
         # or memory pressure) -- degrade to a text-only answer
         logger.warning("zjsearch_ai: image request rejected, retrying text-only")
-        events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, [])), account)
+        events = _merge_spend(engine.run(cfg, overview.build_answer_messages(q, context, lang, [], tz=user_tz)), account)
         stream = _Ndjson(events)
         try:
             stream.prime()
