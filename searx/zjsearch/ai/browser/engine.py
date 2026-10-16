@@ -50,12 +50,14 @@ READ_TIMEOUT = 90.0
 network-quiet wait plus settle plus the ``page.content()`` serialization
 of a large DOM."""
 
-WINDOW = (1280, 800)
+WINDOW = (1920, 1080)
 """The fixed desktop-shaped window, spoofed Camoufox-side (its ``window``
 option -- NOT a playwright ``viewport``, which deadlocks Juggler when
 the window is spoofed to a different size).  The reader extracts DOM
 text, but a realistic geometry keeps responsive layouts on their
-desktop branch (and the observe stage will mirror exactly this frame)."""
+desktop branch (and the observe stage will mirror exactly this frame)
+-- 1920x1080 is the single most common desktop screen, and the
+session's viewport literals ride this constant."""
 
 _NETWORK_IDLE_MS = 3_500
 """The network-quiet wait AFTER ``load`` -- late XHR hydration gets its
@@ -153,6 +155,13 @@ async def _launch() -> "BrowserContext":
         # inert for the reader's pure reads, load-bearing the moment the
         # login stage starts touching pages
         "humanize": True,
+        # the identity OS is PINNED, not randomized (camoufox would otherwise
+        # pick all three per launch): windows is the mainstream desktop claim
+        # -- a Linux fingerprint is itself a rarity flag -- and the image
+        # build leans on this exact pin to drop the other OSes' exclusive
+        # font groups (~850 MB, client/zjsearch/Dockerfile) -- move the two
+        # together
+        "os": "windows",
         # cert failures (expired/self-signed, TLS-intercepting corporate
         # proxies) are dead reads on the long-tail pages the reader exists
         # for -- accepted by default; zjsearch.browser.params restores

@@ -3,7 +3,7 @@
 
 The ``camoufox`` PACKAGE is an ordinary requirements.txt dependency;
 this module downloads the BROWSER it drives (the anti-detect Firefox
-build, ~150 MB).  One entry, two audiences:
+build, ~1.3 GB compressed / ~2.4 GB extracted).  One entry, two audiences:
 
 - dev workstation::
 
@@ -19,10 +19,14 @@ build, ~150 MB).  One entry, two audiences:
 
 ``$XDG_CACHE_HOME`` decides WHERE the bundle lands; whatever is set at
 install time must be set at run time too.  Extra arguments pass
-through to the camoufox CLI verbatim (``camoufox fetch``).  uBlock
-Origin (the default adblock addon) is NOT downloaded here -- it lands
-in the same cache on the browser's first online launch and fails open
-without network.
+through to the camoufox CLI verbatim (``camoufox fetch``).  After the
+browser lands, the LAUNCH-TIME downloads are prefetched into the same
+cache -- the fingerprint generator's model, the GeoIP databases and
+uBlock Origin (the default adblock addon) -- so the browser's first
+launch needs none of them on the network.  Every prefetch is
+fail-open (a deployment without them works once online; the GeoIP db
+additionally ages on camoufox's own re-check schedule, so the
+prefetch buys freshness, not permanent independence).
 """
 
 import os
@@ -63,6 +67,7 @@ def main() -> int:
         )
         return 1
     _prefetch_fingerprint_model()
+    _prefetch_launch_payloads()
     return 0
 
 
@@ -100,6 +105,35 @@ def _prefetch_fingerprint_model() -> None:
         )
         return
     print("zjsearch browser: fingerprint model in place (first launch needs no network)")
+
+
+def _prefetch_launch_payloads() -> None:
+    """The launch-time downloads beyond the browser itself: the GeoIP
+    databases (read whenever a proxy ride turns ``geoip`` on -- the
+    default ``download_mmdb()`` source IS the launch path's source) and
+    uBlock Origin (the default adblock addon; camoufox skips a cached
+    copy on the manifest check).  Fail-open like the fingerprint model
+    above: a deployment whose prefetch failed works once online."""
+    try:
+        from camoufox.geolocation import download_mmdb  # pylint: disable=import-outside-toplevel
+
+        download_mmdb()
+        print("zjsearch browser: geoip databases in place")
+    except Exception as exc:  # pylint: disable=broad-except
+        print(
+            f"warning: the geoip prefetch failed ({exc}); first launch with a proxy fetches them",
+            file=sys.stderr,
+        )
+    try:
+        from camoufox.addons import DefaultAddons, maybe_download_addons  # pylint: disable=import-outside-toplevel
+
+        maybe_download_addons([DefaultAddons.UBO])
+        print("zjsearch browser: ublock origin in place")
+    except Exception as exc:  # pylint: disable=broad-except
+        print(
+            f"warning: the ublock origin prefetch failed ({exc}); first launch fetches it",
+            file=sys.stderr,
+        )
 
 
 if __name__ == "__main__":

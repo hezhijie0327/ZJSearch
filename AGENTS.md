@@ -172,11 +172,22 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     un-routable leak; uBlock Origin rides along as a default addon =
     the adblock, `adblock: false` excludes it; cert errors are accepted
     at launch — `ignore_https_errors: True` is the engine default,
-    params restores strict validation) and bridges every call
+    params restores strict validation); the identity OS is PINNED
+    `windows` in the launch kwargs (camoufox would otherwise randomize
+    all three OSes per launch; windows is the mainstream desktop claim
+    and a Linux fingerprint is itself a rarity flag) and the Docker
+    build leans on that exact pin to trim the font groups windows does
+    not read (~850 MB — the ~2GB font library is packed per SPOOF-OS
+    group, `fonts/groups.json` readBy; move the pin and the trim
+    together) and bridges every call
     onto the shared network loop via `run_coroutine_threadsafe` (the
     mcp tool's pattern); `install` is the build-time browser
     downloader (`python -m searx.zjsearch.ai.browser.install` →
-    `camoufox fetch`).  The engine RENDERS AND EXTRACTS, nothing more:
+    `camoufox fetch`) which also PREFETCHES the launch-time payloads
+    into the same cache — the fingerprint model, the GeoIP databases
+    and uBlock Origin — so a first launch needs none of them on the
+    network (all fail-open; the GeoIP db still ages on camoufox's own
+    re-check schedule).  The engine RENDERS AND EXTRACTS, nothing more:
     a sign-in wall is the model's judgment on the returned content (the
     web_reader spec says so), not an engine heuristic.  Display tiers
     (`zjsearch.browser.mode`): `headless` default everywhere,

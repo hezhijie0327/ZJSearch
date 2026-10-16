@@ -96,6 +96,29 @@ RUN \
         -type f -exec gzip -9 -k -f {} \+ -exec brotli --best -f {} \+ \
     && rm -rf /tmp/* /var/lib/apt/lists/* /var/tmp/*
 
+# The browser's ~2GB font library is packed per SPOOF-OS group
+# (fonts/groups.json: L/M/W letter combinations, each face stored once), and
+# the launch pins os:"windows" (browser/engine.py) -- the fontconfig only ever
+# mounts the groups the pinned OS reads, so the other OSes' EXCLUSIVE groups
+# are dead weight in the image (~850 MB on this bundle).  Drop them keyed on
+# groups.json itself, so upstream regroupings stay covered; a missing file or
+# group fails the build loudly rather than shipping a surprise.  Image-only:
+# a dev workstation's install is untouched.  A separate RUN is safe because
+# the final stage COPYs /app's end state -- intermediate layers never reach it.
+RUN \
+    python3 -c '
+import json, shutil
+from pathlib import Path
+
+for fonts in Path("/app/camoufox/browsers").glob("*/*/fonts"):
+    meta = json.loads((fonts / "groups.json").read_bytes())
+    keep = set(meta["readBy"]["win"])
+    for name in meta["groups"]:
+        if name not in keep and (fonts / name).is_dir():
+            shutil.rmtree(fonts / name)
+            print("zjsearch browser: trimmed font group", name)
+'
+
 FROM python:${PYTHON_VERSION}-slim AS rebased_searxng
 
 # the built-in browser's runtime: Xvfb (zjsearch.browser.mode: virtual) and

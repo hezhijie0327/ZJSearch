@@ -33,7 +33,7 @@ import typing as t
 from searx.network.client import get_loop
 from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.browser import gate
-from searx.zjsearch.ai.browser.engine import _context, drop_context
+from searx.zjsearch.ai.browser.engine import _context, drop_context, WINDOW
 
 if t.TYPE_CHECKING:
     from playwright.async_api import Page
@@ -170,7 +170,7 @@ async def _ensure_page(sess: _Session) -> "Page":
         return sess.page
     context = await _context()
     page = await context.new_page()
-    await page.set_viewport_size({"width": 1280, "height": 800})
+    await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
     # the session page renders FOR THE USER: its stylesheets/fonts/images
     # pass the gate (the reader's pages stay text-only) -- strong refs
     # keyed by id(), the stale entry dropped on replace
@@ -362,7 +362,7 @@ def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             raw = await page.screenshot(type="jpeg", quality=int(quality))
-            vp = page.viewport_size or {"width": 1280, "height": 800}
+            vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
             return {
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(vp["width"]),
