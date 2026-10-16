@@ -11,11 +11,9 @@ build, ~1.3 GB compressed / ~2.4 GB extracted).  One entry, two audiences:
 
 - Docker image build -- run the same module in the BUILDER stage with
   ``XDG_CACHE_HOME`` pinned (Camoufox installs into
-  ``$XDG_CACHE_HOME/camoufox``), COPY that directory over in the dist
-  stage, and install the Firefox runtime libraries there
-  (``python -m playwright install-deps firefox``).  The exact recipe
-  lives in AGENTS.md's render-contract section; nothing in this repo
-  edits the Dockerfiles.
+  ``$XDG_CACHE_HOME/camoufox``); the theme's own recipe is
+  ``client/zjsearch/Dockerfile`` (installer + font-group trimmer in
+  one build stage, the runtime library set in the dist stage).
 
 ``$XDG_CACHE_HOME`` decides WHERE the bundle lands; whatever is set at
 install time must be set at run time too.  Extra arguments pass
@@ -112,13 +110,22 @@ def _prefetch_launch_payloads() -> None:
     databases (read whenever a proxy ride turns ``geoip`` on -- the
     default ``download_mmdb()`` source IS the launch path's source) and
     uBlock Origin (the default adblock addon; camoufox skips a cached
-    copy on the manifest check).  Fail-open like the fingerprint model
-    above: a deployment whose prefetch failed works once online."""
+    copy on the manifest check).  camoufox's own fetch command ends by
+    provisioning BOTH (0.5.8: ``download_mmdb`` + addons + the fpgen
+    model after the browser lands), so this is the FALLBACK leg:
+    ``download_mmdb`` has no freshness check (it always re-downloads),
+    the geoip call gates on ``needs_update()`` -- fresh-from-fetch costs
+    nothing here, a missing/stale database still prefetches.  Fail-open
+    like the fingerprint model above: a deployment whose prefetch failed
+    works once online."""
     try:
-        from camoufox.geolocation import download_mmdb  # pylint: disable=import-outside-toplevel
+        from camoufox.geolocation import download_mmdb, needs_update  # pylint: disable=import-outside-toplevel
 
-        download_mmdb()
-        print("zjsearch browser: geoip databases in place")
+        if needs_update():
+            download_mmdb()
+            print("zjsearch browser: geoip databases in place")
+        else:
+            print("zjsearch browser: geoip databases already fresh (fetched with the browser)")
     except Exception as exc:  # pylint: disable=broad-except
         print(
             f"warning: the geoip prefetch failed ({exc}); first launch with a proxy fetches them",
