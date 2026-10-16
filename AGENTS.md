@@ -89,9 +89,9 @@ lockfile, untouched).
   `searx/static` — as an ignored `zjsearch-theme.patch` for `git apply` + `pnpm run
   build` on the target. Templates and python must ship together: new templates
   reading `answer.data` against old python only log jinja2 Undefined warnings and
-  render raw-text answers.  The reader's render engine needs its browser on the
-  target too: run `python -m searx.zjsearch.ai.browser.install` once on the
-  host (Docker: the build recipe in the render-contract section below).
+  render raw-text answers.  The reader's render engine ships IN the
+  Docker image: `client/zjsearch/Dockerfile` bakes the browser bundle
+  at build (installer + font trim + the runtime library set).
 
 ## zjsearch architecture (Page-Data pattern)
 
@@ -546,7 +546,7 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
 Naming: components PascalCase (one primary export per file), hooks
 `useXxx.ts`, pure logic camelCase `.ts`, locale catalogs named by their
 BCP-47 tag. Export only what other modules need. Full rationale and the
-"add a language" recipe: `client/zjsearch/README.rst`.
+"add a language" recipe: `client/zjsearch/README.md`.
 
 ## Conventions & gotchas
 
@@ -1732,30 +1732,16 @@ names it in `zjsearch.browser.proxy` (the `{server, bypass, username,
 password}` shape).
 Deployments: install the browser once with
 `python -m searx.zjsearch.ai.browser.install` (= `camoufox fetch`,
-lands in the user cache).  Docker bakes it in at build WITHOUT any
-Dockerfile change in this repo being required — the recipe, if/when
-you build the image:
-
-    # builder stage, after the searx/ COPY:
-    ARG ZJSEARCH_BROWSER="true"
-    RUN set -eux; mkdir -p /usr/local/searxng/cache; \
-        if [ "$ZJSEARCH_BROWSER" = "true" ]; then \
-            XDG_CACHE_HOME=/usr/local/searxng/cache \
-                ./.venv/bin/python -m searx.zjsearch.ai.browser.install; \
-        fi
-    # dist stage, after the .venv COPY:
-    ARG ZJSEARCH_BROWSER="true"
-    ENV XDG_CACHE_HOME="/usr/local/searxng/cache"
-    COPY --chown=977:977 --from=builder /usr/local/searxng/cache/ ./cache/
-    # the ONE playwright command that remains: camoufox fetch ships the
-    # browser BINARY only, and camoufox has no system-deps installer of
-    # its own -- playwright's CLI (a transitive dep) carries the
-    # maintained Firefox package list.  Desktop dev never needs this.
-    RUN set -eux; if [ "$ZJSEARCH_BROWSER" = "true" ]; then \
-            apt-get update -qq; \
-            ./.venv/bin/python -m playwright install-deps firefox; \
-            apt-get clean; rm -rf /var/lib/apt/lists/*; \
-        fi
+lands in the user cache) — the module ALSO prefetches the launch-time
+payloads into the same cache (the fingerprint model, the GeoIP
+databases, uBlock Origin), so a first launch needs none of them on the
+network.  Docker: the image recipe lives in the repo now —
+`client/zjsearch/Dockerfile` pins `XDG_CACHE_HOME=/app`, runs the
+installer, then `trim_fonts windows` (the launch pins `os: "windows"`,
+so the other OSes' exclusive font groups drop, ~850 MB), and the
+runtime stage installs the Firefox/GTK library set explicitly
+(xvfb, libgtk-3-0, libdbus-glib-1-2, …) — playwright's
+`install-deps` is NOT part of it.
 
 (Point `zjsearch.browser.profile` into the
 container's data volume so the cookie store survives recreation.)
@@ -3177,6 +3163,6 @@ Python edits — the repo policy forbids them):
   fix→regress→docs loop. Run audits FROM that file.
 - The family `DESIGN.md` (ZJBlog repository) — design tokens, fragments,
   motion and quality contract the theme must conform to.
-- `client/zjsearch/README.rst` — theme architecture and workflow.
+- `client/zjsearch/README.md` — theme architecture and workflow.
 - `docs/dev/templates.rst` — result field reference (the upstream render contract).
 - `docs/dev/plugins/` — server plugin registry used by the preferences UI.
