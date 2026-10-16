@@ -90,7 +90,7 @@ export interface GlobalData {
   decision?: { tk: string; model: string };
   /** Rerank-model capability (token + model): absent when the
       zjsearch.rerank block is off/unconfigured — the knowledge base's
-      recall re-scores its fused head through /zjsearch/ai/rerank */
+      recall re-scores its fused head through /zjsearch/knowledge/rerank */
   rerank?: { tk: string; model: string };
   /** true when THIS request runs in AI search takeover (ai=1 + capability):
       the classic engine fan-out was skipped, the page is the agent */

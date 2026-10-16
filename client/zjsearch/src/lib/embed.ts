@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-/** The thread embeddings' source: the server's ``POST /zjsearch/ai/embed`` route --
+/** The thread embeddings' source: the server's ``POST /zjsearch/knowledge/embed`` route --
     an HMAC-gated proxy to the deployment's OpenAI-compatible embeddings
     API (the key never leaves the server).  The capability rides the
     page-data globals (`embedding`, configured via ``zjsearch.embedding``)
@@ -51,7 +51,7 @@ export async function embedTexts(texts: string[]): Promise<number[][] | null> {
       embeddings?: number[][];
       model?: string;
       usage?: { input?: number; chars?: number } | null;
-    }>("/zjsearch/ai/embed", {
+    }>("/zjsearch/knowledge/embed", {
       body: JSON.stringify({ tk: config.token, texts }),
       headers: { "Content-Type": "application/json" },
       method: "POST",

@@ -60,7 +60,7 @@ export function sessionViewport(): { w: number; h: number } {
     their own beat). */
 export async function postBrowserInput(payload: BrowserInputPayload): Promise<BrowserInputFrame | null> {
   try {
-    const out = await fetchJson<{ ok?: boolean; frame?: BrowserInputFrame }>("/zjsearch/ai/browser/input", {
+    const out = await fetchJson<{ ok?: boolean; frame?: BrowserInputFrame }>("/zjsearch/browser/input", {
       body: JSON.stringify({ tk: token, ...payload }),
       headers: { "Content-Type": "application/json" },
       method: "POST",

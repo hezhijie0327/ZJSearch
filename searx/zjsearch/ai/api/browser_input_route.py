@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/browser/input`` endpoint: the Lightbox
+"""The ``POST /zjsearch/browser/input`` endpoint: the Lightbox
 takeover's input forwarding -- the user's clicks/wheel/keys on the live
 mirror land here and are executed on the interactive session's page
 (viewport-space coordinates; the SSRF gate already guards any navigation
@@ -71,4 +71,4 @@ def install(app: flask.Flask) -> None:
     package install.  Silent when the built-in browser is not ready."""
     if not browser_config.ready():
         return
-    app.add_url_rule("/zjsearch/ai/browser/input", "zjsearch_ai_browser_input", _browser_input_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/browser/input", "zjsearch_browser_input", _browser_input_view, methods=["POST"])

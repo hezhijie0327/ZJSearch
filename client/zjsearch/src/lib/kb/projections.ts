@@ -754,7 +754,7 @@ let embedRunning = false;
 /** Embed the rows whose search_text is non-empty but whose embedding is
     still missing (projections land unembedded when the capability is
     off; they join the semantic search the next time this pass runs with
-    the capability on).  One /zjsearch/ai/embed call per 16 texts. */
+    the capability on).  One /zjsearch/knowledge/embed call per 16 texts. */
 async function embedPending(): Promise<void> {
   if (embedRunning || !embeddingsConfigured()) {
     return;
@@ -795,7 +795,7 @@ async function embedPending(): Promise<void> {
 let normalizeTimer: number | null = null;
 
 /** The normalization pass: fold each row's raw tags into concept tags via
-    ONE small structured completion per batch (POST /zjsearch/ai/tags).
+    ONE small structured completion per batch (POST /zjsearch/knowledge/tags).
     Debounced after settles; a row normalizes once (meta.tnormed); a
     failure keeps the raw tags. */
 function scheduleTagNormalize(): void {
@@ -829,7 +829,7 @@ async function normalizeTags(): Promise<void> {
     // the shared HTTP chokepoint (a manual resp.ok guard is the shape the
     // lib/http contract bans): a FAILED normalization is the caller's
     // no-op -- the catch below keeps the raw tags
-    const data = await fetchJson<{ items?: Array<{ tags?: string[] }> }>("/zjsearch/ai/tags", {
+    const data = await fetchJson<{ items?: Array<{ tags?: string[] }> }>("/zjsearch/knowledge/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Overview: the ``POST /zjsearch/ai/answer`` endpoint.
+"""AI Overview: the ``POST /zjsearch/ai/overview`` endpoint.
 
 NOT a separate feature design -- the FIXED QUICK TASK of the shared
 engine: the client assembles the numbered source context from the page

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-/** The recall rerank's source: the server's ``POST /zjsearch/ai/rerank``
+/** The recall rerank's source: the server's ``POST /zjsearch/knowledge/rerank``
     route -- an HMAC-gated proxy to the deployment's Cohere-shaped rerank
     API (the key never leaves the server).  The capability rides the
     page-data globals (`rerank`, configured via ``zjsearch.rerank``) and
@@ -38,7 +38,7 @@ export async function rerankDocs(query: string, documents: string[]): Promise<nu
     return null;
   }
   try {
-    const result = await fetchJson<{ order?: number[]; tokens?: number }>("/zjsearch/ai/rerank", {
+    const result = await fetchJson<{ order?: number[]; tokens?: number }>("/zjsearch/knowledge/rerank", {
       body: JSON.stringify({ tk: config.token, query, documents }),
       headers: { "Content-Type": "application/json" },
       method: "POST",

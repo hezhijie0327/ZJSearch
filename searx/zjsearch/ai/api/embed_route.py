@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/embed`` endpoint: a thin, HMAC-gated browser
+"""The ``POST /zjsearch/knowledge/embed`` endpoint: a thin, HMAC-gated browser
 proxy to the embedding service (:py:mod:`llm.embed` -- the engine and
 its config live there; this module is only the gate + validation + the
 shared-loop call).
@@ -62,4 +62,4 @@ def install(app: flask.Flask) -> None:
             package,
         )
         return
-    app.add_url_rule("/zjsearch/ai/embed", "zjsearch_ai_embed", _embed_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/knowledge/embed", "zjsearch_knowledge_embed", _embed_view, methods=["POST"])

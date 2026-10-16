@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/answer`` endpoint (AI Overview).
+"""The ``POST /zjsearch/ai/overview`` endpoint (AI Overview).
 
 THIN: authorize, assemble the messages
 (:py:func:`runs.overview.build_answer_messages`), degrade a rejected
@@ -39,7 +39,7 @@ def _merge_spend(events: t.Iterable[dict[str, t.Any]], account: t.Any) -> t.Iter
         yield event
 
 
-def _answer() -> flask.Response:  # pylint: disable=too-many-locals
+def _overview_view() -> flask.Response:  # pylint: disable=too-many-locals
     """AI Overview: the fixed quick task on the shared engine."""
     payload, q, context = http.authorize(
         gate=overview.enabled() and llm_config.configured(llm_config.llm_cfg()), context=True
@@ -70,7 +70,7 @@ def _answer() -> flask.Response:  # pylint: disable=too-many-locals
 
 
 def install(app: flask.Flask) -> None:
-    """Register the answer route; chained from the ``searx.zjsearch.ai``
+    """Register the overview route; chained from the ``searx.zjsearch.ai``
     package install so the theme keeps one webapp.py entry point.  An
     enabled-but-incomplete configuration or a missing SDK package logs a
     warning and the feature stays off."""
@@ -89,4 +89,4 @@ def install(app: flask.Flask) -> None:
             package,
         )
         return
-    app.add_url_rule("/zjsearch/ai/answer", "zjsearch_ai_answer", _answer, methods=["POST"])
+    app.add_url_rule("/zjsearch/ai/overview", "zjsearch_ai_overview", _overview_view, methods=["POST"])

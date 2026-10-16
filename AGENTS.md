@@ -255,7 +255,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     default over the `/rerank` industry convention — Cohere/Jina/
     bigmodel/SiliconFlow; `dashscope` native TextReRank, with the
     compatible-api's `/reranks` reachable via `path: /reranks`; the
-    browser's recall proxy is `POST /zjsearch/ai/rerank`, HMAC-gated
+    browser's recall proxy is `POST /zjsearch/knowledge/rerank`, HMAC-gated
     like the embed one), the decision SERVICE (`decision` — named
     questions in one forward pass, `POST /zjsearch/ai/decision`
     the browser proxy; the client's helper is `lib/decision.ts`,
@@ -2118,7 +2118,7 @@ kind now seeds the mechanical layer from its own text (`seedTags`:
 `segmentKeywords` tokens -- sources and crawled documents from the
 TITLE, memories from the CONTENT, the attachment documents' filename
 tokens unchanged) and the debounced normalize pass
-(`scheduleTagNormalize` → `/zjsearch/ai/tags`, 24 rows per batch, one
+(`scheduleTagNormalize` → `/zjsearch/knowledge/tags`, 24 rows per batch, one
 small structured completion folding raw seeds into concept tags) takes
 over from there; `archiveDocument`/`saveMemory` schedule it too.  The
 STORE BACKFILL (`backfillSeedTags` in recall.ts, one sweep per session
@@ -2173,7 +2173,7 @@ loses the event -- shipped bug).
   hybrid hits' OWN tags seed one more `tags ?|` GIN query -- a related
   tag the query never named still recalls its rows; the 感冒→退烧药
   effect in tag space) at 0.4 -- then the RERANK TIER re-scores the
-  fused head (16, ≥4 candidates) through `POST /zjsearch/ai/rerank`:
+  fused head (16, ≥4 candidates) through `POST /zjsearch/knowledge/rerank`:
   the expansion widens recall, the cross-encoder restores precision,
   any skip/failure keeps the fused order; the classic page's eager
   `recallPages(q, 2)` passes `{rerank: false}` (the hover prewarm spends
@@ -2188,7 +2188,7 @@ loses the event -- shipped bug).
 - TAGS, three layers: the mechanical derive (query tokens + hosts +
   mode + task titles) at settle; the post-run extractor
   (`extract_insights` in ai/tools/memory.py -- ONE completion
-  returns {facts, tags}); and `POST /zjsearch/ai/tags`
+  returns {facts, tags}); and `POST /zjsearch/knowledge/tags`
   (api/tag_route.py, the AI Search token, embed-route shape) which
   folds batches of raw tags into 2-6 concept tags per row (language
   merge, host/noise drop).  Rows carry `meta.tnormed`; a failed

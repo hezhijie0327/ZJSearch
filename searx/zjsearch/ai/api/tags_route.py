@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/tags`` endpoint: LLM tag normalization for the
+"""The ``POST /zjsearch/knowledge/tags`` endpoint: LLM tag normalization for the
 browser's knowledge base (the tag graph's semantic layer).
 
 The client derives RAW tags at write time (query tokens, hosts, mode,
@@ -109,4 +109,4 @@ def install(app: flask.Flask) -> None:
     configured."""
     if not enabled() or not llm_config.configured(llm_config.llm_cfg()):
         return
-    app.add_url_rule("/zjsearch/ai/tags", "zjsearch_ai_tags", _tags_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/knowledge/tags", "zjsearch_knowledge_tags", _tags_view, methods=["POST"])

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``POST /zjsearch/ai/rerank`` endpoint: a thin, HMAC-gated browser
+"""The ``POST /zjsearch/knowledge/rerank`` endpoint: a thin, HMAC-gated browser
 proxy to the rerank service (:py:mod:`llm.rerank` -- the provider wires
 and their config live there; this module is only the gate + validation +
 the call).  The knowledge base's recall is the consumer: its hybrid
@@ -68,4 +68,4 @@ def install(app: flask.Flask) -> None:
             "zjsearch.rerank is enabled but base_url/model are missing -- recall reranking stays off"
         )
         return
-    app.add_url_rule("/zjsearch/ai/rerank", "zjsearch_ai_rerank", _rerank_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/knowledge/rerank", "zjsearch_knowledge_rerank", _rerank_view, methods=["POST"])
