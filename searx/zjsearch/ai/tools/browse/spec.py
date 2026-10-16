@@ -80,30 +80,30 @@ def browse_spec() -> dict[str, t.Any]:
     user completes through the live mirror."""
     return {
         "name": BROWSE_TOOL,
-        "description": (
-            "Drive a browser: read pages in parallel AND operate one"
-            " interactive session.\n"
-            "READ: read(url) opens ONE url in a real anti-detect browser and"
-            " returns its current full content as compact markdown --"
-            " documents (.pdf / .docx / .pptx / .xlsx / .xls) natively as"
-            " full text.  Reads run in parallel: batch several per round."
-            "  One page per read, not a recursive crawl -- to follow a link,"
-            " read it in another explicit call.  Very long pages arrive"
-            " truncated.\n"
-            "SESSION: open a page, snapshot its interactive elements and"
-            " sizeable images as refs, click/type/press/scroll by ref, hover"
-            " a menu open, select a native dropdown's options, drag between"
-            " two viewport points (sliders), screenshot, read with NO url to"
-            " extract the current page, or wait_user while the USER operates"
-            " the page in the live mirror (sign-in, verification -- anything"
-            " human-only).\n"
-            "Reach for a read when a source's snippet promises exactly the"
-            " detail you still need; for the session when a read cannot see"
-            " through or interaction is the only way through -- the plain"
-            " read is always first.  Pages you open become citable sources:"
-            " open mints the [n], read registers the page's full text under"
-            " it -- the writer cites what you drove."
-        ),
+        "description": """\
+Drive a browser: read pages in parallel AND operate one interactive
+session.
+
+READ: read(url) opens ONE url in a real anti-detect browser and returns
+its current full content as compact markdown -- documents (.pdf / .docx
+/ .pptx / .xlsx / .xls) natively as full text.  Reads run in parallel:
+batch several per round.  One page per read, not a recursive crawl -- to
+follow a link, read it in another explicit call.  Very long pages arrive
+truncated.
+
+SESSION: open a page, snapshot its interactive elements and sizeable
+images as refs, click/type/press/scroll by ref, hover a menu open,
+select a native dropdown's options, drag between two viewport points
+(sliders), screenshot, read with NO url to extract the current page, or
+wait_user while the USER operates the page in the live mirror (sign-in,
+verification -- anything human-only).
+
+Reach for a read when a source's snippet promises exactly the detail
+you still need; for the session when a read cannot see through or
+interaction is the only way through -- the plain read is always first.
+Pages you open become citable sources: open mints the [n], read
+registers the page's full text under it -- the writer cites what you
+drove.""",
         "annotations": {"openWorldHint": True},
         "inputSchema": {
             "type": "object",

@@ -92,29 +92,7 @@ def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict
     regardless of engine support."""
     return {
         "name": SEARCH_WEB_TOOL,
-        "description": (
-            "Run one web search on the metasearch engine with specific"
-            " keywords.  Results arrive as globally numbered [n] sources to"
-            " cite in the final answer -- pre-ranked for relevance, with"
-            " near-duplicate syndications of already-seen stories"
-            " suppressed: trust the top of the list, and few results"
-            " usually means the topic is exhausted, not that your keywords"
-            " were bad."
-            + (
-                "  The list_engines tool lists this deployment's engines --"
-                " the categories, and the disabled ones with the bang that"
-                " reaches each."
-                if with_info
-                else ""
-            )
-            + (
-                "  Snippets are heads: when a result promises the exact"
-                f" missing detail, the {BROWSE_TOOL} tool's read fetches"
-                " that page in full."
-                if with_browser
-                else ""
-            )
-        ),
+        "description": _description(with_info, with_browser),
         "annotations": {"readOnlyHint": True, "openWorldHint": True},
         "inputSchema": {
             "type": "object",
@@ -193,6 +171,37 @@ def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict
             "required": ["query"],
         },
     }
+
+
+_DESCRIPTION = """\
+Run one web search on the metasearch engine with specific keywords.
+Results arrive as globally numbered [n] sources to cite in the final
+answer -- pre-ranked for relevance, with near-duplicate syndications of
+already-seen stories suppressed: trust the top of the list, and few
+results usually means the topic is exhausted, not that your keywords
+were bad."""
+"""The call semantics; the run appends the registered siblings'
+pointers (see :py:func:`search_web_spec`)."""
+
+
+def _description(with_info: bool, with_browser: bool) -> str:
+    """The desc document plus the cross-references for the siblings THIS
+    run actually registered (a model that never sees a tool must not be
+    told about it)."""
+    out = _DESCRIPTION
+    if with_info:
+        out += (
+            "\nThe list_engines tool lists this deployment's engines -- the"
+            " categories, and the disabled ones with the bang that reaches"
+            " each."
+        )
+    if with_browser:
+        out += (
+            f"\nSnippets are heads: when a result promises the exact missing"
+            f" detail, the {BROWSE_TOOL} tool's read fetches that page in"
+            " full."
+        )
+    return out
 
 
 _PAID_ENGINES: frozenset[str] | None = None

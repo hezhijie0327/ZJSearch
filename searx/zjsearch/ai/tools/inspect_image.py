@@ -14,20 +14,24 @@ from searx.zjsearch.ai.core.text import raw_args
 
 INSPECT_IMAGE_TOOL = "inspect_image"
 
+INSTRUCTIONS = """\
+Use it when a source's picture IS the evidence -- a chart, a diagram, a
+data visual, a spec sheet photo that a snippet cannot show -- and read
+it properly: axes, labels, numbers, what the visual actually claims.
+Never spend a call on decorative photos or cover art.  Copy the img=
+URL character for character from the feed line (a hallucinated URL
+fails), and pass n when the image belongs to a numbered source so the
+reader can trace it."""
+
 
 def inspect_image_spec() -> dict[str, t.Any]:
     """The ``inspect_image`` tool spec."""
     return {
         "name": INSPECT_IMAGE_TOOL,
-        "description": (
-            "Look at ONE image from the search results -- charts, diagrams,"
-            " product photos, data visuals a snippet cannot show.  Copy the"
-            " img= URL from a source line in the feed.  The image becomes"
-            " visible to you in the next turn: read it (axes, labels,"
-            " numbers) and factor what it shows into the research.  Use it"
-            " when a source's picture is the evidence -- never for decorative"
-            " photos."
-        ),
+        "description": """\
+Look at ONE image from the search results: copy the img= URL from a
+source line in the feed and the image becomes visible to you in the
+next turn (pass n to bind it to its [n] source).""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

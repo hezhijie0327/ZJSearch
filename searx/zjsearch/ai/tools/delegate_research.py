@@ -49,16 +49,14 @@ def delegate_research_spec() -> dict[str, t.Any]:
     title the timeline row carries."""
     return {
         "name": DELEGATE_RESEARCH_TOOL,
-        "description": (
-            "Delegate ONE independent research subtask to a subagent -- a"
-            " nested researcher with its own context window that searches"
-            " and reads pages, then reports a compressed digest back to"
-            " you.  One call = one subagent; batch independent subtasks in"
-            " one round to run them in parallel.  Brief it like a"
-            " colleague: objective (what to establish), output_format (what"
-            " the digest must contain), tool_guidance (where to look, what"
-            " to skip), boundaries (what is OUT of scope)."
-        ),
+        "description": """\
+Delegate ONE independent research subtask to a subagent -- a nested
+researcher with its own context window that searches and reads pages,
+then reports a compressed digest back to you.  One call = one subagent;
+batch independent subtasks in one round to run them in parallel.  Brief
+it like a colleague: objective (what to establish), output_format (what
+the digest must contain), tool_guidance (where to look, what to skip),
+boundaries (what is OUT of scope).""",
         "inputSchema": {
             "type": "object",
             "properties": {

@@ -16,6 +16,14 @@ from searx.zjsearch.ai.core.text import raw_args
 
 BUILD_TABLE_TOOL = "build_table"
 
+INSTRUCTIONS = """\
+Use it whenever a section's material forms a matrix -- companies x
+metrics, options x tradeoffs, region x figures -- and then do NOT
+re-type the same numbers in prose afterwards: cite and interpret the
+table instead.  Every row's refs must be [n] sources from THIS run, and
+the columns must stay essential (a wider table does not render) -- one
+column per metric, the rows ranked by what the section is arguing."""
+
 MAX_COLUMNS = 8
 """A report table wider than this does not render; the spec steers to
 the essential columns instead."""
@@ -28,18 +36,12 @@ def build_table_spec() -> dict[str, t.Any]:
     """The ``build_table`` tool spec."""
     return {
         "name": BUILD_TABLE_TOOL,
-        "description": (
-            "Record ONE data table you have assembled from the sources you"
-            " read -- the report's structured-evidence channel.  Use it"
-            " whenever a section's material forms a matrix (companies x"
-            " metrics, options x tradeoffs, region x figures): each row"
-            " lists its values and the [n] sources that back them.  The"
-            " table reaches the reader as a real table with per-row"
-            " citations and reaches the writer as verified material -- do"
-            " NOT re-type the same numbers in prose afterwards, cite and"
-            " interpret the table instead.  Every row's refs must be [n]"
-            " sources from THIS run."
-        ),
+        "description": """\
+Record ONE data table you have assembled from the sources you read --
+the report's structured-evidence channel: rows of values, each backed
+by the [n] sources that support them.  The table reaches the reader as
+a real table with per-row citations and reaches the writer as verified
+material.""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

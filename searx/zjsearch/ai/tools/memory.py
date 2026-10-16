@@ -51,12 +51,11 @@ def memory_spec() -> dict[str, t.Any]:
     """The ``memory`` tool spec."""
     return {
         "name": MEMORY_TOOL,
-        "description": (
-            "Remember durable facts about the user across sessions"
-            " (action=save) or look up what is already stored"
-            " (action=search).  One save = ONE self-contained fact in the"
-            " user's language; never a one-off conversation detail."
-        ),
+        "description": """\
+Remember durable facts about the user across sessions (action=save) or
+look up what is already stored (action=search).  One save = ONE
+self-contained fact in the user's language; never a one-off
+conversation detail.""",
         "inputSchema": {
             "type": "object",
             "properties": {

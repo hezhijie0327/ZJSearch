@@ -16,6 +16,14 @@ from searx.zjsearch.ai.tools.search_web import available_categories
 
 LIST_ENGINES_TOOL = "list_engines"
 
+INSTRUCTIONS = """\
+Consult it ONCE, and only when it can change a decision: when unsure
+which vertical fits the question, when searches keep coming back thin
+or empty (the right engine may be held back behind its bang), or before
+relying on a niche vertical -- not on every run.  A held-back
+API-billed engine costs money per call: its bang is HELD until the user
+approves the ask_user confirmation."""
+
 _MAX_DISABLED = 80
 """The bangable-engines cap -- a deployment listing more disabled engines
 than this gets a tail note instead of the rest (the inventory is a map,
@@ -26,19 +34,14 @@ def list_engines_spec() -> dict[str, t.Any]:
     """The ``list_engines`` tool spec."""
     return {
         "name": LIST_ENGINES_TOOL,
-        "description": (
-            "List the search ENGINES this deployment carries: the enabled"
-            " ones grouped by category (a category search on search_web"
-            " fans out across every enabled engine in that vertical), and"
-            " the engines kept disabled by default -- those are still"
-            " reachable by prefixing a query with their bang"
-            ' (e.g. "!bocha gpu prices"); useful for API-billed engines the'
-            " deployment deliberately holds back.  Call it when unsure"
-            " which vertical fits the question, when searches keep coming"
-            " back thin or empty (the right engine may be disabled), or"
-            " before relying on a niche vertical.  Read-only and instant;"
-            " once per run is usually enough."
-        ),
+        "description": """\
+List the search ENGINES this deployment carries: the enabled ones
+grouped by category (a category search on search_web fans out across
+every enabled engine in that vertical), and the engines kept disabled
+by default -- those are still reachable by prefixing a query with their
+bang (e.g. "!bocha gpu prices"); API-billed engines the deployment
+deliberately holds back carry their paid marker.  Read-only and
+instant.""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

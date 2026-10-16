@@ -55,14 +55,12 @@ def calculate_spec() -> dict[str, t.Any]:
     binding surface)."""
     return {
         "name": CALCULATE_TOOL,
-        "description": (
-            "Evaluate ONE mathematical expression exactly -- arithmetic,"
-            " powers, roots, logs, trig (radians), factorials, min/max/sum"
-            " over lists, and statistics (mean, median, mode, stdev,"
-            " variance, harmonic_mean).  Syntax: python-like"
-            ' ("2 + 3 * 4", "sqrt(2)**2", "round(10/3, 2)",'
-            ' "mean([1, 2, 3, 4])", "35 * 1.08").'
-        ),
+        "description": """\
+Evaluate ONE mathematical expression exactly -- arithmetic, powers,
+roots, logs, trig (radians), factorials, min/max/sum over lists, and
+statistics (mean, median, mode, stdev, variance, harmonic_mean).
+Syntax: python-like ("2 + 3 * 4", "sqrt(2)**2", "round(10/3, 2)",
+"mean([1, 2, 3, 4])", "35 * 1.08").""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

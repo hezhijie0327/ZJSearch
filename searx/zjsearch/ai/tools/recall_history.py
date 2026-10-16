@@ -29,6 +29,16 @@ from searx.zjsearch.ai.core.text import query_terms, raw_args
 
 RECALL_HISTORY_TOOL = "recall_history"
 
+INSTRUCTIONS = """\
+Use it when a past page plausibly holds the missing detail -- the user
+references "what we found last time" / "the page I saw earlier", or a
+prior topic recurs -- or when the question should be judged against a
+framework or document the user uploaded before.  Past content may be
+OUTDATED: it supplements, never replaces, live search -- keep searching
+when the memory is thin, and prefer fresh sources for anything
+time-sensitive.  A source-only match is an identity, not evidence:
+re-read that page (browse read) before relying on its details."""
+
 MAX_ENTRIES = 12
 """Index entries per request -- pages carry a ~1500-char text head."""
 MAX_TEXT = 1500
@@ -42,27 +52,13 @@ def recall_history_spec() -> dict[str, t.Any]:
     sent an index."""
     return {
         "name": RECALL_HISTORY_TOOL,
-        "description": (
-            "Search YOUR past research with this user (the browser-local"
-            " knowledge base): pages you (or a previous session) already"
-            " read in full, sources earlier runs already touched, and"
-            " files the user uploaded to past runs (frameworks, prior"
-            " reports -- matched files return their content head"
-            " directly)."
-            "  Full-text matches return their content head; source-only"
-            " matches return their identity -- re-read one with your page"
-            " reader before relying on its details.  Use it when a past page"
-            " plausibly holds the missing detail (the user references"
-            ' "what we found last time" / "the page I saw earlier", or a'
-            " prior topic recurs), or when the"
-            " question should be judged against a framework or document the"
-            " user uploaded before.  Past content"
-            " may be OUTDATED -- it supplements, never replaces, live"
-            " search: keep searching when the memory is thin, and prefer"
-            " fresh sources for anything time-sensitive.  Matched pages"
-            " arrive as numbered [n] sources you can cite; uploaded files"
-            " arrive as named context blocks."
-        ),
+        "description": """\
+Search YOUR past research with this user (the browser-local knowledge
+base): pages you (or a previous session) already read in full, sources
+earlier runs already touched, and files the user uploaded to past runs
+(frameworks, prior reports).  Full-text matches return their content
+head as numbered [n] sources you can cite; source-only matches return
+their identity; uploaded files arrive as named context blocks.""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

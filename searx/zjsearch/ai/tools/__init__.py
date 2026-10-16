@@ -28,9 +28,14 @@ the call semantics -- one doctrine, one home, and it disappears from
 the prompt exactly when the tool leaves the surface."""
 
 from searx.zjsearch.ai.core.text import raw_args
-from searx.zjsearch.ai.tools.ask_user import ASK_USER_TOOL, ask_user_spec
+from searx.zjsearch.ai.tools.ask_user import (
+    ASK_USER_TOOL,
+    INSTRUCTIONS as ASK_USER_INSTRUCTIONS,
+    ask_user_spec,
+)
 from searx.zjsearch.ai.tools.build_table import (
     BUILD_TABLE_TOOL,
+    INSTRUCTIONS as BUILD_TABLE_INSTRUCTIONS,
     build_table_spec,
     parse_build_table_call,
 )
@@ -48,22 +53,26 @@ from searx.zjsearch.ai.tools.delegate_research import (
 )
 from searx.zjsearch.ai.tools.evaluate import (
     EVALUATE_TOOL,
+    INSTRUCTIONS as EVALUATE_INSTRUCTIONS,
     decision_row,
     evaluate_spec,
     parse_evaluate_call,
 )
 from searx.zjsearch.ai.tools.list_engines import (
+    INSTRUCTIONS as LIST_ENGINES_INSTRUCTIONS,
     LIST_ENGINES_TOOL,
     list_engines_spec,
     run_call as list_engines_run,
 )
 from searx.zjsearch.ai.tools.memory import MEMORY_TOOL, INSTRUCTIONS as MEMORY_INSTRUCTIONS, memory_spec
 from searx.zjsearch.ai.tools.message_subtask import (
+    INSTRUCTIONS as MESSAGE_SUBTASK_INSTRUCTIONS,
     MESSAGE_SUBTASK_TOOL,
     message_subtask_spec,
     parse_message_subtask_call,
 )
 from searx.zjsearch.ai.tools.recall_history import (
+    INSTRUCTIONS as RECALL_HISTORY_INSTRUCTIONS,
     RECALL_HISTORY_TOOL,
     parse_query,
     recall_history_spec,
@@ -91,6 +100,7 @@ from searx.zjsearch.ai.tools.update_plan import (
     update_plan_spec,
 )
 from searx.zjsearch.ai.tools.inspect_image import (
+    INSTRUCTIONS as INSPECT_IMAGE_INSTRUCTIONS,
     INSPECT_IMAGE_TOOL,
     inspect_image_spec,
     parse_inspect_image_call,
@@ -110,15 +120,24 @@ TOOL_INSTRUCTIONS: dict[str, str] = {
     RECORD_FINDINGS_TOOL: RECORD_FINDINGS_INSTRUCTIONS,
     DELEGATE_RESEARCH_TOOL: DELEGATE_INSTRUCTIONS,
     MEMORY_TOOL: MEMORY_INSTRUCTIONS,
+    ASK_USER_TOOL: ASK_USER_INSTRUCTIONS,
+    EVALUATE_TOOL: EVALUATE_INSTRUCTIONS,
+    LIST_ENGINES_TOOL: LIST_ENGINES_INSTRUCTIONS,
+    RECALL_HISTORY_TOOL: RECALL_HISTORY_INSTRUCTIONS,
+    MESSAGE_SUBTASK_TOOL: MESSAGE_SUBTASK_INSTRUCTIONS,
+    INSPECT_IMAGE_TOOL: INSPECT_IMAGE_INSTRUCTIONS,
+    BUILD_TABLE_TOOL: BUILD_TABLE_INSTRUCTIONS,
 }
-"""Tool name -> its INSTRUCTIONS doctrine (the tools with strategy or
-discipline beyond their call semantics).  The prompt builders collect
-it IN REGISTRATION ORDER for the run's toolset and render it as the
-system prompt's ``<tool_notes>`` -- a tool absent from the surface
-carries no doctrine, so the gate can never drift.  Tools whose
-description already says everything (ask_user, evaluate, list_engines,
-recall_history, message_subtask, inspect_image, build_table) have no
-entry."""
+"""Tool name -> its INSTRUCTIONS doctrine.  The MCP symmetry holds in
+full: EVERY tool carries instructions the way every MCP server does --
+the spec's ``description`` is the call semantics (what it does, its
+arguments), the INSTRUCTIONS constant is the doctrine (when to reach
+for it, how to work it well).  The prompt builders collect the
+registered tools' entries IN REGISTRATION ORDER and render them as the
+system prompt's ``<tool_notes>`` (byte-stable per toolset); the
+search_tools discovery rows carry them beside the schema -- a tool
+absent from the surface carries no doctrine, so the gate can never
+drift."""
 
 __all__ = [
     "ASK_USER_TOOL",

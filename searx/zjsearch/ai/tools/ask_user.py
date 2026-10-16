@@ -13,6 +13,23 @@ import typing as t
 
 ASK_USER_TOOL = "ask_user"
 
+INSTRUCTIONS = """\
+Your human-in-the-loop escape hatch -- available at ANY point during
+research, not just the start.  Do NOT plow ahead on a guess: the moment
+you realize -- from the question itself, the first round's results or
+mid-research -- that the run could miss what the user actually wants,
+ask INSTEAD of researching the wrong thing.  That covers a genuinely
+ambiguous subject (an acronym matching several UNRELATED products, a
+code name), a scope or success criterion only the user can state, and
+any high-stakes deliverable whose assumptions would change the answer
+-- a forecast, an investment or purchase question, a health or legal
+matter: guessing wrong there is the worst outcome this agent can
+produce.  Asking one sharp question beats a full run on the wrong
+premise.  Do not burn rounds on a guess; do not ask what a quick search
+can settle; do not use it for broad informational topics (cover their
+facets instead); do not ask after the user already confirmed a
+direction; and never mix it with search_web calls in the same turn."""
+
 
 def ask_user_spec() -> dict[str, t.Any]:
     """The mid-research human-in-the-loop tool: the model may stop and ask
@@ -26,22 +43,11 @@ def ask_user_spec() -> dict[str, t.Any]:
     type the sanitizer would downgrade must not be advertised."""
     return {
         "name": ASK_USER_TOOL,
-        "description": (
-            "Stop researching and ask the user for direction.  Do NOT plow"
-            " ahead on a guess: call this ONCE, as the ONLY call of its"
-            " turn, the moment you realize that -- whatever the research"
-            " returns -- the answer could miss what the user actually"
-            " wants.  Triggers: a genuinely ambiguous subject (an acronym,"
-            " code or short name matching several unrelated products); a"
-            " scope, target or success criterion only the user can state;"
-            " a high-stakes deliverable (a forecast, an investment,"
-            " purchase, health or legal question) whose assumptions would"
-            " change the answer.  Asking one sharp question beats a full"
-            " run on the wrong premise.  Do NOT use it for broad"
-            " informational topics (cover their facets instead), for"
-            " details live sources can settle, or after the user already"
-            " confirmed a direction."
-        ),
+        "description": """\
+Stop researching and ask the user for direction: the run ends with your
+questions and the answers return as the confirmed research direction.
+Call it ONCE, as the ONLY call of its turn.  At most 3 questions, each
+with 2-4 concrete options (the user can always add free text).""",
         "inputSchema": {
             "type": "object",
             "properties": {

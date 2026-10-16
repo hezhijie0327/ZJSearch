@@ -18,6 +18,16 @@ from searx.zjsearch.ai.llm import decision
 
 EVALUATE_TOOL = "evaluate"
 
+INSTRUCTIONS = """\
+Reach for it when YOU are torn or a call is borderline: which of two
+sources better matches the subtask, whether a snippet is really about
+X, whether the evidence supports a claim, a tie-break between
+candidates.  It judges ONLY the state you hand it -- it cannot search
+and knows no facts: never use it to find information, and cite sources
+for facts regardless of its verdict.  Hand it COMPACT state (a few
+hundred words at most): a title plus snippet, the two options side by
+side, the claim plus the passage that supports it."""
+
 
 def evaluate_spec() -> dict[str, t.Any]:
     """The decision-model delegation tool: ONE forward pass
@@ -33,19 +43,11 @@ def evaluate_spec() -> dict[str, t.Any]:
     {"true": ..., "false": ...})."""
     return {
         "name": EVALUATE_TOOL,
-        "description": (
-            "Delegate ONE structured judgment to a fast decision model"
-            " (no text generation, one forward pass).  Use it when YOU are"
-            " torn or a call is borderline: pick between candidates"
-            " (choice), grade something on an ordered scale (score), or"
-            " answer a yes/no question about the material (noul) -- each"
-            " with probabilities.  Examples: which of these two sources"
-            " better matches the subtask; is this snippet about X; does"
-            " the evidence support the claim.  It judges ONLY the state"
-            " you hand it -- it cannot search and knows no facts: never"
-            " use it to find information, and cite sources for facts"
-            " regardless of its verdict."
-        ),
+        "description": """\
+Delegate ONE structured judgment to a fast decision model (no text
+generation, one forward pass): pick between candidates (choice), grade
+something on an ordered scale (score), or answer a yes/no question
+about the material (noul) -- each with probabilities.""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",

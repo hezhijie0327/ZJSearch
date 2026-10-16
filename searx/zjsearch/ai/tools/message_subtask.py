@@ -15,6 +15,14 @@ from searx.zjsearch.ai.core.text import raw_args
 
 MESSAGE_SUBTASK_TOOL = "message_subtask"
 
+INSTRUCTIONS = """\
+Use it when a digest was close but not what you need -- a correction
+after you learned something new, a refinement of the digest, a gap its
+digest reported.  The follow-up spends turns, not a new context: the
+subagent works your message INSIDE the context it built.  Open a NEW
+delegation (delegate_research) when the facet is independent -- a new
+subagent would re-search it from zero."""
+
 FOLLOWUP_MAX = 4
 """Follow-up messages one subagent may receive per run -- the resume
 channel's spend cap (each resume re-runs up to the subagent's round
@@ -26,18 +34,11 @@ def message_subtask_spec() -> dict[str, t.Any]:
     subagent, resumed inside the context it built."""
     return {
         "name": MESSAGE_SUBTASK_TOOL,
-        "description": (
-            "Send a FOLLOW-UP to a subagent you already delegated to (its"
-            " digest's [Subtask Sn] tag is the id).  It resumes with its"
-            " full research context still in place -- the sources it"
-            " numbered, its findings ledger, the pages it read -- works"
-            " your message (a correction, a refinement of the digest, a"
-            " gap it reported) and reports a FRESH digest.  Use it when a"
-            " digest was close but not what you need; open a NEW"
-            " delegation (delegate_research) when the facet is independent"
-            " (a follow-up costs turns, a new subagent costs a whole"
-            " context)."
-        ),
+        "description": """\
+Send a FOLLOW-UP to a subagent you already delegated to (its digest's
+[Subtask Sn] tag is the id): it resumes with its full research context
+still in place -- the sources it numbered, its findings ledger, the
+pages it read -- works your message and reports a FRESH digest.""",
         "inputSchema": {
             "type": "object",
             "properties": {

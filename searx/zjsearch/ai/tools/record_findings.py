@@ -59,25 +59,22 @@ def record_findings_spec() -> dict[str, t.Any]:
     facts (with revision ops) and gaps (with close ops)."""
     return {
         "name": RECORD_FINDINGS_TOOL,
-        "description": (
-            "Maintain the research BELIEF LEDGER -- what the sources"
-            " ESTABLISHED, and what the question still OWES.  Two"
-            " partitions, one call, roughly once per round:  (1) facts --"
-            " self-contained [n]-cited sentences (\"DeepSeek-V4 ships a"
-            ' 256k context window [4]"); REvise the ledger as evidence'
-            ' moves: {"text": ..., "supersedes": <fact id>} replaces an'
-            ' earlier fact the new evidence corrects, {"text": ...,'
-            ' "retracts": <fact id>} withdraws one a source contradicted.'
-            "  (2) gaps -- the open questions between the evidence and a"
-            ' complete answer: open_gaps adds {"q": ..., "why": ...}'
-            ' (what is missing and why it matters), close_gaps settles'
-            ' one {"q": ..., "close_as": "answered by [7]" | "no public'
-            ' data exists"} -- closing a gap with an honest reason IS'
-            " progress.  Never record plans (the task list owns those)"
-            " and never a fact no source supports.  The writer reads the"
-            " facts; your next rounds chase the gaps; the run ends when"
-            " the ledger closes."
-        ),
+        "description": """\
+Maintain the research BELIEF LEDGER -- what the sources ESTABLISHED,
+and what the question still OWES.  Two partitions, one call, roughly
+once per round:
+(1) facts -- self-contained [n]-cited sentences ("DeepSeek-V4 ships a
+256k context window [4]").  Revise the ledger as evidence moves:
+{"text": ..., "supersedes": <fact id>} replaces an earlier fact the new
+evidence corrects; {"text": ..., "retracts": <fact id>} withdraws one a
+source contradicted.
+(2) gaps -- the open questions between the evidence and a complete
+answer: open_gaps adds {"q": ..., "why": ...} (what is missing and why
+it matters); close_gaps settles one {"q": ..., "close_as": "answered by
+[7]" | "no public data exists"} -- closing a gap with an honest reason
+IS progress.  Never record plans (the task list owns those) and never a
+fact no source supports.  The writer reads the facts; your next rounds
+chase the gaps; the run ends when the ledger closes.""",
         "inputSchema": {
             "type": "object",
             "properties": {

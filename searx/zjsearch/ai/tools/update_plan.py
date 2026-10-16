@@ -40,15 +40,13 @@ def update_plan_spec() -> dict[str, t.Any]:
     delegated next."""
     return {
         "name": UPDATE_PLAN_TOOL,
-        "description": (
-            "Create or update the SUBTASK LIST for this research -- it is"
-            " the ONLY way the plan or its statuses ever change.  The list"
-            " is rendered to the user as your research plan, and the"
-            " coverage tracker records which sources landed on which"
-            " subtask (statuses are never written there).  Send the"
-            " COMPLETE list every time -- the newest call REPLACES the"
-            " card, it is not a diff."
-        ),
+        "description": """\
+Create or update the SUBTASK LIST for this research -- it is the ONLY
+way the plan or its statuses ever change.  The list is rendered to the
+user as your research plan, and the coverage tracker records which
+sources landed on which subtask (statuses are never written there).
+Send the COMPLETE list every time -- the newest call REPLACES the card,
+it is not a diff.""",
         "inputSchema": {
             "type": "object",
             "properties": {
