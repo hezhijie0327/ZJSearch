@@ -39,6 +39,7 @@ Send a FOLLOW-UP to a subagent you already delegated to (its digest's
 [Subtask Sn] tag is the id): it resumes with its full research context
 still in place -- the sources it numbered, its findings ledger, the
 pages it read -- works your message and reports a FRESH digest.""",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
             "properties": {

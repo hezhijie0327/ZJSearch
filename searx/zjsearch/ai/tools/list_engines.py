@@ -46,6 +46,7 @@ instant.""",
         "inputSchema": {
             "type": "object",
             "properties": {},
+            "required": [],
         },
     }
 

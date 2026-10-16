@@ -48,6 +48,7 @@ Stop researching and ask the user for direction: the run ends with your
 questions and the answers return as the confirmed research direction.
 Call it ONCE, as the ONLY call of its turn.  At most 3 questions, each
 with 2-4 concrete options (the user can always add free text).""",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
             "properties": {

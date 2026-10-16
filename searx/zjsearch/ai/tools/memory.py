@@ -56,6 +56,7 @@ Remember durable facts about the user across sessions (action=save) or
 look up what is already stored (action=search).  One save = ONE
 self-contained fact in the user's language; never a one-off
 conversation detail.""",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
             "properties": {

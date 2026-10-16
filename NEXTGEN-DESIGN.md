@@ -94,6 +94,53 @@ searx/zjsearch/ai/
 `mcp_<server>_<tool>` 工具;模型面永远只有一个 `search_tools`(合并索引:外部 server 工具 + 本部署披露的长尾工具 list_engines/evaluate/recall_history/inspect_image)
 发现工具(渐进披露),按关键词取完整 schema 后再按名调用。
 
+### 2.1 MCP 对齐审计(2026-10,对照 server-instructions 指南与 spec)
+
+**已对齐**(内部工具讲 MCP 的语言,但不付协议边界的税):
+
+- **Tool 形状**:`{name, description, inputSchema, annotations}` —— 与
+  MCP `Tool` 同构;`name` 全部是安全标识符;`inputSchema.type=object` +
+  `properties`/`required` 全量在位;每个参数都带描述。
+- **annotations**:纯读工具 `readOnlyHint: true`(search_web/calculate/
+  list_engines/evaluate/recall_history/inspect_image/build_table),
+  开放世界工具 `openWorldHint: true`(search_web/browse),六个改状态
+  工具**显式**声明 `{readOnlyHint: false, destructiveHint: false}`
+  (update_plan 另带 `idempotentHint: true` —— 重发完整列表天然幂等)。
+  按 spec,缺省 = 保守按可变更处理;显式写出让 executor/调试行今后可
+  直接消费,无"未知"态。
+- **instructions 对称**:MCP 的 server instructions 写的是"工具描述装
+  不下的东西"(跨工具关系、操作节奏、约束),反模式是复读 desc、写
+  手册。内部工具 14/14 持有 `INSTRUCTIONS`:desc = 调用语义,INSTRUCTIONS
+  = 教条(何时出手、怎么用好),互相不重叠;跨工具关系显式成文
+  (search_web→list_engines/ask_user 付费门、update_plan↔record_findings
+  的分工、delegate→message_subtask 的追问通道)。注入形态即指南里
+  GitHub 的 pattern:**基础教条 + 按注册工具集追加** —— `<tool_notes>`
+  按 run 实际注册的 spec 收集,披露长尾的教条随 `search_tools` 行的
+  `instructions` 字段到达(与 MCP 行为逐字段同形)。
+- **渐进披露**:核心内联、长尾走 `search_tools` 关键词索引(schema +
+  instructions 同行返回,空结果返回两侧目录)。
+
+**记录在案的有意偏差**(不是疏漏):
+
+- 结算是**富协议**(wire `call` 载荷:img/shot/page、findings 快照、
+  ask 停靠、付费门 hold、[n] 铸号),不是 MCP 的单一文本返回——这是
+  本产品时间线的根基,见 §3。
+- 内联核心按档位豁免披露(Search 的五个常驻工具不付发现回合税);
+  MCP 无此概念,是我们的产品化。
+- 内部 INSTRUCTIONS 无 400 字符上限(那是给外部 server 的不可控文本
+  设的);上限逻辑只作用于 `mcp.py` 的握手捕获。
+
+**为什么不给内部工具起一个真的 in-process MCP server**(决策记录):
+ uniform 的收益已经在**形状与机制层**拿完了(上面四条);真走协议
+ 边界只剩代价——(1) 最热路径(search_web 每轮 2-3 次)每次都要付
+ open→initialize→act→close 的会话往返(mcp.py 的会话故意不缓存,
+ anyio task group 活不过 threadsafe 跳跃);(2) 富结算无法穿过通用
+ 文本返回,要么砍掉时间线/任务卡/台账,要么造一层"假 uniform";(3)
+ MCP 的价值在第三方 client 的协议边界,内部调用之间不存在这个边界。
+ **真正有价值的 MCP 方向是反的**:把 ZJSearch 的搜索能力**作为 MCP
+ server 暴露给外部 client**(Claude Desktop、其他 agent)——那是产品
+ 功能(一层薄 FastMCP 包装经典搜索 API),不是内部重构,留作后续选项。
+
 ---
 
 ## 3. Wire 协议(NDJSON,闭集)

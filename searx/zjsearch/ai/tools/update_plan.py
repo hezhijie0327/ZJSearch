@@ -47,6 +47,7 @@ user as your research plan, and the coverage tracker records which
 sources landed on which subtask (statuses are never written there).
 Send the COMPLETE list every time -- the newest call REPLACES the card,
 it is not a diff.""",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True},
         "inputSchema": {
             "type": "object",
             "properties": {

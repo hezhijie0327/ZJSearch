@@ -57,6 +57,7 @@ batch independent subtasks in one round to run them in parallel.  Brief
 it like a colleague: objective (what to establish), output_format (what
 the digest must contain), tool_guidance (where to look, what to skip),
 boundaries (what is OUT of scope).""",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
             "properties": {

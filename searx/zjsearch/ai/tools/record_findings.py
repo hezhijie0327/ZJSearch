@@ -75,6 +75,7 @@ it matters); close_gaps settles one {"q": ..., "close_as": "answered by
 IS progress.  Never record plans (the task list owns those) and never a
 fact no source supports.  The writer reads the facts; your next rounds
 chase the gaps; the run ends when the ledger closes.""",
+        "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
             "properties": {
