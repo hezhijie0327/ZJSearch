@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { DatabaseSearch } from "lucide-react";
+import { CircleDollarSign, DatabaseSearch } from "lucide-react";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiEngineInventory } from "@/features/results/aiSearch/timeline.ts";
@@ -71,7 +71,11 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
                     <span className="truncate text-[11px] text-ink-3">{engine.cats.join(", ")}</span>
                   ) : null}
                   {engine.paid ? (
-                    <span className="shrink-0 text-[11px] text-accent">{t("ai_engine_info_paid")}</span>
+                    <CircleDollarSign
+                      aria-label={t("ai_engine_info_paid")}
+                      className="size-3 shrink-0 self-center text-accent"
+                      role="img"
+                    />
                   ) : null}
                 </div>
               </div>
