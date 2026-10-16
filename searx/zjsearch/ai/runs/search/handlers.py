@@ -1152,7 +1152,6 @@ section, do not re-type the numbers."""
         self,
         parsed: dict[str, str],
         lang: str,
-        today: str,
         tool_notes: list[tuple[str, str]] | None = None,
     ) -> SubagentHandle:
         """Mint one delegation's handle: the run's stable key (S1, S2,
@@ -1172,7 +1171,7 @@ section, do not re-type the numbers."""
             key,
             self._sub_seq,
             parsed,
-            subagent_messages(parsed, lang, today, tool_notes=tool_notes),
+            subagent_messages(parsed, lang, tool_notes=tool_notes),
             child,
             ChildControl(),
         )
@@ -1292,7 +1291,6 @@ section, do not re-type the numbers."""
         cfg = self.cfg
         child_tools = self._sub_toolset()
         lang = self.lang or "en"
-        today = time.strftime("%Y-%m-%d")
         settled_jobs: list[tuple[int, SubagentHandle]] = []
         threads: list[threading.Thread] = []
         queues: "dict[int, queue.Queue[t.Any]]" = {}
@@ -1311,7 +1309,7 @@ section, do not re-type the numbers."""
                     " merge overlapping subtasks and re-delegate."
                 )
                 continue
-            handle = self._register_subagent(parsed, lang, today, tool_notes=self._sub_tool_notes)
+            handle = self._register_subagent(parsed, lang, tool_notes=self._sub_tool_notes)
             handle.busy = True
             settled_jobs.append((wire_id, handle))
             handles_by_seq[handle.seq] = handle

@@ -79,9 +79,25 @@ def language_directive(catalog_tag: str) -> str:
     )
 
 
+_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+"""Fixed English weekday names -- ``strftime('%A')`` is locale-dependent,
+and a CJK-locale deployment would leak non-English weekdays into the
+English-only prompt layer."""
+
+
+def today_text() -> str:
+    """The date + weekday sentence body ("Friday, 2026-10-17") -- shared
+    by :func:`today_line` and the subagent's opener so every surface
+    speaks the date identically."""
+    now = datetime.date.today()
+    return f"{_WEEKDAYS[now.weekday()]}, {now.isoformat()}"
+
+
 def today_line() -> str:
-    """The deterministic date block: the model must never guess the date."""
-    return block("today", f"Today is {datetime.date.today().isoformat()}.")
+    """The deterministic date block: the model must never guess the date
+    -- and the WEEKDAY grounds "this week" / business-day reasoning the
+    bare ISO date cannot."""
+    return block("today", f"Today is {today_text()}.")
 
 
 def citation_rules() -> str:
