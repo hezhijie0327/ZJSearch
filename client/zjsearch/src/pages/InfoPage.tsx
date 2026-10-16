@@ -32,23 +32,27 @@ interface InstanceConfig {
   plugins: Array<{ enabled: boolean }>;
 }
 
-function useInstanceConfig(): InstanceConfig | null {
-  const [config, setConfig] = useState<InstanceConfig | null>(null);
+function useInstanceConfig(): { config: InstanceConfig | null; failed: boolean } {
+  const [state, setState] = useState<{ config: InstanceConfig | null; failed: boolean }>({
+    config: null,
+    failed: false,
+  });
   useEffect(() => {
     const controller = new AbortController();
     void fetchJson<InstanceConfig>("/config", {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     })
-      .then(setConfig)
+      .then((config) => setState({ config, failed: false }))
       .catch(() => {
-        /* quiet: sections that need it simply stay hidden */
+        /* quiet: the stats block collapses away instead of shimmering forever */
+        setState((prev) => ({ config: prev.config, failed: true }));
       });
     return () => {
       controller.abort();
     };
   }, []);
-  return config;
+  return state;
 }
 
 /** Client-side pages (instance / license) — they render as React content but
@@ -137,12 +141,23 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
+/** Ghost twin of Stat — same cell padding and bar heights (text-xl = h-7,
+    text-xs = h-4) so the loaded card swaps in without any height change. */
+function StatSkeleton() {
+  return (
+    <div className="bg-surface px-4 py-3.5 text-center">
+      <div className="zjs-skeleton mx-auto h-7 w-10" />
+      <div className="zjs-skeleton mx-auto mt-0.5 h-4 w-14" />
+    </div>
+  );
+}
+
 /** Live instance page: version, engines / categories / plugins counts and
     the configurable instance URLs (privacy policy, contact, public
     instances, settings.yml custom links). */
 function InstancePage({ globals }: { globals: GlobalData }) {
   const t = useT();
-  const config = useInstanceConfig();
+  const { config, failed: configFailed } = useInstanceConfig();
   const links: Array<{ label: string; url: string; icon: LucideIcon }> = [];
   if (globals.donation_url) {
     links.push({ label: t("donate"), url: globals.donation_url, icon: Heart });
@@ -180,7 +195,16 @@ function InstancePage({ globals }: { globals: GlobalData }) {
           <Stat label={t("categories")} value={config.categories.length} />
           <Stat label={t("plugins")} value={config.plugins.filter((plugin) => plugin.enabled).length} />
         </div>
-      ) : null}
+      ) : configFailed ? null : (
+        <div
+          aria-hidden="true"
+          className="my-5 grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-line bg-line"
+        >
+          <StatSkeleton />
+          <StatSkeleton />
+          <StatSkeleton />
+        </div>
+      )}
       {links.length > 0 ? (
         <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
           {links.map((link) => {
