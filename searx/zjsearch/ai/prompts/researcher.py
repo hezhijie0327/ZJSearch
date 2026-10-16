@@ -537,7 +537,9 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         if listed:
             run_context += (
                 "<mcp_servers>\nThe connected MCP servers (their tools are"
-                " the mcp_* functions) carry their own usage"
+                " reachable ONLY through the mcp_search_tools discovery"
+                " tool -- keyword-search it to receive the matching tools'"
+                " full schemas) carry their own usage"
                 f" guidance:\n{listed}\n</mcp_servers>\n"
             )
     if image_parts:

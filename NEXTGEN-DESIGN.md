@@ -86,8 +86,8 @@ searx/zjsearch/ai/
 一个模块 + 注册一行 + 前端一个 view(未知工具兜底到通用行,不静默破相)。
 
 与 MCP 的边界:`zjsearch.mcp` 把外部 streamable-HTTP 服务器桥接成
-`mcp_<server>_<tool>` 工具;超过 8 个工具总量后走渐进披露(一个
-`mcp_search_tools` 发现工具,按关键词取完整 schema)。
+`mcp_<server>_<tool>` 工具;模型面永远只有一个 `mcp_search_tools`
+发现工具(渐进披露),按关键词取完整 schema 后再按名调用。
 
 ---
 

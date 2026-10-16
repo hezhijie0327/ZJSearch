@@ -1614,20 +1614,21 @@ scope).  The official `mcp` SDK (MIT, theme requirements section) drives
 the wire; each operation runs inside ONE self-contained connection (open →
 initialize → act → close, a single loop task — the SDK's anyio task groups
 cannot survive the next `run_coroutine_threadsafe` task, so sessions are
-deliberately NOT cached).  Tools are namespaced `mcp_<server>_<tool>`,
-their descriptions and JSON schemas ride the model's tools array verbatim,
-and the researcher prompt gains nothing extra (the descriptions carry it).
+deliberately NOT cached).  Tools are namespaced `mcp_<server>_<tool>`;
+their schemas reach the model ONLY through the `mcp_search_tools`
+discovery tool (see below), never injected into the tools array raw.
 Executor dispatch is the `mcp_` prefix branch: blocking on the shared
 loop's result with a 90s budget, the timeline row renders the server-scoped
 tool name with a Plug icon.  Unconfigured = silence (no specs, no
 sessions); a dead endpoint contributes nothing (one server failing must
-not take the run down).  PROGRESSIVE DISCLOSURE (the Agent Skills
-injection pattern) governs the tool surface: past 8 tools total
-(`PROGRESSIVE_THRESHOLD`) the run registers ONE `mcp_search_tools`
-discovery tool instead of every schema — the model keyword-searches it,
-receives the matched tools' COMPLETE parameter schemas, and calls them
-by name next turn (a miss returns the inventory for re-querying).
-Below the threshold the tools inject directly.  THE SERVER
+not take the run down).  The tool surface is ALWAYS progressive
+disclosure (the Agent Skills injection pattern): the run registers ONE
+`mcp_search_tools` discovery tool, never the raw schemas — the model
+keyword-searches it, receives the matched tools' COMPLETE parameter
+schemas, and calls them by name next turn (a miss returns the
+inventory for re-querying).  One uniform shape however small the
+surface (a 3-tool server pays the same single search round trip), and
+no schema rides a run that never needed it.  THE SERVER
 INSTRUCTIONS ride for free: `_with_session` hands the specs pass the
 initialize result, whose `instructions` land in the module store (400
 chars each, zero extra round trips) and surface twice -- a bounded

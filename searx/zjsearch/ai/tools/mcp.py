@@ -228,16 +228,6 @@ def _specs_future() -> t.Any:
     return asyncio.run_coroutine_threadsafe(list_tools(), get_loop())
 
 
-PROGRESSIVE_THRESHOLD = 8
-"""The tool count past which the MCP surface switches to PROGRESSIVE
-DISCLOSURE (the Agent Skills injection pattern): instead of every
-server tool's full schema riding each run's context -- fifteen amap
-schemas would burn thousands of tokens on a question about the news --
-the model sees ONE discovery tool, searches it by keyword, and receives
-the matched tools' complete schemas for calling.  Below the threshold
-the tools inject directly (the discovery round trip costs more than the
-schemas)."""
-
 SEARCH_TOOL = "mcp_search_tools"
 
 
@@ -332,15 +322,14 @@ def mcp_specs() -> list[dict[str, t.Any]]:
 
 
 def tools_surface() -> list[dict[str, t.Any]]:
-    """What the RUN registers: every namespaced spec when they fit the
-    context, or -- past the threshold -- just the progressive-discovery
-    tool (the Agent Skills pattern: metadata first, full schemas on
-    demand)."""
+    """What the RUN registers: ALWAYS just the progressive-disclosure
+    discovery tool (the Agent Skills pattern) -- however small the
+    surface, the model sees ONE search box and earns the full schemas
+    on a keyword match.  One uniform MCP shape to learn, and no schema
+    rides a run that never needs it."""
     specs = mcp_specs()
     if not specs:
         return []
-    if len(specs) <= PROGRESSIVE_THRESHOLD:
-        return specs
     return [discovery_spec(len(specs), [server for server, _, _ in mcp_cfg()])]
 
 

@@ -519,9 +519,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # login/interaction escape hatch -- one tool surface
     browser_on = browser_config.ready()
     # the MCP bridge (zjsearch.mcp, streamable-HTTP servers): an
-    # unconfigured or package-less deployment registers nothing; a large
-    # surface switches to PROGRESSIVE DISCLOSURE (one discovery tool
-    # instead of every schema)
+    # unconfigured or package-less deployment registers nothing; the
+    # surface is ALWAYS progressive disclosure (the ONE discovery tool,
+    # full schemas only on a keyword match)
     mcp_tools = mcp.tools_surface() if mcp.configured() and mcp.sdk_missing() is None else []
     if not research_needed:
         # the no-research run: the writer alone -- the zero-tool case of the
