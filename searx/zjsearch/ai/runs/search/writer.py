@@ -4,62 +4,36 @@
 The writer half of the researcher/writer split (the researcher's
 conversation opener lives in :py:mod:`prompts.researcher`), composed
 from the SHARED fragments in :py:mod:`searx.zjsearch.ai.prompts.spine`
-(the same source both AI features speak, so they cannot drift): the
-byte-stable answer contract -- ordered cache-friendly, stable blocks
-first, per-run notes last.  The budget honesty note (the prose the
-model is told when the gathering ended early) lives here too: it is the
-writer side's answer to "what do we tell the model".
-"""
+(the same source every answer surface speaks, so they cannot drift):
+the byte-stable answer contract -- ordered cache-friendly, stable blocks
+first, per-run notes last.  The tier output shape comes from
+``spine.shape_ladder`` (the one grammar + per-tier budget the AI
+Overview shares verbatim); the run-level honesty notes live in
+:py:mod:`prompts.notes`."""
 
 import typing as t
 
+from searx.zjsearch.ai.prompts import notes
 from searx.zjsearch.ai.prompts import spine as shared
 from searx.zjsearch.ai.runs.search.context import _fit_context, writer_context_max
 
-_BUDGET_NOTE = "The research budget ended the gathering early -- the sources above are everything that was found."
-
-_DEPTH_SHAPE: dict[str, str] = {
-    # The WRITER's output shape per tier -- the half of the old depth
-    # prompt that describes the ANSWER, now prompted where the answer is
-    # actually written.
-    "speed": "Shape: ONE short dense paragraph -- name the subject (bold on"
-    " first mention), define it in a sentence or two, add at most two or"
-    " three key facts -- each cited.  NO headings, lists, tables or"
-    " diagrams; if the subject is ambiguous, say which sense you picked in"
-    " one clause.",
-    "balanced": "Shape: short paragraphs with the key terms in **bold**; a"
-    " bullet list or definition list when enumerating; a table only for a"
-    " genuine 2-3 way comparison.  Keep it moderate.  Open with the direct"
-    " answer or verdict in the first sentence, then the support -- never"
-    " an aimless lead-in.",
-    "deep": "Shape: a thorough, structured answer in \"##\" sections --"
-    " definitions, mechanics, comparisons, recent developments -- citing"
-    " every major claim.  Real matrices (companies x metrics, options x"
-    " tradeoffs) go into markdown tables with a citation on every"
-    " load-bearing cell; NEVER open with a heading -- a short bold-lead"
-    " paragraph comes first, the headings follow.  Be thorough, not"
-    " exhaustive: cut any"
-    " section that merely restates the question; when two candidate"
-    " depths exist, write the shorter.",
-}
-
-_FOLLOWUPS_BLOCK = (
-    "<follow_ups>\n"
-    "When the answer is substantive -- it compares, recommends, explains a"
-    " mechanism or lays out several points -- end it with EXACTLY ONE"
-    " fenced block carrying three follow-up questions:\n"
-    "```related\n"
-    '{"questions": ["...", "...", "..."]}\n'
-    "```\n"
-    "Each question is short (about a dozen words at most), self-contained,"
-    " in the answer language, and grounded in THIS answer: one deepens its"
-    " most interesting or surprising point, one is the practical next"
-    " step, one broadens with a comparison or related angle -- never three"
-    " near-duplicates.  Omit the block entirely for greetings, single"
-    " facts or values, refusals and clarifying questions.  Write the"
-    " COMPLETE answer prose FIRST -- the fence follows the last prose"
-    " line and is never its substitute; never mention it in the prose.\n</follow_ups>"
-)
+_FOLLOWUPS_BLOCK = """\
+<follow_ups>
+When the answer is substantive -- it compares, recommends, explains a
+mechanism or lays out several points -- end it with EXACTLY ONE fenced
+block carrying three follow-up questions:
+```related
+{"questions": ["...", "...", "..."]}
+```
+Each question is short (about a dozen words at most), self-contained, in
+the answer language, and grounded in THIS answer: one deepens its most
+interesting or surprising point, one is the practical next step, one
+broadens with a comparison or related angle -- never three
+near-duplicates.  Omit the block entirely for greetings, single facts or
+values, refusals and clarifying questions.  Write the COMPLETE answer
+prose FIRST -- the fence follows the last prose line and is never its
+substitute; never mention it in the prose.
+</follow_ups>"""
 
 
 def _answer_images_block(proxied: bool) -> str:
@@ -78,31 +52,28 @@ def _answer_images_block(proxied: bool) -> str:
         if proxied
         else "img=https://upload.wikimedia.org/wikipedia/commons/...jpg"
     )
-    return (
-        "<answer_images>\n"
-        "Some source lines below carry image URLs as img=... .  An image"
-        " earns its place only when the section is about something the"
-        " reader should SEE -- a product, a person, a place, a device, a"
-        " chart, an event: judge by the source line's title, which names"
-        " what the image belongs to.  When the text is about an abstract"
-        " subject (a platform, a policy, a market, a comparison), the"
-        " images behind those sources are usually decorative cover art --"
-        " noise on the page: skip the group and keep the prose.  When"
-        " images do earn a place, each group is a fenced block of a JSON"
-        " array of 1-4 URLs, placed on its own lines inside the markdown"
-        " body:\n"
-        "```zjs-images\n"
-        '["<url>", "<url>"]\n'
-        "```\n"
-        f"A feed line looks like: \"[12] upload.wikimedia.org: Mount Fuji -"
-        f" ... {sample}' -- copy the value after \"img=\""
-        " character for character.  NEVER invent, modify or guess a URL"
-        " (unlisted URLs are dropped server-side and the group renders"
-        " empty).  At most two groups per answer.\n</answer_images>"
-    )
+    return f"""\
+<answer_images>
+Some source lines below carry image URLs as img=... .  An image earns
+its place only when the section is about something the reader should
+SEE -- a product, a person, a place, a device, a chart, an event: judge
+by the source line's title, which names what the image belongs to.  When
+the text is about an abstract subject (a platform, a policy, a market, a
+comparison), the images behind those sources are usually decorative
+cover art -- noise on the page: skip the group and keep the prose.  When
+images do earn a place, each group is a fenced block of a JSON array of
+1-4 URLs, placed on its own lines inside the markdown body:
+```zjs-images
+["<url>", "<url>"]
+```
+A feed line looks like: "[12] upload.wikimedia.org: Mount Fuji - ...
+{sample}' -- copy the value after "img=" character for character.  NEVER
+invent, modify or guess a URL (unlisted URLs are dropped server-side and
+the group renders empty).  At most two groups per answer.
+</answer_images>"""
 
 
-def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-positional-arguments, too-many-branches
+def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
     question: str,
     lang: str,
     history: list[dict[str, str]],
@@ -157,13 +128,14 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         lines = shared.answer_contract(
             lang,
             role,
-            shape=_DEPTH_SHAPE.get(mode, _DEPTH_SHAPE["balanced"]),
-            sources_note=(
-                "<sources_note>\nThe numbered sources gathered for this"
-                " question follow the question below.  [n] labels are global"
-                " and contiguous; sources [1]..[{base}] predate this thread's"
-                " question; cite only sources visible in the context."
-                "\n</sources_note>".format(base=sources_base)
+            shape=shared.shape_ladder(mode),
+            sources_note=shared.block(
+                "sources_note",
+                f"""\
+                The numbered sources gathered for this question follow the
+                question below.  [n] labels are global and contiguous;
+                sources [1]..[{sources_base}] predate this thread's question;
+                cite only sources visible in the context.""",
             ),
         )
     if attached_files:
@@ -192,14 +164,14 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     if halt:
         lines.append(f"<research_note>\n{halt}\n</research_note>")
     elif budget_truncated:
-        lines.append(f"<research_note>\n{_BUDGET_NOTE}\n</research_note>")
+        lines.append(f"<research_note>\n{notes.BUDGET_NOTE}\n</research_note>")
     active = [fact for fact in findings or [] if fact.get("status") == "active"]
     if active:
         # the researcher's own distillation (dzhng's writeFinalReport
         # pattern): a pre-digested, REVISABLE evidence trail beside the raw
         # sources -- support, never substitute (the citation contract still
         # binds every claim to its numbered source)
-        findings = "\n".join(f"- {fact.get('text', '')}" for fact in active)
+        findings_text = "\n".join(f"- {fact.get('text', '')}" for fact in active)
         lines.append(
             "<findings>\nThe research agent recorded these findings as it"
             " worked -- its distillation of what the sources below"
@@ -207,7 +179,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             " retracted facts are already filtered out).  Use them as your"
             " map of the material: they carry the agent's [n] labels and"
             " every claim still cites its numbered source; when a finding"
-            " and a source disagree, the source wins.\n" + findings + "\n</findings>"
+            " and a source disagree, the source wins.\n" + findings_text + "\n</findings>"
         )
     open_gaps = [gap for gap in gaps or [] if gap.get("status") == "open"]
     if open_gaps:

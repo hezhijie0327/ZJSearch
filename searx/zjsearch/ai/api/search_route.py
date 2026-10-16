@@ -45,7 +45,8 @@ from searx.zjsearch.ai.runs.search.state import (
     serialize_subagents,
     state_block,
 )
-from searx.zjsearch.ai.tools._subagent import SUB_ROUNDS
+from searx.zjsearch.ai.prompts.notes import RESUME_NOTE, RESUME_NOTE_WRITE
+from searx.zjsearch.ai.prompts.subagent import SUB_ROUNDS
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.runs.report import synth as report_synth
@@ -164,31 +165,6 @@ _RESUME_MAX_CHARS = 2_000_000
 """The replayed conversation's JSON budget (a deep run's transcript with
 hundreds of sources lands well under it; a bigger payload is a corrupt
 store -- fresh-conversation fallback, not a 413)."""
-
-RESUME_NOTE = (
-    "<resume_note>The transcript above is your own research from a previous"
-    " process that died mid-run -- it is complete up to the last tool results"
-    " shown. Continue it where it stands: re-affirm your task ledger"
-    " (update_plan) and findings ledger (record_findings) first if they are not"
-    " current in this transcript, do NOT repeat searches or page reads whose"
-    " results already appear above (their sources keep their [n] numbers),"
-    " then continue the open ledger items. The user experiences this as the"
-    " same run resuming, not a restart.</resume_note>"
-)
-
-RESUME_NOTE_WRITE = (
-    "<resume_note>The transcript above is your own research from a previous"
-    " process that died during the WRITING phase -- the gathering is DONE and"
-    " the findings ledger above is complete. Do NOT run new searches or page"
-    " reads and do NOT re-open the task list: close with what you have (wrap"
-    " up without tool calls) so the report/deck is written from the material"
-    " above. Only if a RED-LINE gap makes the deliverable impossible may you"
-    " run at most one targeted search. The user experiences this as the same"
-    " run resuming straight into the writer.</resume_note>"
-)
-"""The researcher-facing continuation note appended AFTER the replayed
-conversation (an honest English note -- the model never sees machine
-keys)."""
 
 
 def parse_resume(raw: t.Any, sources_base: int) -> dict[str, t.Any] | None:
@@ -574,10 +550,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             return _search(degraded=True)
         return response
 
-    # everything is a tool: the task list registers for EVERY mode -- the
-    # mode's BEHAVIOR note (speed's "do not bother") shapes its use, the
-    # surface never gates it
-    register_tasks = True
+    # the task list registers for the RESEARCH tiers (Deep Search, Deep
+    # Research); the Search tier runs the AI-Overview shape -- one round,
+    # no plan, no ledger -- so its surface carries neither
+    register_tasks = mode in ("balanced", "deep")
     research_q = (standalone_question(cfg, q, history, lang, account=account) if history else "") or q
     depth_probe_entry: dict[str, t.Any] | None = None
     # the DEPTH PROBE: the decision model grades how deep/broad the
@@ -940,6 +916,46 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # child burnt its own budget
     state.run_control = handle.control
 
+    # THE TOOL SURFACE, assembled ONCE: the specs the run registers and the
+    # toolset frozenset the researcher prompt derives its blocks from -- one
+    # source of truth, so the prompt can never promise a tool the model does
+    # not have.  Tier identity lives here: Search (speed) carries the
+    # AI-Overview minimal set (no plan, no ledger, no inventory -- one round
+    # has no use for them); Deep Search adds the research machinery; Deep
+    # Research alone earns the delegation tools.
+    delegating = mode == "deep" and depth_rung >= 2
+    research_tier = mode in ("balanced", "deep")
+    judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
+    recall_on = bool(past_research_entries or live_recall)
+    tool_specs: list[dict[str, t.Any]] = [
+        search_web_spec(browser_on, with_info=True),
+        calculate_spec(),
+        memory_spec(),
+    ]
+    if research_tier:
+        tool_specs += [list_engines_spec(), record_findings_spec()]
+        if judge_on:
+            tool_specs.append(evaluate_spec())
+        if recall_on:
+            tool_specs.append(recall_history_spec())
+    if browser_on:
+        tool_specs.append(browse_tool.browse_spec())
+    tool_specs.append(ask_user_spec())
+    if register_tasks:
+        tool_specs.append(update_plan_spec())
+    if outline is not None:
+        tool_specs.append(build_table_spec())
+    if delegating:
+        tool_specs += [
+            delegate_research_spec(),
+            # the subagents' follow-up channel: only meaningful beside
+            # the delegation tool (the same depth gate mints both)
+            message_subtask_spec(),
+        ]
+    tool_specs.append(inspect_image_spec())
+    tool_specs += mcp_tools
+    toolset = frozenset(str(spec["name"]) for spec in tool_specs)
+
     if resume is not None:
         # THE CONTINUE REPLAY: the dead attempt's exact conversation (its
         # ctx checkpoints, thinking blocks stripped) + the continuation
@@ -967,21 +983,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             history,
             sources_base,
             mode,
+            toolset=toolset,
             max_rounds=max_rounds,
             clarifications=clarifications if clarify_state == "answered" else "",
             clarify_skipped=clarify_state == "skipped",
-            register_ask=True,
-            page_tool=browser_on,
-            task_tool=register_tasks,
-            browser_tool=browser_on,
-            list_engines_tool=True,
             steerable=handle is not None,
-            # delegation gate: the depth probe's rung decides -- deep runs
-            # delegate from rung 2 (the heavy tool for a clearly heavy
-            # question), balanced from rung 4 (the comparison question with
-            # genuinely independent facets earns it too); the old
-            # deep-only rung-3 gate made delegation nearly unreachable
-            subagent_tool=(mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4),
             depth_rung=depth_rung,
             user_memories=user_memories,
             memories_live=live_recall,
@@ -995,31 +1001,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     events = engine.run(
         cfg,
         research_messages,
-        tools=[
-            search_web_spec(browser_on, with_info=True),
-            calculate_spec(),
-            list_engines_spec(),
-            memory_spec(),
-            record_findings_spec(),
-        ]
-        + ([evaluate_spec()] if decision.enabled() and decision.configured() and decision.sdk_missing() is None else [])
-        + ([recall_history_spec()] if (past_research_entries or live_recall) else [])
-        + ([browse_tool.browse_spec()] if browser_on else [])
-        + [ask_user_spec()]
-        + ([update_plan_spec()] if register_tasks else [])
-        + ([build_table_spec()] if outline is not None else [])
-        + (
-            [
-                delegate_research_spec(),
-                # the subagents' follow-up channel: only meaningful beside
-                # the delegation tool (the same depth gate mints both)
-                message_subtask_spec(),
-            ]
-            if (mode == "deep" and depth_rung >= 2) or (mode == "balanced" and depth_rung >= 4)
-            else []
-        )
-        + [inspect_image_spec()]
-        + mcp_tools,
+        tools=tool_specs,
         executor=state.execute,
         post_round_injections=state.drain_image_injections,
         max_rounds=max_rounds,

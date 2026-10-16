@@ -15,7 +15,7 @@ from __future__ import annotations
 import time
 import typing as t
 
-from searx.zjsearch.ai.prompts.researcher import STALL_NOTE
+from searx.zjsearch.ai.prompts.notes import STALL_NOTE
 
 if t.TYPE_CHECKING:
     from searx.zjsearch.ai.runs.search.executor import Searches

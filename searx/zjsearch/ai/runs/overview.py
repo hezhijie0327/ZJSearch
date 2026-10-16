@@ -101,23 +101,27 @@ def build_answer_messages(
 ) -> list[dict[str, t.Any]]:
     """The zero-tool single-turn conversation: the shared answer spine
     (plus the images note when attachments ride) and the user turn with
-    the client-assembled source context."""
-    system = "\n".join(
-        spine.answer_contract(
-            lang,
-            "<role>\nYou are the \"AI Overview\" feature of a search engine:"
-            " answer the user's question directly, grounded in the numbered"
-            " sources provided.  Synthesize ACROSS the sources -- never one"
-            " summary per source, never a source list; keep it short (a few"
-            " sentences unless the question genuinely demands more), and"
-            " lead with the answer.\n</role>",
-        )
+    the client-assembled source context.  The shape is the SPEED rung of
+    the shared ladder, consumed verbatim: the overview and the speed
+    tier are the same product move -- one write turn over already
+    gathered material -- so they must speak one contract (the role's
+    only difference is where the material came from)."""
+    role = spine.block(
+        "role",
+        f"""\
+        You are the quick-answer surface of {spine.AGENT_PERSONA_NAME} --
+        the AI Overview card.  The numbered sources below were assembled by
+        the search results page; answer the user's question directly from
+        them.  Synthesize ACROSS the sources -- never one summary per
+        source, never a source list -- and lead with the answer.""",
     )
+    system = "\n".join(spine.answer_contract(lang, role, shape=spine.shape_ladder("speed")))
     if image_parts:
-        system += (
-            "\n<images>\nImages are attached after this text; they come from"
-            " the numbered sources and may carry relevant visual"
-            " information.\n</images>"
+        system += "\n" + spine.block(
+            "images",
+            """\
+            Images are attached after this text; they come from the numbered
+            sources and may carry relevant visual information.""",
         )
     user_text = _ANSWER_USER_PROMPT.format(q=query, context=context)
     return spine.build_messages(system, spine.user_message(user_text, image_parts))

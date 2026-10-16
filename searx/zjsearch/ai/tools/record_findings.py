@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-"""AI Search: the ``findings`` tool -- the BELIEF LEDGER's model surface.
+"""AI Search: the ``record_findings`` tool -- the BELIEF LEDGER's model surface.
 
 v2 turns dzhng's append-only findings into a ledger the model REvises:
 facts carry identity (``supersedes`` / ``retracts`` name earlier fact
@@ -15,7 +15,10 @@ import typing as t
 
 from searx.zjsearch.ai.core.text import raw_args
 
-RECORD_FINDINGS_TOOL = "findings"
+RECORD_FINDINGS_TOOL = "record_findings"
+"""The wire name matches the module and every prompt mention (the
+pre-rename wire name "findings" survives only inside stored threads'
+event logs, which render historical rows verbatim)."""
 
 LEARNING_MAX_CHARS = 400
 """One recorded finding's cap -- a finding is one self-contained sentence,
@@ -35,7 +38,7 @@ FACT_TAG_CHARS = 24
 
 
 def record_findings_spec() -> dict[str, t.Any]:
-    """The ``findings`` tool spec: a belief ledger with two partitions --
+    """The ``record_findings`` tool spec: a belief ledger with two partitions --
     facts (with revision ops) and gaps (with close ops)."""
     return {
         "name": RECORD_FINDINGS_TOOL,
@@ -131,7 +134,7 @@ def record_findings_spec() -> dict[str, t.Any]:
 
 
 def parse_record_findings_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
-    """The sanitized ledger operations out of one ``findings`` call:
+    """The sanitized ledger operations out of one ``record_findings`` call:
     ``{"facts": [...], "open_gaps": [...], "close_gaps": [...]}`` -- every
     entry trimmed, capped and type-checked; malformed shapes drop
     silently (a ledger op must never crash a settlement)."""

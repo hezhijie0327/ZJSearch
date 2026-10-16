@@ -30,7 +30,7 @@ from searx.zjsearch.ai.tools import memory as memory_cap
 from searx.zjsearch.ai.tools import list_engines as list_engines_tool
 from searx.zjsearch.ai.browser import session as browser_session
 from searx.zjsearch.ai.tools import delegate_research as delegate_tool
-from searx.zjsearch.ai.tools._subagent import SUB_ROUNDS, SUB_STALL_ROUNDS, subagent_messages
+from searx.zjsearch.ai.prompts.subagent import SUB_ROUNDS, SUB_STALL_ROUNDS, subagent_messages
 from searx.zjsearch.ai.tools.message_subtask import FOLLOWUP_MAX
 from searx.zjsearch.ai.llm import decision
 from searx.zjsearch.ai.runs.search import audit
@@ -1124,14 +1124,16 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
 
     def _sub_toolset(self) -> list[dict[str, t.Any]]:
         """The SUBAGENT's toolset: the shared discipline tools -- search,
-        calculate, the deployment inventory, the REPLACED-MARKER        digest), page reads, the browser session and the structured evaluate call.
-        Built per delegation pass: the availability flags are the RUN's.  The child's LEDGER
-        IS its digest: the delegation contract promises the lead "facts
-        + gaps + the source lines", and ``_sub_digest`` builds exactly
-        that from ``child.facts``/``child.gaps`` -- which only the
-        record_findings tool writes.  Evaluate rides the same gate as the
-        lead's -- a structured tie-break is exactly what a worker
-        without the lead's context needs."""
+        calculate, the deployment inventory, the findings ledger (the
+        child's LEDGER IS its digest), page reads, the browser session and
+        the structured evaluate call.  Built per delegation pass: the
+        availability flags are the RUN's.  The child's LEDGER IS its
+        digest: the delegation contract promises the lead "facts + gaps +
+        the source lines", and ``_sub_digest`` builds exactly that from
+        ``child.facts``/``child.gaps`` -- which only the record_findings
+        tool writes.  Evaluate rides the same gate as the lead's -- a
+        structured tie-break is exactly what a worker without the lead's
+        context needs."""
         from searx.zjsearch.ai.tools import (  # pylint: disable=import-outside-toplevel
             calculate_spec,
             record_findings_spec,

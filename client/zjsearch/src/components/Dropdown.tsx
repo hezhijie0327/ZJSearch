@@ -17,6 +17,9 @@ export interface DropdownOption {
   label: string;
   /** optional icon rendered before the label in the menu */
   icon?: ReactNode;
+  /** optional muted second line under the label in the menu (the tier
+      identity under the tier name) -- rows with a hint grow taller */
+  hint?: string;
 }
 
 export function Dropdown({
@@ -108,9 +111,10 @@ export function Dropdown({
       const minWidth = Math.max(rect.width, 176);
       const maxLeft = window.innerWidth - minWidth - margin;
       const left = Math.max(margin, Math.min(rect.left, maxLeft));
-      // ~36px per option row (py-2 + 13px text) + py-1.5 padding, capped
+      // ~36px per plain option row (py-2 + 13px text), ~54px when the
+      // option carries a hint's second line, + py-1.5 padding, capped
       // by the panel's own max-h-80
-      const menuHeight = Math.min(options.length * 36 + 12, 320);
+      const menuHeight = Math.min(options.reduce((height, option) => height + (option.hint ? 54 : 36), 0) + 12, 320);
       const roomBelow = window.innerHeight - margin - rect.bottom;
       const openUp = roomBelow < menuHeight + 6;
       const style: CSSProperties = {
@@ -249,8 +253,13 @@ export function Dropdown({
                     >
                       <span className="flex min-w-0 items-center gap-2">
                         {option.icon ? <span className="shrink-0 text-ink-3">{option.icon}</span> : null}
-                        <span className={`truncate ${selected ? "font-medium text-ink" : "text-ink-2"}`}>
-                          {option.label}
+                        <span className="min-w-0">
+                          <span className={`block truncate ${selected ? "font-medium text-ink" : "text-ink-2"}`}>
+                            {option.label}
+                          </span>
+                          {option.hint ? (
+                            <span className="block truncate text-xs text-ink-3">{option.hint}</span>
+                          ) : null}
                         </span>
                       </span>
                       {selected ? <Check className="size-4 shrink-0 text-accent" /> : null}

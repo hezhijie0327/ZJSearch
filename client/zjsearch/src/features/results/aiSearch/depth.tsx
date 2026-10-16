@@ -8,13 +8,15 @@ import { useT } from "@/lib/i18n.ts";
 
 /** The valid research depths, in wire order -- the single source of
     truth for parsing the `mode` URL param.  THREE user-facing tiers
-    (quick/balanced/deep): the deep tier's output FORMAT (report=outline
-    document / deck=slide deck) is decided INSIDE the run at the
-    rail's output-structure picker, not in the composer.  The wire forms are
-    `mode: "deep"` + `report: true` / `deck: true` (see useAiSearch's
-    body); legacy `?mode=deck` URLs keep parsing.  Server-side mirror:
-    SEARCH_MODES in runs/profile.py (the three research depths; the
-    report/deck flags are the output shapes on top). */
+    (Search / Deep Search / Deep Research -- the labels keep the short
+    zh catalog names, the hints carry the identity): the deep tier's
+    output FORMAT (report=outline document / deck=slide deck) is decided
+    INSIDE the run at the rail's output-structure picker, not in the
+    composer.  The wire forms are `mode: "deep"` + `report: true` /
+    `deck: true` (see useAiSearch's body); legacy `?mode=deck` URLs keep
+    parsing.  Server-side mirror: SEARCH_MODES in runs/profile.py (the
+    three research depths; the report/deck flags are the output shapes
+    on top). */
 const DEPTH_MODES: readonly AiSearchMode[] = ["speed", "balanced", "report", "deck"];
 
 /** Parse a raw `mode` param: anything unknown falls back to balanced.
@@ -29,17 +31,34 @@ function isDeepMode(mode: AiSearchMode): boolean {
 }
 
 /**
- * The research-depth dropdown's three tiers: Zap = the quick pass,
- * Gauge = the middle setting, Telescope = DEEP RESEARCH (the
- * outline-driven machinery behind both the report and the deck
- * formats).  The labels carry the expectation -- a deep run is a
+ * The research-depth dropdown's three tiers: Zap = SEARCH (the
+ * AI-Overview-style quick answer), Gauge = DEEP SEARCH (multi-round
+ * reading), Telescope = DEEP RESEARCH (the outline-driven machinery
+ * behind both the report and the deck formats).  Three products on one
+ * voice -- the labels keep the short names, the hints carry the
+ * identity.  The labels carry the expectation -- a deep run is a
  * purchase.
  */
 function depthOptions(t: Translate) {
   return [
-    { value: "speed", label: t("mode_speed"), icon: <Zap className="size-3.5 text-ink-3" /> },
-    { value: "balanced", label: t("mode_balanced"), icon: <Gauge className="size-3.5 text-ink-3" /> },
-    { value: "deep", label: t("mode_deep"), icon: <Telescope className="size-3.5 text-ink-3" /> },
+    {
+      value: "speed",
+      label: t("mode_speed"),
+      hint: t("mode_speed_desc"),
+      icon: <Zap className="size-3.5 text-ink-3" />,
+    },
+    {
+      value: "balanced",
+      label: t("mode_balanced"),
+      hint: t("mode_balanced_desc"),
+      icon: <Gauge className="size-3.5 text-ink-3" />,
+    },
+    {
+      value: "deep",
+      label: t("mode_deep"),
+      hint: t("mode_deep_desc"),
+      icon: <Telescope className="size-3.5 text-ink-3" />,
+    },
   ];
 }
 
