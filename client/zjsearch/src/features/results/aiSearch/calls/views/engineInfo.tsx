@@ -62,7 +62,7 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
               <div
                 className={`${CELL} py-1.5`}
                 key={engine.name}
-                title={engine.cats.join(", ") + (engine.paid ? " · " + t("ai_engine_info_paid") : "")}
+                title={engine.cats.join(", ") + (engine.paid ? ` · ${t("ai_engine_info_paid")}` : "")}
               >
                 <div className="truncate text-xs text-ink-2">{engine.name}</div>
                 <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">

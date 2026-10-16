@@ -179,3 +179,51 @@ export const MD = {
   /** ==mark==: the blog prose recipe — accent-soft chip, ink text */
   mark: "rounded bg-accent-soft px-0.5 text-ink",
 };
+
+/** The streaming tail-holdback (scira's markdownJoinerTransform, in the
+    renderer's own terms): while a run streams, a TRAILING fragment whose
+    markdown structure is still open must not reach the parser -- a half
+    link `[1](https://…` flashes as literal text before the closing paren
+    lands, a half table row paints as a paragraph then re-flows into the
+    table, an unclosed ``` fence leaks raw markdown.  The three openers we
+    hold back (fence / math block / an unterminated inline link on the
+    last line) are exactly the ones whose mid-stream render is visibly
+    broken; everything else recovers invisibly.  `settled` ALWAYS returns
+    the full string -- the wire settle, the local settle fallback, a
+    client stop and every replay flush the held tail.  Pure: apply at the
+    render site (before citeToLinks), never inside the event fold -- the
+    reducer must stay replay-deterministic. */
+export function holdBackTail(markdown: string, settled: boolean): string {
+  if (settled || !markdown) {
+    return markdown;
+  }
+  // 1. an UNPAIRED ``` fence holds from its opener line (the info-string
+  //    included -- a half ```mermaid must not paint): fences alternate
+  //    open/close, so an ODD total count means the last one is still open
+  const fences = markdown.match(/^```/gm) || [];
+  if (fences.length % 2 === 1) {
+    const fenceStart = markdown.lastIndexOf("```");
+    if (fenceStart >= 0) {
+      const lineBreak = markdown.lastIndexOf("\n", fenceStart);
+      return lineBreak < 0 ? "" : markdown.slice(0, lineBreak + 1);
+    }
+  }
+  // 2. the last UNPAIRED $$ math block holds from its opener
+  const mathOpen = markdown.lastIndexOf("$$");
+  if (mathOpen >= 0) {
+    const before = markdown.slice(0, mathOpen);
+    const opens = (before.match(/\$\$/g) || []).length;
+    if (opens % 2 === 0) {
+      return markdown.slice(0, mathOpen);
+    }
+  }
+  // 3. the last line's unterminated inline link `[text](url` holds that
+  //    line (a citation mid-rewrite is the common case -- the citation
+  //    rewriter would also see a half target)
+  const lastBreak = markdown.lastIndexOf("\n");
+  const lastLine = markdown.slice(lastBreak + 1);
+  if (/\[[^\]]*\]\([^)\s]*$/.test(lastLine) || /\]\($/.test(lastLine)) {
+    return markdown.slice(0, lastBreak + 1);
+  }
+  return markdown;
+}

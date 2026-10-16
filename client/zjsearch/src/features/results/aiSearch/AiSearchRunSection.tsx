@@ -78,6 +78,7 @@ import { buildAnswerMarkdown, buildReportMarkdown } from "@/lib/exporters.ts";
 import { formatDuration } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { listTemplates } from "@/lib/kb/templates.ts";
+import { holdBackTail } from "@/lib/markdownParts.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml, printDocument } from "@/lib/print.ts";
 import { CHIP, CHIP_BTN, META_TOGGLE, PAPER_STRIP } from "@/lib/styles.ts";
@@ -329,22 +330,44 @@ function GapsCard({
   expanded,
   onToggleExpanded,
   onCiteN,
+  onFollowup,
 }: {
   gaps: LedgerGap[];
   expanded: boolean;
   onToggleExpanded: (next: boolean) => void;
   onCiteN: (n: number) => void;
+  /** the gap-driven follow-up: launch a research run on the open gaps
+      (the host composes the message; absent on surfaces without a
+      composer) */
+  onFollowup?: (gaps: { q: string }[]) => void;
 }) {
   const t = useT();
   if (gaps.length === 0) {
     return null;
   }
+  const openGaps = gaps.filter((gap) => gap.status === "open" && gap.q);
   const gapsHidden = Math.max(0, gaps.length - 4);
   const gapView = [...gaps.slice(-4)].reverse();
   const gapExtra = [...gaps.slice(0, Math.max(0, gaps.length - 4))].reverse();
   return (
     <div className="mb-5">
-      <RailHeader count={gaps.length} icon={CircleHelp} title={t("ai_findings_gaps")} />
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <RailHeader count={gaps.length} icon={CircleHelp} title={t("ai_findings_gaps")} />
+        </div>
+        {onFollowup && openGaps.length > 0 ? (
+          <button
+            className={`shrink-0 rounded-full border border-accent-strong/40 bg-accent-soft px-2.5 py-1 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover`}
+            onClick={() => {
+              onFollowup(openGaps.slice(-5).map((gap) => ({ q: gap.q })));
+            }}
+            title={t("ai_gaps_followup")}
+            type="button"
+          >
+            {t("ai_gaps_followup")}
+          </button>
+        ) : null}
+      </div>
       <ul className="mt-3 space-y-1.5">
         {gapView.map((gap) => (
           <li className="flex items-start gap-2" key={gap.id}>
@@ -1319,6 +1342,7 @@ function AiSearchRunSectionImpl({
   onContinue,
   onFallback,
   onRelated,
+  onGapsFollowup,
   onStop,
   onWrap,
   onSetTemplate,
@@ -1343,6 +1367,9 @@ function AiSearchRunSectionImpl({
   onFallback?: () => void;
   /** a Related question was picked: start a follow-up run */
   onRelated?: (question: string) => void;
+  /** the 未决缺口 card's 继续调研 action: launch a follow-up run on this
+      run's open gaps (the host composes the message) */
+  onGapsFollowup?: (gaps: { q: string }[]) => void;
   onStop?: () => void;
   /** the report rail's output-structure control (research phase only) */
   onSetTemplate?: (template: ReportTemplate) => Promise<boolean>;
@@ -1759,7 +1786,7 @@ function AiSearchRunSectionImpl({
                 <MarkdownAnswer
                   figureLightbox
                   galleries={run.galleries}
-                  markdown={citeToLinks(run.answer, citationMap)}
+                  markdown={citeToLinks(holdBackTail(run.answer, !streaming), citationMap)}
                   meta={citedSourceRows(citationMap, sourceMeta)}
                   onCite={(local) => {
                     // the identity map: a chip's number IS the rail card's
@@ -1873,7 +1900,12 @@ function AiSearchRunSectionImpl({
           {/* the run's meta line at the END of the output (lobehub's
               message footer): model + tokens + transport outcome */}
           {!streaming && !failed ? (
-            <AiRunFooter finish={run.finish ?? null} model={run.model ?? null} usage={run.usage ?? null} />
+            <AiRunFooter
+              finish={run.finish ?? null}
+              haltReason={run.haltReason ?? null}
+              model={run.model ?? null}
+              usage={run.usage ?? null}
+            />
           ) : null}
           {/* a USER-STOPPED run keeps its checkpoint (the user may reverse
               the stop) but wears NO red failed box -- the quiet continue
@@ -2070,6 +2102,7 @@ function AiSearchRunSectionImpl({
                 expanded={gapsExpanded}
                 gaps={run.gaps ?? []}
                 onCiteN={handleCite}
+                onFollowup={onGapsFollowup}
                 onToggleExpanded={setGapsExpanded}
               />
             ) : null}

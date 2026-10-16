@@ -27,7 +27,7 @@ import { cn } from "@/lib/cn.ts";
 import { buildAnswerMarkdown } from "@/lib/exporters.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
-import { MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
+import { holdBackTail, MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -292,15 +292,13 @@ type MdProps = {
   [key: string]: unknown;
 };
 
-/** Compact [n] citation chip: hovering opens a floating preview panel with
-    the source favicon, site and title (portalled to <body> so the clamp
-    wrapper's overflow-hidden cannot clip it); clicking jumps to the
-    matching result row.  Moving between chip and panel keeps it open. */
-function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; onCite?: (index: number) => void }) {
-  const t = useT();
-  const [panel, setPanel] = useState<{ x: number; y: number } | null>(null);
+/** The citation chips' shared hover-panel state: open on hover/focus with
+    the anchor's rect (kept inside the viewport), a 120ms grace when the
+    pointer leaves (moving onto the panel keeps it), unmount clears the
+    timer.  Both the single chip and the group pill ride it. */
+function useFloatPanel() {
+  const [panel, setPanel] = useState<{ x: number; y: number; w: number } | null>(null);
   const hideTimer = useRef<number | null>(null);
-  const chipRef = useRef<HTMLButtonElement | null>(null);
 
   const keepPanel = () => {
     if (hideTimer.current !== null) {
@@ -319,16 +317,16 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
     }, 120);
   };
 
-  const openPanel = () => {
+  const openPanel = (anchor: HTMLElement | null, width: number, height: number) => {
     keepPanel();
-    const rect = chipRef.current?.getBoundingClientRect();
+    const rect = anchor?.getBoundingClientRect();
     if (!rect) {
       return;
     }
     // keep the floating panel inside the viewport
-    const x = Math.max(8, Math.min(rect.left, window.innerWidth - 336));
-    const y = rect.bottom + 8 + 150 <= window.innerHeight ? rect.bottom + 8 : Math.max(8, rect.top - 158);
-    setPanel({ x, y });
+    const x = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    const y = rect.bottom + 8 + height <= window.innerHeight ? rect.bottom + 8 : Math.max(8, rect.top - height - 8);
+    setPanel({ x, y, w: width });
   };
 
   useEffect(
@@ -340,43 +338,54 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
     [],
   );
 
+  return { panel, openPanel, keepPanel, closeSoon, close: () => setPanel(null) };
+}
+
+/** Compact [n] citation chip: hovering opens a floating preview panel with
+    the source favicon, site and title (portalled to <body> so the clamp
+    wrapper's overflow-hidden cannot clip it); clicking jumps to the
+    matching result row.  Moving between chip and panel keeps it open. */
+function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; onCite?: (index: number) => void }) {
+  const t = useT();
+  const chipRef = useRef<HTMLButtonElement | null>(null);
+  const float = useFloatPanel();
   return (
     <>
       <button
         aria-label={`${t("open_source")} ${n}`}
         className="mx-0.5 inline-flex items-center rounded align-middle text-xs text-accent transition-colors hover:text-accent-hover hover:underline underline-offset-2"
-        onBlur={closeSoon}
+        onBlur={float.closeSoon}
         onClick={() => {
           onCite?.(n);
-          setPanel(null);
+          float.close();
         }}
-        onFocus={openPanel}
-        onMouseEnter={openPanel}
-        onMouseLeave={closeSoon}
+        onFocus={() => float.openPanel(chipRef.current, 320, 150)}
+        onMouseEnter={() => float.openPanel(chipRef.current, 320, 150)}
+        onMouseLeave={float.closeSoon}
         ref={chipRef}
         type="button"
       >
         [{n}]
       </button>
-      {panel
+      {float.panel
         ? createPortal(
             <div
-              className="fixed z-50 w-80 cursor-pointer rounded-2xl border border-line bg-surface p-3 shadow-pop"
+              className="fixed z-50 cursor-pointer rounded-2xl border border-line bg-surface p-3 shadow-pop"
               onClick={() => {
                 onCite?.(n);
-                setPanel(null);
+                float.close();
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   onCite?.(n);
-                  setPanel(null);
+                  float.close();
                 }
               }}
-              onMouseEnter={keepPanel}
-              onMouseLeave={closeSoon}
+              onMouseEnter={float.keepPanel}
+              onMouseLeave={float.closeSoon}
               role="button"
-              style={{ left: panel.x, top: panel.y }}
+              style={{ left: float.panel.x, top: float.panel.y, width: float.panel.w }}
               tabIndex={0}
             >
               <div className="flex items-center gap-1.5 text-xs text-ink-3">
@@ -399,6 +408,101 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
                 </a>
               </div>
               <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-ink">{source.t}</p>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+/** The GROUP pill ([1,2]): one button where the adjacent single chips used
+    to cluster -- hovering/focusing opens a panel listing every member
+    source (favicon + domain + title row), and each row jumps to the rail's
+    matching #n card.  Members without a source behind them (phantoms) do
+    not get a row; a group with NO resolvable member renders as the static
+    fallback span (the `a` branch handles that before mounting this). */
+function CitationGroupChip({
+  nums,
+  sources,
+  onCite,
+}: {
+  nums: number[];
+  sources: Array<AiSourceMeta | undefined>;
+  onCite?: (index: number) => void;
+}) {
+  const t = useT();
+  const chipRef = useRef<HTMLButtonElement | null>(null);
+  const float = useFloatPanel();
+  const rows = nums.map((n, i) => ({ n, source: sources[i] })).filter((row) => row.source);
+  return (
+    <>
+      <button
+        aria-expanded={float.panel !== null}
+        aria-label={`${t("open_source")} ${nums.join(",")}`}
+        className="mx-0.5 inline-flex items-center rounded align-middle text-xs text-accent transition-colors hover:text-accent-hover hover:underline underline-offset-2"
+        onBlur={float.closeSoon}
+        onClick={() => {
+          // keyboard/touch activation opens the panel; a row click jumps
+          const first = rows[0];
+          if (first && float.panel) {
+            onCite?.(first.n);
+            float.close();
+          } else {
+            float.openPanel(chipRef.current, 320, Math.min(48 + rows.length * 44, 220));
+          }
+        }}
+        onFocus={() => float.openPanel(chipRef.current, 320, Math.min(48 + rows.length * 44, 220))}
+        onMouseEnter={() => float.openPanel(chipRef.current, 320, Math.min(48 + rows.length * 44, 220))}
+        onMouseLeave={float.closeSoon}
+        ref={chipRef}
+        type="button"
+      >
+        [{nums.join(",")}]
+      </button>
+      {float.panel
+        ? createPortal(
+            <div
+              aria-label={t("open_source")}
+              className="fixed z-50 rounded-2xl border border-line bg-surface p-2 shadow-pop"
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  float.close();
+                }
+              }}
+              onMouseEnter={float.keepPanel}
+              onMouseLeave={float.closeSoon}
+              role="group"
+              style={{ left: float.panel.x, top: float.panel.y, width: float.panel.w }}
+              tabIndex={-1}
+            >
+              <div className="space-y-1">
+                {rows.map(({ n, source }) => (
+                  <button
+                    className="flex w-full items-start gap-2 rounded-xl p-1.5 text-start transition-colors hover:bg-surface-2"
+                    key={n}
+                    onClick={() => {
+                      onCite?.(n);
+                      float.close();
+                    }}
+                    type="button"
+                  >
+                    {source?.favicon ? (
+                      <img alt="" className="mt-0.5 size-4 shrink-0 rounded-full object-contain" src={source.favicon} />
+                    ) : (
+                      <span aria-hidden="true" className="mt-0.5 size-4 shrink-0 rounded-full bg-surface-2" />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs text-ink-3">
+                        {source?.domain}
+                        <span className="ms-1 text-ink-2">#{n}</span>
+                      </span>
+                      <span className="mt-0.5 line-clamp-2 block text-[13px] leading-snug text-ink">{source?.t}</span>
+                    </span>
+                    <ArrowUpRight aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-ink-3" />
+                  </button>
+                ))}
+              </div>
             </div>,
             document.body,
           )
@@ -591,6 +695,20 @@ function markdownComponents(
   );
   return {
     a: ({ children, href }) => {
+      const g = /^#refs-([\d.]+)$/.exec(href ?? "");
+      if (g) {
+        // the citation GROUP pill (citations.ts emits one #refs-a.b link
+        // per [a,b] match): members resolve positionally like single chips
+        const nums = (g[1] ?? "")
+          .split(".")
+          .map((part) => Number.parseInt(part, 10))
+          .filter((n) => Number.isInteger(n) && n > 0);
+        const sources = nums.map((n) => meta[n - 1]);
+        if (nums.length > 1 && sources.some(Boolean)) {
+          return <CitationGroupChip nums={nums} onCite={onCite} sources={sources} />;
+        }
+        return external({ children, href });
+      }
       const m = /^#ref-(\d+)$/.exec(href ?? "");
       if (!m) {
         return external({ children, href });
@@ -903,7 +1021,7 @@ export function AiAnswerCard({
   // failure; a user stop keeps the partial content without an error label
   const failed = state.phase === "error" || (state.phase === "done" && !hasAnswer && !hasThink);
 
-  const markdown = useMemo(() => citeToLinks(answer), [answer]);
+  const markdown = useMemo(() => citeToLinks(holdBackTail(answer, !streaming)), [answer, streaming]);
 
   return (
     // the family pinned-card language (DESIGN.md §7, ZJBlog's ProjectCard):

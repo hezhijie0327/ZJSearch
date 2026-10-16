@@ -21,11 +21,15 @@ doctrine (reasoning relayed for the timeline is NEVER the answer -- a
 turn that answered in its reasoning channel only fails the run loudly),
 transport health timeouts (connect+first-token and per-event idle -- NOT
 research limits, the user's stop button is the control), the
-stall-detector termination (``round_progress`` returns the halt message;
-``max_rounds`` is only a safety ceiling), the writer's empty-stream
-single retry (a reasoning-only writer is NOT retried -- the identical
-request would repeat the misroute), and the mid-research transport-blip
-recovery (the writer still answers from what was gathered).
+stall-detector termination (``round_progress`` returns the halt message
+plus its machine ``halt_reason``; ``max_rounds`` is only a safety
+ceiling), the tool-call loop guard (a round repeating the previous
+round's exact calls is warned once, then ends the research -- deer-flow's
+LoopDetectionMiddleware against the stall detector's blind spot: identical
+calls make round PROGRESS while learning nothing), the writer's
+empty-stream single retry (a reasoning-only writer is NOT retried -- the
+identical request would repeat the misroute), and the mid-research
+transport-blip recovery (the writer still answers from what was gathered).
 """
 
 import asyncio
@@ -71,6 +75,32 @@ _WRAP_NOTE = (
 )
 """The WRITER-facing half of the wrap halt (an honest English research
 note -- the model must never see a machine key)."""
+
+_REASON_STALLED = "stalled"
+_REASON_TIME = "time_budget"
+_REASON_ROUNDS = "round_budget"
+_REASON_LOOP = "loop_detected"
+"""The settle's ``halt_reason`` machine keys (a CLOSED set -- the
+client's i18n catalog renders them): the guard-caused early ends of the
+research.  ``halt`` stays the human/writer-facing prose; the reason is
+what the client and the journal can branch on."""
+
+_LOOP_WARNING = (
+    "<loop_warning>\n"
+    "This round repeated the EXACT tool calls of the previous round (same\n"
+    "tools, same arguments) -- the results will not change.  Change the\n"
+    "approach: different keywords, another instrument, another facet -- or\n"
+    "stop calling tools and let the writer answer from what is gathered.\n"
+    "</loop_warning>"
+)
+"""The loop guard's ONE course correction (a user message, model-facing --
+NOT a ``steer`` event, which is the user's own channel)."""
+
+_LOOP_NOTE = (
+    "The research was cut short: the latest round repeated the previous"
+    " round's tool calls exactly -- answer from what was gathered."
+)
+"""The writer-facing research note when the loop guard ends the research."""
 
 _CONTROL_SLICE = 1.0
 """The stop-observable event wait slice (seconds): a stop is seen
@@ -300,6 +330,29 @@ class _Run:
         return (turn_text, turn_reasoning, calls, meta, outcome)
 
 
+def _call_sig(calls: list[dict[str, t.Any]]) -> tuple[tuple[str, str], ...] | None:
+    """One round's tool-call fingerprint: sorted ``(name, normalized
+    arguments)`` pairs.  Equality with the previous round's fingerprint
+    means the model repeated itself verbatim -- the loop guard warns
+    once, then ends the research (the stall detector cannot see this:
+    an identical call makes ROUND progress while learning nothing, and
+    the content-level duplicate refusals only cover web_search/reader
+    keys, not browser/MCP actions).  Arguments are JSON-normalized (key
+    order and whitespace are irrelevant); a call whose arguments fail
+    to parse rides its raw string.  ``None`` for an empty batch."""
+    if not calls:
+        return None
+    sig: list[tuple[str, str]] = []
+    for call in calls:
+        raw = str(call.get("arguments") or "")
+        try:
+            args = json.dumps(json.loads(raw), sort_keys=True, ensure_ascii=False)
+        except (ValueError, TypeError):
+            args = raw
+        sig.append((str(call.get("name") or ""), args))
+    return tuple(sorted(sig))
+
+
 def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-statements, too-many-arguments
     cfg: dict[str, t.Any],
     messages: list[dict[str, t.Any]],
@@ -307,7 +360,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     tools: list[dict[str, t.Any]] | None = None,
     executor: t.Any = None,
     max_rounds: int = 1,
-    round_progress: t.Callable[[int], str | None] | None = None,
+    round_progress: t.Callable[[int], tuple[str, str] | None] | None = None,
     extend_budget: t.Callable[[int], tuple[int, str]] | None = None,
     continuation: t.Callable[[], str | None] | None = None,
     pre_write: t.Callable[[], list[dict[str, t.Any]]] | None = None,
@@ -334,7 +387,9 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     - ``tools`` + ``executor``: the research phase (both or neither --
       without them the run is a single WRITE turn, the AI Overview shape).
     - ``round_progress(executed_rounds)``: the stall detector -- ``None``
-      keeps researching, a string explains the halt and ends the phase.
+      keeps researching, a ``(note, halt_reason)`` pair explains the halt
+      and ends the phase (the note rides the writer prompt, the reason
+      the settle event).
     - ``pre_write()``: the PRE-WRITE verification pass -- runs AFTER the
       research ends and BEFORE the write opens; the returned events
       stream as-is (evidence checks land in the 决策结果 card), so the
@@ -388,10 +443,13 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     researching = bool(tools and executor is not None)
     rounds = round_base
     halt_message: str | None = None
+    halt_reason: str | None = None
     carried_error: str | None = None
     refusals = 0
     stop_requested = False
     length_continues = 0
+    last_call_sig: tuple[tuple[str, str], ...] | None = None
+    loop_warned = False
     compactor = compact.Compactor(cfg, compact_state=compact_state, tally=run_state.tally) if researching else None
 
     def poll_control() -> str | None:
@@ -449,6 +507,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 # writer).  ONE extension per run, model-facing through
                 # the next turn's user message.
                 if extend_budget is None or extended:
+                    halt_reason = halt_reason or _REASON_ROUNDS
                     break
                 extended = True
                 try:
@@ -459,8 +518,10 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                         type(exc).__name__,
                         str(exc)[:200],
                     )
+                    halt_reason = halt_reason or _REASON_ROUNDS
                     break
                 if extra <= 0:
+                    halt_reason = halt_reason or _REASON_ROUNDS
                     break
                 max_rounds = rounds + extra
                 messages.append(
@@ -594,6 +655,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     # the WRITER must know the plan was not completed (an
                     # honest research_note beats a confident partial)
                     halt_message = note
+                    halt_reason = halt_reason or _REASON_STALLED
                 break
             rounds += 1
             yield {"e": "calls", "id": entry, "round": rounds, "items": (display or _noop_display)(calls)}
@@ -637,10 +699,31 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 # the progress verdict lands AFTER the round's results are in
                 # the conversation: the next loop iteration sees the halt
                 try:
-                    halt_message = round_progress(rounds)
+                    verdict_note, verdict_reason = round_progress(rounds)
+                    halt_message = verdict_note
+                    halt_reason = halt_reason or verdict_reason
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("zjsearch loop: round progress check failed: %r", exc)
                     halt_message = None
+            if halt_message is None:
+                # THE TOOL-CALL LOOP GUARD (the stall detector's blind
+                # spot): a round whose calls are byte-identical to the
+                # previous round's learns nothing new -- the first
+                # repetition earns ONE course correction, the second ends
+                # the research (the writer answers from what was
+                # gathered).  Consulted only on rounds that executed.
+                sig = _call_sig(calls)
+                if sig is not None:
+                    if sig == last_call_sig:
+                        if loop_warned:
+                            halt_message = _LOOP_NOTE
+                            halt_reason = halt_reason or _REASON_LOOP
+                        else:
+                            loop_warned = True
+                            messages.append({"role": "user", "content": _LOOP_WARNING})
+                    else:
+                        loop_warned = False
+                    last_call_sig = sig
             steer_text = poll_control()
             if stop_requested:
                 break
@@ -733,7 +816,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             if built:
                 messages = built
 
-    yield from _write_turn(run_state, messages, carried_error, gallery_validator)
+    yield from _write_turn(run_state, messages, carried_error, gallery_validator, halt_reason)
 
 
 def _write_turn(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
@@ -741,6 +824,7 @@ def _write_turn(  # pylint: disable=too-many-branches, too-many-statements, too-
     messages: list[dict[str, t.Any]],
     carried_error: str | None,
     gallery_validator: t.Callable[[str], list[dict[str, t.Any]]] | None,
+    halt_reason: str | None = None,
 ) -> t.Iterator[dict[str, t.Any]]:
     """One WRITE turn: a fresh completion whose ``answer`` deltas are the
     run's answer (narration never mixes in).  The ``related`` /
@@ -779,7 +863,7 @@ def _write_turn(  # pylint: disable=too-many-branches, too-many-statements, too-
         )
         yield wire.settle("error", halt=halt, **run_state.tally.settle_kwargs())
         return
-    yield wire.settle("done", halt=carried_error or None, **run_state.tally.settle_kwargs())
+    yield wire.settle("done", halt=carried_error or None, halt_reason=halt_reason, **run_state.tally.settle_kwargs())
 
 
 def _write_attempt(  # pylint: disable=too-many-branches

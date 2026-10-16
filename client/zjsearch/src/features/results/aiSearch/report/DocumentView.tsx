@@ -7,6 +7,7 @@ import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
 import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";
+import { holdBackTail } from "@/lib/markdownParts.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 
 /**
@@ -202,7 +203,7 @@ export function DocumentView({
               <MarkdownAnswer
                 figureLightbox
                 galleries={run.galleries}
-                markdown={citeToLinks(text, citationMap)}
+                markdown={citeToLinks(holdBackTail(text, settled), citationMap)}
                 meta={citedMeta}
                 onCite={onCiteLocal}
                 settled={settled}

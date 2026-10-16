@@ -443,6 +443,29 @@ def _section_user(
     if sec["key_questions"]:
         parts.append("key questions:\n" + "\n".join(f"- {q}" for q in sec["key_questions"]))
     parts.append("</this_section>")
+    if written:
+        # the EARLIER sections' opening theses (the IterResearch-style
+        # workspace refinement): every written section except the
+        # immediately-previous one -- whose ending already rides
+        # <previous_section_tail> -- contributes its title + first ~200
+        # chars, so this section writes against ALL prior positions, not
+        # just the previous one's last 600 chars.  Purely mechanical
+        # (no extra model calls); the executive summary's call passes a
+        # full ``written`` with no prev_tail, so it digests EVERYTHING.
+        done_ids = [s["id"] for s in outline["sections"] if s["id"] in written]
+        digest_ids = done_ids[:-1] if prev_tail else done_ids
+        rows = []
+        for sid in digest_ids:
+            title = next((s["title"] for s in outline["sections"] if s["id"] == sid), sid)
+            body = " ".join(str(written.get(sid) or "").split())
+            if body:
+                rows.append(f"- {title}: {body[:200]}")
+        if rows:
+            parts.append(
+                "<earlier_sections_digest>\nWhat the EARLIER sections already"
+                " established (their openings; stay consistent with their"
+                " judgments and never re-argue them):\n" + "\n".join(rows) + "\n</earlier_sections_digest>"
+            )
     if prev_tail:
         parts.append(f"<previous_section_tail>\n{prev_tail}\n</previous_section_tail>")
     if ledger_block:

@@ -10,6 +10,7 @@ import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { DepthControls } from "@/features/results/aiSearch/depth.tsx";
+import { composeGapsFollowup } from "@/features/results/aiSearch/ledger.ts";
 import { SteerChips } from "@/features/results/aiSearch/SteerChips.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -207,6 +208,12 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                 }}
                 onDeleteRun={(runNo) => aiSearch.deleteRun(runNo)}
                 onFallback={onRunFallback}
+                onGapsFollowup={(gaps) => {
+                  // the 未决缺口 card's 继续调研: a follow-up run on the
+                  // run's open gaps (the thread ledger hands them over)
+                  setFollowupQuery("");
+                  aiSearch.followup(composeGapsFollowup(gaps, t("ai_gaps_followup_body")), aiLang, researchMode);
+                }}
                 onRegenerate={() => {
                   // in-place re-run of the last run -- the same semantic the
                   // takeover's 重新生成 carries (the button was a silent

@@ -85,7 +85,12 @@ function ActionMark({ view }: { view: MirrorView }) {
         />
       ) : null}
       {dragLine ? (
-        <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox={`0 0 ${w} ${h}`}>
+        <svg
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full"
+          preserveAspectRatio="none"
+          viewBox={`0 0 ${w} ${h}`}
+        >
           <line
             className="text-accent"
             stroke="currentColor"
@@ -103,7 +108,11 @@ function ActionMark({ view }: { view: MirrorView }) {
       {hasPoint ? (
         <span
           className="absolute z-10"
-          style={{ left: pct(view.px ?? 0, w), top: pct(view.py ?? 0, h), transition: "left 250ms ease, top 250ms ease" }}
+          style={{
+            left: pct(view.px ?? 0, w),
+            top: pct(view.py ?? 0, h),
+            transition: "left 250ms ease, top 250ms ease",
+          }}
         >
           <MousePointer2
             aria-hidden="true"

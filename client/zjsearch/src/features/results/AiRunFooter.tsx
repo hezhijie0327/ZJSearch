@@ -11,11 +11,13 @@ import {
   CircleCheck,
   Database,
   DatabaseZap,
+  Flag,
   Network,
   Scale,
   ShieldAlert,
   Wrench,
 } from "lucide-react";
+import { haltReasonText } from "@/features/results/aiSearch/halts.ts";
 import { formatTokens } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
@@ -62,13 +64,18 @@ export function AiRunFooter({
   finish,
   model,
   usage,
+  haltReason,
 }: {
   finish?: string | null;
   model?: string | null;
   usage?: AiUsage | null;
+  /** the settle's machine key for a guard-caused early end of the
+      research (stalled / time_budget / round_budget / loop_detected) --
+      an honest guard note the user must see, never silently swallowed */
+  haltReason?: string | null;
 }) {
   const t = useT();
-  if (!finish && !usage && !model) {
+  if (!finish && !usage && !model && !haltReason) {
     return null;
   }
   // every finish state carries its own icon and tone: ok = green check,
@@ -138,6 +145,12 @@ export function AiRunFooter({
               {value}
             </span>
           ))}
+        </span>
+      ) : null}
+      {haltReason ? (
+        <span className="inline-flex min-h-6 items-center gap-1 text-accent">
+          <Flag aria-hidden="true" className="size-3 shrink-0" />
+          <span>{haltReasonText(haltReason, t)}</span>
         </span>
       ) : null}
       {note ? (

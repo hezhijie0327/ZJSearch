@@ -988,6 +988,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             attached_files=attached_files or None,
             deliverable_entities=state.deliverable_entities,
             thread_ledger=thread_ledger,
+            mcp_servers=(mcp.server_instructions() or None) if mcp_tools else None,
         )
 
     events = engine.run(

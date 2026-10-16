@@ -94,15 +94,17 @@ def sdk_missing() -> str | None:
     return "mcp" if _sdk() is None else None
 
 
-async def _with_session(name: str, action: t.Callable[[t.Any], t.Any]) -> t.Any:
-    """Run ``action(initialized_session)`` inside ONE self-contained
-    connection (open -> initialize -> act -> close, a single loop task).
-    Sessions are deliberately NOT cached across calls: the SDK's anyio
-    task groups cannot survive the next run_coroutine_threadsafe's
-    different task (the cancel-scope-affinity error), and streamable
-    HTTP reconnects are two cheap round trips.  The configured headers
-    ride a dedicated http client (the SDK's factory applies them over
-    its own defaults)."""
+async def _with_session(name: str, action: t.Callable[[t.Any, t.Any], t.Any]) -> t.Any:
+    """Run ``action(initialized_session, initialize_result)`` inside ONE
+    self-contained connection (open -> initialize -> act -> close, a
+    single loop task).  Sessions are deliberately NOT cached across
+    calls: the SDK's anyio task groups cannot survive the next
+    run_coroutine_threadsafe's different task (the cancel-scope-affinity
+    error), and streamable HTTP reconnects are two cheap round trips.
+    The initialize result rides along so the specs pass can capture the
+    server's ``instructions`` in the SAME handshake (zero extra round
+    trips).  The configured headers ride a dedicated http client (the
+    SDK's factory applies them over its own defaults)."""
     sdk = _sdk()
     if sdk is None:
         raise RuntimeError("the 'mcp' package is not installed")
@@ -115,8 +117,8 @@ async def _with_session(name: str, action: t.Callable[[t.Any], t.Any]) -> t.Any:
         async with create_mcp_http_client(headers=headers or None) as http_client:
             async with streamable_http_client(url, http_client=http_client) as (read, write):
                 async with ClientSession(read, write) as session:
-                    await session.initialize()
-                    return await action(session)
+                    init = await session.initialize()
+                    return await action(session, init)
 
     return await asyncio.wait_for(run(), _CALL_TIMEOUT)
 
@@ -133,15 +135,34 @@ def _server_of(name: str) -> tuple[str, str, dict[str, str]] | None:
     return None
 
 
+_INSTRUCTIONS_CAP = 400
+"""One server's ``instructions`` budget -- the servers' own usage guidance
+is advisory context, not a second system prompt."""
+
+_instructions: dict[str, str] = {}
+"""The per-server ``instructions`` captured during the specs pass (the
+same memoized handshake that lists the tools -- zero extra round
+trips).  Advisory: a server without instructions simply contributes
+nothing here."""
+
+
 async def list_tools() -> list[dict[str, t.Any]]:
     """Every configured server's tools as llm-shape specs, namespaced
     ``mcp_<server>_<tool>``.  A server that fails to answer logs a
     warning and contributes nothing (one dead endpoint must not take the
-    run down)."""
+    run down).  The initialize result's ``instructions`` land in
+    :data:`_instructions` on the same pass."""
     specs: list[dict[str, t.Any]] = []
     for name, _, _ in mcp_cfg():
         try:
-            response = await _with_session(name, lambda session: session.list_tools())
+
+            def _list(session: t.Any, init: t.Any) -> t.Any:
+                text = str(getattr(init, "instructions", "") or "").strip()
+                if text:
+                    _instructions[name] = text[:_INSTRUCTIONS_CAP]
+                return session.list_tools()
+
+            response = await _with_session(name, _list)
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch_mcp: listing %r failed: %s", name, exc)
             continue
@@ -167,6 +188,17 @@ async def list_tools() -> list[dict[str, t.Any]]:
     return specs
 
 
+def server_instructions() -> dict[str, str]:
+    """The per-server ``instructions`` (blocking like :func:`mcp_specs` --
+    the capture rides the same memoized specs future).  A failed
+    discovery returns whatever the healthy servers offered (fail-open:
+    the instructions are advisory context, never a gate)."""
+    if not configured() or _sdk() is None:
+        return {}
+    mcp_specs()
+    return dict(_instructions)
+
+
 async def call_tool(name: str, arguments: dict[str, t.Any]) -> str:
     """One namespaced tool call -> the server's text content.  Errors come
     back as readable messages (the model fixes or drops the call)."""
@@ -176,7 +208,7 @@ async def call_tool(name: str, arguments: dict[str, t.Any]) -> str:
     server, _, _ = resolved
     tool = name[len("mcp_") + len(server) + 1 :]
     try:
-        response = await _with_session(server, lambda session: session.call_tool(tool, arguments=arguments))
+        response = await _with_session(server, lambda session, _init: session.call_tool(tool, arguments=arguments))
     except asyncio.TimeoutError:
         return f"error: the MCP server {server!r} did not answer in time"
     except Exception as exc:  # pylint: disable=broad-except
@@ -260,15 +292,24 @@ def search_mcp_tools(query: str, limit: int = 6) -> str:
             scored.append((score, spec))
     scored.sort(key=lambda pair: -pair[0])
     if not scored:
-        servers = ", ".join(server for server, _, _ in mcp_cfg())
-        return (
-            f"no MCP tool matches {query!r}.  The connected servers"
-            f" ({servers}) expose: " + ", ".join(spec["name"] for spec in specs[:40]) + " -- try different keywords."
+        servers = ", ".join(
+            f"{server} ({_instructions[server][:120]})" if _instructions.get(server) else server
+            for server, _, _ in mcp_cfg()
         )
-    matches = [
-        {"name": spec["name"], "description": spec["description"], "parameters": spec.get("parameters") or {}}
-        for _, spec in scored[:limit]
-    ]
+        return (
+            f"no MCP tool matches {query!r}.  The connected servers -- {servers}"
+            " -- expose: " + ", ".join(spec["name"] for spec in specs[:40]) + " -- try different keywords."
+        )
+
+    def _with_server(spec: dict[str, t.Any]) -> dict[str, t.Any]:
+        resolved = _server_of(str(spec["name"]))
+        server = resolved[0] if resolved else ""
+        out = {**spec, "server": server}
+        if _instructions.get(server):
+            out["instructions"] = _instructions[server]
+        return out
+
+    matches = [_with_server(spec) for _, spec in scored[:limit]]
     return (
         json.dumps(matches, ensure_ascii=False) + "\n\nCall a matched tool by its exact name (the mcp_... string above)"
         " with arguments following its parameter schema."

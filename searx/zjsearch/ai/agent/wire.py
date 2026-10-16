@@ -91,7 +91,14 @@ bug and :py:func:`encode` refuses it):
                         the authoritative state block).  Renders as a
                         separator line.
 ``settle``              the terminal state: ``{status: done|awaiting|
-                        error, finish, usage, model, halt}``.  After it,
+                        error, finish, usage, model, halt,
+                        halt_reason}``.  ``halt`` is human-facing prose
+                        (or one of the legacy machine keys the client's
+                        i18n map renders); ``halt_reason`` is the closed
+                        machine key naming WHY a guard ended the
+                        research early (``stalled | time_budget |
+                        round_budget | loop_detected`` -- client i18n;
+                        null when the run ended on its own).  After it,
                         only ``related`` / ``memory`` may follow (the
                         follow-up box must not wait for the related
                         fallback completion).
@@ -120,6 +127,17 @@ def settle(
     usage: dict[str, t.Any] | None = None,
     model: str | None = None,
     halt: str | None = None,
+    halt_reason: str | None = None,
 ) -> dict[str, t.Any]:
-    """The terminal event's payload (the loop emits exactly one)."""
-    return {"e": "settle", "status": status, "finish": finish, "usage": usage, "model": model, "halt": halt}
+    """The terminal event's payload (the loop emits exactly one).
+    ``halt_reason`` is the closed machine key for a guard-caused early
+    end of the research (see the module docstring's settle row)."""
+    return {
+        "e": "settle",
+        "status": status,
+        "finish": finish,
+        "usage": usage,
+        "model": model,
+        "halt": halt,
+        "halt_reason": halt_reason,
+    }

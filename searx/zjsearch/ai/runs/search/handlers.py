@@ -1653,7 +1653,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                     pass
             q.put(None)
 
-    def _sub_round_progress(self, child: t.Any) -> t.Callable[[int], str | None]:
+    def _sub_round_progress(self, child: t.Any) -> t.Callable[[int], tuple[str, str] | None]:
         """The subagent's stall detector closure, bound to the CHILD's
         state (its own counters; two unproductive rounds end it -- the
         budget is the delegation's spend cap)."""

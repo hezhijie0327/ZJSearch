@@ -139,6 +139,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     deliverable_entities: list[str] | None = None,
     depth_rung: int = 0,
     memories_live: bool = False,
+    mcp_servers: dict[str, str] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -527,6 +528,18 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             )
         thread_ctx += "</thread_context>\n"
         run_context += thread_ctx
+    if mcp_servers:
+        # the MCP servers' own usage guidance (the initialize results'
+        # ``instructions``, captured during the memoized specs pass) --
+        # per-process variable material, so it rides the USER message
+        # with the rest of <run_context>, never the cached system prompt
+        listed = "\n".join(f"- {name}: {text}" for name, text in mcp_servers.items() if text)
+        if listed:
+            run_context += (
+                "<mcp_servers>\nThe connected MCP servers (their tools are"
+                " the mcp_* functions) carry their own usage"
+                f" guidance:\n{listed}\n</mcp_servers>\n"
+            )
     if image_parts:
         run_context += (
             "<attached_images>\nThe user attached image(s) to this"

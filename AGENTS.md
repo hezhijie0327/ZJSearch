@@ -124,7 +124,16 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   (`extractBootPageData`; the classic search boots exactly like the AI
   takeover instead of waiting for the engines), then the completed
   `#page-data` settles the real data.
-  ResultsPage shows skeletons while `data.pending`. Redirects (external
+  ResultsPage shows skeletons while `data.pending`.  THE STREAMING
+  ANSWER NEVER RENDERS HALF MARKDOWN: `holdBackTail(md, settled)`
+  (markdownParts.ts) holds the trailing open structure back from the
+  parser while a run streams -- the last unpaired ``` fence, the last
+  unpaired `$$` math block, and a last line ending in an unterminated
+  `[text](url` link; `settled` always returns the full string (wire
+  settle, local settle, stop, replays).  Applied at the render sites
+  (run answer, report sections, the AI overview) BEFORE citeToLinks --
+  never inside the event fold, the reducer stays replay-deterministic
+  (scira's markdownJoinerTransform, in the renderer's own terms). Redirects (external
   bangs, instant-redirect) and mid-stream search errors arrive as late
   payloads (`page_redirect` / `page_error` macros → `globals.page:
   "redirect"` / `"error"`, handled at boot in `main.tsx` or by the pending
@@ -397,7 +406,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   OWN buffer (narration never mixes in); `ask` is the clarify gate AND
   the mid-research ask_user (same schema); `settle` declares the
   terminal state (`status: done|awaiting|error` + finish/usage/model/
-  halt).  `decisions` batches the run's DECISION RESULTS (framework gates
+  halt + halt_reason -- the CLOSED machine key naming WHY a guard ended
+  the research early: `stalled | time_budget | round_budget |
+  loop_detected`; the client's halts.ts renders it through i18n beside
+  the run footer).  `decisions` batches the run's DECISION RESULTS (framework gates
   + the model's own judge) once per round — the rail's 决策结果 card
   renders them click-through; every decision speaks the ONE
   NAMED-VERDICT-MAP protocol (`answers: {name: choice|score|noul}` +
@@ -445,7 +457,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   已确认方向 (the clarify archive) → 调研计划 (task card,
   plan order, never capped) → 研究发现 (findings + 未决缺口: open gaps
   read as colored DOTS, closed ones as checks; facts render inline [n]
-  marks as accent chip BUTTONS) → 来源 (source cards) → 决策结果
+  marks as accent chip BUTTONS; the gaps card's 继续调研 chip launches a
+  follow-up run on the open gaps -- `composeGapsFollowup` in ledger.ts
+  builds the message, both hosts thread `onGapsFollowup`, the follow-up
+  POST's thread_ledger handoff carries the questions) → 来源 (source cards) → 决策结果
   (decisions, diagnostics sink last).  Every list reads NEWEST-FIRST and
   caps at 4 rows (`useCapExpand` state owned by the run section so a
   citation click can force it open).  The aside is a FIXED-HEIGHT
@@ -1432,7 +1447,14 @@ where the reader has no rail to match against.  The exported markdown
 LINKS its cites: `renumberCitations(text, map, anchor)` emits
 `[n](#引用来源)`-style jumps to the tail's `## ` heading (every renderer
 that slugs headings follows; thread exports keep plain per-run
-renumbering -- repeated headings would slug unpredictably).  The
+renumbering -- repeated headings would slug unpredictably).  THE GROUP PILL: a multi-number citation `[1,2]` rewrites to ONE
+`#refs-a.b` link (citations.ts) and the renderer's `a` branch mounts
+`CitationGroupChip` -- a single pill whose hover/focus panel lists every
+member source (favicon + domain + title row, each row jumping the rail's
+#n card); the old adjacent `[1][2][3]` chip cluster read as noise.
+Singles keep the plain `#ref-n` shape.  The print path
+(`applyLocalCiteNumbers`) maps each group member and lands the paper's
+group on its FIRST member's tail row (a paper has no hover panel).  The
 paper's chips become REAL ANCHORS and the tail rows carry
 `id="ref-N"` -- the browser's print-to-PDF preserves same-document
 fragment links as internal PDF jumps (a [n] on the paper jumps to its
@@ -1550,7 +1572,14 @@ injection pattern) governs the tool surface: past 8 tools total
 discovery tool instead of every schema — the model keyword-searches it,
 receives the matched tools' COMPLETE parameter schemas, and calls them
 by name next turn (a miss returns the inventory for re-querying).
-Below the threshold the tools inject directly.  This is the same
+Below the threshold the tools inject directly.  THE SERVER
+INSTRUCTIONS ride for free: `_with_session` hands the specs pass the
+initialize result, whose `instructions` land in the module store (400
+chars each, zero extra round trips) and surface twice -- a bounded
+`<mcp_servers>` block in the researcher's `<run_context>` (per-process
+variable material, never the cached system prompt) and the discovery
+tool's payloads (match rows carry `instructions`, the no-match
+inventory lists each server's guidance head).  This is the same
 three-layer idea as LobeHub's skills (`activateSkill`: name+summary
 first, full instructions on activation, references on demand) — any
 future skills system must follow it too.  The amap E2E: 15 tools listed, real geo/weather
@@ -2453,7 +2482,20 @@ redundant, both fused into ONE post-run extractor:
   `stopped_by_user` / `wrap_grace_ended` (loop `_STOP_HALT`/`_WRAP_HALT`)
   and the client's `aiSearch/halts.ts` renders them through i18n
   (unknown halt strings stay verbatim -- legacy stored threads keep
-  reading).  The writer-facing half of the wrap halt is the English
+  reading).  The GUARD-caused early ends ride `halt_reason` instead
+  (closed set `stalled | time_budget | round_budget | loop_detected` --
+  `halt` stays the writer-facing prose): the stall detector's verdict is
+  a `(note, reason)` pair (progress.py), the round-budget tail and the
+  spent-continuation case record theirs, and the run footer shows the
+  reason as an amber flag chip so an early wrap is never silent.  THE
+  TOOL-CALL LOOP GUARD (loop.py, beside the stall detector -- deer-flow's
+  LoopDetectionMiddleware against its blind spot): a round whose calls
+  are byte-identical to the previous round's (sorted name+normalized-args
+  fingerprint) makes round progress while learning nothing -- the first
+  repetition earns ONE `<loop_warning>` user message, the second sets
+  `_LOOP_NOTE` + `loop_detected` and the writer answers from what was
+  gathered; content-level duplicate refusals only cover
+  web_search/reader keys, browser/MCP actions are what the guard catches.  The writer-facing half of the wrap halt is the English
   `_WRAP_NOTE` (the model never sees a key).  Report-synthesized text
   follows the run language (the summary section title, the section-gap
   note) -- no hardcoded Chinese reaches en users.
@@ -2506,11 +2548,23 @@ redundant, both fused into ONE post-run extractor:
   vectors clear the shared 0.92 repeat floor against already-written
   section heads (one batch embed per section, fail-open).  The citation
   gate samples 3..6 claims by section length; the pre-write evidence
-  check's face scales `max(8, min(24, sources // 5))`.
+  check's face scales `max(8, min(24, sources // 5))`.  THE CROSS-SECTION
+  WORKSPACE (the IterResearch refinement): beyond `<previous_section_tail>`
+  (the previous section's last 600 chars), every EARLIER written section
+  contributes its title + first ~200 chars as an
+  `<earlier_sections_digest>` row -- a later section writes against ALL
+  prior positions, not just the previous one's ending; purely mechanical
+  (zero extra model calls), and the executive summary's call (no
+  prev_tail) digests EVERYTHING.
 - **SEARCH QUALITY LOOP**: the ranking cascade reports `no_signal` /
   head duplicate ratio; a search that matched nothing textually or came
   back >60% near-duplicates appends a REPHRASE-ADVICE note to its own
-  feed.  `RERANK_HEAD` is 30 (the whole engine fan-out rides the
+  feed.  An EMPTY result set gets its own explicit ZERO verdict (distinct
+  from the no-signal note, which also fires for results without textual
+  signal): "this query returned ZERO results -- rewrite it ... never
+  repeat it verbatim -- the duplicate guard will refuse"; the model must
+  know the engine found NOTHING so it rewrites instead of re-reading an
+  empty page.  `RERANK_HEAD` is 30 (the whole engine fan-out rides the
   cross-encoder); searx's `result.score` joins the BM25 fusion as a
   third RRF leg (0.4 -- authority prior, tie-break only, fail-open).
 

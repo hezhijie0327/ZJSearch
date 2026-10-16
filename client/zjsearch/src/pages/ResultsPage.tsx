@@ -23,6 +23,7 @@ import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSecti
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { DepthControls, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
+import { composeGapsFollowup } from "@/features/results/aiSearch/ledger.ts";
 import { SteerChips } from "@/features/results/aiSearch/SteerChips.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { type AiSearchMode, type AiSearchRun, useAiSearch } from "@/features/results/aiSearch/useAiSearch.ts";
@@ -545,6 +546,21 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     setFollowupQuery("");
     aiSearchRef.current.followup(question, view.aiLang, view.researchMode, view.filterValues.search_language);
   }, []);
+  const onRunGapsFollowup = useCallback(
+    (gaps: { q: string }[]) => {
+      // the 未决缺口 card's 继续调研: a follow-up run on the run's open
+      // gaps (the thread ledger hands them over)
+      const view = aiViewStateRef.current;
+      setFollowupQuery("");
+      aiSearchRef.current.followup(
+        composeGapsFollowup(gaps, t("ai_gaps_followup_body")),
+        view.aiLang,
+        view.researchMode,
+        view.filterValues.search_language,
+      );
+    },
+    [t],
+  );
   const onRunStop = useCallback(() => {
     aiSearchRef.current.stop();
   }, []);
@@ -922,6 +938,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onContinue={onRunContinue}
                       onDeleteRun={(runNo) => aiSearch.deleteRun(runNo)}
                       onFallback={onRunFallback}
+                      onGapsFollowup={onRunGapsFollowup}
                       onRegenerate={onRunRegenerate}
                       onRelated={onRunRelated}
                       onSetShape={(shape) => aiSearch.setShape(shape)}

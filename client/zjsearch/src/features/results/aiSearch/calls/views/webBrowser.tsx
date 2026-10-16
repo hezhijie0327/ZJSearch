@@ -95,7 +95,7 @@ function BrowserOutline({ snapshot, t }: { snapshot: string; t: ToolRowProps["t"
       {lines.map((line, i) => {
         if (line.startsWith("-- frame ")) {
           return (
-            <p className="px-1 pt-1 font-mono text-xs text-ink-3" key={`f${i}`} dir="auto">
+            <p className="px-1 pt-1 font-mono text-xs text-ink-3" dir="auto" key={`f${i}`}>
               {line.trim()}
             </p>
           );
@@ -186,7 +186,9 @@ export const webBrowserView: ToolView = {
         }
         const cx = args?.x;
         const cy = args?.y;
-        return cx !== undefined || cy !== undefined ? `${t("ai_browser_act_click")} ${cx ?? "?"},${cy ?? "?"}` : t("ai_browser_act_click");
+        return cx !== undefined || cy !== undefined
+          ? `${t("ai_browser_act_click")} ${cx ?? "?"},${cy ?? "?"}`
+          : t("ai_browser_act_click");
       }
       case "type": {
         const text = String(args?.text ?? "").trim();
@@ -213,7 +215,9 @@ export const webBrowserView: ToolView = {
       case "drag": {
         const x2 = args?.x2;
         const y2 = args?.y2;
-        return x2 !== undefined || y2 !== undefined ? `${t("ai_browser_act_drag")} → ${x2 ?? "?"},${y2 ?? "?"}` : t("ai_browser_act_drag");
+        return x2 !== undefined || y2 !== undefined
+          ? `${t("ai_browser_act_drag")} → ${x2 ?? "?"},${y2 ?? "?"}`
+          : t("ai_browser_act_drag");
       }
       case "read":
         return pageLabel(call.url || call.page?.url);
@@ -262,7 +266,15 @@ export const webBrowserView: ToolView = {
         </>
       );
     }
-    if (action === "click" || action === "type" || action === "press" || action === "scroll" || action === "hover" || action === "select" || action === "drag") {
+    if (
+      action === "click" ||
+      action === "type" ||
+      action === "press" ||
+      action === "scroll" ||
+      action === "hover" ||
+      action === "select" ||
+      action === "drag"
+    ) {
       return call.page ? <LocationLine page={call.page} /> : null;
     }
     // read / wait_user carry the reading pane through the DEFAULT body

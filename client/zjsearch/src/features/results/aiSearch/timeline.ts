@@ -289,6 +289,11 @@ export interface AiSearchRun {
   /** the server's halt explanation carried on settle (stall verdict,
       truncation, transport cut) -- the meta row renders it */
   halt?: string | null;
+  /** the machine key naming WHY a guard ended the research early
+      (stalled | time_budget | round_budget | loop_detected) -- the
+      meta row renders its i18n label; null when the run ended on its
+      own */
+  haltReason?: string | null;
   /** the WRITER's own thread title (the related fence's title field, or
       the settle-tail's generated fallback) -- the thread_head projection
       adopts it unless the user renamed manually */
@@ -959,9 +964,7 @@ export function applyEvent(
           ? { px: Number(event.px), py: Number(event.py), pk: String(event.pk ?? "") }
           : {}),
         ...(Array.isArray(event.box) ? { box: event.box.map(Number) } : {}),
-        ...(event.x2 !== undefined && event.y2 !== undefined
-          ? { x2: Number(event.x2), y2: Number(event.y2) }
-          : {}),
+        ...(event.x2 !== undefined && event.y2 !== undefined ? { x2: Number(event.x2), y2: Number(event.y2) } : {}),
         ...(event.label !== undefined ? { label: String(event.label) } : {}),
       };
       runs[lastIdx] = {
@@ -1241,6 +1244,7 @@ export function applyEvent(
       const status = String(event.status ?? "done");
       const usage = event.usage as AiSearchRun["usage"];
       const halt = typeof event.halt === "string" && event.halt ? event.halt : null;
+      const haltReason = typeof event.halt_reason === "string" && event.halt_reason ? event.halt_reason : null;
       let next: AiSearchRun = {
         ...run,
         browser: null,
@@ -1261,6 +1265,7 @@ export function applyEvent(
             }
           : (run.usage ?? null),
         halt,
+        haltReason,
       };
       if (status === "awaiting") {
         next = { ...next, status: "awaiting", endedAt: null };

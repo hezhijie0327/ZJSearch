@@ -9,9 +9,20 @@ import type { StringKey, Translate } from "@/lib/i18n";
 const HALT_KEYS = {
   stopped_by_user: "ai_halt_stopped_by_user",
   wrap_grace_ended: "ai_halt_wrap_grace_ended",
+  // the settle's halt_reason machine keys (the guard-caused early ends
+  // of the research -- wire.py's closed set)
+  stalled: "ai_halt_stalled",
+  time_budget: "ai_halt_time_budget",
+  round_budget: "ai_halt_round_budget",
+  loop_detected: "ai_halt_loop_detected",
 } as const satisfies Record<string, StringKey>;
 
 export function haltText(halt: string, t: Translate): string {
   const key = HALT_KEYS[halt as keyof typeof HALT_KEYS];
   return key ? t(key) : halt;
+}
+
+export function haltReasonText(reason: string, t: Translate): string {
+  const key = HALT_KEYS[reason as keyof typeof HALT_KEYS];
+  return key ? t(key) : reason;
 }

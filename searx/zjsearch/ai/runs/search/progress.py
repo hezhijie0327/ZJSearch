@@ -47,7 +47,7 @@ def round_progress(
     state: Searches,
     stall_rounds: int,
     max_seconds: int = 0,
-) -> t.Callable[[int], str | None]:
+) -> t.Callable[[int], tuple[str, str] | None]:
     """The progress-based termination policy: called by the agent loop
     after each executed round.  A round is PRODUCTIVE when at least one
     fresh query returned results; ``stall_rounds`` consecutive
@@ -57,18 +57,21 @@ def round_progress(
     progress nor stall.  ``max_seconds`` (0 = unlimited) is the run's
     wall-clock budget: the FIRST expiry returns the grace note (the
     model wraps up), the second ends the research regardless of
-    productivity."""
+    productivity.  The verdict is a ``(model-facing note, machine
+    halt_reason)`` pair -- the reason rides the settle event so the
+    client can name WHY the research ended early; ``None`` keeps
+    researching."""
 
     expired = False
 
-    def verdict(_round_no: int) -> str | None:
+    def verdict(_round_no: int) -> tuple[str, str] | None:
         nonlocal expired
         elapsed = time.monotonic() - state.started_at
         if 0 < max_seconds <= elapsed:
             if expired:
-                return STALL_NOTE
+                return STALL_NOTE, "stalled"
             expired = True
-            return TIME_BUDGET_NOTE
+            return TIME_BUDGET_NOTE, "time_budget"
         if not state.round_gathered:
             return None
         if state.round_new_hits > 0:
@@ -77,7 +80,7 @@ def round_progress(
         state.stalled_rounds += 1
         if state.stalled_rounds < stall_rounds:
             return None
-        return STALL_NOTE
+        return STALL_NOTE, "stalled"
 
     return verdict
 

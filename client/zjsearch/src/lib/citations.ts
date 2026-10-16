@@ -127,28 +127,35 @@ export function citedSourceRows<C extends { n?: number }>(map: CitationMap, rows
   return out;
 }
 
-/** One [n] / [n,m] match -> the `#ref-n` markdown links (one per number);
-    `[*]` stays literal text.  With a document map the LINK text is the
-    local label while the anchor keeps the local slot (the renderer's
+/** One [n] / [n,m] match -> `#ref-n` markdown links; `[*]` stays literal
+    text.  A MULTI-number group becomes ONE link with a `#refs-a.b` anchor
+    (the renderer's group branch merges the members into a single pill
+    whose hover panel lists every source -- the adjacent [1][2][3] chip
+    cluster read as noise and pushed the prose apart); singles keep the
+    plain `#ref-n` shape.  With a document map the LINK text is the local
+    label while the anchor keeps the local slot (the renderer's
     positional meta contract), so hover previews and clicks keep working
     unchanged; an unmapped number passes through verbatim. */
 function rewriteCitation(match: string, group: string | undefined, map?: CitationMap): string {
   if (!group) {
     return match;
   }
-  return group
-    .split(/\s*[,，]\s*/)
-    .map((n: string) => {
-      const num = Number.parseInt(n, 10);
-      if (map) {
-        const local = map.get(num);
-        if (local) {
-          return `[${local}](#ref-${local})`;
-        }
+  const resolve = (n: string) => {
+    if (map) {
+      const local = map.get(Number.parseInt(n, 10));
+      if (local) {
+        return String(local);
       }
-      return `[${n}](#ref-${n})`;
-    })
-    .join("");
+    }
+    return n;
+  };
+  const nums = group.split(/\s*[,，]\s*/);
+  if (nums.length > 1) {
+    const locals = nums.map(resolve);
+    return `[${locals.join(",")}](#refs-${locals.join(".")})`;
+  }
+  const n = nums[0] ?? "";
+  return `[${n}](#ref-${resolve(n)})`;
 }
 
 /** Rewrite [n] / [n,m] citations into `#ref-n` links that the markdown `a`
@@ -244,37 +251,42 @@ export function renumberCitations(text: string, map: CitationMap, linkAnchor?: s
     `data-cite-n`, the deck's marpit slides render `a[href^="#ref-"]`
     anchors. */
 export function applyLocalCiteNumbers(root: HTMLElement, map: CitationMap): void {
+  const GROUP_LABEL = /^\[(\d+(?:\s*[,，]\s*\d+)*)\]$/;
   for (const chip of root.querySelectorAll<HTMLElement>("button, a")) {
-    const match = /^\[(\d+)\]$/.exec((chip.textContent ?? "").trim());
+    const match = GROUP_LABEL.exec((chip.textContent ?? "").trim());
     if (!match) {
       continue;
     }
-    const globalN = Number.parseInt(match[1] ?? "", 10);
-    const local = map.get(globalN);
-    if (!local) {
+    const members = (match[1] ?? "").split(/\s*[,，]\s*/);
+    const locals = members.map((n) => map.get(Number.parseInt(n, 10)));
+    // a member with no local slot (a phantom) leaves the chip untouched
+    if (locals.some((local) => !local)) {
       continue;
     }
+    const label = `[${locals.join(",")}]`;
     // the paper's chips become REAL ANCHORS: the browser's print-to-PDF
     // preserves same-document fragment links as internal PDF jumps, so a
-    // [n] on the paper jumps straight to its tail row
+    // [n] on the paper jumps straight to its tail row (a group lands on
+    // its FIRST member's row -- the paper has no group pill to hover)
+    const href = `#ref-${locals[0]}`;
     if (chip.tagName === "BUTTON") {
       const link = root.ownerDocument.createElement("a");
-      link.href = `#ref-${local}`;
+      link.href = href;
       link.className = chip.className;
-      link.textContent = `[${local}]`;
+      link.textContent = label;
       chip.replaceWith(link);
       continue;
     }
-    if (chip.hasAttribute("data-cite-n")) {
-      chip.setAttribute("data-cite-n", String(local));
+    if (chip.hasAttribute("data-cite-n") && locals.length === 1) {
+      chip.setAttribute("data-cite-n", String(locals[0]));
     }
     if (chip.hasAttribute("href")) {
-      chip.setAttribute("href", `#ref-${local}`);
+      chip.setAttribute("href", href);
     }
-    if (chip.hasAttribute("aria-label")) {
-      const label = chip.getAttribute("aria-label") ?? "";
-      chip.setAttribute("aria-label", label.replace(/\d+/, String(local)));
+    if (chip.hasAttribute("aria-label") && locals.length === 1) {
+      const chipLabel = chip.getAttribute("aria-label") ?? "";
+      chip.setAttribute("aria-label", chipLabel.replace(/\d+/, String(locals[0])));
     }
-    chip.textContent = `[${local}]`;
+    chip.textContent = label;
   }
 }

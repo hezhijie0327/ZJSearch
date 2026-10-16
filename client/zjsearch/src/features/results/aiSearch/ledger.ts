@@ -188,3 +188,13 @@ export function continueBrief(q: string, learnings: LedgerFact[], gaps: LedgerGa
     ` repeat angles already searched.`
   ).slice(0, 2000);
 }
+
+/** The gap-driven follow-up's composed message (the 未决缺口 card's
+    继续调研 action): the localized lead line + one bullet per open gap.
+    A plain string -- the follow-up POST takes free text, and the new
+    run's thread_ledger handoff (useAiSearch.followup already harvests
+    the thread's open gaps) carries the questions into the server's
+    ledger machinery. */
+export function composeGapsFollowup(gaps: Array<{ q: string }>, lead: string): string {
+  return [lead, ...gaps.map((gap) => `- ${gap.q}`)].join("\n");
+}

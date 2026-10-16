@@ -217,7 +217,18 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             # at the query layer): a no-signal or duplicate-dominated search
             # tells the model to REPHRASE instead of repeating the angle --
             # the cascade's own statistics are the referee's evidence here
-            if quality.get("no_signal"):
+            if not items and not plugin_answers:
+                # the explicit ZERO verdict, distinct from the no-signal
+                # note below (which also fires for results without textual
+                # signal): the model must know the engine found NOTHING so
+                # it rewrites the query instead of re-reading an empty page
+                feed_block += (
+                    "\n(search result: this query returned ZERO results --"
+                    " rewrite it: different keywords, another language,"
+                    " another category, or drop a filter; never repeat it"
+                    " verbatim -- the duplicate guard will refuse)"
+                )
+            elif quality.get("no_signal"):
                 feed_block += (
                     "\n(search quality: this query matched nothing textually --"
                     " rephrase it: different keywords, another language, or a"
