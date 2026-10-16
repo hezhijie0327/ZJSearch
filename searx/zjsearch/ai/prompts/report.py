@@ -140,6 +140,7 @@ def section_system(role: str, surface: str, shape: str) -> str:
     return "\n".join(
         [
             role,
+            spine.today_line(),
             spine.citation_rules(),
             spine.citation_discipline(surface),
             spine.figures_rule(),

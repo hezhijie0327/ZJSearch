@@ -57,6 +57,7 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
     slides) -- the skeleton SHAPE is shared.  ``None`` on any failure."""
     system = "\n".join(
         [
+            spine.today_line(),
             deck_prompts.DECK_OUTLINE_SYSTEM if deck else report_prompts.OUTLINE_SYSTEM,
             spine.language_directive(lang),
         ]
@@ -202,6 +203,7 @@ def build_outline_from_template(  # pylint: disable=too-many-arguments, too-many
     presentation wording."""
     system = "\n".join(
         [
+            spine.today_line(),
             deck_prompts.DECK_TEMPLATE_ADAPT_SYSTEM if deck else report_prompts.TEMPLATE_ADAPT_SYSTEM,
             spine.language_directive(lang),
         ]

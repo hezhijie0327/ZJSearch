@@ -410,7 +410,7 @@ def make_synthesizer(
                 break
             digest_parts.append(block)
             used += len(block)
-        system = "\n".join([report_prompts.SUMMARY_SYSTEM, lang_directive])
+        system = "\n".join([spine.today_line(), report_prompts.SUMMARY_SYSTEM, lang_directive])
         user = report_prompts.summary_user(question[:1000], "\n".join(digest_parts))
         yield from stream([{"role": "system", "content": system}, {"role": "user", "content": user}], "summary", tally)
 
