@@ -1019,6 +1019,61 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   the real boot).  The degraded session is sticky per page — reload
   after the orphan dies to get the real store back.
 
+- THE WINDOWS TEST INSTANCE + LIVE AI-ROUTE TESTING (2026-10-16, the
+  absorption-batch session's environment recipes -- the fallback when
+  WSL is unavailable is a NATIVE WINDOWS venv, and the setup has four
+  non-obvious steps).  (1) `python -m venv local/py3-win`
+  (git-ignored) + `pip install -i
+  https://mirrors.cernet.edu.cn/pypi/web/simple -r requirements.txt`
+  -- granian is NOT in requirements.txt, add `-r
+  requirements-server.txt`.  (2) upstream `searx/valkeydb.py` imports
+  `pwd` at module level (a unix-only stdlib module), so
+  `import searx.webapp` dies on Windows: drop a tiny stub `pwd.py`
+  into `local/py3-win/Lib/site-packages` (attributes raise if ever
+  touched) -- zero repo footprint, rebase-safe, and safe because the
+  valkey path is only reached with a redis.url unix socket that no
+  test deployment sets.  (3) granian MUST boot with `--interface
+  wsgi` -- its default RSGI scope has no `.get`, so
+  `searx/zjsearch/static_cache.py`'s WSGI wrapper crashes EVERY
+  request with `AttributeError: 'RSGIHTTPScope' object has no
+  attribute 'get'`: `SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/
+  prod-settings.yml SEARXNG_SECRET=... local/py3-win/Scripts/granian
+  --interface wsgi --host 127.0.0.1 --port 8888 searx.webapp:app`.
+  (4) THE SILENT 403 RECIPE: a POST to the AI routes that 403s with
+  no app log is almost always the HMAC token gate seeing NO tk --
+  `curl -d` with inline Chinese from Git Bash sends mojibake,
+  `get_json(silent=True)` returns None, `payload.get("tk")` comes
+  back empty; test POSTs from a python client (urllib) or a body
+  file.  The `ERROR:searx.botdetection: X-Forwarded-For nor
+  X-Real-IP...` line is just ProxyFix (webapp.py) logging once --
+  harmless, not the limiter (prod-settings runs `limiter: false`).
+  The token rides the homepage page-data (`"tk": "ts.sig"`), a pure
+  timestamp HMAC with an hour TTL.  To split app-layer from
+  transport-layer in one step: POST the route through
+  `app.test_client()` in-process -- a 200 with NDJSON means the app
+  is fine, look at the server layer.  OBSERVING A LIVE RUN over the
+  wire needs no browser: POST
+  `/zjsearch/ask/search {tk, q, lang, mode}` and read the NDJSON --
+  `settle`'s `halt_reason`, the `ctx` snapshots (grep for
+  `<mcp_servers>`), the `call` settlements' `n` (zero-result
+  behavior).  THE WSL VENV TRAP (same session, learned the hard
+  way): `./manage webapp.run` on a `local/py3` whose
+  `requirements.sha256` is missing WIPES the venv and then dies
+  (`python3.14-venv`/ensurepip absent, sudo needed); recover without
+  sudo via `python3 -m venv --without-pip local/py3` +
+  `get-pip.py` (bootstrap.pypa.io, pass `-i` the CERNET mirror).
+  TWO TOOLING NOTES from the same session: pure lib-module smoke
+  tests need NO test infra (the no-vitest rule stands) --
+  `client/zjsearch/node_modules/.bin/rolldown src/lib/x.ts --format
+  esm --file <tmp>/x.mjs` then `node -e "import('<tmp>/x.mjs')"`
+  (rolldown ships with vite); and the GIT BASH HEREDOC GOTCHA that
+  corrupted generated files twice -- backslash sequences inside
+  heredoc bodies get mangled through the harness (a newline-escape
+  literal arrives as a real newline) and backticks inside a
+  double-quoted `git commit -m` fire command substitution, so write
+  generated files with a python script and pass multi-line/backtick
+  commit messages via `git commit -F file`.
+
 ## zjsearch UI design system
 
 A consistent control/typography language is enforced across all pages —
