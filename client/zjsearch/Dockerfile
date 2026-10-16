@@ -59,6 +59,9 @@ WORKDIR /app
 COPY --from=build_zjsearch_frontend /tmp/BUILDTMP/SEARXNG/requirements.txt /app/requirements.txt
 COPY --from=build_zjsearch_frontend /tmp/BUILDTMP/SEARXNG/searx /app/searx
 
+ENV \
+    XDG_CACHE_HOME="/app"
+
 RUN \
     apt update \
     && apt install -qy \
@@ -79,7 +82,7 @@ RUN \
     # XDG_CACHE_HOME pins the camoufox install into /app so the final
     # stage ships it together with the venv (the runtime ENV re-exports
     # the same path)
-    && XDG_CACHE_HOME=/app/browser python3 -m searx.zjsearch.ai.browser.install \
+    && python3 -m searx.zjsearch.ai.browser.install \
     && python3 -m compileall -q searx \
     # the vite build's closeBundle pass (tools/assets.ts) already wrote
     # .gz/.br siblings for the zjsearch artifacts -- -f makes this pass
@@ -130,7 +133,7 @@ COPY --from=rebased_searxng / /
 ENV \
     PYTHONPATH="/app" \
     SEARXNG_SETTINGS_PATH="/config/settings.yml" \
-    XDG_CACHE_HOME="/app/browser"
+    XDG_CACHE_HOME="/app"
 
 EXPOSE 8888/tcp
 
