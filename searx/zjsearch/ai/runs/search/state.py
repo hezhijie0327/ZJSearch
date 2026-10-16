@@ -476,6 +476,10 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # view_image 的注入队列:抓到的图作为下一轮的 user 消息回灌对话
         # (工具结果本身是文本通道,图走 user turn 是全供应商通用的形态)
         self.image_injections: list[dict[str, t.Any]] = []
+        # the browser screenshots already injected this run (viewport +
+        # element shots share the budget) -- a captcha retry loop must not
+        # turn the conversation into an image carousel
+        self.model_shots = 0
         # the browser SESSION this run drives: the lead's lane ("lead")
         # or a subagent's own keyed page (v2.1 R3B -- separate tabs in
         # the mirror, one persistent context)

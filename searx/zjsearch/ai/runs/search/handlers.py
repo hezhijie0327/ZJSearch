@@ -75,6 +75,11 @@ logger = logging.getLogger(__name__)
 PLAN_REMINDER_EVERY = 6
 """Rounds between task-card cadence reminders (B2)."""
 
+_MAX_MODEL_SHOTS = 8
+"""The per-run budget for browser screenshots injected into the model's
+conversation (viewport + element close-ups share it) -- a captcha retry
+loop must not turn the context into an image carousel."""
+
 
 def subagents_auto_background_ms() -> int:
     """The delegation batch's foreground deadline (``zjsearch.subagents
@@ -286,18 +291,33 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 frame = {**frame, "agent": self.browser_session_id}
             yield ("browser", frame)
         if result.image:
+            if self.model_shots >= _MAX_MODEL_SHOTS:
+                yield settle(
+                    "error",
+                    "error: the per-run screenshot budget is spent -- the"
+                    " images already captured are in the conversation;"
+                    " work from what you have or move on.",
+                )
+                return False
+            self.model_shots += 1
+            aimed_ref = str(args.get("ref") or "")
+            if aimed_ref:
+                shot_note = (
+                    f"Attached: the close-up screenshot you requested of"
+                    f" element {aimed_ref} on the page you opened.  Read it"
+                    " now and decide your next action from what is visible."
+                )
+            else:
+                shot_note = (
+                    "Attached: the screenshot you requested of the page you"
+                    " opened. Read it now and decide your next action from"
+                    " what is visible."
+                )
             self.image_injections.append(
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "Attached: the screenshot you requested of the page you"
-                                " opened. Read it now and decide your next action from"
-                                " what is visible."
-                            ),
-                        },
+                        {"type": "text", "text": shot_note},
                         {"type": "image_url", "image_url": {"url": result.image}},
                     ],
                 }

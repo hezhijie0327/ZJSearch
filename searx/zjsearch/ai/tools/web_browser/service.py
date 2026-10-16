@@ -142,8 +142,14 @@ def _act_scroll(args: dict[str, t.Any], session_id: str) -> ActionResult:
     )
 
 
-def _act_screenshot(_args: dict[str, t.Any], session_id: str) -> ActionResult:
-    shot = session.screenshot_b64(session_id, quality=75)
+def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    ref = str(args.get("ref") or "")
+    if ref:
+        # the aimed shot: ONE element close-up instead of the viewport
+        # (the crop is what the model sees next turn)
+        shot = session.inspect_b64(session_id, ref, quality=75)
+    else:
+        shot = session.screenshot_b64(session_id, quality=75)
     return ActionResult(
         feed="",
         frames=[

@@ -196,13 +196,23 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     login stage's interaction carrier.  `session` is the ONE interactive page the
     ``web_browser`` tool drives (a serialized lane beside the reader's
     parallel reads, same cookie store): snapshot refs via injected
-    `data-zjs-ref` attributes, click/type/press that return the FRESH
+    `data-zjs-ref` attributes (interactive elements FIRST, then sizeable
+    visible `img` elements — alt/src-basename named — so the aimed
+    screenshot has targets), click/type/press that return the FRESH
     outline automatically when the action navigated (refs die on
     navigation — the re-snapshot doctrine is automatic; a ref dead to a
     plain re-render fails FAST with the recovery recipe), native text
     extraction over the live DOM (`read` — the reader's pipeline, the
     reader's `max_chars` cap), and the raw input primitives the user's
-    Lightbox takeover forwards.  The open lane runs the reader's
+    Lightbox takeover forwards.  The `screenshot` action is AIMED:
+    without `ref` it is the whole viewport, with `ref` it captures ONE
+    element as a close-up (`locator.screenshot`, auto-scrolls; the
+    captcha/canvas/chart use — the crop IS what the model sees next
+    turn through the same user-message image injection both shapes
+    ride); every injected screenshot spends a per-run budget
+    (`_MAX_MODEL_SHOTS` 8, viewport + close-ups together) — past it the
+    settlement errors honestly instead of turning the context into an
+    image carousel.  The open lane runs the reader's
     public-url gate itself (`file://` never reaches `context.route`).
     The engine self-heals: a "closed"-flavored failure drops the
     poisoned context and the next action relaunches; a launch failure

@@ -77,3 +77,4 @@ client/zjsearch/*.local.yml
 
 # local e2e scripts (transient)
 *.local.sh
+.captest/

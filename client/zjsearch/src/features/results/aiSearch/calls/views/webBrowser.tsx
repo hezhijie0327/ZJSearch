@@ -178,8 +178,10 @@ export const webBrowserView: ToolView = {
         return `${t("ai_browser_act_press")} ${String(args?.key ?? "").trim()}`.trim();
       case "scroll":
         return `${t("ai_browser_act_scroll")} ${String(args?.direction ?? "") === "up" ? "↑" : "↓"}`;
-      case "screenshot":
-        return t("ai_browser_act_screenshot");
+      case "screenshot": {
+        const ref = String(args?.ref ?? "").trim();
+        return ref ? `${t("ai_browser_act_screenshot")} ${ref}` : t("ai_browser_act_screenshot");
+      }
       case "read":
         return pageLabel(call.url || call.page?.url);
       case "wait_user":

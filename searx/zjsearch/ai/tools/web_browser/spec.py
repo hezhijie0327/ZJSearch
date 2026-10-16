@@ -48,7 +48,8 @@ def web_browser_spec() -> dict[str, t.Any]:
             "empty pages are dead ends: move on to a different source\n"
             "instead of retrying.\n\n"
             "SESSION -- the interactive lane: open a page, snapshot its\n"
-            "interactive elements as refs, click/type/press/scroll by ref,\n"
+            "interactive elements and sizeable images as refs, click/type/\n"
+            "press/scroll by ref,\n"
             "take a screenshot you will SEE, read with NO url to extract\n"
             "the page the session is currently on, or wait while the USER\n"
             "operates the page in the live mirror (sign-in, verification,\n"
@@ -68,7 +69,11 @@ def web_browser_spec() -> dict[str, t.Any]:
             "content plain fetches and search engines cannot.\n\n"
             "DISCIPLINE: snapshot is your primary read; take a screenshot\n"
             "ONLY when the snapshot cannot answer (visual layout, captcha,\n"
-            "canvas) -- never both by default.  A click or submit that\n"
+            "canvas) -- never both by default.  screenshot with a `ref`\n"
+            "captures that ONE element as a CLOSE-UP (the captcha image,\n"
+            "a canvas widget, a chart) -- the crop is exactly what you see\n"
+            "next turn, so aim before you shoot; without a ref it is the\n"
+            "whole viewport.  A click or submit that\n"
             "NAVIGATES returns the fresh outline itself; a ref that died\n"
             "to a re-render (no navigation) fails fast -- re-snapshot and\n"
             "use the new ref.  Pages you open become citable sources: open\n"
@@ -92,7 +97,14 @@ def web_browser_spec() -> dict[str, t.Any]:
                         " it to read the page the session is currently on."
                     ),
                 },
-                "ref": {"type": "string", "description": "click/type: the snapshot ref (e.g. e12)."},
+                "ref": {
+                    "type": "string",
+                    "description": (
+                        "click/type: the snapshot ref (e.g. e12)."
+                        " screenshot: capture that ONE element as a"
+                        " close-up instead of the whole viewport."
+                    ),
+                },
                 "text": {"type": "string", "description": "type: the text to fill."},
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},
                 "key": {"type": "string", "description": "press: the key (Enter, Escape, Tab...)."},
@@ -115,7 +127,7 @@ def parse_web_browser_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     out: dict[str, t.Any] = {"action": action}
     if action in ("open", "read"):
         out["url"] = str(args.get("url") or "").strip()[:2000]
-    if action in ("click", "type"):
+    if action in ("click", "type", "screenshot"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
     if action == "type":
         out["text"] = str(args.get("text") or "")[:500]

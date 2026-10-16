@@ -44,6 +44,12 @@ SNAPSHOT_MAX_ELEMENTS = 120
 """The outline's element budget -- the model's primary read must stay a
 cheap one."""
 
+SNAPSHOT_IMG_SLOTS = 20
+"""The img ANNEX on top of the element budget: sizeable visible images
+get refs AFTER the interactive pass (additive -- a link farm must not
+crowd the aimed screenshot's targets out, and a page without them costs
+nothing)."""
+
 _ACTION_TIMEOUT_MS = 15_000
 
 LEAD = "lead"
@@ -78,9 +84,21 @@ _SNAPSHOT_JS = """
     out.push(ref + '\\t' + role + '\\t' + name);
     if (out.length >= %d) break;
   }
+  for (const el of document.querySelectorAll('img')) {
+    if (out.length >= %d) break;
+    const r = el.getBoundingClientRect();
+    if (r.width < 30 || r.height < 15) continue;
+    const style = getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none') continue;
+    const ref = 'e' + (++window.__zjsRef);
+    el.setAttribute('data-zjs-ref', ref);
+    const file = (el.currentSrc || el.src || '').split(/[?#]/)[0].split('/').pop() || '';
+    const name = (el.getAttribute('alt') || file).replace(/\\s+/g, ' ').trim().slice(0, 80);
+    out.push(ref + '\\timg\\t' + name);
+  }
   return out.join('\\n');
 }
-""" % SNAPSHOT_MAX_ELEMENTS
+""" % (SNAPSHOT_MAX_ELEMENTS, SNAPSHOT_MAX_ELEMENTS + SNAPSHOT_IMG_SLOTS)
 
 
 class SessionError(Exception):
@@ -367,6 +385,34 @@ def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(vp["width"]),
                 "h": int(vp["height"]),
+                "url": str(page.url),
+                "title": await page.title(),
+            }
+
+        return _run(run())
+
+
+def inspect_b64(session_id: str, ref: str, quality: int = 75) -> dict[str, t.Any]:
+    """ONE element as a close-up ``{img, w, h, url, title}`` -- the ref
+    scoped screenshot the model aims at a widget a viewport shot only
+    smears (captcha image, canvas, chart).  ``locator.screenshot``
+    scrolls the element into view itself; a stale ref fails fast through
+    ``_resolve_live`` with the re-snapshot recipe.  Read-only: no
+    navigation check, no re-snapshot."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            sel = await _resolve_live(page, ref)
+            box = await page.locator(sel).first.bounding_box(timeout=1_500)
+            raw = await page.locator(sel).first.screenshot(
+                type="jpeg", quality=int(quality), timeout=_ACTION_TIMEOUT_MS
+            )
+            return {
+                "img": base64.b64encode(raw).decode("ascii"),
+                "w": int(box["width"]) if box else 0,
+                "h": int(box["height"]) if box else 0,
                 "url": str(page.url),
                 "title": await page.title(),
             }
