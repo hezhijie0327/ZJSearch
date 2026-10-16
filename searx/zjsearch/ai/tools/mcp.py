@@ -23,12 +23,18 @@ headers).  Streamable HTTP ONLY -- stdio / SSE servers are out of
 scope.  Unconfigured = the capability is silent: no specs, no sessions.
 
 The official ``mcp`` SDK drives the wire (MIT, theme requirement
-section); each operation runs inside ONE self-contained connection
-(open -> initialize -> act -> close) on the shared network loop -- the
-SDK's anyio task groups cannot survive the next ``run_coroutine_threadsafe``
-task, so sessions are deliberately NOT cached across calls.  Tool
-names are namespaced ``mcp_<server>_<tool>`` so two servers can never
-collide with each other or with the built-ins."""
+section).  The SDK's own design is a LONG-LIVED session (enter the
+context manager once, initialize, reuse for every call); this bridge
+deliberately runs each operation inside ONE self-contained connection
+(open -> initialize -> act -> close) instead -- a topology constraint,
+not an SDK recommendation: every call enters from a WSGI worker thread
+and hops onto the shared network loop via ``run_coroutine_threadsafe``,
+and the session's dispatcher/receive loop lives inside the task group
+of exactly one such hop task.  A cached-session supervisor task on the
+loop is possible future work; until then, correctness comes from the
+per-operation scope.  Tool names are namespaced ``mcp_<server>_<tool>``
+so two servers can never collide with each other or with the
+built-ins."""
 
 import asyncio
 import functools

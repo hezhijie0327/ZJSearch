@@ -418,7 +418,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 # model what this instance can search, the STRUCTURED
                 # inventory rides the row's expanded body (category chips
                 # + bang rows), n drives the metric
-                feed_text, extras = list_engines_tool.run_call()
+                feed_text, extras = list_engines_tool.run_call(raw_args(call))
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",

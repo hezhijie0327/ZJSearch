@@ -132,9 +132,11 @@ searx/zjsearch/ai/
 
 **为什么不给内部工具起一个真的 in-process MCP server**(决策记录):
  uniform 的收益已经在**形状与机制层**拿完了(上面四条);真走协议
- 边界只剩代价——(1) 最热路径(search_web 每轮 2-3 次)每次都要付
- open→initialize→act→close 的会话往返(mcp.py 的会话故意不缓存,
- anyio task group 活不过 threadsafe 跳跃);(2) 富结算无法穿过通用
+ 边界只剩代价——(1) 最热路径(search_web 每轮 2-3 次)要付协议税:
+ 桥接器现况是每操作一连接(SDK 本身推荐长会话复用;不缓存是我们
+ WSGI→shared-loop 拓扑的约束而非 SDK 建议,循环上的 cached-session
+ supervisor 是未来可做的减税项),即使缓存后每次调用仍剩序列化与
+ 帧化的底价;(2) 富结算无法穿过通用
  文本返回,要么砍掉时间线/任务卡/台账,要么造一层"假 uniform";(3)
  MCP 的价值在第三方 client 的协议边界,内部调用之间不存在这个边界。
  **真正有价值的 MCP 方向是反的**:把 ZJSearch 的搜索能力**作为 MCP
