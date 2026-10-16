@@ -940,8 +940,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 continue
             if tool_name == mcp.SEARCH_TOOL:
                 # progressive disclosure: the discovery tool returns the
-                # matched tools' full schemas (a text result like any other)
-                gathered = True
+                # matched tools' full schemas (a text result like any
+                # other).  BOOKKEEPING, not gathering: a pure-discovery
+                # round must not eat the stall detector's credits or draw
+                # the no-new-sources nag -- the catalog listing is
+                # metadata, the data starts at the first real mcp_ call.
                 feed_text = mcp.search_mcp_tools(str(raw_args(call).get("query") or ""))
                 feeds[wire_id - 1] = feed_text
                 yield (
@@ -958,6 +961,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             if tool_name.startswith("mcp_"):
                 gathered = True
                 feed = mcp.call_mcp_tool_sync(tool_name, raw_args(call))
+                if not feed.startswith("error:"):
+                    # an MCP settlement is material like a page read: it
+                    # counts as the round's fresh progress -- the stall
+                    # detector is web-hit-driven and would otherwise read
+                    # a productive MCP-only round as stalled
+                    self.round_new_hits += 1
                 feeds[wire_id - 1] = feed
                 # progressive disclosure: the row's preview is the head of
                 # what came back (the full text rode the feed to the model)

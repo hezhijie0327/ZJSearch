@@ -697,14 +697,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             yield {"e": "close", "id": entry}
             if round_progress is not None:
                 # the progress verdict lands AFTER the round's results are in
-                # the conversation: the next loop iteration sees the halt
+                # the conversation: the next loop iteration sees the halt.
+                # A None verdict is the healthy keep-researching answer, not
+                # a failure -- only a raised exception warns.
                 try:
-                    verdict_note, verdict_reason = round_progress(rounds)
-                    halt_message = verdict_note
-                    halt_reason = halt_reason or verdict_reason
+                    verdict = round_progress(rounds)
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("zjsearch loop: round progress check failed: %r", exc)
-                    halt_message = None
+                    verdict = None
+                if verdict is not None:
+                    halt_message = verdict[0]
+                    halt_reason = halt_reason or verdict[1]
             if halt_message is None:
                 # THE TOOL-CALL LOOP GUARD (the stall detector's blind
                 # spot): a round whose calls are byte-identical to the

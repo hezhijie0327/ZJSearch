@@ -370,7 +370,7 @@ class RunHandle:
 
     def grace_expired(self) -> bool:
         with self._lock:
-            if self._linger:
+            if self.linger:
                 # the background-completion contract: a closed tab never
                 # wraps this run -- it researches to the ledger's closure
                 return False
