@@ -479,6 +479,13 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
 
         messages.append({"role": "user", "content": spine.block("user_steering", text)})
 
+    if not researching:
+        # the DIRECT run's phase (the zero-tool case -- greeting, chat, a
+        # writing task): ONE ideate segment, the non-search path's own
+        # identity (Vane's "Brainstorming..." borrow) -- without it the
+        # run would show no strip at all and read as a broken search
+        current_phase = "ideate"
+        yield {"e": "phase", "name": current_phase}
     if researching:
         # the coarse phase spine (the closed set's one coarse event): the
         # run opens in "plan" -- the first turn reads the material and
@@ -486,13 +493,6 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         # round's calls actually execute (micro-activity belongs to the
         # entries; this spine only tells the user where they are)
         current_phase = "plan"
-        yield {"e": "phase", "name": current_phase}
-    else:
-        # the DIRECT run's phase (the zero-tool case -- greeting, chat, a
-        # writing task): ONE ideate segment, the non-search path's own
-        # identity (Vane's "Brainstorming..." borrow) -- without it the
-        # run would show no strip at all and read as a broken search
-        current_phase = "ideate"
         yield {"e": "phase", "name": current_phase}
         # the FIRST resume checkpoint: the seeded conversation is the only
         # copy of itself -- a process death before the first round

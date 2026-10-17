@@ -31,6 +31,7 @@ from searx.zjsearch.ai.tools import memory as memory_cap
 from searx.zjsearch.ai.tools import list_engines as list_engines_tool
 from searx.zjsearch.ai.browser import session as browser_session
 from searx.zjsearch.ai.tools import delegate_research as delegate_tool
+from searx.zjsearch.ai.tools import message_subtask
 from searx.zjsearch.ai.prompts import spine
 from searx.zjsearch.ai.prompts.subagent import SUB_ROUNDS, SUB_STALL_ROUNDS, subagent_messages
 from searx.zjsearch.ai.tools.message_subtask import FOLLOWUP_MAX
@@ -1007,12 +1008,12 @@ section, do not re-type the numbers."""
                 sub_jobs.append((wire_id, delegate_tool.parse_delegate_research_call(call)))
                 gathered = True
                 continue
-            if str(call.get("name") or "") == delegate_tool.MESSAGE_SUBTASK_TOOL:
+            if str(call.get("name") or "") == message_subtask.MESSAGE_SUBTASK_TOOL:
                 # the FOLLOW-UP: a message to a registered subagent -- it
                 # resumes inside the context it built.  Executed AFTER the
                 # round's delegation batch, so a same-round delegate+message
                 # pair still finds its target in the registry.
-                followup_jobs.append((wire_id, delegate_tool.parse_message_subtask_call(call)))
+                followup_jobs.append((wire_id, message_subtask.parse_message_subtask_call(call)))
                 gathered = True
                 continue
             feed, event, job = self._search_plan(call, wire_id)
