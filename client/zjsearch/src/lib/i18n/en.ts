@@ -532,6 +532,7 @@ export const EN = {
   ai_debug_restart: "Restart scenario",
   ai_debug_timeline: "Event timeline",
   ai_debug_error: "Error",
+  ai_debug_raw: "Raw response (unrendered)",
   ai_debug_args: "Raw arguments",
   ai_debug_feed: "Model receipt",
   ai_clarify_more: "Add context (optional)",

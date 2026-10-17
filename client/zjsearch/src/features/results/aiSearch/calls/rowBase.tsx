@@ -183,16 +183,19 @@ export function DebugArgs({ rawArgs }: { rawArgs: string }) {
 export function DebugFeed({ feed, error = false }: { feed: string; error?: boolean }) {
   const t = useT();
   const copyToast = useCopyToast();
+  // the raw channel's pane scrolls taller (the FULL tool output is the
+  // developer's ground truth -- 40 heads vs 96 lets real responses breathe)
+  const full = feed.length > 1000;
   return (
     <div className="mt-1">
       <div className={error ? "px-1 pb-1 text-xs font-medium text-danger" : undefined}>
-        <DebugLabel label={error ? t("ai_debug_error") : t("ai_debug_feed")} />
+        <DebugLabel label={error ? t("ai_debug_error") : full ? t("ai_debug_raw") : t("ai_debug_feed")} />
       </div>
       <div className="group relative">
         <div
-          className={`max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words ${
-            error ? "text-danger/85" : "text-ink-2"
-          }`}
+          className={`overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 py-2 pe-10 ps-3 font-mono text-xs leading-relaxed whitespace-pre-wrap break-words ${
+            full ? "max-h-96" : "max-h-40"
+          } ${error ? "text-danger/85" : "text-ink-2"}`}
           dir="auto"
         >
           {feed}
@@ -214,14 +217,18 @@ export function DebugFeed({ feed, error = false }: { feed: string; error?: boole
 }
 
 /** The row's debug expansion composition: the raw-arguments pane, the
-    model-receipt pane and the call's wall time, in contract order.  Rows
-    render it inside their fold when ANY piece exists -- the expandable
-    conditions OR the pieces (rawArgs / call.feed / results). */
+    RAW response pane (the FULL tool output, uncapped -- the developer's
+    ground truth) and the call's wall time, in contract order.  The
+    800-char feed head only renders for legacy replays that predate the
+    raw channel.  Rows render it inside their fold when ANY piece exists
+    -- the expandable conditions OR the pieces (rawArgs / call.feed /
+    call.raw / results). */
 export function DebugPanes({ call, rawArgs }: { call: AiSearchCall; rawArgs: string | null }) {
+  const response = call.raw ?? (call.raw === undefined ? call.feed : null);
   return (
     <>
       {rawArgs ? <DebugArgs rawArgs={rawArgs} /> : null}
-      {call.feed ? <DebugFeed error={call.status === "error"} feed={call.feed} /> : null}
+      {response ? <DebugFeed error={call.status === "error"} feed={response} /> : null}
     </>
   );
 }

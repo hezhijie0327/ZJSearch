@@ -137,6 +137,11 @@ export interface AiSearchCall {
   /** search_tools rows: the matched tools (structured); absent on
       no-match and legacy replays */
   tools?: AiToolMatch[];
+  /** the tool's FULL raw response text (exactly what the executor fed
+      back to the model, uncapped) -- the debug pane's RAW-RESPONSE pane; absent
+      on legacy replays that predate the raw channel (their 800-char
+      feed head still renders) */
+  raw?: string;
   /** browse read: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
@@ -892,6 +897,7 @@ export function applyEvent(
               ...(event.n !== undefined ? { n: Number(event.n) || 0 } : {}),
               ...(event.ms !== undefined ? { ms: Number(event.ms) || 0 } : {}),
               ...(event.feed !== undefined ? { feed: String(event.feed ?? "") || undefined } : {}),
+              ...(event.raw !== undefined ? { raw: String(event.raw ?? "") || undefined } : {}),
               ...(event.chars !== undefined ? { chars: Number(event.chars) || 0 } : {}),
               ...(event.result !== undefined ? { result: String(event.result ?? "") } : {}),
               ...(event.answers !== undefined && event.answers !== null

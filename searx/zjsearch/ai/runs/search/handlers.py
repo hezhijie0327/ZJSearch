@@ -276,6 +276,7 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 "status": status,
                 "ms": int((time.monotonic() - started) * 1000),
                 "feed": feed[:800],
+                "raw": feed[:50_000],
             }
             if extra:
                 payload.update(extra)
@@ -392,6 +393,7 @@ what is visible."""
                         "q": "",
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -406,6 +408,7 @@ what is visible."""
                         "result": event.get("result"),
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed[:800],
+                        "raw": feed[:50_000],
                     },
                 )
                 continue
@@ -426,6 +429,7 @@ what is visible."""
                         "inventory": extras["inventory"],
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -484,6 +488,7 @@ and the referee advises when a subtask's evidence runs thin."""
                         "q": summary,
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -502,6 +507,7 @@ and the referee advises when a subtask's evidence runs thin."""
                             "status": "error",
                             "ms": int((time.monotonic() - started_vi) * 1000),
                             "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
                         },
                     )
                     continue
@@ -516,6 +522,7 @@ and the referee advises when a subtask's evidence runs thin."""
                             "status": "error",
                             "ms": int((time.monotonic() - started_vi) * 1000),
                             "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
                         },
                     )
                     continue
@@ -537,6 +544,7 @@ and the referee advises when a subtask's evidence runs thin."""
                                 "status": "error",
                                 "ms": int((time.monotonic() - started_vi) * 1000),
                                 "feed": feed_text[:800],
+                                "raw": feed_text[:50_000],
                             },
                         )
                         continue
@@ -565,6 +573,7 @@ and the referee advises when a subtask's evidence runs thin."""
                         "ms": int((time.monotonic() - started_vi) * 1000),
                         "preview": url[:600],
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -583,6 +592,7 @@ and the referee advises when a subtask's evidence runs thin."""
                             "status": "error",
                             "ms": int((time.monotonic() - started) * 1000),
                             "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
                         },
                     )
                     continue
@@ -619,6 +629,7 @@ section, do not re-type the numbers."""
                         "n": len(artifact["rows"]),
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 yield ("artifact", {"id": artifact["id"], "item": artifact})
@@ -640,6 +651,7 @@ section, do not re-type the numbers."""
                             "q": "",
                             "ms": int((time.monotonic() - started) * 1000),
                             "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
                         },
                     )
                     continue
@@ -695,6 +707,7 @@ section, do not re-type the numbers."""
                         "n": len(questions),
                         "ms": ms,
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                         # the STRUCTURED verdict rides the settlement too: the
                         # timeline row renders the same probability bars as the
                         # rail's decision card -- one judgment, one rendering
@@ -760,6 +773,7 @@ section, do not re-type the numbers."""
                         "n": active,
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -862,6 +876,7 @@ section, do not re-type the numbers."""
                         "n": len(matches),
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                         **(
                             {
                                 "preview": "\n".join(
@@ -913,6 +928,7 @@ section, do not re-type the numbers."""
                             "label": save_event["content"],
                             "ms": ms,
                             "feed": feed[:800],
+                            "raw": feed[:50_000],
                         },
                     )
                     yield ("memory", save_event)
@@ -927,6 +943,7 @@ section, do not re-type the numbers."""
                             "preview": feed[:600],
                             "ms": ms,
                             "feed": feed[:800],
+                            "raw": feed[:50_000],
                         },
                     )
                 continue
@@ -953,6 +970,7 @@ section, do not re-type the numbers."""
                         "preview": "",
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -977,6 +995,7 @@ section, do not re-type the numbers."""
                         "preview": feed[:600],
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed[:800],
+                        "raw": feed[:50_000],
                     },
                 )
                 continue
@@ -1353,6 +1372,7 @@ section, do not re-type the numbers."""
                     "label": f"{handle.key} · {parsed['title']}",
                     "ms": 0,
                     "feed": parsed["objective"][:800],
+                    "raw": parsed["objective"][:50_000],
                 },
             )
             yield (
@@ -1394,6 +1414,7 @@ section, do not re-type the numbers."""
                         "ms": elapsed_ms,
                         "label": f"{handle.key} · {handle.parsed['title']}",
                         "feed": background_feed[:800],
+                        "raw": background_feed[:50_000],
                     },
                 )
             self._spawn_late_lane(
@@ -1426,6 +1447,7 @@ section, do not re-type the numbers."""
                     "label": f"{handle.key} · {handle.parsed['title']}",
                     "chars": len(digest),
                     "feed": digest[:800],
+                    "raw": digest[:50_000],
                     "result": digest,
                 },
             )
@@ -1574,6 +1596,7 @@ section, do not re-type the numbers."""
                         "ms": 0,
                         "label": f"{handle.key} · follow-up (queued)",
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -1589,6 +1612,7 @@ section, do not re-type the numbers."""
                         "label": f"{parsed['id']} · follow-up",
                         "ms": 0,
                         "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue
@@ -1633,6 +1657,7 @@ section, do not re-type the numbers."""
                     "label": f"{handle.key} · follow-up",
                     "ms": 0,
                     "feed": parsed["message"][:800],
+                    "raw": parsed["message"][:50_000],
                 },
             )
             yield from self._interleave({handle.seq: q}, {handle.seq: handle})
@@ -1650,6 +1675,7 @@ section, do not re-type the numbers."""
                     "label": f"{handle.key} · follow-up",
                     "chars": len(digest),
                     "feed": digest[:800],
+                    "raw": digest[:50_000],
                     "result": digest,
                 },
             )
@@ -1784,6 +1810,7 @@ section, do not re-type the numbers."""
                     "n": 0,
                     "ms": 0,
                     "feed": feed_text[:800],
+                    "raw": feed_text[:50_000],
                 },
                 None,
             )
@@ -1807,6 +1834,7 @@ paid_ok and stay on the free engines."""
                     "n": 0,
                     "ms": 0,
                     "feed": feed_text[:800],
+                    "raw": feed_text[:50_000],
                 },
                 None,
             )
@@ -1843,6 +1871,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
                     "n": 0,
                     "ms": 0,
                     "feed": feed_text[:800],
+                    "raw": feed_text[:50_000],
                 },
                 None,
             )
@@ -1870,6 +1899,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
                     "url": "",
                     "ms": 0,
                     "feed": feed_text[:800],
+                    "raw": feed_text[:50_000],
                 },
                 None,
             )
@@ -1883,6 +1913,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
                     "url": url,
                     "ms": 0,
                     "feed": feed_text[:800],
+                    "raw": feed_text[:50_000],
                 },
                 None,
             )
@@ -1940,6 +1971,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
                             "url": url,
                             "ms": 0,
                             "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
                         },
                         None,
                     )

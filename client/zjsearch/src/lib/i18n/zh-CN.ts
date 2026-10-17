@@ -531,6 +531,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_debug_restart: "重置场景",
   ai_debug_timeline: "事件时间线",
   ai_debug_error: "错误",
+  ai_debug_raw: "原始响应（未渲染）",
   ai_debug_args: "原始参数",
   ai_debug_feed: "模型回执",
   ai_clarify_more: "补充说明（可选）",

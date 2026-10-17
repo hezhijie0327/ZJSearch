@@ -464,6 +464,7 @@ the research feed; the full text is archived under its source ...]"""
                 "chars": len(text),
                 "text": text,
                 "feed": feed_text[:800],
+                "raw": feed_text[:50_000],
             },
         )
 
