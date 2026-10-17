@@ -416,6 +416,37 @@ const FULL_STAGE: DebugScenario = {
           feed: "geocode result: 深圳 南山",
         },
         {
+          id: 13,
+          tool: "mcp",
+          name: "search_tools",
+          q: "engine inventory",
+          status: "ok",
+          n: 2,
+          ms: 3,
+          args: { query: "engine inventory" },
+          feed: '[{"name":"list_engines","server":"","description":"List the search ENGINES this deployment carries","inputSchema":{"type":"object","properties":{},"required":[]},"instructions":"Consult it ONCE, and only when it can change a decision."}]',
+          tools: [
+            {
+              name: "list_engines",
+              server: "",
+              description:
+                "List the search ENGINES this deployment carries: the enabled ones grouped by category, and the engines kept disabled by default -- still reachable by their bang.",
+              params: [],
+              required: [],
+              instructions:
+                "Consult it ONCE, and only when it can change a decision: when unsure which vertical fits, when searches keep coming back thin or empty, or before relying on a niche vertical.",
+            },
+            {
+              name: "mcp_amap_maps_search_poi",
+              server: "amap-maps",
+              description: "Search points of interest around a location (POI keyword search).",
+              params: ["keywords", "city", "page"],
+              required: ["keywords"],
+              instructions: "返回结果含名称、地址与距离；城市名可显著提升命中率。",
+            },
+          ],
+        },
+        {
           id: 9,
           tool: "build_table",
           q: "头部多肽 CDMO 产能对比",
@@ -484,6 +515,35 @@ const FULL_STAGE: DebugScenario = {
       text: "# 多肽原料药(CDMO)行业深度报告\n\n## 市场规模\n\n全球多肽原料药市场 2025 年规模 **41.2 亿美元**,2019-2025 年 CAGR 8.6%;其中 GLP-1 相关肽类占比从 31% 升至 58%。\n\n## 产能格局\n\n| 企业 | 产能(吨/年) | 扩产投资 |\n|---|---|---|\n| Polypeptide | ≈12 | €1.4亿 |\n| Bachem | ≈9 | CHF 1.1亿 |\n| 诺泰生物 | ≈5 | ¥8.2亿 |\n\n欧洲双雄占据高端合成订单,中国企业以 40-60% 的成本优势切入仿制肽与轻改造肽。\n\n## 采购要点\n\n- 长约锁价周期从 2 年缩短至 1 年,买方倾向分批定价;\n- 固相合成 overcrowding:2026 年新产能投产后价格战风险上升;\n- 质量审计成本占交付价 8-12%,FDA 483 记录是硬门槛。",
     },
     { e: "call", id: 2, call: 2, status: "error", ms: 15200, feed: "error: page reader HTTP 404: not found" },
+    {
+      e: "call",
+      id: 2,
+      call: 13,
+      status: "ok",
+      n: 2,
+      ms: 3,
+      feed: '[{"name":"list_engines","server":"","description":"List the search ENGINES this deployment carries","inputSchema":{"type":"object","properties":{},"required":[]},"instructions":"Consult it ONCE, and only when it can change a decision."}]',
+      tools: [
+        {
+          name: "list_engines",
+          server: "",
+          description:
+            "List the search ENGINES this deployment carries: the enabled ones grouped by category, and the engines kept disabled by default -- still reachable by their bang.",
+          params: [],
+          required: [],
+          instructions:
+            "Consult it ONCE, and only when it can change a decision: when unsure which vertical fits, when searches keep coming back thin or empty, or before relying on a niche vertical.",
+        },
+        {
+          name: "mcp_amap_maps_search_poi",
+          server: "amap-maps",
+          description: "Search points of interest around a location (POI keyword search).",
+          params: ["keywords", "city", "page"],
+          required: ["keywords"],
+          instructions: "返回结果含名称、地址与距离；城市名可显著提升命中率。",
+        },
+      ],
+    },
     {
       e: "call",
       id: 2,
