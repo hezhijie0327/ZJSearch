@@ -78,18 +78,24 @@ def _spec_score(spec: dict[str, t.Any], terms: list[str]) -> float:
     return sum(2.0 if term in spec["name"].lower() else 1.0 if term in haystack else 0.0 for term in terms)
 
 
-def run_call(query: str, limit: int = 6, internal_specs: list[dict[str, t.Any]] | None = None) -> str:
+def run_call(
+    query: str, limit: int = 6, internal_specs: list[dict[str, t.Any]] | None = None
+) -> tuple[str, dict[str, t.Any]]:
     """The discovery call's execution: keyword-score both indexes -- the
     external MCP servers' tools AND the run's disclosed internal long
-    tail -- and return the top matches WITH their full parameter
-    schemas; an internal row carries the tool's INSTRUCTIONS doctrine
-    beside its schema (an MCP row carries the server's).  The model can
-    call a match on its next turn without a second lookup."""
+    tail -- and return (model feed, settlement extras).  The feed carries
+    the top matches WITH their full parameter schemas; an internal row
+    carries the tool's INSTRUCTIONS doctrine beside its schema (an MCP
+    row carries the server's), so doctrine arrives exactly when the
+    schema does.  The extras carry the same matches STRUCTURED (``tools``
+    -- the timeline row's expanded body renders them as cards) plus
+    ``n`` for the row's metric.  The model can call a match on its next
+    turn without a second lookup."""
     from searx.zjsearch.ai.tools import TOOL_INSTRUCTIONS  # pylint: disable=import-outside-toplevel
 
     terms = _terms(query)
     if not terms:
-        return "error: empty query"
+        return "error: empty query", {"query": query, "n": 0, "tools": []}
     known_instructions = server_instructions()
     rows: list[tuple[float, dict[str, t.Any], str]] = []  # (score, spec, instructions)
     for spec in internal_specs or []:
@@ -110,19 +116,32 @@ def run_call(query: str, limit: int = 6, internal_specs: list[dict[str, t.Any]] 
             server = resolved[0] if resolved else ""
             rows.append((score, {**spec, "server": server}, known_instructions.get(server, "")))
     if not rows:
-        return _no_match_note(query, internal_specs)
+        return _no_match_note(query, internal_specs), {"query": query, "n": 0, "tools": []}
     rows.sort(key=lambda pair: -pair[0])
-    matches = []
+    feed_matches: list[dict[str, t.Any]] = []
+    view_matches: list[dict[str, t.Any]] = []
     for _score, spec, instructions in rows[:limit]:
-        out = dict(spec)
+        wire = dict(spec)
         if instructions:
-            out["instructions"] = instructions
-        matches.append(out)
-    return (
-        json.dumps(matches, ensure_ascii=False)
+            wire["instructions"] = instructions
+        feed_matches.append(wire)
+        schema = spec.get("inputSchema") or {}
+        view_matches.append(
+            {
+                "name": spec["name"],
+                "server": spec.get("server") or "",
+                "description": (spec.get("description") or "")[:220],
+                "params": sorted(str(k) for k in (schema.get("properties") or {})),
+                "required": list(schema.get("required") or []),
+                "instructions": (instructions or "")[:800],
+            }
+        )
+    text = (
+        json.dumps(feed_matches, ensure_ascii=False)
         + '\n\nCall a matched tool by its exact name (the string in "name" above)'
         " with arguments following its inputSchema."
     )
+    return text, {"query": query, "n": len(view_matches), "tools": view_matches}
 
 
 def _no_match_note(query: str, internal_specs: list[dict[str, t.Any]] | None) -> str:

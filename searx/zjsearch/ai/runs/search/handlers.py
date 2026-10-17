@@ -939,13 +939,17 @@ section, do not re-type the numbers."""
                 # not eat the stall detector's credits or draw the
                 # no-new-sources nag -- the catalog listing is metadata,
                 # the data starts at the first real tool call.
-                feed_text = search_tools.run_call(str(raw_args(call).get("query") or ""), internal_specs=self.disclosed_specs)
+                feed_text, extras = search_tools.run_call(
+                    str(raw_args(call).get("query") or ""), internal_specs=self.disclosed_specs
+                )
                 feeds[wire_id - 1] = feed_text
                 yield (
                     "call",
                     {
                         "call": wire_id,
                         "status": "ok",
+                        "n": extras["n"],
+                        "tools": extras["tools"],
                         "preview": "",
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],

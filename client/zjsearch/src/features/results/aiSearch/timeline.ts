@@ -54,6 +54,21 @@ export interface AiAskQuestion {
   options: string[];
 }
 
+/** One tool the search_tools discovery matched (the settlement's
+    structured ``tools`` payload): the row's expanded body renders these
+    as cards -- name + source, the description line, the parameter names
+    and the tool's own doctrine in a reading pane.  Absent for no-match
+    and pre-tools replays (the raw feed text still rides `feed`). */
+export interface AiToolMatch {
+  name: string;
+  /** "" = one of OUR tools; otherwise the MCP server's name */
+  server: string;
+  description: string;
+  params: string[];
+  required: string[];
+  instructions: string;
+}
+
 /** list_engines's STRUCTURED listing (the settlement's inventory payload):
     the expanded body renders it as category chips + bang rows; absent on
     pre-inventory replays, whose preview text still rides `text`. */
@@ -119,6 +134,9 @@ export interface AiSearchCall {
   /** list_engines: the structured deployment listing -- the row's
       expansion renders category chips + cap-expandable bang rows */
   inventory?: AiEngineInventory;
+  /** search_tools rows: the matched tools (structured); absent on
+      no-match and legacy replays */
+  tools?: AiToolMatch[];
   /** browse read: the extracted page content -- the row's expansion is a
       READING PANE of what the model actually read, not a link card */
   text?: string;
@@ -891,6 +909,9 @@ export function applyEvent(
                         : [],
                     },
                   }
+                : {}),
+              ...(event.tools !== undefined && event.tools !== null
+                ? { tools: (event.tools as AiToolMatch[]).filter((m) => m && m.name) }
                 : {}),
               ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
               ...(event.dupes !== undefined
