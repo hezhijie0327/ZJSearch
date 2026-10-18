@@ -1047,6 +1047,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     take_template=_take_template,
                     take_deck=_take_deck,
                     deck=deck_requested,
+                    handle=handle,
                 ),
                 "writer": None,
             }

@@ -419,12 +419,14 @@ export interface AiSearchRun {
 
 /** The REPORT mode's outline snapshot (the wire's ``outline`` event): the
     document's TOC -- the server synthesizes the summary/method sections,
-    their status rides the same snapshot. */
+    their status rides the same snapshot.  ``failed`` is a section whose
+    stream died (the gap placeholder shipped) -- the rewrite lane's
+    target. */
 interface AiSearchOutlineSection {
   id: string;
   title: string;
   brief?: string;
-  status: "pending" | "writing" | "done";
+  status: "pending" | "writing" | "done" | "failed";
 }
 
 export interface AiSearchOutline {
@@ -483,9 +485,14 @@ export interface Core {
 /** Entries as step indices: think/say/calls events route by entry id. */
 export type EntryIndex = { think?: number; intent?: number; calls?: number };
 
-export const LATE_KINDS = new Set(["related", "title", "memory", "tags", "usage"]);
 /** The wire's LATE_EVENTS: they trail the settle on purpose and must
-    fold in the settled phases too (the live-fold guard above). */
+    still fold on a settled phase -- the fallback suggestions render
+    live, memory saves persist, tags/usage park on the run.  The
+    SECTION REWRITE tail (outline + section) joins them: a settled
+    report's failed section re-streams through the same events, and the
+    fold must accept the replacement (the seq guard dedups it against
+    any concurrent attach replay). */
+export const LATE_KINDS = new Set(["related", "title", "memory", "tags", "usage", "outline", "section"]);
 
 /** Settle every still-pending call row (abort / stream cut / error settle):
     no timeline row spins forever. */
@@ -556,12 +563,17 @@ export interface FoldFx {
 }
 
 /** The wire-event fold: one timeline operation in, the next state out.
-    Exported for the knowledge page's replay (see the module doc). */
+    Exported for the knowledge page's replay (see the module doc).
+    ``targetRunNo`` retargets the fold at THAT run instead of the thread's
+    last -- the section rewrite's tail (outline/section events for a run
+    that is no longer the last) folds into its own run; everything else
+    (the live stream, replays) omits it and keeps the last-run contract. */
 export function applyEvent(
   core: Core,
   event: Record<string, unknown>,
   fx: FoldFx,
   pastRefCounts?: Map<string, number>,
+  targetRunNo?: number,
 ): Core {
   const kind = event.e as string;
   // the bootstrap event CREATES the run -- it must pass before the
@@ -586,7 +598,13 @@ export function applyEvent(
     return { ...core, runs: [...core.runs, fresh], phase: "streaming" };
   }
   const runs = [...core.runs];
-  const lastIdx = runs.length - 1;
+  let lastIdx = runs.length - 1;
+  if (targetRunNo !== undefined && !kind.startsWith("client.")) {
+    const idx = runs.findIndex((item) => item.runNo === targetRunNo);
+    if (idx >= 0) {
+      lastIdx = idx;
+    }
+  }
   const run = runs[lastIdx];
   if (!run) {
     return core;
@@ -1125,10 +1143,9 @@ export function applyEvent(
             id: String(raw.id ?? ""),
             title: String(raw.title ?? ""),
             brief: String(raw.brief ?? "") || undefined,
-            status: (["pending", "writing", "done"].includes(String(raw.status)) ? String(raw.status) : "pending") as
-              | "pending"
-              | "writing"
-              | "done",
+            status: (["pending", "writing", "done", "failed"].includes(String(raw.status))
+              ? String(raw.status)
+              : "pending") as "pending" | "writing" | "done" | "failed",
           })),
         },
         sections: run.sections ?? {},
@@ -1302,6 +1319,21 @@ export function applyEvent(
         next = { ...next, status: "awaiting", endedAt: null };
         runs[lastIdx] = next;
         return { ...core, runs, phase: "awaiting" };
+      }
+      if (next.outline) {
+        // THE SPINNING-FOREVER GUARD: outline statuses ride snapshots, and
+        // a section whose stream died mid-write may never see its terminal
+        // snapshot (a crashed synthesizer, a dead process, a replay whose
+        // tail is simply absent).  A settle with a section still
+        // pending/writing means that section is DEAD -- coalesce it to
+        // failed so the TOC tells the truth and the rewrite chip has its
+        // target (a later rewrite's own snapshots re-mint the real state).
+        const sections = next.outline.sections.map((section) =>
+          section.status === "done" || section.status === "failed"
+            ? section
+            : { ...section, status: "failed" as const },
+        );
+        next = { ...next, outline: { ...next.outline, sections } };
       }
       if (status === "error") {
         const reason = halt ?? "error";

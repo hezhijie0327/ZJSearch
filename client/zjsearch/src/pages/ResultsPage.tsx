@@ -941,6 +941,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onGapsFollowup={onRunGapsFollowup}
                       onRegenerate={onRunRegenerate}
                       onRelated={onRunRelated}
+                      onRewriteSection={(runNo, sectionId) => aiSearch.rewriteSection(runNo, sectionId)}
                       onSetShape={(shape) => aiSearch.setShape(shape)}
                       onSetTemplate={(template) => aiSearch.setTemplate(template)}
                       onStop={onRunStop}
@@ -948,6 +949,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                       onWrap={() => {
                         aiSearch.wrap();
                       }}
+                      rewriting={aiSearch.rewriting}
                       run={run}
                       sourceMeta={runSourceMetas[index] ?? EMPTY_META}
                     />

@@ -48,7 +48,7 @@ import { CHIP, ICON_BTN, META_ROW } from "@/lib/styles.ts";
 interface DeckViewOutline {
   title: string;
   subtitle?: string;
-  sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" }>;
+  sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" | "failed" }>;
 }
 
 interface DeckViewProps {

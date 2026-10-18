@@ -169,6 +169,14 @@ export interface AiSearchState extends Core {
       Resolves false when the run host rejects it (unknown run, steer
       queue full) -- the composer flips its pending chip to not-sent. */
   steer(text: string, preempt?: boolean): Promise<boolean>;
+  /** ONE settled section's rewrite (the failed section's chip): the
+      rewrite lane re-streams the section and the tail folds in place.
+      Resolves the outcome -- "busy" while another rewrite runs or the
+      run is still streaming, "unknown" when the run's server handle is
+      gone (past the terminal TTL, restart), "error" otherwise. */
+  rewriteSection(runNo: number, sectionId: string): Promise<"ok" | "busy" | "unknown" | "error">;
+  /** the section a rewrite is currently streaming (the chips' spinner) */
+  rewriting: { runNo: number; sectionId: string } | null;
   /** wrap-up: end the research gracefully and let the writer answer from
       the material gathered */
   wrap(): void;
@@ -247,16 +255,19 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   const langRef = useRef("");
   // the continue path's re-entry guard (the double-click race)
   const continuingRef = useRef(false);
+  // the section rewrite's re-entry guard + live chip state
+  const rewritingRef = useRef(false);
+  const [rewriting, setRewriting] = useState<{ runNo: number; sectionId: string } | null>(null);
   const entryIndexRef = useRef<Map<number, EntryIndex>>(new Map());
   // the current run's recalled-refs badge map (set at beginRun, read by
   // the sources fold)
   const refCountsRef = useRef<Map<string, number>>(new Map());
-  // the run host's seq watermark: the highest wire seq this client has
-  // folded, shared by the main stream and every attach so replays and
-  // live tails dedup against ONE monotonic guard.  Reset per beginRun
-  // (a fresh run's host seqs from 1); an attach continues the same
-  // handle's sequence.
-  const lastSeqRef = useRef(0);
+  // the run host's seq watermarks, PER RUN id: the highest wire seq each
+  // run has folded, shared by its main stream, every attach AND the
+  // section rewrite so replays and live tails dedup against one
+  // monotonic guard per handle.  beginRun deletes the run's entry (a
+  // fresh handle's seqs from 1; a continued run mints a NEW handle).
+  const seqWatermarkRef = useRef<Map<string, number>>(new Map());
   // the last wire line's wall clock + the live keepalive verdict (the
   // stream watchdog's inputs) and the wait_user window flag (the
   // watchdog stands down while the run legitimately blocks on the user)
@@ -345,10 +356,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     return (raw: Record<string, unknown>) => {
       const seq = typeof raw.seq === "number" ? raw.seq : 0;
       if (seq) {
-        if (seq <= lastSeqRef.current) {
+        const seen = seqWatermarkRef.current.get(runId) ?? 0;
+        if (seq <= seen) {
           return;
         }
-        lastSeqRef.current = seq;
+        seqWatermarkRef.current.set(runId, seq);
       }
       lastEventAtRef.current = Date.now();
       // the wait_user window: the mirror frame's wait_left marks the run
@@ -431,11 +443,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         // BY DESIGN -- the settled phases must still fold them (the
         // fallback suggestions render live, memory saves persist BEFORE
         // settleRun, tags park on the run, the gates correction lands);
-        // everything else after the settle is dropped
+        // everything else after the settle is dropped.  The fold targets
+        // THIS run (the rewrite of a non-last run must land on its own
+        // run, not the thread's last) -- for the live stream the two are
+        // the same run and the guard changes nothing.
         if (prev.phase !== "streaming" && prev.phase !== "awaiting" && !LATE_KINDS.has(String(event.e ?? ""))) {
           return prev;
         }
-        return applyEvent(prev, event, LIVE_FX, refCounts);
+        return applyEvent(prev, event, LIVE_FX, refCounts, runNo);
       });
     };
   };
@@ -469,6 +484,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     if (!capability) {
       return { settled: false };
     }
+    const runId = `${threadId}:${runNo}`;
+    const seenSeq = () => seqWatermarkRef.current.get(runId) ?? 0;
     const apply = makeApply(threadId, runNo, refCounts);
     // the store wakes WITH the stream -- off the submit path since the
     // submit-posts-immediately budget: the run's own recording needs it
@@ -513,7 +530,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         outer?.signal.addEventListener("abort", onAbort);
         fetchEventStream(
           "/zjsearch/ask/run/attach",
-          { tk: capability.tk, run_key: runKeyRef.current, after_seq: lastSeqRef.current },
+          { tk: capability.tk, run_key: runKeyRef.current, after_seq: seenSeq() },
           apply,
           controller.signal,
         )
@@ -583,7 +600,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
             await openStream("/zjsearch/ask/run/attach", {
               tk: capability.tk,
               run_key: runKeyRef.current,
-              after_seq: lastSeqRef.current,
+              after_seq: seenSeq(),
             });
           } catch (error) {
             attachError = error;
@@ -633,8 +650,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     continuingRef.current = false;
     // a NEW run's host seqs from 1: the watermark resets with it (an
     // attach on the SAME handle continues the sequence -- only beginRun
-    // resets)
-    lastSeqRef.current = 0;
+    // resets).  A continued run mints a NEW handle for the same runNo,
+    // so the delete covers both.
+    seqWatermarkRef.current.delete(`${threadIdRef.current}:${runNo}`);
     waitWindowRef.current = false;
     beatOkAtRef.current = 0;
     // the shape-flip control's steer wording follows the RUN language
@@ -1037,7 +1055,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           last.runNo,
           refCountsRef.current,
           "/zjsearch/ask/run/attach",
-          { tk: capability.tk, run_key: staleKey, after_seq: lastSeqRef.current },
+          {
+            tk: capability.tk,
+            run_key: staleKey,
+            after_seq: seqWatermarkRef.current.get(`${threadIdRef.current}:${last.runNo}`) ?? 0,
+          },
           undefined,
           REATTACH_PROBE_MS,
         ).catch((error: unknown) => ({ settled: false, error, attachError: error as unknown }));
@@ -1202,6 +1224,64 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
 
   const setTemplate = (template: ReportTemplate): Promise<boolean> => control("template", { template });
 
+  /** ONE settled section's rewrite: POST the rewrite lane and fold the
+      streamed outline/section tail through the shared apply -- the same
+      per-run seq watermark, evt log and reducer the live run used, so
+      the document updates in place, every store record refreshes, and a
+      replay folds the identical events.  The run key rides the per-run
+      host record (an older run's key is not the hook's current one). */
+  const rewriteSection = async (runNo: number, sectionId: string): Promise<"ok" | "busy" | "unknown" | "error"> => {
+    if (!capability || rewritingRef.current) {
+      return "busy";
+    }
+    const threadId = threadIdRef.current;
+    const runId = `${threadId}:${runNo}`;
+    const last = core.runs[core.runs.length - 1];
+    const runKey =
+      last?.runNo === runNo && runKeyRef.current ? runKeyRef.current : await loadRunHost(runId).catch(() => "");
+    if (!threadId || !runKey) {
+      return "unknown";
+    }
+    rewritingRef.current = true;
+    setRewriting({ runNo, sectionId });
+    const controller = new AbortController();
+    const onAbort = () => controller.abort();
+    abortRef.current?.signal.addEventListener("abort", onAbort);
+    try {
+      await fetchEventStream(
+        "/zjsearch/ask/run/section",
+        { tk: capability.tk, run_key: runKey, section_id: sectionId },
+        makeApply(threadId, runNo, refCountsRef.current),
+        controller.signal,
+      );
+      // the rewritten run's knowledge projection re-lands (the section
+      // buffers and the derived answer changed under the settled row --
+      // an idempotent upsert, so the double-fire is safe)
+      setCore((prev) => {
+        const run = prev.runs.find((item) => item.runNo === runNo);
+        if (run) {
+          void settleRun(threadId, run);
+        }
+        return prev;
+      });
+      return "ok";
+    } catch (error) {
+      if (error instanceof HttpError) {
+        if (error.status === 404) {
+          return "unknown";
+        }
+        if (error.status === 409) {
+          return "busy";
+        }
+      }
+      return "error";
+    } finally {
+      abortRef.current?.signal.removeEventListener("abort", onAbort);
+      rewritingRef.current = false;
+      setRewriting(null);
+    }
+  };
+
   const setShape = (shape: TemplateShape): Promise<boolean> => control("shape", { shape, lang: langRef.current });
 
   const clearTemplate = (): Promise<boolean> => {
@@ -1250,7 +1330,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         const q = String(meta.q ?? "");
         const mode = parseDepthMode(meta.mode == null ? null : String(meta.mode));
         runKeyRef.current = runKey;
-        lastSeqRef.current = 0;
+        seqWatermarkRef.current.set(`${threadId}:1`, 0);
         entryIndexRef.current = new Map();
         settledRef.current = false;
         void saveRunHost(`${threadId}:1`, threadId, runKey).catch(() => {});
@@ -1321,7 +1401,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     // normalize: an interrupted run is a done run with interrupted call
     // rows; an awaiting clarify never survives a reload; a mirror that
     // outlived its stream is DEAD (the live card must not render on a
-    // replay, let alone auto-open a takeover for a run that is over)
+    // replay, let alone auto-open a takeover for a run that is over);
+    // and an outline section still pending/writing at replay end is a
+    // DEAD section (the settle guard's replay twin -- its terminal
+    // snapshot never arrived) -- failed, so the TOC never spins forever
     const runs = interruptPending(
       core.runs.map((run) => ({
         ...run,
@@ -1329,6 +1412,18 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         ask: null,
         browser: null,
         wrappingUp: false,
+        ...(run.outline
+          ? {
+              outline: {
+                ...run.outline,
+                sections: run.outline.sections.map((section) =>
+                  section.status === "done" || section.status === "failed"
+                    ? section
+                    : { ...section, status: "failed" as const },
+                ),
+              },
+            }
+          : {}),
       })),
     );
     setCore({ ...core, runs, phase: "done", error: null });
@@ -1394,7 +1489,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       abortRef.current = controller;
       threadIdRef.current = threadId;
       runKeyRef.current = runKey;
-      lastSeqRef.current = afterSeq;
+      seqWatermarkRef.current.set(runId, afterSeq);
       settledRef.current = false;
       setCore((prev) => ({
         ...prev,
@@ -1463,6 +1558,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setTemplate,
     setShape,
     clearTemplate,
+    rewriteSection,
+    rewriting,
     deleteRun,
     wrap,
     reset,

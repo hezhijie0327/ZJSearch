@@ -222,6 +222,15 @@ class RunHandle:
         # browser mirror's img bytes already stripped), so a journal is a
         # byte-verbatim attach backlog.  Wired by the search route.
         self.journal: t.Callable[[int, str], None] | None = None
+        # the report synthesizer's SECTION REWRITE lane (synth.py registers
+        # the entry when the write phase opens): ``callable(section_id)``
+        # re-streams one settled section against the run's own write
+        # materials, serving ``POST /zjsearch/ask/run/section`` for the
+        # handle's terminal TTL.  ``None`` = not a synthesizer run (or the
+        # write phase never opened).  The lock serializes rewrites -- the
+        # written/status maps they mutate are single-writer state.
+        self.section_rewrite: t.Callable[[str], t.Iterator[dict[str, t.Any]]] | None = None
+        self.rewrite_lock = threading.Lock()
         self._lock = threading.Lock()
         self._lines: list[str] = []
         self._subs: dict[int, "queue.Queue[str]"] = {}

@@ -6,10 +6,15 @@ follow the live tail; the SAME run, never a restart), ``POST
 steer / preempt / wrap / template), ``POST /zjsearch/ask/run/keepalive``
 (the backgrounded tab's heartbeat -- the detach grace counts from the
 last beat, so a living tab whose fetch the OS dropped keeps its run
-alive) and ``POST /zjsearch/ask/run/journal`` (the LATE COLLECTOR -- a
+alive), ``POST /zjsearch/ask/run/journal`` (the LATE COLLECTOR -- a
 settled run's durable shadow: the journaled wire lines after
 ``after_seq``, serving windows the host's memory buffers cannot --
-beyond the terminal TTL and across process restarts).  These are the
+beyond the terminal TTL and across process restarts) and ``POST
+/zjsearch/ask/run/section`` (the SECTION REWRITE -- one settled
+section's second life through the synthesizer's registered lane; the
+replacement streams as the ordinary outline/section events through the
+handle, so every subscriber, the buffer and the journal record it).
+These are the
 stack's client-to-server live channels beside the browser takeover
 input: the run's NDJSON stays one-way server-to-client, these are the
 upstream lanes.
@@ -193,6 +198,45 @@ def _journal_view() -> t.Any:
     return http.streaming_response(iter(lines), "application/x-ndjson")
 
 
+def _section_view() -> t.Any:
+    """The failed section's rewrite channel: ``POST /zjsearch/ask/run/section
+    {tk, run_key, section_id}`` re-streams ONE settled section through the
+    synthesizer's registered rewrite lane (synth.py binds it to the run's
+    own write materials at the write phase) -- the ordinary
+    outline/section events ride :py:meth:`RunHandle.publish`, so every
+    attached client, the seq buffer AND the journal see the same
+    replacement, and the response is the published lines themselves.  A
+    settled run accepts rewrites until the terminal TTL sweeps the
+    handle; a still-streaming run answers 409 (the write phase owns the
+    materials) and an unknown section 404."""
+    payload = http.token_payload(gate=_gate())
+    handle = run_host.get(str(payload.get("run_key") or ""))
+    if handle is None:
+        return flask.jsonify({"ok": False, "error": "unknown run"}), 404
+    rewrite = getattr(handle, "section_rewrite", None)
+    if rewrite is None or not handle.settled:
+        return flask.jsonify({"ok": False, "error": "the run has no rewrite lane yet"}), 409
+    section_id = str(payload.get("section_id") or "").strip()[:80]
+    if not section_id:
+        return flask.jsonify({"ok": False, "error": "section_id is required"}), 422
+    if not handle.rewrite_lock.acquire(blocking=False):
+        return flask.jsonify({"ok": False, "error": "a rewrite is already running"}), 409
+    try:
+        events = rewrite(section_id)
+    except KeyError:
+        handle.rewrite_lock.release()
+        return flask.jsonify({"ok": False, "error": "unknown section"}), 404
+
+    def _lines() -> t.Iterator[str]:
+        try:
+            for event in events:
+                yield handle.publish(event)
+        finally:
+            handle.rewrite_lock.release()
+
+    return http.streaming_response(_lines(), "application/x-ndjson")
+
+
 def install(app: flask.Flask) -> None:
     """Register the run host's channels; silent unless AI search itself
     is enabled and fully configured (the same gate as the search route --
@@ -203,3 +247,4 @@ def install(app: flask.Flask) -> None:
     app.add_url_rule("/zjsearch/ask/run/control", "zjsearch_ask_run_control", _control_view, methods=["POST"])
     app.add_url_rule("/zjsearch/ask/run/keepalive", "zjsearch_ask_run_keepalive", _keepalive_view, methods=["POST"])
     app.add_url_rule("/zjsearch/ask/run/journal", "zjsearch_ask_run_journal", _journal_view, methods=["POST"])
+    app.add_url_rule("/zjsearch/ask/run/section", "zjsearch_ask_run_section", _section_view, methods=["POST"])

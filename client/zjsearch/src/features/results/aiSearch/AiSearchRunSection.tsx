@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertTriangle,
   Brain,
   Check,
   ChevronDown,
@@ -82,6 +83,7 @@ import { holdBackTail } from "@/lib/markdownParts.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml, printDocument } from "@/lib/print.ts";
 import { CHIP, CHIP_BTN, META_TOGGLE, PAPER_STRIP } from "@/lib/styles.ts";
+import { flashToast } from "@/lib/toast.ts";
 
 /**
  * One threaded Q&A section of the AI Search page: the question as a
@@ -1282,8 +1284,21 @@ function StructureFace({ deck, templateName }: { deck: boolean; templateName?: s
     section status marks) and the settled record alike.  READ-ONLY by
     design: the template pick lane is consumed ONCE at the write
     boundary, so a post-outline pick could only re-mint nothing -- a
-    structure change past that point is a new run, not a hidden control. */
-function ActiveStructureCard({ deck, outline }: { deck: boolean; outline: AiSearchOutline }) {
+    structure change past that point is a new run, not a hidden control.
+    The one exception is a FAILED section's row: its rewrite chip is the
+    repair affordance (the section re-streams through the run host's
+    rewrite lane), not a structure change. */
+function ActiveStructureCard({
+  deck,
+  outline,
+  onRewrite,
+  rewritingId,
+}: {
+  deck: boolean;
+  outline: AiSearchOutline;
+  onRewrite?: (sectionId: string) => void;
+  rewritingId?: string | null;
+}) {
   const t = useT();
   if (outline.sections.length === 0) {
     return null;
@@ -1295,25 +1310,45 @@ function ActiveStructureCard({ deck, outline }: { deck: boolean; outline: AiSear
         <StructureFace deck={deck} templateName={outline.template} />
       </div>
       <ol className="mt-2 space-y-1 px-1">
-        {outline.sections.map((section, index) => (
-          <li className="flex items-start gap-2 text-[13px]" key={section.id || index}>
-            <span className="w-3 shrink-0 pt-0.5 text-center font-mono text-xs tabular-nums text-ink-3">
-              {index + 1}
-            </span>
-            <span className="min-w-0 flex-1 leading-relaxed text-ink" dir="auto">
-              {section.title}
-            </span>
-            <span className="grid w-3.5 shrink-0 place-items-center pt-0.5">
-              {section.status === "done" ? (
-                <Check aria-hidden="true" className="size-3 text-ok" />
-              ) : section.status === "writing" ? (
-                <LoaderCircle aria-hidden="true" className="size-3 animate-spin text-accent" />
-              ) : (
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-line" />
-              )}
-            </span>
-          </li>
-        ))}
+        {outline.sections.map((section, index) => {
+          const busy = rewritingId === section.id;
+          return (
+            <li className="flex items-start gap-2 text-[13px]" key={section.id || index}>
+              <span className="w-3 shrink-0 pt-0.5 text-center font-mono text-xs tabular-nums text-ink-3">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1 leading-relaxed text-ink" dir="auto">
+                {section.title}
+              </span>
+              <span className="grid w-3.5 shrink-0 place-items-center pt-0.5">
+                {section.status === "done" ? (
+                  <Check aria-hidden="true" className="size-3 text-ok" />
+                ) : section.status === "writing" || busy ? (
+                  <LoaderCircle aria-hidden="true" className="size-3 animate-spin text-accent" />
+                ) : section.status === "failed" ? (
+                  <AlertTriangle aria-hidden="true" className="size-3 text-warning" />
+                ) : (
+                  <span aria-hidden="true" className="size-1.5 rounded-full bg-line" />
+                )}
+              </span>
+              {section.status === "failed" && onRewrite ? (
+                <button
+                  aria-label={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
+                  className="-mt-0.5 -me-1 grid size-6 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent"
+                  onClick={() => onRewrite(section.id)}
+                  title={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
+                  type="button"
+                >
+                  {busy ? (
+                    <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
+                  ) : (
+                    <RefreshCw aria-hidden="true" className="size-3" />
+                  )}
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
@@ -1355,6 +1390,8 @@ function AiSearchRunSectionImpl({
   onClearTemplate,
   onSetShape,
   onDeleteRun,
+  onRewriteSection,
+  rewriting,
   onSubmitClarify,
 }: {
   run: AiSearchRun;
@@ -1387,6 +1424,12 @@ function AiSearchRunSectionImpl({
   onSetShape?: (shape: TemplateShape) => Promise<boolean>;
   /** delete THIS run (storage + timeline fold) -- settled runs only */
   onDeleteRun?: (runNo: number) => void;
+  /** ONE settled section's rewrite (the failed section's chip): the
+      rewrite lane re-streams the section on the server and the tail
+      folds in place.  Resolves the outcome -- the chips toast it. */
+  onRewriteSection?: (runNo: number, sectionId: string) => Promise<"ok" | "busy" | "unknown" | "error">;
+  /** the section a rewrite is currently streaming (the chips' spinner) */
+  rewriting?: { runNo: number; sectionId: string } | null;
   /** Wrap-up: the run finishes its round and the writer answers from the
       material gathered (the graceful end beside the hard stop) */
   onWrap?: () => void;
@@ -1447,6 +1490,21 @@ function AiSearchRunSectionImpl({
     setSourcesExpanded(true);
     setFindingsExpanded(true);
     setGapsExpanded(true);
+  };
+  // the failed section's rewrite chip: the lane streams the section back
+  // and the fold updates the document in place; the OUTCOME toasts (the
+  // "ok" case needs no toast -- the replacement prose is its own
+  // feedback)
+  const handleRewrite = (sectionId: string) => {
+    onRewriteSection?.(run.runNo, sectionId).then((outcome) => {
+      if (outcome === "busy") {
+        flashToast(t("ai_section_rewrite_busy"), { tone: "accent" });
+      } else if (outcome === "unknown") {
+        flashToast(t("ai_section_rewrite_gone"), { tone: "danger" });
+      } else if (outcome === "error") {
+        flashToast(t("ai_section_rewrite_error"), { tone: "danger" });
+      }
+    });
   };
   useEffect(() => {
     if (!locate) {
@@ -1783,6 +1841,12 @@ function AiSearchRunSectionImpl({
                 <DocumentView
                   meta={sourceMeta}
                   onCite={handleCite}
+                  onRewrite={
+                    onRewriteSection && !streaming && (rewriting == null || rewriting.runNo === run.runNo)
+                      ? handleRewrite
+                      : undefined
+                  }
+                  rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
                   run={{ galleries: run.galleries, outline: run.outline, sections: run.sections, runNo: run.runNo }}
                   settled={!streaming}
                   stamp={run.endedAt}
@@ -2032,7 +2096,16 @@ function AiSearchRunSectionImpl({
                 always sees which structure the run used */}
             {run.mode === "report" || run.mode === "deck" ? (
               run.outline ? (
-                <ActiveStructureCard deck={run.deck === true} outline={run.outline} />
+                <ActiveStructureCard
+                  deck={run.deck === true}
+                  onRewrite={
+                    onRewriteSection && !streaming && (rewriting == null || rewriting.runNo === run.runNo)
+                      ? handleRewrite
+                      : undefined
+                  }
+                  outline={run.outline}
+                  rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
+                />
               ) : (streaming || run.status === "awaiting") && run.stage !== "write" && onSetTemplate ? (
                 <OutputStructureCard
                   onClearTemplate={() => onClearTemplate?.() ?? Promise.resolve(false)}
@@ -2180,5 +2253,8 @@ export const AiSearchRunSection = memo(
     prev.sourceMeta === next.sourceMeta &&
     prev.isFirst === next.isFirst &&
     prev.isLast === next.isLast &&
-    prev.live === next.live,
+    prev.live === next.live &&
+    // the rewrite chips' spinner rides this prop (the object identity
+    // flips null <-> {runNo, sectionId} on every rewrite start/end)
+    prev.rewriting === next.rewriting,
 );

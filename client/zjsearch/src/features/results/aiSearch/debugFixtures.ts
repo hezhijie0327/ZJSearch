@@ -2275,9 +2275,136 @@ const OVERVIEW_ERROR: AiOverviewDebugScenario = {
 
 export const AI_OVERVIEW_SCENARIOS: AiOverviewDebugScenario[] = [OVERVIEW_STREAMED, OVERVIEW_FENCES, OVERVIEW_ERROR];
 
+/** The section REWRITE lane end to end: a settled report whose §2's
+    stream died mid-write -- the settle's outline coalescing flips the
+    stuck `writing` status to `failed` (the spinning-forever guard), the
+    TOC/heading warn and the rewrite chips mount -- then the LATE
+    rewrite tail (outline/section events AFTER the settle, the
+    LATE_KINDS contract) re-streams the section through the reset
+    replacement and re-mints it `done`. */
+const REWRITE_STAGE: DebugScenario = {
+  id: "rewrite",
+  label: "failed section → rewrite (report, post-settle lane)",
+  q: "国产 GPU 显存生态现状调研",
+  mode: "report",
+  events: [
+    { e: "client.start", runNo: 1, q: "国产 GPU 显存生态现状调研", mode: "report" },
+    { ...base },
+    { e: "phase", name: "research" },
+    { e: "say", id: 1, t: "两条线:显存颗粒的国产供给,以及整机厂商的适配进度。" },
+    calls([
+      {
+        id: 1,
+        tool: "search_web",
+        q: "国产 GPU 显存颗粒 供应链",
+        status: "ok",
+        n: 4,
+        ms: 1650,
+        args: { query: "国产 GPU 显存颗粒 供应链" },
+      },
+      {
+        id: 2,
+        tool: "search_web",
+        q: "国产显卡 显存适配 驱动",
+        status: "ok",
+        n: 3,
+        ms: 1490,
+        args: { query: "国产显卡 显存适配 驱动" },
+      },
+    ]),
+    { e: "sources", items: [SOURCES[1], SOURCES[2]] },
+    { e: "call", id: 1, call: 1, status: "ok", n: 4, ms: 1650, feed: "plan: 5 deep lines [2]" },
+    { e: "call", id: 1, call: 2, status: "ok", n: 3, ms: 1490, feed: "plan: 5 deep lines [3]" },
+    { e: "close", id: 1 },
+    { e: "open", id: 2, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "think",
+      id: 2,
+      t: "供给线有颗粒自给率与代工节点[2],适配线有整机机型与驱动里程碑[3]。§2 的上游材料最薄,写的时候保守给数。",
+    },
+    {
+      e: "outline",
+      title: "国产 GPU 显存生态现状调研",
+      subtitle: "颗粒供给与整机适配的双线评估",
+      sections: [
+        { id: "summary", title: "执行摘要", status: "writing" },
+        { id: "s1", title: "显存颗粒的国产供给格局", status: "pending" },
+        { id: "s2", title: "整机适配与驱动生态", status: "pending" },
+      ],
+    },
+    {
+      e: "section",
+      id: "summary",
+      t: "**基线判断.** 国产显存生态呈「颗粒端单点突破、适配端长尾未平」结构:颗粒自给覆盖中容量 GDDR6[2],整机适配集中在主流发行版与头部整机[3]。",
+    },
+    {
+      e: "section",
+      id: "s1",
+      t: "国产颗粒的量产节点集中在 2024-2025 年:中容量 GDDR6 已实现稳定供货[2],高频与 HBM 档位仍在验证线。代工侧的产能爬坡决定了 2026 年的自给率上限[2]。",
+    },
+    {
+      // §2's stream DIED mid-write: no terminal snapshot, no failed mark
+      // -- the pre-guard zombie (the screenshot's stuck spinner).  The
+      // settle below carries the coalescing fix.
+      e: "section",
+      id: "s2",
+      t: "整机适配方面,主流整机厂商已经完成",
+    },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 9820,
+        output: 640,
+        thoughts: 260,
+        cached: 4110,
+        cache_write: 0,
+        research: { input: 7300, output: 420 },
+        write: { input: 2520, output: 220 },
+        gates: null,
+        rerank: { calls: 2, tokens: 1620 },
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+    // THE REWRITE TAIL (post-settle, LATE_KINDS): §2 re-streams against
+    // the run's own write materials -- writing snapshot, reset-marked
+    // replacement deltas, the terminal done snapshot
+    {
+      e: "outline",
+      title: "国产 GPU 显存生态现状调研",
+      subtitle: "颗粒供给与整机适配的双线评估",
+      sections: [
+        { id: "summary", title: "执行摘要", status: "done" },
+        { id: "s1", title: "显存颗粒的国产供给格局", status: "done" },
+        { id: "s2", title: "整机适配与驱动生态", status: "writing" },
+      ],
+    },
+    {
+      e: "section",
+      id: "s2",
+      reset: true,
+      t: "整机适配方面,三家头部整机厂商的中端机型已完成国产颗粒的换装验证[3];驱动生态的长尾仍在收敛,二线发行版的适配矩阵预计 2026 年上半年补齐[3]。",
+    },
+    {
+      e: "outline",
+      title: "国产 GPU 显存生态现状调研",
+      subtitle: "颗粒供给与整机适配的双线评估",
+      sections: [
+        { id: "summary", title: "执行摘要", status: "done" },
+        { id: "s1", title: "显存颗粒的国产供给格局", status: "done" },
+        { id: "s2", title: "整机适配与驱动生态", status: "done" },
+      ],
+    },
+  ],
+};
+
 export const DEBUG_SCENARIOS: DebugScenario[] = [
   BROWSER_STAGE,
   FULL_STAGE,
+  REWRITE_STAGE,
   PAID_STAGE,
   DECK_STAGE,
   SHAPE_FLIP_STAGE,

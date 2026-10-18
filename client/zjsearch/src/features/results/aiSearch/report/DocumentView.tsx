@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { LoaderCircle } from "lucide-react";
+import { AlertTriangle, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Tape } from "@/components/Tape.tsx";
 import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
@@ -9,6 +9,7 @@ import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";
 import { holdBackTail } from "@/lib/markdownParts.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
+import { CHIP_BTN } from "@/lib/styles.ts";
 
 /**
  * The REPORT document renderer: the run's outline becomes the document
@@ -17,17 +18,26 @@ import { scrollIntoViewAnimated } from "@/lib/motion.ts";
  * `MarkdownAnswer` pipeline as the single-write answer (GFM tables,
  * mermaid, KaTeX, citation chips), so a report is the answer contract,
  * typographically elevated.  A section still writing carries the live
- * spinner in the TOC and at its heading; the TOC row scrolls to its
- * section (the animated scroll -- rAF is not a safe primitive).  A settled
- * document carries the family postmark at its tail (DESIGN.md §7
- * `.paper-postmark`, the LockScreen stamp's real-meta cousin): the
+ * spinner in the TOC and at its heading; a FAILED section (its stream
+ * died -- the server's gap placeholder shipped) carries the warning
+ * mark and the rewrite chip beside its heading; the TOC row scrolls to
+ * its section (the animated scroll -- rAF is not a safe primitive).  A
+ * settled document carries the family postmark at its tail (DESIGN.md
+ * §7 `.paper-postmark`, the LockScreen stamp's real-meta cousin): the
  * filing date + label, mono, deterministic 12° tilt, in flow.
  */
+
+/** The server's gap placeholder (synth.py owns the string): a failed
+    section whose buffer holds exactly this renders the localized note
+    instead -- the English machine line is not report prose. */
+const GAP_PLACEHOLDER = "*Section generation failed upstream*";
 
 export function DocumentView({
   run,
   meta,
   onCite,
+  onRewrite,
+  rewritingId,
   settled,
   stamp,
 }: {
@@ -36,13 +46,18 @@ export function DocumentView({
     outline: NonNullable<{
       title: string;
       subtitle?: string;
-      sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" }>;
+      sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" | "failed" }>;
     }>;
     sections?: Record<string, string>;
     galleries: AiSearchGallery[][];
   };
   meta: AiSourceMeta[];
   onCite: (n: number) => void;
+  /** the failed section's rewrite action (absent while the run's host
+      is unreachable -- the chip is then warning-only) */
+  onRewrite?: (sectionId: string) => void;
+  /** the section a rewrite is currently streaming (its chip spins) */
+  rewritingId?: string | null;
   settled: boolean;
   /** the run's settle client-clock (ms) — the tail postmark's filing date;
       absent/0 renders no stamp */
@@ -166,6 +181,8 @@ export function DocumentView({
                   </span>
                   {section.status === "writing" ? (
                     <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin text-accent" />
+                  ) : section.status === "failed" ? (
+                    <AlertTriangle aria-hidden="true" className="size-3 shrink-0 text-warning" />
                   ) : section.status === "pending" ? (
                     <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full border border-ink-3/50" />
                   ) : null}
@@ -181,23 +198,48 @@ export function DocumentView({
         </nav>
       </div>
       {outline.sections.map((section) => {
-        const text = run.sections?.[section.id] ?? "";
+        const raw = run.sections?.[section.id] ?? "";
+        // the failed section's gap placeholder is the server's machine
+        // line, not report prose -- the localized failure note takes its
+        // place (partial streamed text stands as written)
+        const isGap = section.status === "failed" && raw.trim() === GAP_PLACEHOLDER;
+        const text = isGap ? "" : raw;
         // a PENDING section renders NOTHING in the document body -- its
         // existence is the TOC's hollow dot; a bare heading column would
-        // read as empty chapters while the report streams
+        // read as empty chapters while the report streams.  A FAILED one
+        // renders its heading + the failure note -- the rewrite chip's
+        // home.
         if (section.status === "pending" && !text) {
           return null;
         }
+        const busy = rewritingId === section.id;
         return (
           <section className="scroll-mt-20" id={anchorId(section.id)} key={section.id}>
             <h2
               className="mt-6 flex items-center gap-2 text-[1.5em] font-semibold tracking-tight text-ink first:mt-0"
               dir="auto"
             >
-              {section.status === "writing" ? (
+              {section.status === "writing" || busy ? (
                 <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-accent" />
+              ) : section.status === "failed" ? (
+                <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0 text-warning" />
               ) : null}
               {section.title}
+              {section.status === "failed" && onRewrite ? (
+                <button
+                  aria-label={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
+                  className={`${CHIP_BTN} ms-1`}
+                  onClick={() => onRewrite(section.id)}
+                  title={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
+                  type="button"
+                >
+                  {busy ? (
+                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-3.5" />
+                  )}
+                </button>
+              ) : null}
             </h2>
             {text ? (
               <MarkdownAnswer
@@ -208,12 +250,16 @@ export function DocumentView({
                 onCite={onCiteLocal}
                 settled={settled}
               />
-            ) : section.status === "writing" ? (
+            ) : section.status === "writing" || busy ? (
               <div aria-hidden="true" className="mt-2 space-y-2">
                 <div className="h-3 w-full animate-pulse rounded bg-surface-2/70" />
                 <div className="h-3 w-4/5 animate-pulse rounded bg-surface-2/70" />
                 <div className="h-3 w-3/5 animate-pulse rounded bg-surface-2/70" />
               </div>
+            ) : section.status === "failed" ? (
+              <p className="mt-2 text-[13px] text-warning" dir="auto">
+                {t("ai_section_rewrite_note")}
+              </p>
             ) : null}
           </section>
         );

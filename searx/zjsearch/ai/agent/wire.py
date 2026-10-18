@@ -90,6 +90,20 @@ bug and :py:func:`encode` refuses it):
                         ``<compacted_context>`` user message (summary +
                         the authoritative state block).  Renders as a
                         separator line.
+``outline``             the REPORT/DECK mode's document skeleton,
+                        AUTHORITATIVE snapshot: ``{title, subtitle,
+                        template?, shape?, sections: [{id, title,
+                        brief, status}]}`` -- status speaks the closed
+                        ``pending | writing | done | failed`` alphabet
+                        (failed = the section's stream died; the rewrite
+                        lane re-streams it).
+``section``             ONE report section's markdown delta:
+                        ``{id, t}`` -- the client's per-section buffer
+                        appends; a delta carrying ``reset: true``
+                        REPLACES the buffer (the citation gate's
+                        rewrite, a CONTINUE's re-synthesis, the
+                        post-settle rewrite lane).  A dead section's
+                        gap placeholder rides ``failed: true``.
 ``settle``              the terminal state: ``{status: done|awaiting|
                         error, finish, usage, model, halt,
                         halt_reason}``.  ``halt`` is human-facing prose
@@ -101,7 +115,10 @@ bug and :py:func:`encode` refuses it):
                         null when the run ended on its own).  After it,
                         only ``related`` / ``memory`` may follow (the
                         follow-up box must not wait for the related
-                        fallback completion).
+                        fallback completion) -- plus the ONE sanctioned
+                        exception, the section REWRITE lane's
+                        outline/section tail a settled report emits when
+                        a failed section re-streams.
 ======================  ===================================================
 """
 

@@ -11,6 +11,15 @@ LAST (it needs the finished sections); the DECK shape (``deck=True``)
 speaks the slide dialect instead, has no summary section and marks its
 outline snapshots ``shape: "deck"``.
 
+FAILURE SHAPE: a section stream that dies before its first byte gets
+ONE automatic retry (a tail section's long upstream queue is the
+ordinary failure, and it is transient); a still-dead section ships the
+gap placeholder and its outline snapshot marks it ``failed`` -- the
+document still delivers, and the run handle's rewrite lane
+(:py:func:`make_synthesizer`'s ``handle`` registration, served by
+``POST /zjsearch/ask/run/section``) re-streams that one section against
+the run's own write materials after the settle.
+
 All wire events flow through the agent loop's synthesizer hook; the
 usage lands in the same tally as the research phase."""
 
@@ -49,33 +58,33 @@ _MAX_GATE_CLAIMS = 3
 decision pass; the gate is a spot check, not an audit)."""
 
 
-def _stream_section_once(
+def _pump_section(
     cfg: dict[str, t.Any],
     messages: list[dict[str, t.Any]],
     section_id: str,
     tally: t.Any,
-    gap_text: str,
-    reset: bool = False,
+    reset: bool,
+    produced: list[bool],
 ) -> t.Iterator[dict[str, t.Any]]:
-    """One section stream: answer deltas as ``section`` events; the usage
-    lands in the tally; a transport error degrades THIS section to a
-    visible gap note IN THE REPORT'S LANGUAGE (the document still
-    ships).  ``reset`` marks the stream's FIRST delta ``reset: true`` --
+    """One stream ATTEMPT: answer deltas as ``section`` events; the usage
+    lands in the tally; a transport error or idle timeout ends the attempt
+    (the caller owns the retry and the gap note).  ``produced`` is a
+    one-element flag flipped on the first delta -- the caller's retry
+    verdict.  ``reset`` marks the attempt's FIRST delta ``reset: true`` --
     the wire contract that this stream REPLACES whatever the client
     already buffers for the section id (the citation gate's rewrite, and
     every re-synthesis a CONTINUE replays into a run whose earlier
     attempt had already written the section)."""
     stream = LlmStream(cfg, messages, relay_reasoning=False)
-    produced = False
     try:
         while True:
-            wait = _FIRST_TIMEOUT if not produced else _IDLE_TIMEOUT
+            wait = _FIRST_TIMEOUT if not produced[0] else _IDLE_TIMEOUT
             kind, payload = stream.next_event(wait)
             if kind == "delta":
                 text = str(payload or "")
                 if text:
-                    first = not produced
-                    produced = True
+                    first = not produced[0]
+                    produced[0] = True
                     yield {
                         "e": "section",
                         "id": section_id,
@@ -86,13 +95,11 @@ def _stream_section_once(
                 tally.absorb(payload)
             elif kind == "error":
                 logger.warning("zjsearch report: section %s stream failed: %s", section_id, payload)
-                break
+                return
             else:
-                break
+                return
     finally:
         stream.cancel()
-    if not produced:
-        yield {"e": "section", "id": section_id, "t": f"*{gap_text}*\n"}
 
 
 def make_synthesizer(
@@ -104,6 +111,7 @@ def make_synthesizer(
     take_template: t.Callable[[bool], dict[str, t.Any] | None] | None = None,
     take_deck: t.Callable[[], bool | None] | None = None,
     deck: bool = False,
+    handle: t.Any = None,
 ) -> t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]]:
     """Bind the run's state and outline; returns the synthesizer the loop
     calls with the tally at write-phase time.  The citation gate's
@@ -120,7 +128,11 @@ def make_synthesizer(
     executive summary added/dropped, the snapshot's ``shape`` field).
     ``deck`` is the request-time shape the flips default from -- the
     machinery (packed context, streaming, citation gate + rewrite) is the
-    report's own either way."""
+    report's own either way.  ``handle`` is the run host's handle: when
+    given, the write phase registers the SECTION REWRITE LANE on it (a
+    settled run's failed section re-streams against this closure's own
+    write materials -- outline, written map, corpus, artifacts all stay
+    live for the handle's terminal TTL)."""
     lang_directive = spine.language_directive(lang)
     tz = getattr(state, "tz", None)
     today = spine.today_line(tz)
@@ -132,11 +144,6 @@ def make_synthesizer(
     gap_text = "Section generation failed upstream"
     section_system = deck_prompts.DECK_SECTION_SYSTEM if deck else report_prompts.SECTION_SYSTEM
     claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
-
-    def stream(
-        messages: list[dict[str, t.Any]], section_id: str, tally: t.Any, reset: bool = False
-    ) -> t.Iterator[dict[str, t.Any]]:
-        yield from _stream_section_once(cfg, messages, section_id, tally, gap_text, reset=reset)
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
         nonlocal outline, deck, section_system, claim_re
@@ -196,22 +203,114 @@ def make_synthesizer(
                 snap["shape"] = "deck"
             return snap
 
+        def stream(
+            messages: list[dict[str, t.Any]], section_id: str, tally: t.Any, reset: bool = False
+        ) -> t.Iterator[dict[str, t.Any]]:
+            """One section's stream with the failure ladder: a first
+            attempt that dies BEFORE its first byte gets one automatic
+            retry (the tail sections' long upstream queue is the ordinary
+            transient), and only a second dead attempt degrades to the
+            gap placeholder -- whose ``failed: true`` mark lets the
+            caller's outline snapshot tell the truth.  The retry is
+            preceded by a fresh outline snapshot line: the wire's silence
+            between LINES is what the client's stream watchdog counts, so
+            a second 150s first-byte wait must not ride behind a quiet
+            failure."""
+            produced = [False]
+            yield from _pump_section(cfg, messages, section_id, tally, reset, produced)
+            if not produced[0]:
+                status[section_id] = "writing"
+                yield snapshot(status)
+                yield from _pump_section(cfg, messages, section_id, tally, reset, produced)
+            if not produced[0]:
+                yield {
+                    "e": "section",
+                    "id": section_id,
+                    "t": f"*{gap_text}*\n",
+                    "failed": True,
+                    **({"reset": True} if reset else {}),
+                }
+
+        def _rewrite(section_id: str) -> t.Iterator[dict[str, t.Any]]:
+            """ONE settled section's second life: re-run it against this
+            closure's own write materials (the same packed context, the
+            same citation gate, the sections written BEFORE it as
+            continuity) and stream the replacement through the ordinary
+            outline/section events -- snapshots carry the ``writing`` /
+            ``done`` / ``failed`` states, the reset-marked deltas replace
+            the client's buffered text.  Sections written AFTER this one
+            were written against the old text and stand (the digest only
+            looks backwards); the executive summary is rewritable too --
+            it digests every section, so a body rewrite can be followed
+            by a summary refresh."""
+            status[section_id] = "writing"
+            yield snapshot(status)
+            text = ""
+            failed = False
+            try:
+                if section_id == "summary":
+                    source: t.Iterator[dict[str, t.Any]] = _write_summary(question, written, tally, stream)
+                else:
+                    idx = next(i for i, s in enumerate(outline["sections"]) if s["id"] == section_id)
+                    prev_id = outline["sections"][idx - 1]["id"] if idx else ""
+                    prev = "" if status.get(prev_id) == "failed" else str(written.get(prev_id) or "").strip()[-600:]
+                    source = _write_section(outline["sections"][idx], prev, written, status, tally, stream)
+                for event in source:
+                    if event.get("e") == "section":
+                        if event.get("failed"):
+                            failed = True
+                        text += str(event.get("t") or "")
+                    yield event
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("zjsearch report: rewrite of section %s failed", section_id)
+                failed = True
+                if not text:
+                    yield {
+                        "e": "section",
+                        "id": section_id,
+                        "t": f"*{gap_text}*\n",
+                        "failed": True,
+                        "reset": True,
+                    }
+            written[section_id] = text.strip()
+            status[section_id] = "failed" if failed else "done"
+            yield snapshot(status)
+
+        def rewrite_entry(section_id: str) -> t.Iterator[dict[str, t.Any]]:
+            """The handle's rewrite lane (the route calls this): validates
+            the id EAGERLY (KeyError -- the route answers 404) so the
+            HTTP status is precise, then returns the streaming
+            generator."""
+            if section_id not in {s["id"] for s in sections}:
+                raise KeyError(section_id)
+            return _rewrite(section_id)
+
         yield snapshot()
         written: dict[str, str] = {}
         status: dict[str, str] = {}
+        if handle is not None:
+            # the rewrite lane opens WITH the write phase: by the settle
+            # (the route's precondition) the registration is long done
+            handle.section_rewrite = rewrite_entry
         prev_tail = ""
         for sec in outline["sections"]:
             status[sec["id"]] = "writing"
             yield snapshot(status)
             text = ""
-            for event in _write_section(sec, prev_tail, written, status, tally):
+            failed = False
+            for event in _write_section(sec, prev_tail, written, status, tally, stream):
                 if event.get("e") == "section":
+                    if event.get("failed"):
+                        failed = True
                     text += str(event.get("t") or "")
                 yield event
             written[sec["id"]] = text.strip()
-            status[sec["id"]] = "done"
+            status[sec["id"]] = "failed" if failed else "done"
             yield snapshot(status)
-            prev_tail = text.strip()[-600:]
+            # a failed section's placeholder is not continuity: the next
+            # section writes without a previous tail rather than chaining
+            # off the failure note
+            prev_tail = "" if failed else text.strip()[-600:]
         # the executive summary: LAST, over the finished sections (the deck
         # shape has none -- the chapters' own closing slides carry the
         # conclusion)
@@ -219,12 +318,15 @@ def make_synthesizer(
             status["summary"] = "writing"
             yield snapshot(status)
             text = ""
-            for event in _write_summary(question, written, tally):
+            failed = False
+            for event in _write_summary(question, written, tally, stream):
                 if event.get("e") == "section":
+                    if event.get("failed"):
+                        failed = True
                     text += str(event.get("t") or "")
                 yield event
             written["summary"] = text.strip()
-            status["summary"] = "done"
+            status["summary"] = "failed" if failed else "done"
             yield snapshot(status)
         yield wire.settle("done", **tally.settle_kwargs())
 
@@ -283,25 +385,32 @@ def make_synthesizer(
         written: dict[str, str],
         status: dict[str, str],
         tally: t.Any,
+        stream: t.Callable[..., t.Iterator[dict[str, t.Any]]],
     ) -> t.Iterator[dict[str, t.Any]]:
         """One section: the completion, then the citation gate (whose
         rewrite, when it fires, replaces the streamed text -- the client
         re-renders the section from the deltas it already has, so the
         rewrite stream APPENDS a full replacement block delimited by the
-        section id)."""
+        section id).  ``stream`` is the synthesizer's failure-laddered
+        stream (synthesizer scope -- it carries the outline snapshots the
+        retry and the gap note ride)."""
         messages = _section_messages(sec, prev_tail, written, status)
         text = ""
         for event in stream(messages, sec["id"], tally, reset=True):
             if event.get("e") == "section":
                 text += str(event.get("t") or "")
             yield event
-        for event in _citation_gate(sec, text, written, tally):
+        for event in _citation_gate(sec, text, written, tally, stream):
             if event.get("e") == "section":
                 text = str(event.get("t") or "")  # the rewrite REPLACES
             yield event
 
     def _citation_gate(
-        sec: dict[str, t.Any], text: str, written: dict[str, str], tally: t.Any
+        sec: dict[str, t.Any],
+        text: str,
+        written: dict[str, str],
+        tally: t.Any,
+        stream: t.Callable[..., t.Iterator[dict[str, t.Any]]],
     ) -> t.Iterator[dict[str, t.Any]]:
         """The section-level citation gate: sample the cited claims, one
         decision pass judges each against its source's material; a
@@ -403,7 +512,12 @@ def make_synthesizer(
             # on this event's reset flag, then this whole text IS the section
             yield {"e": "section", "id": sec["id"], "t": rewrite, "reset": True}
 
-    def _write_summary(question: str, written: dict[str, str], tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
+    def _write_summary(
+        question: str,
+        written: dict[str, str],
+        tally: t.Any,
+        stream: t.Callable[..., t.Iterator[dict[str, t.Any]]],
+    ) -> t.Iterator[dict[str, t.Any]]:
         digest_parts = []
         used = 0
         for sec in outline["sections"]:

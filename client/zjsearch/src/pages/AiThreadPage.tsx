@@ -225,6 +225,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                   setFollowupQuery("");
                   aiSearch.followup(question, aiLang, researchMode);
                 }}
+                onRewriteSection={(runNo, sectionId) => aiSearch.rewriteSection(runNo, sectionId)}
                 onSetShape={(shape) => aiSearch.setShape(shape)}
                 onSetTemplate={(template) => aiSearch.setTemplate(template)}
                 onStop={() => {
@@ -236,6 +237,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                 onWrap={() => {
                   aiSearch.wrap();
                 }}
+                rewriting={aiSearch.rewriting}
                 run={run}
                 sourceMeta={
                   run.sources.map((source) => ({
