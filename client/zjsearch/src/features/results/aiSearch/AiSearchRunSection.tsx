@@ -1714,17 +1714,6 @@ function AiSearchRunSectionImpl({
               </div>
             </Collapse>
           </section>
-          {/* the budget took the tools away: the model was told to summarize
-          and is rewriting the complete answer (partial prose discarded).
-          The REPORT shape renders neither line -- its progress surface is
-          the document itself (the TOC's per-section spinners and the
-          N/M counter); a spinner here would read as a stalled run. */}
-          {run.wrappingUp && streaming && !run.outline ? (
-            <p className="flex items-center gap-1.5 text-xs text-ink-3">
-              <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
-              {t("ai_wrapup")}
-            </p>
-          ) : null}
           {/* the writer's reasoning: the AiAnswerCard toggle language --
               a header row that stays above the answer/document for the
               run's whole life (expanded live while the think streams,
@@ -1755,7 +1744,17 @@ function AiSearchRunSectionImpl({
               </Collapse>
             </div>
           ) : null}
-          {/* the answer column continues below */}
+          {/* THE one write-turn progress line: the silence cover from the
+              write-open (or a direct run's start) until the first answer
+              delta -- the think block above only exists once think text
+              streams, and the streaming answer itself is the progress
+              after.  The budget wrap-up (the wrap-up directive took the
+              tools away and the complete answer is being rewritten,
+              partial prose discarded) rides the same line -- wrappingUp
+              is set either way.  The REPORT shape renders no line: its
+              progress surface is the document itself (the TOC's
+              per-section spinners and the N/M counter); a spinner here
+              would read as a stalled run. */}
           {streaming && !run.answer && (run.wrappingUp || run.direct) && !run.outline ? (
             <p className="flex items-center gap-1.5 text-xs text-ink-3">
               <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />

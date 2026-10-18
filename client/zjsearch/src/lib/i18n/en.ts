@@ -547,7 +547,6 @@ export const EN = {
   ai_clarify_summary: "Confirmed direction",
   ai_compact_line: "Context compacted · {pre} → {post} tokens ({rounds} rounds summarized)",
   ai_compact_micro_line: "Old page reads cleared · {pre} → {post} tokens",
-  ai_wrapup: "Synthesizing the sources — writing the final answer",
   ai_answer_writing: "Writing the answer…",
   ai_finish_stop: "completed",
   ai_finish_length: "Hit the model's output limit — the answer may be cut short",

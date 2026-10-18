@@ -546,7 +546,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_clarify_summary: "已确认方向",
   ai_compact_line: "上下文已压缩 · {pre} → {post} 词元（摘要 {rounds} 轮）",
   ai_compact_micro_line: "已清理旧页正文 · {pre} → {post} 词元",
-  ai_wrapup: "整理来源，撰写最终回答",
   ai_answer_writing: "正在撰写回答…",
   ai_finish_stop: "正常完成",
   ai_finish_length: "已达模型输出上限，回答可能被截断",
