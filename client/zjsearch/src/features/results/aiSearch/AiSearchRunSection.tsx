@@ -1574,9 +1574,13 @@ function AiSearchRunSectionImpl({
   // are every think step AFTER the last research calls step (a round is
   // think→calls; what follows the final settle is the write turn's --
   // reports may reopen entries per section, so the steps JOIN).
-  const writeThinkText = (() => {
+  // writeThinkFrom is that boundary: everything at/after it is the write
+  // turn's material.  Gated on the write turn's OPEN (wrappingUp): a
+  // research round's own think streams BEFORE its calls step lands and
+  // must stay inside the process record.
+  const writeThinkFrom = (() => {
     if (!run.wrappingUp) {
-      return "";
+      return run.steps.length;
     }
     let lastCalls = -1;
     run.steps.forEach((step, index) => {
@@ -1584,12 +1588,19 @@ function AiSearchRunSectionImpl({
         lastCalls = index;
       }
     });
-    return run.steps
-      .slice(lastCalls + 1)
-      .filter((step) => step.kind === "think")
-      .map((step) => step.text)
-      .join("\n\n");
+    return lastCalls + 1;
   })();
+  const writeThinkText = run.steps
+    .slice(writeThinkFrom)
+    .filter((step) => step.kind === "think")
+    .map((step) => step.text)
+    .join("\n\n");
+  // the process record renders the RESEARCH turns only: the write turn's
+  // think steps live in the standalone thinking toggle below (the
+  // machine-voice content never folds back into the research-process
+  // record) -- left in, an expanded process box shows the SAME text
+  // twice, once per surface.
+  const researchSteps = run.steps.filter((step, index) => !(index >= writeThinkFrom && step.kind === "think"));
   // expanded while the think streams, folded once the answer starts
   // arriving, re-openable after the settle (the toggle never leaves).
   // The outline shapes show it only SETTLED: while a report/deck writes,
@@ -1757,7 +1768,7 @@ function AiSearchRunSectionImpl({
             this is the orientation element for a ~10-minute deep run */}
             <Collapse className={researchOpen ? "mt-3" : ""} open={researchOpen}>
               <div className="break-words rounded-lg border border-line p-3">
-                {run.steps.map((step, index) => (
+                {researchSteps.map((step, index) => (
                   <StepSegment
                     index={index}
                     key={`${step.kind}-${index}`}
@@ -1766,7 +1777,7 @@ function AiSearchRunSectionImpl({
                     streaming={streaming}
                   />
                 ))}
-                {streaming && !run.steps.length ? (
+                {streaming && !researchSteps.length ? (
                   <p className="px-1 py-1 text-xs text-ink-3">{t("ai_search_thinking_plan")}</p>
                 ) : null}
               </div>
