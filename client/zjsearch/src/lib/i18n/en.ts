@@ -219,6 +219,14 @@ export const EN = {
   ai_halt_time_budget: "Wrapped up at the time budget -- the answer covers the material gathered so far",
   ai_halt_round_budget: "Wrapped up at the research budget -- the answer covers the material gathered so far",
   ai_halt_loop_detected: "Wrapped up early -- the research kept repeating the same tool calls",
+  // the run footer's SHORT inline labels (the full sentence above rides the
+  // hover tooltip -- a guard note must not stretch the meta row)
+  ai_halt_stopped_by_user_label: "Stopped",
+  ai_halt_wrap_grace_ended_label: "Wrapped up",
+  ai_halt_stalled_label: "Wrapped early",
+  ai_halt_time_budget_label: "Time budget reached",
+  ai_halt_round_budget_label: "Round budget reached",
+  ai_halt_loop_detected_label: "Loop detected",
   ai_output_structure: "Output structure",
   ai_output_structure_free: "Designed automatically from the research",
   report_template_free: "Smart report",

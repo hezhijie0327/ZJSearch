@@ -17,7 +17,7 @@ import {
   ShieldAlert,
   Wrench,
 } from "lucide-react";
-import { haltReasonText } from "@/features/results/aiSearch/halts.ts";
+import { haltLabelText, haltReasonText } from "@/features/results/aiSearch/halts.ts";
 import { formatTokens } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";
@@ -148,10 +148,23 @@ export function AiRunFooter({
         </span>
       ) : null}
       {haltReason ? (
-        <span className="inline-flex min-h-6 items-center gap-1 text-accent">
-          <Flag aria-hidden="true" className="size-3 shrink-0" />
-          <span>{haltReasonText(haltReason, t)}</span>
-        </span>
+        (() => {
+          // the SHORT label inline, the full sentence on hover (the row's
+          // tooltip language -- a guard note must not stretch the meta
+          // row); unknown/legacy values degrade to the verbatim string on
+          // both surfaces
+          const label = haltLabelText(haltReason, t);
+          const detail = haltReasonText(haltReason, t);
+          return (
+            <span
+              className="inline-flex min-h-6 items-center gap-1 text-accent"
+              title={label === detail ? undefined : detail}
+            >
+              <Flag aria-hidden="true" className="size-3 shrink-0" />
+              <span>{label}</span>
+            </span>
+          );
+        })()
       ) : null}
       {note ? (
         <span className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.cls}`} title={note.text}>

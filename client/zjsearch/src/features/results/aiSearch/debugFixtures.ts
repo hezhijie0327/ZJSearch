@@ -2005,6 +2005,9 @@ const PANORAMA_STAGE: DebugScenario = {
       e: "settle",
       status: "done",
       finish: "stop",
+      // the GUARD HALT chip: the run footer's short inline label + the
+      // full sentence on hover (the facet this scenario exists to show)
+      halt_reason: "stalled",
       usage: {
         input: 3810,
         output: 210,
