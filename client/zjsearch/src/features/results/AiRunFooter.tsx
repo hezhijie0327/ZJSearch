@@ -147,25 +147,25 @@ export function AiRunFooter({
           ))}
         </span>
       ) : null}
-      {haltReason ? (
-        (() => {
-          // the SHORT label inline, the full sentence on hover (the row's
-          // tooltip language -- a guard note must not stretch the meta
-          // row); unknown/legacy values degrade to the verbatim string on
-          // both surfaces
-          const label = haltLabelText(haltReason, t);
-          const detail = haltReasonText(haltReason, t);
-          return (
-            <span
-              className="inline-flex min-h-6 items-center gap-1 text-accent"
-              title={label === detail ? undefined : detail}
-            >
-              <Flag aria-hidden="true" className="size-3 shrink-0" />
-              <span>{label}</span>
-            </span>
-          );
-        })()
-      ) : null}
+      {haltReason
+        ? (() => {
+            // the SHORT label inline, the full sentence on hover (the row's
+            // tooltip language -- a guard note must not stretch the meta
+            // row); unknown/legacy values degrade to the verbatim string on
+            // both surfaces
+            const label = haltLabelText(haltReason, t);
+            const detail = haltReasonText(haltReason, t);
+            return (
+              <span
+                className="inline-flex min-h-6 items-center gap-1 text-accent"
+                title={label === detail ? undefined : detail}
+              >
+                <Flag aria-hidden="true" className="size-3 shrink-0" />
+                <span>{label}</span>
+              </span>
+            );
+          })()
+        : null}
       {note ? (
         <span className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.cls}`} title={note.text}>
           <note.icon aria-hidden="true" className="size-3 shrink-0" />

@@ -935,7 +935,7 @@ export function applyEvent(
                   }
                 : {}),
               ...(event.tools !== undefined && event.tools !== null
-                ? { tools: (event.tools as AiToolMatch[]).filter((m) => m && m.name) }
+                ? { tools: (event.tools as AiToolMatch[]).filter((m) => m?.name) }
                 : {}),
               ...(event.text !== undefined ? { text: String(event.text ?? "") || undefined } : {}),
               ...(event.dupes !== undefined
@@ -1381,7 +1381,7 @@ function normalizeCall(item: Record<string, unknown>): AiSearchCall {
     tool: (KNOWN_TOOLS.has(tool) ? tool : "search_web") as AiSearchCall["tool"],
     name: typeof item.name === "string" ? item.name : undefined,
     label: typeof item.label === "string" ? item.label : undefined,
-    tools: Array.isArray(item.tools) ? (item.tools as AiToolMatch[]).filter((m) => m && m.name) : undefined,
+    tools: Array.isArray(item.tools) ? (item.tools as AiToolMatch[]).filter((m) => m?.name) : undefined,
     q: String(item.q ?? ""),
     url: item.url ? String(item.url) : undefined,
     category: String(item.category ?? ""),
