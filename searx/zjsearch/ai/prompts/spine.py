@@ -160,21 +160,23 @@ def identity() -> str:
 
 
 def markdown_surface() -> str:
-    """The renderer's markdown vocabulary -- the FULL surface (GFM, task
-    lists, definition lists, emoji shortcodes, ==mark== highlights,
-    Obsidian-style callouts, mermaid with quoted labels incl. xychart
-    charts, once-only LaTeX).  MIRROR CONTRACT with the client (DESIGN.md
-    §5.1, lib/markdownParts.ts): the prompt teaches exactly the grammar
-    the shared remark chain renders -- a taught-but-unrenderable grammar
-    falls back to raw text, a renderable-but-untaught path is an opening
-    for untrusted output nobody asked for."""
+    """The renderer's markdown vocabulary -- the FULL surface (GFM incl.
+    task lists and footnotes, definition lists, emoji shortcodes,
+    ==mark== highlights, Obsidian-style callouts with fold markers, the
+    mermaid v12 diagram set with its CJK lexical discipline, once-only
+    LaTeX incl. the ```math fence).  MIRROR CONTRACT with the client
+    (DESIGN.md §5.1, lib/markdownParts.ts): the prompt teaches exactly
+    the grammar the shared remark chain renders -- a taught-but
+    -unrenderable grammar falls back to raw text, a renderable-but
+    -untaught path is an opening for untrusted output nobody asked
+    for."""
     return block(
         "markdown_surface",
         """\
         - Format freely in GitHub-flavored markdown -- the renderer supports
           all of it: "## " section headings, bullet / numbered lists, task
-          lists ("- [x]" for step checklists), **bold**, ==highlighted
-          spans== for the few words that must not be missed,
+          lists ("- [x]" for step checklists), **bold**, *italic*,
+          ==highlighted spans== for the few words that must not be missed,
           ~~strikethrough~~, tables for comparisons, > blockquotes for short
           source quotes, `inline code` and fenced code blocks, ---
           horizontal rules, definition lists ("Term" on one line,
@@ -187,21 +189,39 @@ def markdown_surface() -> str:
         - Callouts make a judgment stand out (the key verdict, the sharpest
           risk, the recommendation): a blockquote whose first line is
           "> [!WARNING] Title text" -- body lines quoted below.  Kinds:
-          NOTE / TIP / IMPORTANT / QUESTION / WARNING / DANGER / SUCCESS /
-          EXAMPLE (use one where it earns its emphasis, not one per
-          section).
+          NOTE / INFO / TIP / IMPORTANT / QUESTION / WARNING / DANGER /
+          SUCCESS / EXAMPLE / TODO (use one where it earns its emphasis,
+          not one per section).  A - or + right after the marker folds the
+          callout ("> [!QUESTION]-" starts collapsed, "+" expanded) --
+          fold only what the reader may skip.
+        - Footnotes park an aside that would derail the sentence -- a
+          term's origin, a methodological caveat: mark it "text[^1]" and
+          define it on a later line "[^1]: the aside".  They render as
+          superscripts and collect at the answer's end.  Never put source
+          citations in footnotes: sources always ride [n].
         - When a diagram clarifies better than prose, emit a ```mermaid
-          fenced block (flowchart, sequence, state, ER, gantt, pie, mindmap,
-          timeline -- and xychart for BAR and LINE CHARTS of numbers:
-          quarterly revenue, market share, growth series).  Keep diagrams
-          small -- around 15 nodes at most -- and quote every node label
-          that contains punctuation or parentheses:
+          fenced block: flowchart, sequenceDiagram, stateDiagram-v2,
+          erDiagram, classDiagram, gantt, pie, mindmap, timeline, gitGraph,
+          journey, quadrantChart, radar-beta, treemap, sankey-beta,
+          C4Context -- and xychart for BAR and LINE CHARTS of numbers:
+          quarterly revenue, market share, growth series.  Keep diagrams
+          small -- around 15 nodes at most -- and quote every label
+          carrying punctuation, parentheses or Chinese characters:
           A["Revenue (USD millions)"] -- not A[Revenue (USD millions)].
-        - Math typesets as real equations -- write LaTeX: inline $E=mc^2$ or
-          display $$\\int_0^1 f(x)\\,dx$$ blocks.  Each formula appears ONCE,
-          in LaTeX only -- never repeat it as plain text beside the
-          equation.  No raw HTML and no markdown images (![alt](url)) --
-          visual evidence arrives as attachments instead.""",
+          Four types have ASCII-only bare identifiers -- Chinese belongs
+          inside quoted strings there: xychart axis/category arrays quote
+          every non-numeric entry (a bare Chinese weekday is a lexical
+          error; the same word quoted renders); sankey-beta rows are CSV
+          source,target,value with ASCII node names; radar-beta and
+          quadrantChart take ASCII axis and point names.  treemap is the
+          reverse: node names MUST be double-quoted, and Chinese is fine
+          inside the quotes ("node name": 40).
+        - Math typesets as real equations -- write LaTeX: inline $E=mc^2$,
+          display $$\\int_0^1 f(x)\\,dx$$ blocks, or a ```math fenced
+          block.  Each formula appears ONCE, in LaTeX only -- never repeat
+          it as plain text beside the equation.  No raw HTML and no
+          markdown images (![alt](url)) -- visual evidence arrives as
+          attachments instead.""",
     )
 
 

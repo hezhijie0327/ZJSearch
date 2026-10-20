@@ -81,7 +81,9 @@ DECK_SLIDE_DIALECT = spine.block(
       aloud beyond the slide, not what the slide already shows.
     - FORBIDDEN in this dialect: raw HTML of any kind (it renders as
       visible escaped text -- including <hr>, <br>, <div>), markdown
-      images, front-matter blocks, `<!-- _class: ... -->` or any other
+      images, footnotes (the slide pipeline has no footnote renderer --
+      an aside rides the speaker note instead), front-matter blocks,
+      `<!-- _class: ... -->` or any other
       style directive (the renderer fixes the theme), and a document-level
       title (the deck's cover slide is built from the outline's title).""",
 )

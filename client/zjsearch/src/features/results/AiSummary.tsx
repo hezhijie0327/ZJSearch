@@ -689,10 +689,13 @@ function markdownComponents(
 ): Record<string, (props: MdProps) => ReactNode> {
   // the family editorial levels (DESIGN.md §5.1): serif, weighted by depth
   const heading = (level: "h1" | "h2" | "h3" | "h4" | "h5" | "h6") =>
-    function Heading({ children }: MdProps) {
+    function Heading({ children, className }: MdProps) {
       const Tag = level as "h3";
+      // an incoming class rides along -- the GFM footnotes' sr-only
+      // section label is the one producer, and stripping it would paint
+      // an a11y-only heading in full serif
       return (
-        <Tag className={MD[level]} dir="auto">
+        <Tag className={className ? `${MD[level]} ${className}` : MD[level]} dir="auto">
           {children}
         </Tag>
       );
@@ -720,6 +723,16 @@ function markdownComponents(
       }
       const m = /^#ref-(\d+)$/.exec(href ?? "");
       if (!m) {
+        // an in-page anchor (the GFM footnotes' refs and back-refs are the
+        // chain's producers): a plain same-document jump -- external's
+        // target="_blank" would open this very page in a new tab
+        if (href?.startsWith("#")) {
+          return (
+            <a className={MD.a} href={href}>
+              {children}
+            </a>
+          );
+        }
         return external({ children, href });
       }
       const n = Number.parseInt(m[1] ?? "", 10);
@@ -777,6 +790,16 @@ function markdownComponents(
       }
       return <CodeBlock>{children}</CodeBlock>;
     },
+    section: ({ children, className }) =>
+      // the GFM footnotes block (the shared chain's only section
+      // producer): the answer's asides collect at the 0.875em tier under
+      // a hairline, per the §4 footnote area; the sr-only "Footnotes"
+      // label keeps speaking through the heading merge
+      className?.includes("footnotes") ? (
+        <section className="mt-4 border-t border-line pt-2 text-[0.875em] text-ink-2">{children}</section>
+      ) : (
+        <section className={className}>{children}</section>
+      ),
     table: ({ children }) => (
       // a wide table scrolls INSIDE its block (same language as the code
       // blocks) — a bare table's min-content width would push the whole
