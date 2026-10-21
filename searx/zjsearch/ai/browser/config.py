@@ -153,6 +153,22 @@ def settle_ms() -> int:
         return 1_200
 
 
+def stabilize_budget_s() -> float:
+    """``zjsearch.browser.stabilize_budget_ms`` -- the total budget of
+    the read's document-stability wait: navigation, network and DOM must
+    all go quiet within this ceiling, and at the deadline the capture
+    happens regardless (the old fixed timing is the floor).  The default
+    carries a ~3x margin over an observed ~6.5s bot-challenge clearance;
+    the clamp's floor keeps a mistuned deployment at a working read."""
+    value = cfg().get("stabilize_budget_ms")
+    if value is None:
+        return 20.0
+    try:
+        return max(3.0, min(int(value), 60_000)) / 1000.0
+    except (TypeError, ValueError):
+        return 20.0
+
+
 def allow_hosts() -> frozenset[str]:
     """``zjsearch.browser.allow_hosts`` -- hosts the gates let through
     DESPITE failing the public-address checks: the deployment's intranet

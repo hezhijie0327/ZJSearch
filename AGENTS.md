@@ -1868,9 +1868,18 @@ the Browserless provider code was REMOVED, and with it the whole
 `zjsearch.reader` provider surface — `base_url`/`api_key`/`query`/
 `params` are dead keys, only `enabled`/`max_chars` remain).  Reads
 dispatch onto the shared loop, one page per read under a `max_pages`
-semaphore, `load` + network-quiet + settle, then the WHOLE rendered
+semaphore, `load` + DOCUMENT-STABILITY + settle, then the WHOLE rendered
 page goes to ONE markdown engine — the shared markitdown service
-(`core/convert.py`; `html-to-markdown` is GONE).  NO readability
+(`core/convert.py`; `html-to-markdown` is GONE).  DOCUMENT-STABILITY:
+the `load` event fires on bot-challenge shells and mid-hydration apps
+alike, so the capture waits for the document to STOP MOVING — no
+main-frame navigation (the challenge-clearance reload), no in-flight
+requests, no DOM mutations (an init-script MutationObserver, re-armed
+by every navigation), each quiet for its small window, bounded by
+`zjsearch.browser.stabilize_budget_ms` (default 20s — a ~3x margin
+over an observed Fastly clearance); at the deadline the capture happens
+anyway, making the old fixed timing the floor of the wait, never its
+ceiling.  NO readability
 extraction, NO drop-tree: silent content loss is the one unacceptable
 failure in the reader, and page chrome (nav, footer, banners) is
 visible noise the model navigates past on its own.  Title and the

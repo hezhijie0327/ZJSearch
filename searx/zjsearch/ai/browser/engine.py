@@ -41,14 +41,14 @@ from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.browser import gate
 
 if t.TYPE_CHECKING:
-    from playwright.async_api import BrowserContext
+    from playwright.async_api import BrowserContext, Page
 
 logger = logging.getLogger(__name__)
 
 READ_TIMEOUT = 90.0
 """One read's whole wall clock on the sync bridge -- goto budget plus
-network-quiet wait plus settle plus the ``page.content()`` serialization
-of a large DOM."""
+the document-stability budget plus settle plus the ``page.content()``
+serialization of a large DOM."""
 
 WINDOW = (1920, 1080)
 """The fixed desktop-shaped window, spoofed Camoufox-side (its ``window``
@@ -59,10 +59,23 @@ desktop branch (and the observe stage will mirror exactly this frame)
 -- 1920x1080 is the single most common desktop screen, and the
 session's viewport literals ride this constant."""
 
-_NETWORK_IDLE_MS = 3_500
-"""The network-quiet wait AFTER ``load`` -- late XHR hydration gets its
-moment; chatty pages (analytics, sockets) never go idle and hit this
-budget instead, which is what it is for."""
+_NAV_QUIET_S = 1.5
+_NET_QUIET_S = 1.0
+_DOM_QUIET_S = 1.0
+"""The document-stability windows: a main-frame navigation (the
+bot-challenge clearance reload), the network, and the DOM must EACH go
+quiet for this long before the document counts as stable."""
+
+_STABILIZE_POLL_S = 0.3
+
+_MUTATION_INIT = (
+    "window.__zjsMut = 0;"
+    "new MutationObserver(() => { window.__zjsMut = Date.now(); })"
+    ".observe(document.documentElement, {childList: true, subtree: true, attributes: true, characterData: true});"
+)
+"""Injected before ``goto``: records the last DOM mutation as a wall
+timestamp.  An init script re-runs on EVERY navigation of the page, so
+the observer survives the challenge-clearance reload it exists for."""
 
 _CODE_OWNED_KEYS = frozenset(
     {
@@ -261,6 +274,52 @@ def _brief(exc: BaseException) -> str:
     return " ".join(str(exc).split())[:200] or type(exc).__name__
 
 
+async def _stabilize(page: "Page") -> None:
+    """Wait for the DOCUMENT to go quiet -- "load complete" as an
+    extraction-readiness predicate, not a moment the ``load`` event
+    names.  The event fires on bot-challenge shells and mid-hydration
+    apps alike; what the reader needs is a document that has stopped
+    moving: no main-frame navigation (the challenge clearance reloads
+    the page), no in-flight requests, no DOM mutations -- each for its
+    small quiet window, ALL bounded by the stability budget.  At the
+    deadline the capture happens anyway: today's fixed-timing behavior
+    is the floor of this wait, never its ceiling."""
+    state = {"last_nav": time.monotonic(), "pending": 0, "last_net": time.monotonic()}
+
+    def on_nav(frame) -> None:
+        if frame is page.main_frame:
+            state["last_nav"] = time.monotonic()
+
+    def on_request(_req) -> None:
+        state["pending"] += 1
+        state["last_net"] = time.monotonic()
+
+    def on_settled(_r) -> None:
+        state["pending"] = max(0, state["pending"] - 1)
+        state["last_net"] = time.monotonic()
+
+    page.on("framenavigated", on_nav)
+    page.on("request", on_request)
+    page.on("requestfinished", on_settled)
+    page.on("requestfailed", on_settled)
+    deadline = time.monotonic() + browser_config.stabilize_budget_s()
+    while time.monotonic() < deadline:
+        await page.wait_for_timeout(_STABILIZE_POLL_S)
+        now = time.monotonic()
+        try:
+            mut_ms = await page.evaluate("window.__zjsMut || 0")
+        except Exception:  # pylint: disable=broad-except
+            continue  # a navigation tore the execution context down -- not quiet
+        dom_quiet = mut_ms == 0 or (time.time() * 1000 - mut_ms) >= _DOM_QUIET_S * 1000
+        if (
+            now - state["last_nav"] >= _NAV_QUIET_S
+            and state["pending"] == 0
+            and now - state["last_net"] >= _NET_QUIET_S
+            and dom_quiet
+        ):
+            return
+
+
 async def _read_on(context: "BrowserContext", url: str) -> str:
     semaphore = _state.get("pages")
     if semaphore is None:
@@ -270,16 +329,16 @@ async def _read_on(context: "BrowserContext", url: str) -> str:
         page = await context.new_page()
         await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
         try:
+            # the stability observer must precede goto: it has to cover
+            # the first document AND every reload the page performs
+            await page.add_init_script(_MUTATION_INIT)
             try:
                 await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
             except Exception as exc:  # pylint: disable=broad-except
                 raise browser_config.RenderError(
                     f"the built-in browser could not open this page ({_brief(exc)})"
                 ) from exc
-            try:
-                await page.wait_for_load_state("networkidle", timeout=_NETWORK_IDLE_MS)
-            except Exception:  # pylint: disable=broad-except
-                pass  # chatty pages never go quiet -- the fixed settle still applies
+            await _stabilize(page)
             await page.wait_for_timeout(browser_config.settle_ms())
             html = await page.content()
         finally:
