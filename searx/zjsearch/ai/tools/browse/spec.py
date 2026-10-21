@@ -45,7 +45,11 @@ and search engines cannot.
 Snapshot is your primary read; take a screenshot ONLY when the
 snapshot cannot answer (visual layout, captcha, canvas) -- screenshot
 with a ref captures that ONE element as a close-up (the captcha image, a
-canvas widget, a chart), so aim before you shoot.  Child-frame refs are
+canvas widget, a chart), and screenshot with x/y/w/h crops that
+VIEWPORT rectangle instead (the same coordinate space you click in) --
+for a corner, a caption strip, or a spread of widgets no single element
+wraps.  So aim before you shoot: ref for a thing, x/y/w/h for a place.
+Child-frame refs are
 prefixed with their frame index (f1e5) -- embedded widgets live there; a
 screenshot of the frame's box plus coordinate clicks is how you work
 INSIDE a widget that does not expose its internals to the outline.  A
@@ -119,13 +123,15 @@ drove.""",
                 },
                 "ref": {
                     "type": "string",
-                    "description": 'click/type/hover/select: the snapshot ref (e12; child-frame elements are f1e5).  screenshot: capture that ONE element as a close-up instead of the whole viewport.',
+                    "description": 'click/type/hover/select: the snapshot ref (e12; child-frame elements are f1e5).  screenshot: capture that ONE element as a close-up instead of the whole viewport -- give ref OR x/y/w/h, not both.',
                 },
                 "text": {"type": "string", "description": "type: the text to fill."},
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},
                 "key": {"type": "string", "description": "press: the key (Enter, Escape, Tab...)."},
-                "x": {"type": "integer", "description": "click: viewport X when clicking by COORDINATES instead of ref."},
-                "y": {"type": "integer", "description": "click: viewport Y when clicking by COORDINATES instead of ref."},
+                "x": {"type": "integer", "description": "click: viewport X when clicking by COORDINATES instead of ref.  screenshot: region left edge (with y/w/h)."},
+                "y": {"type": "integer", "description": "click: viewport Y when clicking by COORDINATES instead of ref.  screenshot: region top edge (with x/w/h)."},
+                "w": {"type": "integer", "description": "screenshot: region width (with x/y/h) -- crops that viewport rectangle instead of the full viewport."},
+                "h": {"type": "integer", "description": "screenshot: region height (with x/y/w)."},
                 "x1": {"type": "integer", "description": "drag: start viewport X."},
                 "y1": {"type": "integer", "description": "drag: start viewport Y."},
                 "x2": {"type": "integer", "description": "drag: end viewport X."},
@@ -157,6 +163,14 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
         out["url"] = str(args.get("url") or "").strip()[:2000]
     if action in ("click", "type", "screenshot", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
+    if action == "screenshot":
+        region = [args.get(k) for k in ("x", "y", "w", "h")]
+        if any(v is not None for v in region):
+            for key in ("x", "y", "w", "h"):
+                try:
+                    out[key] = max(0, int(args.get(key)))
+                except (TypeError, ValueError):
+                    pass
     if action == "click":
         try:
             out["x"] = max(0, int(args.get("x")))

@@ -176,6 +176,11 @@ def _act_scroll(args: dict[str, t.Any], session_id: str) -> ActionResult:
 
 def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
     ref = str(args.get("ref") or "")
+    region = [args.get(k) for k in ("x", "y", "w", "h")]
+    if ref and any(v is not None for v in region):
+        raise SessionError("screenshot takes a ref (element close-up) OR a region (x y w h), not both")
+    if any(v is not None for v in region) and not all(v is not None for v in region):
+        raise SessionError("the screenshot region needs x, y, w and h together (viewport coordinates)")
     if ref:
         # the aimed shot: ONE element close-up instead of the viewport
         # (the crop is what the model sees next turn)
@@ -194,6 +199,25 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
             )
         else:
             session.set_mark(session_id, {"pk": "shot", "label": f"screenshot {ref}"})
+    elif all(v is not None for v in region):
+        # the region crop: a viewport rectangle by coordinates (the same
+        # viewport space the coordinate clicks aim in)
+        try:
+            x, y, w, h = (max(0, int(v)) for v in region)
+        except (TypeError, ValueError) as exc:
+            raise SessionError(f"the screenshot region needs integer x y w h: {exc}") from exc
+        shot = session.region_b64(session_id, x, y, w, h, quality=75)
+        box = shot["box"]
+        session.set_mark(
+            session_id,
+            {
+                "px": int(box[0] + box[2] / 2),
+                "py": int(box[1] + box[3] / 2),
+                "pk": "shot",
+                "label": f"screenshot region {box[0]},{box[1]} {box[2]}x{box[3]}",
+                "box": box,
+            },
+        )
     else:
         shot = session.screenshot_b64(session_id, quality=75)
         session.set_mark(

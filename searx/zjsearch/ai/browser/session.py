@@ -612,6 +612,51 @@ def inspect_b64(session_id: str, ref: str, quality: int = 75) -> dict[str, t.Any
         return _run(run())
 
 
+def region_b64(
+    session_id: str, x: int, y: int, w: int, h: int, quality: int = 75
+) -> dict[str, t.Any]:
+    """A viewport RECTANGLE as a close-up ``{img, w, h, box, url, title}``
+    -- the region crop the model aims by coordinates (the same viewport
+    space its clicks use), for a page area no element wraps: a corner, a
+    caption strip, a spread of widgets shot as one.  The region is
+    intersected with the current viewport (the model aims on the viewport
+    image it was shown); a region that collapses below 16px either way is
+    a mis-aim and fails fast with the scroll recipe.  Read-only."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
+            vx = max(0, min(int(x), int(vp["width"]) - 1))
+            vy = max(0, min(int(y), int(vp["height"]) - 1))
+            vw = max(0, min(int(w), int(vp["width"]) - vx))
+            vh = max(0, min(int(h), int(vp["height"]) - vy))
+            if vw < 16 or vh < 16:
+                raise SessionError(
+                    f"the region ({x},{y} {w}x{h}) is outside the viewport"
+                    f" ({vp['width']}x{vp['height']}) -- scroll first, then"
+                    " re-aim at the visible area"
+                )
+            off = await page.evaluate("() => [window.scrollX, window.scrollY]")
+            raw = await page.screenshot(
+                type="jpeg",
+                quality=int(quality),
+                clip={"x": vx + float(off[0]), "y": vy + float(off[1]), "width": vw, "height": vh},
+                timeout=_ACTION_TIMEOUT_MS,
+            )
+            return {
+                "img": base64.b64encode(raw).decode("ascii"),
+                "w": vw,
+                "h": vh,
+                "box": [vx, vy, vw, vh],
+                "url": str(page.url),
+                "title": await page.title(),
+            }
+
+        return _run(run())
+
+
 def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
     """The ACTION layer's mark (the capture primitives stay pure -- they
     serve mirror frames too, and a frame capture must never overwrite the

@@ -312,6 +312,12 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
 Attached: the close-up screenshot you requested of element {aimed_ref}
 on the page you opened.  Read it now and decide your next action from
 what is visible."""
+            elif all(args.get(k) is not None for k in ("x", "y", "w", "h")):
+                region_note = " ".join(str(args.get(k)) for k in ("x", "y", "w", "h"))
+                shot_note = f"""\
+Attached: the region crop you requested of the page you opened
+(viewport rectangle {region_note}).  Read it now and decide your next
+action from what is visible."""
             else:
                 shot_note = 'Attached: the screenshot you requested of the page you opened.  Read it now and decide your next action from what is visible.'
             self.image_injections.append(
