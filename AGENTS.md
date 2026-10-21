@@ -295,7 +295,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (`runs/search/`: profile/prompts/gates/tools/executor/route;
     THREE tiers, three products on ONE loop -- Search (speed: the
     AI-Overview feel, one round, the minimal toolset: search/calculate/
-    ask_user/memory/inspect_image), Deep Search (balanced: the probe
+    ask_user/memory, inspect_image only when the request carries
+    images), Deep Search (balanced: the probe
     ladder 12-60 rounds, the plan + ledger machinery), Deep Research
     (deep: the ladder 15-120, decomposition, the ONLY tier with the
     delegation tools) -- the tiers differ in budget/decomposition/
@@ -1642,20 +1643,26 @@ Executor dispatch is the `mcp_` prefix branch: blocking on the shared
 loop's result with a 90s budget, the timeline row renders the server-scoped
 tool name with a Plug icon.  Unconfigured = silence (no specs, no
 sessions); a dead endpoint contributes nothing (one server failing must
-not take the run down).  The long tail is ALWAYS progressive
+not take the run down).  The external long tail is ALWAYS progressive
 disclosure (the Agent Skills injection pattern): the run registers ONE
-`search_tools` discovery tool over the MERGED index — the external
-servers' tools AND the tier's disclosed internal long tail
-(list_engines/evaluate/recall_history/inspect_image on the research
-tiers; Search discloses nothing) — never the raw schemas.  The model
-keyword-searches it, receives the matched tools' COMPLETE parameter
-schemas (an internal row carries the tool's `INSTRUCTIONS` doctrine
-beside its schema, an MCP row the server's), and calls them by name
-next turn (a miss returns both directories for re-querying).  The
-every-round instruments stay inline: the discovery round trip is a tax
-only the rarely-needed tools pay.  One uniform shape however small the
-surface (a 3-tool server pays the same single search round trip), and
-no schema rides a run that never needed it.  THE SERVER
+`search_tools` discovery tool over the MCP servers' index — never the
+raw schemas.  The INTERNAL niche tools (list_engines/evaluate/
+recall_history/inspect_image on the research tiers) do NOT ride the
+index: the set is small, bounded and deployment-independent, so they
+register INLINE beside the core instruments (`runs/search/surface.py`
+— `build_tool_surface`, the one pure assembly the flags feed and the
+smoke scripts print; Search keeps its AI-Overview minimal set).  The
+model keyword-searches `search_tools`, receives the matched tools'
+COMPLETE parameter schemas (an MCP row carries the server's
+`instructions`), and calls them by name next turn; a keyword miss with
+embeddings configured falls back to ONE bounded semantic pass (cosine
+floor, fail-open to the directories), and a miss returns the servers'
+directory for re-querying.  The every-round instruments stay inline:
+the discovery round trip is a tax only the rarely-needed tools pay —
+and an inline spec is a fraction of that tax under the prefix cache.
+One uniform shape however small the surface (a 3-tool server pays the
+same single search round trip), and no schema rides a run that never
+needed it.  THE SERVER
 INSTRUCTIONS ride for free: `_with_session` hands the specs pass the
 initialize result, whose `instructions` land in the module store (400
 chars each, zero extra round trips) and surface twice -- a bounded

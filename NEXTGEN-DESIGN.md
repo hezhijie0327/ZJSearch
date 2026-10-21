@@ -60,14 +60,15 @@ searx/zjsearch/ai/
                update_plan · ask_user · evaluate · memory · recall_history ·
                inspect_image ·
                list_engines · delegate_research · mcp(纯桥接器)·
-               search_tools(发现工具:合并索引)
+               search_tools(发现工具:MCP 外部索引)
   runs/        profile(档位/预算)· host(Run Host)· journal(run 日志)·
                overview(AI Overview)· attachments(多模态附件)
     search/    state · gather(并发执行)· registry([n] 注册表/dedup)·
                rank(排序级联:引擎序 → BM25/RRF → rerank → 多样性)·
                feed(writer 紧凑源块)· coverage · referee(计划/覆盖裁判)·
                gates(延长/停机等结构门)· corpus(Run Corpus)· context ·
-               writer · handlers · recall(活召回槽)· entity_gate ·
+               writer · handlers · surface(工具面纯函数装配)·
+               recall(活召回槽)· entity_gate ·
                progress · audit
     report/    outline(大纲门)· synth(逐节合成,report/deck 共用)
   api/         search_route · run_host_route(attach/control/keepalive/
@@ -91,8 +92,10 @@ searx/zjsearch/ai/
 一个模块 + 注册一行 + 前端一个 view(未知工具兜底到通用行,不静默破相)。
 
 与 MCP 的边界:`zjsearch.mcp` 把外部 streamable-HTTP 服务器桥接成
-`mcp_<server>_<tool>` 工具;模型面永远只有一个 `search_tools`(合并索引:外部 server 工具 + 本部署披露的长尾工具 list_engines/evaluate/recall_history/inspect_image)
-发现工具(渐进披露),按关键词取完整 schema 后再按名调用。
+`mcp_<server>_<tool>` 工具;模型面永远只有一个 `search_tools`(索引 =
+外部 server 工具;本部署的内部工具集小而封闭,全部 inline,不为它们付
+每次 run 重付的发现往返)发现工具(渐进披露),按关键词取完整 schema
+后再按名调用;关键词 miss 且配置了 embedding 时做一次有预算的语义兜底。
 
 ### 2.1 MCP 对齐审计(2026-10,对照 server-instructions 指南与 spec)
 
@@ -115,10 +118,14 @@ searx/zjsearch/ai/
   (search_web→list_engines/ask_user 付费门、update_plan↔record_findings
   的分工、delegate→message_subtask 的追问通道)。注入形态即指南里
   GitHub 的 pattern:**基础教条 + 按注册工具集追加** —— `<tool_notes>`
-  按 run 实际注册的 spec 收集,披露长尾的教条随 `search_tools` 行的
+  按 run 实际注册的 spec 收集;MCP server 的教条随 `search_tools` 行的
   `instructions` 字段到达(与 MCP 行为逐字段同形)。
-- **渐进披露**:核心内联、长尾走 `search_tools` 关键词索引(schema +
-  instructions 同行返回,空结果返回两侧目录)。
+- **渐进披露**:内部工具(小、封闭、部署无关)全部内联;外部长尾走
+  `search_tools` 关键词索引(schema + server instructions 同行返回,
+  空结果返回服务器目录;embedding 在位时 miss 落一次有 4s 预算的语义
+  兜底,失败 fail-open 回目录)。**可见性门 ≠ 授权门**:executor 按名
+  全量 dispatch,有副作用的工具把鉴权做在自己的 service 里(paid gate、
+  inspect_image 的 fetch 层 SSRF 门为先例)。
 
 **记录在案的有意偏差**(不是疏漏):
 
@@ -365,9 +372,10 @@ flowchart TB
 | balanced(Deep Search) | 12 / 24 / 36 / 48 / 60 | 3 轮 | 单写 | 2-4 短节(MODERATE 预算) |
 | deep(Deep Research) | 15 / 35 / 60 / 90 / 120 | 4 轮 | **形态化输出(强制)** | 报告文档 / 演示文稿 |
 
-三档工具面:Search = search_web/calculate/ask_user/memory/inspect_image;Deep Search 加
-plan/ledger/browse(附件图时)+ 披露长尾(list_engines/evaluate/recall_history/inspect_image
-经 `search_tools` 发现);Deep Research 再加委派。
+三档工具面(`runs/search/surface.py` 一个纯函数装配):Search =
+search_web/calculate/ask_user/memory(/inspect_image,请求带图时);Deep Search 加
+plan/ledger/browse + 研究四件套(list_engines/evaluate/recall_history/
+inspect_image,按可用性门 inline);Deep Research(探针 rung≥2)再加委派。
 
 ```mermaid
 flowchart TB

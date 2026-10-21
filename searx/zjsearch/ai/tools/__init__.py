@@ -8,9 +8,21 @@ untrusted call arguments into executed / displayed values, and the
 service that backs it (Vane's researcher/actions split, Morphic's
 lib/tools -- schema, description, parsing and execution live WITH the
 tool).  ``browse`` is the one package (the session/reader machinery),
-``mcp`` the external-server bridge, ``search_tools`` the
-discovery instrument over the disclosed long tail, ``rows`` the
-calls-event row builders; the shared text guard is :py:mod:`core.text` (``raw_args``).
+``mcp`` the external-server bridge, ``search_tools`` the discovery
+instrument over the EXTERNAL long tail (the MCP servers' tools),
+``rows`` the calls-event row builders; the shared text guard is
+:py:mod:`core.text` (``raw_args``).
+
+THE VISIBILITY GATE IS NOT AN AUTHORIZATION GATE.  The executor
+dispatches by name over its full branch set -- a tool's handler runs
+whether or not the run registered its spec (the tools array and the
+prompt are a VISIBILITY decision, made in ``runs.search.surface``).
+Any tool with side effects -- spending money, fetching arbitrary URLs,
+writing -- must therefore enforce its own gate INSIDE its service:
+the paid-``!bang`` hold in ``search_web``'s ``_search_plan`` and the
+fetch-time SSRF check behind ``inspect_image`` are the precedents.
+Never treat registration as the only thing standing between the model
+and a side effect.
 
 Consumers (``runs.search.executor``, ``api.routes``,
 ``prompts.researcher``) import from the package root -- the re-exports
