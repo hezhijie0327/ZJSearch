@@ -1013,6 +1013,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           autoComplete="off"
                           className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
                           dir="auto"
+                          name="q"
                           onChange={(event) => {
                             setFollowupQuery(event.target.value);
                           }}
@@ -1209,7 +1210,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
 
       <BackToTop />
       {renderHelp ? (
-        <HelpModal closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
+        <HelpModal ai={aiMode} closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
       ) : null}
     </Shell>
   );

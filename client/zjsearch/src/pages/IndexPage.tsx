@@ -18,6 +18,7 @@ import { useRouter } from "@/lib/router.tsx";
 import { useSettings } from "@/lib/settings.ts";
 import type { BasicPageData } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
+import { useHotkeyHint } from "@/lib/useHotkeyHint.ts";
 import { preloadResultsPage } from "@/pages/lazyPages.ts";
 
 interface IndexData extends BasicPageData {
@@ -117,7 +118,7 @@ export function IndexPage({ data }: { data: IndexData }) {
 
   const [helpOpen, setHelpOpen] = useState(false);
   const { render: renderHelp, closing: helpClosing } = useExitPresence(helpOpen);
-  const [hintHidden, setHintHidden] = useState(() => window.localStorage.getItem("zjs-hint-hidden") === "1");
+  const [hintHidden, setHintHidden] = useHotkeyHint();
   const settings = useSettings();
   const t = useT();
 
@@ -303,9 +304,10 @@ export function IndexPage({ data }: { data: IndexData }) {
           </div>
         </Collapse>
       </main>
-      {/* the hotkeys hint: dismissed hides it for good, the AI composition
-          fades it via the Collapse band (no snap when the mode flips) */}
-      <Collapse className="mx-auto mb-10 w-full max-w-xl px-4" open={!aiMode && !hintHidden}>
+      {/* the hotkeys hint: BOTH hero modes (the AI help column teaches the
+          keys that work there), the dismiss memory is shared; the re-show
+          path lives in the help modal's footer */}
+      <Collapse className="mx-auto mb-10 w-full max-w-xl px-4" open={!hintHidden}>
         <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-2.5 text-sm">
           <Lightbulb className="size-4 shrink-0 text-accent" />
           <button
@@ -321,7 +323,6 @@ export function IndexPage({ data }: { data: IndexData }) {
             aria-label={t("close")}
             className="grid size-7 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
             onClick={() => {
-              window.localStorage.setItem("zjs-hint-hidden", "1");
               setHintHidden(true);
             }}
             type="button"
@@ -331,7 +332,7 @@ export function IndexPage({ data }: { data: IndexData }) {
         </div>
       </Collapse>
       {renderHelp ? (
-        <HelpModal closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
+        <HelpModal ai={aiMode} closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
       ) : null}
     </Shell>
   );

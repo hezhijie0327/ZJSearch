@@ -3,9 +3,11 @@
 import { MessageCircleQuestion, Zap } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { BootRunBody } from "@/components/BootGhosts.tsx";
+import { HelpModal } from "@/components/HelpModal.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { SubmitCircle } from "@/components/SearchBox.tsx";
 import { Shell } from "@/components/Shell.tsx";
+import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
@@ -18,8 +20,10 @@ import { useAiSteer } from "@/features/results/aiSearch/useAiSteer.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { useRouter } from "@/lib/router.tsx";
+import { useSettings } from "@/lib/settings.ts";
 import { PAPER_STRIP } from "@/lib/styles.ts";
 import type { AiThreadPageData } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 // the debug stage LAZY-loads behind the `debug` thread id: its fixture catalog is
 // ~1,500 lines of QA-only data that otherwise rides EVERY real thread
@@ -159,6 +163,22 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   // the not-found empty state only shows AFTER the resume attempt resolved
   const showMissing = !resuming && !hasThread;
 
+  // "?" opens the shortcuts help, `i`/`/` focus the composer; the
+  // result-navigation keys have nothing to act on here (AI-only page)
+  const [helpOpen, setHelpOpen] = useState(false);
+  const { render: renderHelp, closing: helpClosing } = useExitPresence(helpOpen);
+  const settings = useSettings();
+  const hotkeyTarget: HotkeyTarget = {
+    move: () => {},
+    open: () => {},
+    yank: () => {},
+    page: () => {},
+    focusSearch: focusSearchInput,
+  };
+  useHotkeys(settings.hotkeys, hotkeyTarget, () => {
+    setHelpOpen((open) => !open);
+  });
+
   return (
     <Shell globals={globals}>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-44 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
@@ -280,6 +300,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                     autoComplete="off"
                     className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
                     dir="auto"
+                    name="q"
                     onChange={(event) => {
                       setFollowupQuery(event.target.value);
                     }}
@@ -366,6 +387,9 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
           </PaperEmpty>
         ) : null}
       </main>
+      {renderHelp ? (
+        <HelpModal ai closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
+      ) : null}
     </Shell>
   );
 }

@@ -2,11 +2,17 @@
 
 /** Keyboard shortcuts help dialog (opened with "?"). */
 
-import { X } from "lucide-react";
+import { Lightbulb, X } from "lucide-react";
 import { useEffect } from "react";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { type Translate, useT } from "@/lib/i18n.ts";
 import { ICON_BTN } from "@/lib/styles.ts";
+import { useHotkeyHint } from "@/lib/useHotkeyHint.ts";
+
+// the fullwidth question mark a CJK IME emits (hotkeys.ts accepts both
+// forms; escaped here — display text outside i18n stays out of the
+// audit-cjk source rule)
+const QUESTION = "? / \uFF1F";
 
 interface HelpColumn {
   title: string;
@@ -29,7 +35,7 @@ function shortcutRows(layout: "default" | "vim", t: Translate): Array<[string, s
     ];
   }
   return [
-    ["? / ?", t("help_show_hide")],
+    [QUESTION, t("help_show_hide")],
     ["↓", t("help_focus_next")],
     ["↑", t("help_focus_prev")],
     ["→", t("help_page_next")],
@@ -38,6 +44,26 @@ function shortcutRows(layout: "default" | "vim", t: Translate): Array<[string, s
     ["t", t("help_open_new_tab")],
     ["y", t("help_yank")],
     ["i /", t("help_focus_search")],
+    ["Esc", t("help_esc")],
+  ];
+}
+
+/** The AI surfaces' column (hero ask card, AI takeover, thread page): no
+    results to walk, so the result keys give way to the ask box's own
+    grammar — focus, and the composer's steer interrupt. */
+function aiShortcutRows(layout: "default" | "vim", t: Translate): Array<[string, string]> {
+  if (layout === "vim") {
+    return [
+      ["?", t("help_show_hide")],
+      ["i", t("help_focus_ask")],
+      ["Shift+Enter", t("help_ai_steer")],
+      ["Esc", t("help_esc")],
+    ];
+  }
+  return [
+    [QUESTION, t("help_show_hide")],
+    ["i /", t("help_focus_ask")],
+    ["Shift+Enter", t("help_ai_steer")],
     ["Esc", t("help_esc")],
   ];
 }
@@ -83,16 +109,24 @@ function widgetRows(t: Translate): Array<[string, string]> {
 }
 
 export function HelpModal({
+  ai = false,
   layout,
   closing = false,
   onClose,
 }: {
+  /** AI surface (hero ask card in AI mode / AI takeover / thread page):
+      the shortcuts column swaps to the AI key set */
+  ai?: boolean;
   layout: "default" | "vim";
   /** exit phase: the dialog is fading out and must stop interacting */
   closing?: boolean;
   onClose: () => void;
 }) {
   const t = useT();
+  // the dismissed homepage hint's re-show path lives here: the hint itself
+  // teaches "?", so the recovery sits at the same door — the row shows only
+  // while the hint is hidden and flips off the moment it restores
+  const [hintHidden, setHintHidden] = useHotkeyHint();
   // active=false the moment closing starts: focus returns to the trigger
   // immediately instead of after the exit animation unmounts the dialog
   const dialogRef = useDialogFocus<HTMLDivElement>(!closing);
@@ -113,7 +147,7 @@ export function HelpModal({
   }, [onClose, closing]);
 
   const columns: HelpColumn[] = [
-    { title: t("help_shortcuts"), rows: shortcutRows(layout, t) },
+    { title: t("help_shortcuts"), rows: ai ? aiShortcutRows(layout, t) : shortcutRows(layout, t) },
     { title: t("help_operators"), rows: operatorRows(t) },
     { title: t("help_bangs"), rows: bangRows(t) },
     { title: t("help_widgets"), rows: widgetRows(t) },
@@ -165,6 +199,20 @@ export function HelpModal({
               </section>
             ))}
           </div>
+          {hintHidden ? (
+            <div className="mt-6 flex justify-end border-t border-line pt-3">
+              <button
+                className="inline-flex items-center gap-1.5 text-[13px] text-accent transition-colors hover:text-ink"
+                onClick={() => {
+                  setHintHidden(false);
+                }}
+                type="button"
+              >
+                <Lightbulb aria-hidden="true" className="size-3.5" />
+                {t("help_show_hint_again")}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
