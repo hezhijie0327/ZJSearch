@@ -735,14 +735,19 @@ section, do not re-type the numbers."""
                 written, opened, closed = self.apply_learnings(ops, rnd)
                 # the conflict scan: each NEW fact vs the previously
                 # established ones (embedding nearest-neighbour + one
-                # consistency noul) -- a flagged pair rides the fact and
-                # the findings card renders the ⚡ (fail-open: an
-                # unconfigured model simply never flags)
+                # consistency noul) -- a flagged pair rides the fact, the
+                # findings card renders the ⚡ AND a Resolve gap opens so
+                # the loop's own continuation contract chases the
+                # contradiction (fail-open: an unconfigured model simply
+                # never flags)
                 established = [str(fact.get("text") or "") for fact in self.facts[:-written]] if written else []
+                auto_gaps = 0
                 for fact in self.facts[-written:] if written else []:
                     conflict = audit.finding_conflict(str(fact.get("text") or ""), established, account=self.account)
                     if conflict is not None:
                         fact["conflict_with"] = self.facts[conflict].get("id")
+                        if self.open_conflict_gap(fact, self.facts[conflict], rnd):
+                            auto_gaps += 1
                 self.round_learned = True
                 yield (
                     "findings",
@@ -761,6 +766,8 @@ section, do not re-type the numbers."""
                     parts.append(f"opened {opened} gap(s)")
                 if closed:
                     parts.append(f"closed {closed} gap(s)")
+                if auto_gaps:
+                    parts.append(f"flagged {auto_gaps} conflict gap(s) to resolve")
                 feed_text = (
                     "ledger updated: "
                     + ", ".join(parts)

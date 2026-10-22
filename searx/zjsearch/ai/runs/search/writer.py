@@ -173,7 +173,23 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # pattern): a pre-digested, REVISABLE evidence trail beside the raw
         # sources -- support, never substitute (the citation contract still
         # binds every claim to its numbered source)
-        findings_text = "\n".join(f"- {fact.get('text', '')}" for fact in active)
+        by_id = {fact.get("id"): fact for fact in active}
+
+        def _contested(fact: dict) -> bool:
+            if fact.get("contested"):
+                return True
+            return by_id.get(fact.get("conflict_with")) is not None
+
+        findings_text = "\n".join(
+            f"- {fact.get('text', '')}"
+            + (
+                "  [CONTESTED: the gathered evidence or a sibling finding"
+                " contradicts this -- do not state it as settled fact]"
+                if _contested(fact)
+                else ""
+            )
+            for fact in active
+        )
         lines.append(
             shared.block(
                 "findings",
@@ -184,7 +200,10 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
                 are already filtered out).  Use them as your map of the
                 material: they carry the agent's [n] labels and every claim
                 still cites its numbered source; when a finding and a source
-                disagree, the source wins.
+                disagree, the source wins.  A finding marked CONTESTED
+                carries an unresolved contradiction -- present the
+                disagreement in its own sentence or drop the claim; never
+                average contested figures into one.
                 {findings_text}""",
             )
         )

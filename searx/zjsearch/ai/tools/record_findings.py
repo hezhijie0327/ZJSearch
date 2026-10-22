@@ -32,8 +32,14 @@ naming its topics ("DeepSeek-V4", "context window"), reusing the exact
 words earlier facts used over inventing new ones -- the tags are not
 decoration, they place the fact in the knowledge graph and decide which
 topic searches resurface it.  Revise honestly: supersede or retract a
-fact the moment better evidence overturns it.  Skip a round honestly
-when it produced nothing durable."""
+fact the moment better evidence overturns it.  A load-bearing number
+you confirmed but never dispute-checked owes a gap ("is <claim>
+contested anywhere?").  When the ledger flags two facts as conflicting
+it opens a Resolve gap: settle it with a search or a read, then close
+it with the VERDICT -- which side wins and why, or "sources disagree,
+present both" (an honest split IS a resolution; an unresolved conflict
+must never reach the writer silently).  Skip a round honestly when it
+produced nothing durable."""
 """The ledger doctrine -- injected into the system prompt's
 <tool_notes> whenever the tool is registered."""
 

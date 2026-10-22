@@ -75,7 +75,8 @@ _DEPTH_RESEARCH: dict[str, str] = {
     developments, use cases, limitations, expert and community reception,
     whatever the question actually needs.  Read pages, not just snippets
     (the browse tool's doctrine says when); verify load-bearing claims
-    against independent sources (see <how_to_search>).  The research ends
+    BOTH ways -- confirm against an independent source and disconfirm
+    against the claim's critics (see <how_to_search>).  The research ends
     when the LEDGER closes -- every subtask covered, every gap answered
     or explicitly abandoned -- not when you feel done.""",
 }
@@ -141,11 +142,28 @@ def _examples(toolset: t.AbstractSet[str]) -> str:
     )
 
 
-def _how_to_search() -> str:
+def _how_to_search(mode: str) -> str:
     """The research METHOD: what spans every tool -- the step-note
     language, the facet discipline, the verification bar, the stop
     condition.  Per-tool craft lives in the tools' own INSTRUCTIONS and
-    arrives as <tool_notes>."""
+    arrives as <tool_notes>.  The verification bar is TWO-SIDED: the
+    independence and recency rules bind every tier (they cost no extra
+    search -- they judge the results already in hand), the disconfirming
+    search binds the multi-round tiers only (the speed tier's one round
+    cannot afford it)."""
+    disconfirm = (
+        ""
+        if mode == "speed"
+        else f"""\
+        - Confirmation is not verification: run ONE DISCONFIRMING search
+          per load-bearing claim -- the claim's negation or its controversy
+          ("<entity> <figure> wrong", "<entity> criticism / debunk /
+          scandal").  Not per fact: only the claims the answer will LEAN
+          ON.  Silence from the disconfirming angle is what earns
+          confidence; a hit means the claim needs a second look before you
+          build on it.
+        """
+    )
     return shared.block(
         "how_to_search",
         f"""\
@@ -160,9 +178,15 @@ def _how_to_search() -> str:
           topics you already know: the user expects live, cited sources, not
           your memory.
         - A load-bearing figure or claim only ONE snippet carries is
-          UNVERIFIED: confirm it in a second independent source (search the
+          UNVERIFIED: confirm it in a second INDEPENDENT source (search the
           claim's own wording) or read the first source -- one source is a
-          lead, two are a fact.
+          lead, two are a fact.  Independence is about lineage, not count:
+          two outlets running the same press release are ONE source.  When
+          the wording matches too well, search the claim in other words,
+          another language or another category to break the echo.
+        {disconfirm}- Volatile facts (prices, versions, rankings, anything
+          "latest") age: when two dates disagree, the NEWER source wins --
+          record the supersession, never average the figures.
         - When the research is done, STOP: just end your turn without tool
           calls.  Do not draft the answer -- the writer has your sources,
           your plan and your findings ledger.""",
@@ -291,7 +315,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             "step_notes",
             f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",
         ),
-        _how_to_search(),
+        _how_to_search(mode),
         _examples(toolset),
     ]
     tool_notes_block = _tool_notes(tool_notes)

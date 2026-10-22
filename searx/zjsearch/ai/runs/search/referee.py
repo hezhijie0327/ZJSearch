@@ -265,4 +265,107 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
             self.feed_chars += len(note)
         # the wire batch (the loop streams it BEFORE the writer opens): a
         # DECISIONS event, not the bare ledger entry
+        events = [{"e": "decisions", "round": self.round_no, "items": [entry]}]
+        events.extend(self._claim_check())
+        return events
+
+    def _claim_check(self) -> list[dict[str, t.Any]]:
+        """The pre-write CLAIM check (the verification stage's second
+        half): the ledger's load-bearing FIGURES -- active facts carrying
+        digits -- judged against the run's OWN corpus.  BM25 retrieves the
+        evidence each finding touches (the finding's own chunk does not
+        vouch for itself), then one noul asks whether that evidence
+        contradicts it.  A contradicted finding is marked ``contested``
+        on the fact (the writer's findings block renders the marker:
+        present the disagreement, never average) and a feed note says so.
+        Fail-open everywhere: no decision model, an empty corpus or no
+        candidates simply marks nothing."""
+        gate = decision_features("claim_check")
+        if not gate.get("enabled") or not decision.enabled() or not decision.configured():
+            return []
+        candidates = [
+            fact
+            for fact in self.facts
+            if fact.get("status") == "active" and any(ch.isdigit() for ch in str(fact.get("text") or ""))
+        ][-int(gate.get("max_facts", 6) or 6) :]
+        if not candidates or len(self.corpus) == 0:
+            return []
+        started = time.monotonic()
+        graded: dict[int, float] = {}
+
+        def _one(fact: dict[str, t.Any]) -> tuple[int, float]:
+            fid = int(fact.get("id") or 0)
+            try:
+                text = " ".join(str(fact.get("text") or "").split())
+                evidence = [
+                    line[:400]
+                    for line in self.corpus.pack(text, k=4, budget=2_000)
+                    if text[:48] not in line
+                ]
+                if not evidence:
+                    return fid, 0.0  # nothing retrieved reads as no contradiction (fail-open)
+                out = decision.evaluate(
+                    {"finding": text, "evidence": "\n".join(evidence)[:1_600]},
+                    {
+                        "contradicted": {
+                            "type": "noul",
+                            "instructions": (
+                                "Does the evidence contradict this finding -- a figure,"
+                                " date or claim that genuinely conflicts with it?  Answer"
+                                " high only when the evidence states a CONFLICTING value"
+                                " for the same measure; a different measure or scope (for"
+                                " example a main span vs a total length) is NOT a"
+                                " contradiction, and evidence that merely omits the figure"
+                                " is not one either."
+                            ),
+                        }
+                    },
+                    timeout=8.0,
+                    account=self.account,
+                )
+                answers = out.get("answers") if isinstance(out, dict) else None
+                verdict = answers.get("contradicted") if isinstance(answers, dict) else None
+                if isinstance(verdict, dict):
+                    return fid, float(verdict.get("noul") or 0.0)
+            except Exception:  # pylint: disable=broad-except
+                pass
+            return fid, 0.0  # unjudgable counts as PASS (fail-open)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            for fid, score in pool.map(_one, candidates):
+                graded[fid] = score
+        failing = sorted(fid for fid, score in graded.items() if score >= float(gate.get("contradict_min", 0.55)))
+        heads = {
+            int(fact.get("id") or 0): " ".join(str(fact.get("text") or "").split())[:80]
+            for fact in candidates
+        }
+        entry = {
+            "purpose": "claim_check",
+            "question": "Per load-bearing finding: contradicted by the retrieved evidence? (noul 0-1, high scores mark the finding contested)",
+            "target": f"pre-write check of {len(candidates)} ledger figures",
+            "answers": {f"f_{fid}": {"type": "noul", "noul": round(score, 2)} for fid, score in sorted(graded.items())},
+            "record_questions": [
+                {"name": f"f_{fid}", "instructions": f"Finding #{fid}: {head}"} for fid, head in sorted(heads.items())
+            ],
+            "failing": failing,
+            "ms": int((time.monotonic() - started) * 1000),
+        }
+        self.judgments.append(entry)
+        if failing:
+            by_id = {int(fact.get("id") or 0): fact for fact in self.facts}
+            contested = []
+            for fid in failing:
+                fact = by_id.get(fid)
+                if fact is not None:
+                    fact["contested"] = True
+                    contested.append(heads.get(fid, ""))
+            note = (
+                "(claim audit: finding(s) "
+                + "; ".join(f'"{head}"' for head in contested[:3] if head)
+                + " CONTRADICT the gathered evidence -- do NOT state them as"
+                " settled fact: present the disagreement in its own sentence"
+                " or verify before leaning on them.)"
+            )
+            self.feed.append(note)
+            self.feed_chars += len(note)
         return [{"e": "decisions", "round": self.round_no, "items": [entry]}]

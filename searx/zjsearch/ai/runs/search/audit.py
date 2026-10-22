@@ -26,9 +26,17 @@ logger = logging.getLogger(__name__)
 AUDIT_TIMEOUT = 5.0
 """One conflict call's budget (the decision model answers in ~100ms)."""
 
-CONFLICT_SIMILARITY = 0.82
+CONFLICT_SIMILARITY = 0.70
 """The embedding similarity above which two facts are ABOUT the same
-thing -- only there does a consistency judgment mean anything."""
+thing and a consistency judgment means something.  Measured on real
+contradictory pairs (2026-10-22, the bigmodel embedding): a conflicting
+restatement usually scores 0.72-0.81 -- LOWER than a paraphrase,
+because the contradiction rides different wording -- while facts about
+merely adjacent aspects of one domain sit at ~0.66.  The old 0.82 floor
+(prefilter tuned for paraphrase recall) therefore never let a genuine
+conflict reach the judge; 0.70 admits the conflicting band and the one
+consistency noul remains the accuracy carrier (a false recall costs one
+~100ms judgment, fail-open)."""
 
 DEDUP_SIMILARITY = 0.92
 """The near-duplicate floor (the memory-dedup threshold): two ledger

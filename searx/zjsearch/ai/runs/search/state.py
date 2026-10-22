@@ -588,10 +588,14 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
     def ledger_open_items(self) -> tuple[list[str], list[str]]:
         """The ledger's OPEN items: (open subtask titles, open gap
         questions).  The loop's continuation contract reads this -- a run
-        may stop researching only when BOTH lists are empty (or the
-        budget says otherwise)."""
+        may stop researching only when BOTH lists are empty (or the budget
+        says otherwise).  Conflict gaps lead the gap list (the same order
+        the ledger echo teaches): the nudge's scarce name slots must show
+        the contradiction first -- an unresolved conflict outranks a fresh
+        facet."""
         tasks = [str(task.get("title") or "") for task in self.coverage.task_list if task.get("status") != "done"]
         gaps = [str(gap.get("q") or "") for gap in self.gaps if gap.get("status") == "open"]
+        gaps.sort(key=lambda q: 0 if q.startswith("Resolve conflict:") else 1)
         return tasks, gaps
 
     def apply_learnings(self, ops: dict[str, t.Any], rnd: int) -> tuple[int, int, int]:
@@ -675,13 +679,57 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
                     closed += 1
         return written, opened, closed
 
+    def open_conflict_gap(self, fact: dict[str, t.Any], other: dict[str, t.Any], rnd: int) -> bool:
+        """The conflict scan's follow-through: a flagged pair opens ONE
+        ``Resolve`` gap (deduped on the pair's texts), so the contradiction
+        joins the loop's own continuation contract -- the next round is
+        steered at it like any other open question, and the model's
+        ``close_gaps`` verdict (which side wins, or "sources disagree,
+        present both") is the auditable resolution.  Returns whether a gap
+        was opened (the caller's feed counts it)."""
+        head_a = " ".join(str(fact.get("text") or "").split())[:70]
+        head_b = " ".join(str(other.get("text") or "").split())[:70]
+        q = f'Resolve conflict: "{head_a}" vs "{head_b}"'
+        if any(str(gap.get("q") or "").lower() == q.lower() for gap in self.gaps):
+            return False
+        self._ledger_seq += 1
+        self.gaps.append(
+            {
+                "id": self._ledger_seq,
+                "q": q,
+                "why": (
+                    "The ledger conflict scan flagged these two facts as"
+                    " inconsistent -- verify which source holds (or that"
+                    " both describe different scopes/dates) and close with"
+                    " the verdict."
+                ),
+                "status": "open",
+                "close_as": "",
+                "round": rnd,
+            }
+        )
+        return True
+
     def ledger_echo(self) -> str:
         """The tool feed's ledger summary -- the per-round injection that
         keeps the model aiming at its own gaps (the researcher reads this
-        result before the next turn composes)."""
-        active = sum(1 for fact in self.facts if fact["status"] == "active")
+        result before the next turn composes).  Conflict gaps lead (the
+        contradiction is the most load-bearing open item -- it must be
+        seen even in a crowded ledger) and the single-source counter is
+        the self-check mirror for the verification bar."""
+        active_facts = [fact for fact in self.facts if fact["status"] == "active"]
         open_gaps = [gap for gap in self.gaps if gap["status"] == "open"]
-        lines = [f"LEDGER: {active} active fact(s)."]
+        open_gaps.sort(
+            key=lambda gap: 0 if str(gap.get("q") or "").startswith("Resolve conflict:") else 1
+        )
+        lines = [f"LEDGER: {len(active_facts)} active fact(s)."]
+        solo = sum(1 for fact in active_facts if len(fact.get("refs") or []) < 2)
+        if active_facts and solo:
+            lines.append(
+                f"{solo} of {len(active_facts)} rest on ONE source -- lean on"
+                " those only after a second independent source or a"
+                " disconfirming search."
+            )
         if open_gaps:
             shown = "\n".join(f"  {index}. {gap['q']}" for index, gap in enumerate(open_gaps[:5], 1))
             lines.append(f"Open gaps ({len(open_gaps)}):\n{shown}")

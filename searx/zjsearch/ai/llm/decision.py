@@ -148,6 +148,14 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
         "ladder_balanced": [4, 8, 16, 24, 32],
     },
     "evidence_check": {"enabled": True, "head": 8, "pass_min": 0.45},
+    # the pre-write CLAIM check (rides the evidence_check pass,
+    # referee.py): the ledger's load-bearing figures judged against
+    # BM25-retrieved corpus evidence -- a finding the evidence
+    # CONTRADICTS is marked contested for the writer (present the
+    # disagreement, never average).  The noul asks the POSITIVE question
+    # (contradicted?) -- small models read it reliably, the double
+    # negative did not survive the live probe -- so a HIGH score flags.
+    "claim_check": {"enabled": True, "max_facts": 6, "contradict_min": 0.55},
     # the report SYNTHESIZE's per-section citation spot check (runs/search/
     # report/synth.py): sampled claims judged against their sources, a
     # failing claim earns one targeted rewrite BEFORE delivery
