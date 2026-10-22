@@ -40,6 +40,7 @@ import typing as t
 from searx.zjsearch.ai.prompts import spine as shared
 from searx.zjsearch.ai.tools import (
     BROWSE_TOOL,
+    DELEGATE_RESEARCH_TOOL,
     RECORD_FINDINGS_TOOL,
     SEARCH_WEB_TOOL,
     UPDATE_PLAN_TOOL,
@@ -96,14 +97,15 @@ def _role() -> str:
     )
 
 
-def _examples(toolset: t.AbstractSet[str]) -> str:
-    """The few-shot block, composed from the tools THIS run registered: an
-    example demonstrating an unregistered tool teaches a call that lands
-    as an ``error: empty query`` row (the page reader rides only when the
-    browse tool is registered; the task tool registers for the tier and
-    the depth block says what each tier's round rewards).  The last
-    example shows the LATER-round intent shape: reflection on the results
-    so far, not a restatement of the question.
+def _examples(toolset: t.AbstractSet[str], mode: str) -> str:
+    """The few-shot block, composed from the tools THIS run registered
+    (an example demonstrating an unregistered tool teaches a call that
+    lands as an ``error: empty query`` row) and from the tier (the
+    disconfirming-search recipe rides the same ``mode != "speed"`` gate
+    as the method block's rule -- an example teaching a second-round
+    behavior must not contradict the speed tier's one-round policy).  The
+    last example shows the LATER-round intent shape: reflection on the
+    results so far, not a restatement of the question.
 
     RECIPES, not a transcript: a ``User:/You:/Action:`` transcript teaches
     literal imitation -- qwen-family models answer such examples by
@@ -114,9 +116,34 @@ def _examples(toolset: t.AbstractSet[str]) -> str:
     and the calls as TOOL semantics."""
     page_tool = BROWSE_TOOL in toolset
     task_tool = UPDATE_PLAN_TOOL in toolset
+    delegating = DELEGATE_RESEARCH_TOOL in toolset
     reader = ", then a browse read on the model card url" if page_tool else ""
     plan = ", and update_plan with that round's subtasks" if task_tool else ""
     reflect_reader = f", reading the two strongest hits with {BROWSE_TOOL} reads" if page_tool else ""
+    disconfirm = (
+        ""
+        if mode == "speed"
+        else """
+        - A figure the answer will LEAN ON ("Company X's Q3 revenue"):
+          confirm it in a second INDEPENDENT source and hunt the
+          disconfirming angle in the same round -- search_web ("Company X
+          Q3 revenue", "Company X Q3 revenue wrong OR corrected") --
+          silence from the second call is what earns confidence.
+"""
+    )
+    delegate = (
+        ""
+        if not delegating
+        else f"""
+        - A subtask that is its own deep dive ("compare the top three
+          vector databases") while the other facets stay yours:
+          delegate_research (title a 4-12 word label, objective the exact
+          question with entities and constraints named, output_format the
+          digest shape you need, tool_guidance where to look, boundaries
+          what the other subtasks own) -- and keep researching YOUR facets
+          in the same round; the digest returns as a <task_result>.
+"""
+    )
     return shared.block(
         "examples",
         f"""\
@@ -127,10 +154,10 @@ def _examples(toolset: t.AbstractSet[str]) -> str:
         - "What is DeepSeek-V4-Flash's context length?": snippets rarely carry
           exact numbers -- say that, then search_web ("DeepSeek-V4-Flash
           context length site:huggingface.co"){reader}.
-
+{disconfirm}
         - "Should I pick A or B?": both sides before any verdict -- search_web
           ("A pros cons", "B pros cons"){plan}.
-
+{delegate}
         - A second round opens with reflection on the results so far ("[4]
           covers the official specs, but pricing is missing -- this round
           targets reseller pages{reflect_reader}"), never a restatement of the
@@ -316,7 +343,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",
         ),
         _how_to_search(mode),
-        _examples(toolset),
+        _examples(toolset, mode),
     ]
     tool_notes_block = _tool_notes(tool_notes)
     if tool_notes_block:
