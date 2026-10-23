@@ -958,7 +958,9 @@ def tab_new(session_id: str, url: str) -> dict[str, t.Any]:
             await _settle_page(page)
             _register_tab(sess, page)
             outline = await _snapshot_page(sess, page)
-            return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
+            views = _tab_view(sess.pages, sess.active)
+            await _tab_titles(sess.pages, views)
+            return {"url": str(page.url), "title": await page.title(), "snapshot": outline, "tabs": views}
 
         return _run(run())
 
@@ -984,7 +986,15 @@ def tab_switch(session_id: str, index: t.Any) -> dict[str, t.Any]:
             sess.page = sess.pages[idx]
             gate.visual_pages[id(sess.page)] = sess.page
             outline = await _snapshot_page(sess, sess.page)
-            return {"index": idx, "url": str(sess.page.url), "title": await sess.page.title(), "snapshot": outline}
+            views = _tab_view(sess.pages, sess.active)
+            await _tab_titles(sess.pages, views)
+            return {
+                "index": idx,
+                "url": str(sess.page.url),
+                "title": await sess.page.title(),
+                "snapshot": outline,
+                "tabs": views,
+            }
 
         return _run(run())
 

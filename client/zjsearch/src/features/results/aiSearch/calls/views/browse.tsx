@@ -126,6 +126,62 @@ function BrowserOutline({ snapshot, t }: { snapshot: string; t: ToolRowProps["t"
   );
 }
 
+/** The tab action's rendered result: the session's tab strip as chips --
+    the mirror tab bar's vocabulary at row scale (index badge, title,
+    the active tab in accent). */
+function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tabs"]>; t: ToolRowProps["t"] }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {tabs.map((tab) => (
+        <span
+          className={`inline-flex min-w-0 max-w-56 items-center gap-1 rounded-md border px-1.5 py-1 text-xs ${
+            tab.active ? "border-accent-strong bg-accent-soft text-accent" : "border-line text-ink-3"
+          }`}
+          key={tab.index}
+          title={tab.url}
+        >
+          <span className="shrink-0 font-mono leading-none">[{tab.index}]</span>
+          <span className="truncate">{tab.title || tab.url}</span>
+          {tab.active ? <span className="shrink-0 font-mono leading-none">✓</span> : null}
+        </span>
+      ))}
+      <span className="sr-only">{t("ai_browser_act_tab")}</span>
+    </div>
+  );
+}
+
+/** The multi action's rendered result: the numbered per-step lines --
+    the service composes them, the row shows the batch's shape (which
+    steps ran, which failed, where it stopped). */
+function MultiSteps({ feed }: { feed: string }) {
+  const steps = feed.split("\n").filter((line) => /^\d+\. /.test(line));
+  if (!steps.length) {
+    return null;
+  }
+  return (
+    <ol className="mt-1 space-y-0.5">
+      {steps.map((line) => {
+        const cut = line.indexOf(". ");
+        const failed = line.slice(cut).includes("error:");
+        return (
+          <li className="flex min-w-0 items-start gap-1.5 text-xs" key={line.slice(0, 24)}>
+            <span
+              className={`shrink-0 rounded px-1 font-mono leading-4 ${
+                failed ? "bg-danger/10 text-danger" : "bg-accent-soft text-accent"
+              }`}
+            >
+              {line.slice(0, cut)}
+            </span>
+            <span className={`min-w-0 flex-1 ${failed ? "text-danger" : "text-ink-2"}`} dir="auto">
+              {line.slice(cut + 2)}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /** The screenshot action's rendered result: the shot as a FIXED-HEIGHT
     thumb (a viewport shot and an element close-up read at the same scale
     -- a full-width render let a tall close-up shove the whole timeline
@@ -206,8 +262,35 @@ export const browseView: ToolView = {
       }
       case "press":
         return `${t("ai_browser_act_press")} ${String(args?.key ?? "").trim()}`.trim();
-      case "scroll":
-        return `${t("ai_browser_act_scroll")} ${String(args?.direction ?? "") === "up" ? "↑" : "↓"}`;
+      case "scroll": {
+        const target = String(args?.text ?? "").trim();
+        return target
+          ? `${t("ai_browser_act_scroll")} "${target.slice(0, 24)}${target.length > 24 ? "…" : ""}"`
+          : `${t("ai_browser_act_scroll")} ${String(args?.direction ?? "") === "up" ? "↑" : "↓"}`;
+      }
+      case "history":
+        return t(
+          String(args?.op ?? "") === "forward"
+            ? "ai_browser_act_forward"
+            : String(args?.op ?? "") === "reload"
+              ? "ai_browser_act_reload"
+              : "ai_browser_act_back",
+        );
+      case "tab": {
+        const op = String(args?.op ?? "list");
+        const idx = args?.index;
+        const verb =
+          op === "new"
+            ? t("ai_browser_tab_new")
+            : op === "switch"
+              ? t("ai_browser_tab_switch")
+              : op === "close"
+                ? t("ai_browser_tab_close")
+                : t("ai_browser_tab_list");
+        return idx !== undefined && (op === "switch" || op === "close") ? `${verb} [${idx}]` : verb;
+      }
+      case "multi":
+        return t("ai_browser_act_multi");
       case "screenshot": {
         const ref = String(args?.ref ?? "").trim();
         return ref ? `${t("ai_browser_act_screenshot")} ${ref}` : t("ai_browser_act_screenshot");
@@ -274,6 +357,22 @@ export const browseView: ToolView = {
         </>
       );
     }
+    if (action === "tab") {
+      return (
+        <>
+          {call.tabs?.length ? <TabStripView t={t} tabs={call.tabs} /> : null}
+          {call.page ? <LocationLine page={call.page} /> : null}
+        </>
+      );
+    }
+    if (action === "multi") {
+      return (
+        <>
+          <MultiSteps feed={call.feed ?? ""} />
+          {call.page ? <LocationLine page={call.page} /> : null}
+        </>
+      );
+    }
     if (
       action === "click" ||
       action === "type" ||
@@ -281,7 +380,8 @@ export const browseView: ToolView = {
       action === "scroll" ||
       action === "hover" ||
       action === "select" ||
-      action === "drag"
+      action === "drag" ||
+      action === "history"
     ) {
       return call.page ? <LocationLine page={call.page} /> : null;
     }
@@ -289,5 +389,6 @@ export const browseView: ToolView = {
     // (call.text -> CallContent); returning null falls through to it
     return null;
   },
-  expandable: ({ call, results }) => Boolean(call.img || call.snapshot || call.page || call.text) || results.length > 0,
+  expandable: ({ call, results }) =>
+    Boolean(call.img || call.snapshot || call.page || call.text || call.tabs) || results.length > 0,
 };

@@ -230,6 +230,8 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         sources event; returns ``(feed, extra, gathered)``."""
         feed = result.feed
         extra: dict[str, t.Any] = {"page": result.page}
+        if result.tabs:
+            extra["tabs"] = list(result.tabs)
         if result.frames:
             extra["img"] = f"data:image/jpeg;base64,{result.frames[-1]['img']}"
         if result.snapshot is not None:

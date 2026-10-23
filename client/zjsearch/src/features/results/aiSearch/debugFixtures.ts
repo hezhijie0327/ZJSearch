@@ -2683,11 +2683,11 @@ const BROWSER_OPS_STAGE: DebugScenario = {
       e: "browser",
       url: "https://cn.bing.com/search?q=安吉云上草原",
       title: "安吉云上草原 - Search",
-      img: TINY_JPEG,
+      img: BING_ANN_JPEG,
       w: 1920,
       h: 1080,
       // the scroll-to-text mark: the box rides the matched element, the
-      // label reads 滚动 "百度百科"
+      // label reads 滚动 "百度百科" -- over the real annotated frame
       px: 340,
       py: 706,
       pk: "scroll",
@@ -2696,12 +2696,21 @@ const BROWSER_OPS_STAGE: DebugScenario = {
     },
     {
       e: "call",
-      id: 1,
+      id: 2,
       call: 1,
       status: "ok",
       ms: 5240,
       url: "https://www.bing.com/search?q=安吉云上草原+门票价格",
       n: 86,
+      tabs: [
+        { index: 0, url: "https://cn.bing.com/search?q=安吉云上草原", title: "安吉云上草原 - Search", active: false },
+        {
+          index: 1,
+          url: "https://www.bing.com/search?q=安吉云上草原+门票价格",
+          title: "安吉云上草原门票价格 - Search",
+          active: true,
+        },
+      ],
       feed: "new tab opened and active: https://www.bing.com/search?q=安吉云上草原+门票价格 -- 安吉云上草原门票价格 - Search\n\ne1\tinput\t安吉云上草原 门票价格\n(86 refs; tab [0] sleeps beside it)",
     },
     {
@@ -2736,7 +2745,7 @@ const BROWSER_OPS_STAGE: DebugScenario = {
     ),
     {
       e: "call",
-      id: 1,
+      id: 3,
       call: 1,
       status: "ok",
       ms: 4120,
@@ -2774,18 +2783,18 @@ const BROWSER_OPS_STAGE: DebugScenario = {
         },
       ],
     },
-    { e: "open", id: 9, kind: "write", round: 0 },
+    { e: "open", id: 4, kind: "write", round: 0 },
     { e: "phase", name: "write" },
     {
       e: "think",
-      id: 9,
+      id: 4,
       t: "两个搜索页 + 百科条目互相印证:门票 260 元、缆车 280 元[1][2]。浏览器探索的页面已在来源里,直接给结论。",
     },
     {
       e: "answer",
       t: "安吉云上草原门票 **260 元/人**,上下缆车另收 **280 元**[1];百科条目与票价细节已核对[2]。",
     },
-    { e: "close", id: 9 },
+    { e: "close", id: 4 },
     {
       e: "settle",
       status: "done",

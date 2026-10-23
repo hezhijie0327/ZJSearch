@@ -31,6 +31,7 @@ class ActionResult(t.NamedTuple):
     page: dict[str, str] | None = None
     snapshot: str | None = None
     elements: int = 0
+    tabs: t.Sequence[dict[str, t.Any]] | None = None
 
 
 def _obs(state: dict[str, str]) -> str:
@@ -331,20 +332,22 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
     if op == "new":
         url = _guard_open_url(str(args.get("url") or ""))
         state = session.tab_new(session_id, url)
-        return _outline_result(
+        result = _outline_result(
             f"new tab opened and active: {state['url']} -- {state['title']}\n\n{state['snapshot']}",
             state,
             session_id,
         )
+        return result._replace(tabs=state.get("tabs"))
     if op == "switch":
         state = session.tab_switch(session_id, args.get("index"))
-        return _outline_result(
+        result = _outline_result(
             f"switched to tab [{state['index']}]: {state['url']} -- {state['title']}"
             " (refs are per-page -- this page's outline follows)\n\n"
             f"{state['snapshot']}",
             state,
             session_id,
         )
+        return result._replace(tabs=state.get("tabs"))
     if op == "close":
         state = session.tab_close(session_id, args.get("index"))
         remaining = state.get("tabs") or []
@@ -357,6 +360,7 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
             feed=feed,
             frames=[{**session.frame(session_id), "agent": session_id}],
             page=None,
+            tabs=state.get("tabs"),
         )
     state = session.tab_list(session_id)
     tabs = state.get("tabs") or []
@@ -366,6 +370,7 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
     return ActionResult(
         feed=feed,
         frames=[{**session.frame(session_id), "agent": session_id}],
+        tabs=tabs,
     )
 
 

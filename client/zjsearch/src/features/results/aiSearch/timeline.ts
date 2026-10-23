@@ -126,6 +126,9 @@ export interface AiSearchCall {
       click-through navigation) -- the expansion renders the session's
       interactive-element list */
   snapshot?: string;
+  /** browse tab rows: the session's tab strip (index / url / title /
+      active) -- the expansion renders the mirror tab strip's chips */
+  tabs?: Array<{ index: number; url: string; title: string; active: boolean }>;
   /** calculate: the exact evaluated result (the row shows expr = result) */
   result?: string;
   /** evaluate: the STRUCTURED verdict (question name -> choice/score/noul
@@ -993,6 +996,16 @@ export function applyEvent(
                 : {}),
               ...(event.img !== undefined ? { img: String(event.img ?? "") || undefined } : {}),
               ...(event.snapshot !== undefined ? { snapshot: String(event.snapshot ?? "") || undefined } : {}),
+              ...(Array.isArray(event.tabs)
+                ? {
+                    tabs: (event.tabs as Array<Record<string, unknown>>).map((t) => ({
+                      index: Number(t.index) || 0,
+                      url: String(t.url ?? ""),
+                      title: String(t.title ?? ""),
+                      active: t.active === true,
+                    })),
+                  }
+                : {}),
             }
           : call;
       // a page read's extracted text persists as a document row (the
