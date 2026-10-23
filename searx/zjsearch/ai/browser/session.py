@@ -125,16 +125,20 @@ class SessionError(Exception):
 
 
 class _Session:  # pylint: disable=too-few-public-methods
-    """One keyed session: its page, its lock, its wait_user flag, and the
+    """One keyed session: its page, its lock, its wait_user flag, the
     MODEL POINTER -- the viewport-space landing point of the last
     ref-targeted action (click / type), so the client can draw a cursor
-    that shows where the model is working."""
+    that shows where the model is working -- and the ref NAME DIRECTORY
+    (the last snapshot's ref -> accessible-name map, the action mark's
+    vocabulary: the mirror label names the element it touched, not the
+    machine ref)."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.page: "Page | None" = None
         self.wait_done = threading.Event()
         self.mark: dict[str, t.Any] | None = None
+        self.names: dict[str, str] = {}
 
 
 _SESSIONS: dict[str, _Session] = {}
@@ -261,7 +265,7 @@ def open_url(session_id: str, url: str) -> dict[str, str]:
             except Exception:  # pylint: disable=broad-except
                 pass
             await page.wait_for_timeout(browser_config.settle_ms())
-            outline = await _snapshot_page(page)
+            outline = await _snapshot_page(sess, page)
             return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
 
         return _run(run())
@@ -274,13 +278,13 @@ def snapshot(session_id: str = LEAD) -> dict[str, str]:
 
         async def run() -> dict[str, str]:
             page = await _ensure_page(sess)
-            outline = await _snapshot_page(page)
+            outline = await _snapshot_page(sess, page)
             return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
 
         return _run(run())
 
 
-async def _post_action_state(page: "Page", before_url: str, settle_wait_ms: int) -> dict[str, t.Any]:
+async def _post_action_state(sess: "_Session", page: "Page", before_url: str, settle_wait_ms: int) -> dict[str, t.Any]:
     """The state after one mutating action: url + title, PLUS a fresh
     outline when the action navigated (navigation invalidates every
     injected ref -- riding the new outline with the action's result is
@@ -293,7 +297,7 @@ async def _post_action_state(page: "Page", before_url: str, settle_wait_ms: int)
     out: dict[str, t.Any] = {"url": str(page.url), "title": await page.title()}
     if out["url"] != before_url:
         await _settle_page(page)
-        out["snapshot"] = await _snapshot_page(page)
+        out["snapshot"] = await _snapshot_page(sess, page)
     return out
 
 
@@ -348,13 +352,31 @@ def _live_frames(page: "Page") -> list[t.Any]:
 _SNAP_FRAME_HEADER = "\n-- frame f{} {} --\n"
 
 
-async def _snapshot_page(page: "Page") -> str:
+_NAME_LINE_RE = re.compile(r"^((?:f\d+)?e\d+)\t[^\t]*\t(.*)$")
+
+
+def _index_names(outline: str) -> dict[str, str]:
+    """The snapshot outline's ref -> accessible-name directory -- the
+    action mark's vocabulary (the mirror label names the element it
+    touched, "clicked 门票预订", not the machine ref).  Rebuilt WHOLESALE
+    per scan: refs die to re-renders, the model's next action addresses
+    the current outline, and an unbounded dict must not outlive them."""
+    out: dict[str, str] = {}
+    for line in outline.splitlines():
+        match = _NAME_LINE_RE.match(line)
+        if match:
+            out[match.group(1)] = match.group(2)
+    return out
+
+
+async def _snapshot_page(sess: "_Session", page: "Page") -> str:
     """The multi-frame outline: the MAIN frame first (its refs stay the
     un-prefixed ``e12`` every stored thread speaks), then each real child
     frame re-scanned with its refs prefixed ``f1e5`` under a one-line
     header.  Child frames scan with their OWN cap
     (:data:`SNAPSHOT_CHILD_FRAME_CAP`) -- an element-dense main page must
-    not starve the embedded widget the aimed interaction needs."""
+    not starve the embedded widget the aimed interaction needs.  The
+    scan also refreshes the session's ref-name directory."""
     outlines: list[str] = [await page.evaluate(_SNAPSHOT_JS)]
     frames = _live_frames(page)
     child_lines = 0
@@ -363,7 +385,7 @@ async def _snapshot_page(page: "Page") -> str:
             sub = await frame.evaluate(
                 _SNAPSHOT_JS_TEMPLATE % SNAPSHOT_CHILD_FRAME_CAP
             )
-        except Exception:  # pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-exception-caught
             continue  # a frame that forbids evaluation (crashed, detached) reads as absent
         if not sub:
             continue
@@ -375,34 +397,40 @@ async def _snapshot_page(page: "Page") -> str:
         child_lines += len(sub.splitlines())
         if child_lines >= SNAPSHOT_CHILD_FRAME_CAP[1] * 2:
             break
-    return "\n".join(outlines)
+    outline = "\n".join(outlines)
+    sess.names = _index_names(outline)
+    return outline
 
 
 async def _mark_ref_action(
-    sess: "_Session", holder: "Page | object", sel: str, kind: str, label: str
+    sess: "_Session", holder: "Page | object", sel: str, kind: str, ref: str, name: str | None = None
 ) -> None:
     """Best-effort ACTION MARK of one ref-targeted action: the element's
-    bounding box + landing point + a short intent label ride the next
-    mirror frame, and the takeover viewer sees WHICH element the action
-    touched and what it was -- not just a cursor dot.  An unresolvable
+    bounding box + landing point ride the next mirror frame, and the
+    takeover viewer sees WHICH element the action touched -- labeled by
+    the element's OWN name from the snapshot directory (an unknown ref
+    falls back to the raw id; an explicit ``name`` -- the typed text,
+    the chosen options -- outranks the lookup).  An unresolvable
     box (detached mid-race, zero-size) degrades to the point-only mark;
-    the mark is a visibility aid, never action-critical."""
+    the mark is a visibility aid, never action-critical.  The VERB is
+    the client's (``pk`` + the i18n'd action key) -- the server ships
+    the vocabulary, never the sentence."""
     try:
         loc = holder.locator(sel).first
         await loc.scroll_into_view_if_needed(timeout=1_500)
         box = await loc.bounding_box(timeout=1_500)
     except Exception:  # pylint: disable=broad-exception-caught
         box = None
+    mark: dict[str, t.Any] = {"pk": kind, "name": name if name is not None else sess.names.get(ref) or ref}
     if box:
-        sess.mark = {
-            "px": int(box["x"] + box["width"] / 2),
-            "py": int(box["y"] + box["height"] / 2),
-            "pk": kind,
-            "label": label,
-            "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])],
-        }
-    else:
-        sess.mark = {"pk": kind, "label": label}
+        mark.update(
+            {
+                "px": int(box["x"] + box["width"] / 2),
+                "py": int(box["y"] + box["height"] / 2),
+                "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])],
+            }
+        )
+    sess.mark = mark
 
 
 def click(session_id: str, ref: str) -> dict[str, t.Any]:
@@ -413,9 +441,9 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
             holder, sel = await _resolve_holder(page, ref)
-            await _mark_ref_action(sess, holder, sel, "click", f"clicked {ref}")
+            await _mark_ref_action(sess, holder, sel, "click", ref)
             await holder.click(sel, timeout=_ACTION_TIMEOUT_MS)
-            return await _post_action_state(page, before, 600)
+            return await _post_action_state(sess, page, before, 600)
 
         return _run(run())
 
@@ -428,11 +456,11 @@ def type_text(session_id: str, ref: str, text: str, submit: bool) -> dict[str, t
             page = await _ensure_page(sess)
             before = str(page.url)
             holder, sel = await _resolve_holder(page, ref)
-            await _mark_ref_action(sess, holder, sel, "type", f"typed {str(text)[:24]!r}")
+            await _mark_ref_action(sess, holder, sel, "type", ref, name=str(text)[:60])
             await holder.fill(sel, str(text), timeout=_ACTION_TIMEOUT_MS)
             if submit:
                 await page.keyboard.press("Enter")
-            return await _post_action_state(page, before, 400)
+            return await _post_action_state(sess, page, before, 400)
 
         return _run(run())
 
@@ -445,7 +473,7 @@ def press_key(session_id: str, key: str) -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
             await page.keyboard.press(str(key))
-            return await _post_action_state(page, before, 300)
+            return await _post_action_state(sess, page, before, 300)
 
         return _run(run())
 
@@ -483,9 +511,9 @@ def click_xy(session_id: str, x: t.Any, y: t.Any) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
-            sess.mark = {"px": cx, "py": cy, "pk": "click", "label": f"clicked at {cx},{cy}"}
+            sess.mark = {"px": cx, "py": cy, "pk": "click"}
             await page.mouse.click(cx, cy, timeout=_ACTION_TIMEOUT_MS)
-            return await _post_action_state(page, before, 600)
+            return await _post_action_state(sess, page, before, 600)
 
         return _run(run())
 
@@ -500,9 +528,9 @@ def hover(session_id: str, ref: str) -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
             holder, sel = await _resolve_holder(page, ref)
-            await _mark_ref_action(sess, holder, sel, "hover", f"hovered {ref}")
+            await _mark_ref_action(sess, holder, sel, "hover", ref)
             await holder.locator(sel).first.hover(timeout=_ACTION_TIMEOUT_MS)
-            return await _post_action_state(page, before, 400)
+            return await _post_action_state(sess, page, before, 400)
 
         return _run(run())
 
@@ -523,9 +551,9 @@ def select_options(session_id: str, ref: str, values: list[str]) -> dict[str, t.
             holder, sel = await _resolve_holder(page, ref)
             chosen = await holder.locator(sel).first.select_option(clean, timeout=_ACTION_TIMEOUT_MS)
             await _mark_ref_action(
-                sess, holder, sel, "select", f"selected: {', '.join(str(c) for c in chosen)}"
+                sess, holder, sel, "select", ref, name=", ".join(str(c) for c in chosen)[:80]
             )
-            return {**(await _post_action_state(page, before, 300)), "chosen": [str(c) for c in chosen]}
+            return {**(await _post_action_state(sess, page, before, 300)), "chosen": [str(c) for c in chosen]}
 
         return _run(run())
 
@@ -544,20 +572,13 @@ def drag(session_id: str, x1: t.Any, y1: t.Any, x2: t.Any, y2: t.Any, steps: int
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
-            sess.mark = {
-                "px": ax,
-                "py": ay,
-                "x2": bx,
-                "y2": by,
-                "pk": "drag",
-                "label": f"dragged {ax},{ay} -> {bx},{by}",
-            }
+            sess.mark = {"px": ax, "py": ay, "x2": bx, "y2": by, "pk": "drag"}
             await page.mouse.move(ax, ay)
             await page.mouse.down()
             await page.mouse.move(bx, by, steps=n)
             await page.wait_for_timeout(120)
             await page.mouse.up()
-            return await _post_action_state(page, before, 600)
+            return await _post_action_state(sess, page, before, 600)
 
         return _run(run())
 
@@ -666,8 +687,9 @@ def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
 
 def frame(session_id: str = LEAD) -> dict[str, t.Any]:
     """The mirror frame: the same capture at mirror quality, PLUS the
-    model pointer when one has been tracked (px/py viewport space, pk the
-    action kind -- the client draws the cursor and its click ripple)."""
+    action mark when one has been tracked -- px/py viewport space, pk
+    the action kind, name the touched element's own name (the client
+    draws the cursor, its click ripple and the i18n'd intent label)."""
     out = screenshot_b64(session_id, quality=55)
     mark = getattr(get(session_id), "mark", None)
     if mark:

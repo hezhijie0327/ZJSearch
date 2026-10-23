@@ -193,12 +193,12 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
                     "px": int(box[0] + box[2] / 2),
                     "py": int(box[1] + box[3] / 2),
                     "pk": "shot",
-                    "label": f"screenshot {ref}",
+                    "name": session.ref_name(session_id, ref),
                     "box": box,
                 },
             )
         else:
-            session.set_mark(session_id, {"pk": "shot", "label": f"screenshot {ref}"})
+            session.set_mark(session_id, {"pk": "shot", "name": session.ref_name(session_id, ref)})
     elif all(v is not None for v in region):
         # the region crop: a viewport rectangle by coordinates (the same
         # viewport space the coordinate clicks aim in)
@@ -214,7 +214,6 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
                 "px": int(box[0] + box[2] / 2),
                 "py": int(box[1] + box[3] / 2),
                 "pk": "shot",
-                "label": f"screenshot region {box[0]},{box[1]} {box[2]}x{box[3]}",
                 "box": box,
             },
         )
@@ -226,7 +225,6 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
                 "px": int(shot["w"] / 2),
                 "py": int(shot["h"] / 2),
                 "pk": "shot",
-                "label": "screenshot",
             },
         )
     return ActionResult(

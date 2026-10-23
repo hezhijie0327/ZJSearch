@@ -397,13 +397,14 @@ export interface AiSearchRun {
     py?: number;
     pk?: string;
     /** the LAST action's visual mark: the touched element's viewport bbox
-        [x, y, w, h], the drag endpoint, and a short intent label -- the
-        mirror renders the box + gesture so the viewer sees WHAT the model
-        did, not just where its cursor rests */
+        [x, y, w, h], the drag endpoint, and the element's OWN name (the
+        server ships the vocabulary; the client composes the i18n'd verb
+        -- the mirror renders the box + gesture + label so the viewer
+        sees WHAT the model did, not just where its cursor rests) */
     box?: number[];
     x2?: number;
     y2?: number;
-    label?: string;
+    name?: string;
   } | null;
   /** ALL live browser sessions keyed by session id (v2.1 R3B: the lead
       plus one per delegating subagent -- the rail card's tab strip).
@@ -421,6 +422,10 @@ export interface AiSearchRun {
       px?: number;
       py?: number;
       pk?: string;
+      box?: number[];
+      x2?: number;
+      y2?: number;
+      name?: string;
     }
   >;
 }
@@ -1051,7 +1056,7 @@ export function applyEvent(
           : {}),
         ...(Array.isArray(event.box) ? { box: event.box.map(Number) } : {}),
         ...(event.x2 !== undefined && event.y2 !== undefined ? { x2: Number(event.x2), y2: Number(event.y2) } : {}),
-        ...(event.label !== undefined ? { label: String(event.label) } : {}),
+        ...(event.name !== undefined ? { name: String(event.name) } : {}),
       };
       runs[lastIdx] = {
         ...run,

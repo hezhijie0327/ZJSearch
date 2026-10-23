@@ -1571,10 +1571,11 @@ const BROWSER_STAGE: DebugScenario = {
       px: 640,
       py: 156,
       pk: "click",
-      // the action mark: the touched element's viewport box + the intent
-      // label -- the mirror draws the highlight, not just a cursor dot
+      // the action mark: the touched element's viewport box + its OWN
+      // name (the server's snapshot vocabulary) -- the client composes
+      // the i18n'd verb, the mirror draws the highlight + the label
       box: [560, 130, 160, 52],
-      label: "clicked e3",
+      name: "登录",
     },
     {
       e: "sources",
@@ -1629,6 +1630,7 @@ const BROWSER_STAGE: DebugScenario = {
       px: 912,
       py: 402,
       pk: "type",
+      name: "安吉云上草原",
     },
     {
       e: "browser",

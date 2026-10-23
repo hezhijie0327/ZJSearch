@@ -55,17 +55,50 @@ function addressOf(url: string): string {
 }
 
 /** The ACTION MARK: the session's last model action drawn ON the frame --
-    the touched element's box, the drag's gesture line, and a short intent
+    the touched element's box, the drag's gesture line, and an intent
     label, plus the cursor + one-shot click ripple at the landing point
     (px/py viewport space, rendered as percentages of the displayed
-    frame).  A synthetic overlay -- viewport screenshots never contain
-    one -- so the viewer sees WHAT the model did, not just where its
-    cursor rests.  Everything is optional; old frames render bare. */
+    frame).  The SERVER ships the vocabulary (the action kind + the
+    element's own name from its snapshot directory); the CLIENT speaks
+    the sentence -- the same i18n'd action keys the timeline rows use,
+    so the label reads 点击 门票预订, not "clicked e194".  A synthetic
+    overlay -- viewport screenshots never contain one -- so the viewer
+    sees WHAT the model did, not just where its cursor rests.  Everything
+    is optional; old frames render bare. */
 function ActionMark({ view }: { view: MirrorView }) {
+  const t = useT();
   const hasPoint = view.px !== undefined && view.py !== undefined;
   const box = Array.isArray(view.box) && view.box.length === 4 ? view.box : null;
   const dragLine = view.x2 !== undefined && view.y2 !== undefined && hasPoint;
-  if (!hasPoint && !box && !view.label) {
+  const verb =
+    view.pk === "click"
+      ? t("ai_browser_act_click")
+      : view.pk === "type"
+        ? t("ai_browser_act_type")
+        : view.pk === "hover"
+          ? t("ai_browser_act_hover")
+          : view.pk === "select"
+            ? t("ai_browser_act_select")
+            : view.pk === "shot"
+              ? t("ai_browser_act_screenshot")
+              : view.pk === "drag"
+                ? t("ai_browser_act_drag")
+                : "";
+  const markLabel = (() => {
+    if (view.pk === "drag") {
+      return hasPoint && view.x2 !== undefined && view.y2 !== undefined
+        ? `${verb} ${view.px},${view.py} → ${view.x2},${view.y2}`
+        : verb;
+    }
+    if (!verb) {
+      return "";
+    }
+    if (view.name) {
+      return view.pk === "type" ? `${verb} "${view.name}"` : `${verb} ${view.name}`;
+    }
+    return hasPoint ? `${verb} ${view.px},${view.py}` : verb;
+  })();
+  if (!hasPoint && !box && !markLabel) {
     return null;
   }
   const w = view.w || VIEWPORT_W();
@@ -127,16 +160,16 @@ function ActionMark({ view }: { view: MirrorView }) {
           ) : null}
         </span>
       ) : null}
-      {view.label ? (
+      {markLabel ? (
         <span
-          className="absolute z-10 max-w-[60%] truncate rounded-md bg-accent px-1.5 py-0.5 font-mono text-xs text-accent-contrast shadow-md"
+          className="absolute z-10 max-w-[60%] truncate rounded-md bg-accent px-1.5 py-0.5 text-xs text-accent-contrast shadow-md"
           dir="auto"
           style={{
             left: pct(box ? (box[0] ?? 0) : (view.px ?? 0), w),
             top: pct(box ? Math.max((box[1] ?? 0) - 22, 2) : (view.py ?? 0) + 14, h),
           }}
         >
-          {view.label}
+          {markLabel}
         </span>
       ) : null}
     </div>
