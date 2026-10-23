@@ -1686,6 +1686,10 @@ function AiSearchRunSectionImpl({
   const failed = run.status === "error" || (run.status === "done" && !run.stopped && !run.answer.trim());
   const awaiting = run.status === "awaiting" && run.ask !== null;
 
+  // the run's research-mode chip: the composer's depth choice, always
+  // visible on the run (the phase strip shows WHERE, this shows HOW deep)
+  const modeLabel =
+    run.mode === "speed" ? t("mode_speed") : run.mode === "balanced" ? t("mode_balanced") : t("mode_deep");
   return (
     <section
       aria-busy={streaming}
@@ -1695,10 +1699,18 @@ function AiSearchRunSectionImpl({
     >
       <div className="group/run flex items-start justify-between gap-3">
         {/* the question heading -- text-3xl, the takeover page's run title
-            tier (ResultsPage h1 + the boot ghost mirror it at 3xl) */}
-        <h2 className="break-words font-medium leading-tight text-ink text-3xl" dir="auto">
-          {run.q}
-        </h2>
+            tier (ResultsPage h1 + the boot ghost mirror it at 3xl) -- with
+            the run's RESEARCH MODE beside it (the composer's depth choice:
+            speed/balanced/deep; a report/deck birth reads as its deep
+            tier) so the current mode is always visible on the run */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="break-words font-medium leading-tight text-ink text-3xl" dir="auto">
+            {run.q}
+          </h2>
+          {run.mode ? (
+            <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-xs text-ink-3">{modeLabel}</span>
+          ) : null}
+        </div>
         {/* the ROOT run anchors the thread (every later run is its
             sub-topic) -- it is not deletable; killing the whole thread is
             the knowledge directory's delete */}

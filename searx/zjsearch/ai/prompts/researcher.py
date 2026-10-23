@@ -55,10 +55,12 @@ _DEPTH_RESEARCH: dict[str, str] = {
     Depth: SEARCH -- the user wants the AI-Overview-style quick answer:
     what this is, straight and cited.  ONE round: 2-3 targeted searches
     covering the core facet, read a page only when the snippets cannot
-    answer, then stop.  The run carries no plan and no findings ledger --
-    do not narrate a plan; let the sources speak.  Ask the user only to
-    avoid a genuinely wrong high-stakes guess (see the ask tool);
-    otherwise never.""",
+    answer, then stop.  No plan, no gap-chasing -- do not narrate a plan;
+    let the sources speak.  One LIGHT ledger write: before the round
+    ends, record the round's key facts with record_findings (1-3 concept
+    tags each -- they name the run's topics in the knowledge graph).
+    Ask the user only to avoid a genuinely wrong high-stakes guess (see
+    the ask tool); otherwise never.""",
     "balanced": """\
     Depth: DEEP SEARCH -- a handful of rounds covering the main facets:
     what it is, how it works or why it matters, and whatever context the
