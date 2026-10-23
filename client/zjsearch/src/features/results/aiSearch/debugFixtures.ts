@@ -2847,6 +2847,10 @@ const BROWSER_OPS_STAGE: DebugScenario = {
 };
 
 export const DEBUG_SCENARIOS: DebugScenario[] = [
+  // the DEFAULT is the comprehensive surface: every tool, every state
+  // (success / failed / duplicate / approval) -- the other scenarios are
+  // special cases of it
+  FULL_STAGE,
   BROWSER_OPS_STAGE,
   BROWSER_STAGE,
   FULL_STAGE,

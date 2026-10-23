@@ -3,6 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  AlignLeft,
   Brain,
   Check,
   ChevronDown,
@@ -27,6 +28,7 @@ import {
   Printer,
   RefreshCw,
   Repeat2,
+  Swords,
   Telescope,
   Trash2,
   Waypoints,
@@ -190,7 +192,7 @@ function FactMeta({ fact }: { fact: LedgerFact }) {
         <span className="mt-1 flex flex-wrap items-center gap-1 text-xs text-ink-3">
           {conflict ? (
             <span className={`${CHIP} bg-warning/10 font-medium text-warning`}>
-              <Zap aria-hidden="true" className="size-3" />
+              <Swords aria-hidden="true" className="size-3" />
               {t("ai_finding_conflict")}
             </span>
           ) : null}
@@ -1084,7 +1086,7 @@ function OutputStructureCard({
       label: t("ai_output_structure_direct"),
       sub: t("ai_output_structure_direct_sub"),
       count: 0,
-      icon: Zap,
+      icon: AlignLeft,
     },
     {
       id: "free:report",
@@ -1324,7 +1326,7 @@ function OutputStructureCard({
     writer has taken over or the run settled. */
 function StructureFace({ deck, direct, templateName }: { deck: boolean; direct?: boolean; templateName?: string }) {
   const t = useT();
-  const Icon = direct ? Zap : deck ? TEMPLATE_SHAPE_ICONS.deck : TEMPLATE_SHAPE_ICONS.report;
+  const Icon = direct ? AlignLeft : deck ? TEMPLATE_SHAPE_ICONS.deck : TEMPLATE_SHAPE_ICONS.report;
   const label = direct
     ? t("ai_output_structure_direct")
     : (templateName ?? (deck ? t("template_free_deck") : t("report_template_free")));
