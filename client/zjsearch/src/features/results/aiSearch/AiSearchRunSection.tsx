@@ -13,6 +13,7 @@ import {
   Copy,
   CornerDownRight,
   FoldVertical,
+  Gauge,
   Lightbulb,
   ListEnd,
   ListTodo,
@@ -26,6 +27,7 @@ import {
   Printer,
   RefreshCw,
   Repeat2,
+  Telescope,
   Trash2,
   Waypoints,
   X,
@@ -1688,8 +1690,9 @@ function AiSearchRunSectionImpl({
 
   // the run's research-mode chip: the composer's depth choice, always
   // visible on the run (the phase strip shows WHERE, this shows HOW deep)
-  const modeLabel =
-    run.mode === "speed" ? t("mode_speed") : run.mode === "balanced" ? t("mode_balanced") : t("mode_deep");
+  // the mode chip's icon + label: the depth dropdown's own vocabulary
+  const ModeGlyph = run.mode === "speed" ? Zap : run.mode === "balanced" ? Gauge : Telescope;
+  const modeLabel = t(run.mode === "speed" ? "mode_speed" : run.mode === "balanced" ? "mode_balanced" : "mode_deep");
   return (
     <section
       aria-busy={streaming}
@@ -1708,7 +1711,19 @@ function AiSearchRunSectionImpl({
             {run.q}
           </h2>
           {run.mode ? (
-            <span className="shrink-0 rounded-full border border-line px-2 py-0.5 text-xs text-ink-3">{modeLabel}</span>
+            <span
+              className="flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink-3"
+              title={t(
+                run.mode === "speed"
+                  ? "mode_speed_desc"
+                  : run.mode === "balanced"
+                    ? "mode_balanced_desc"
+                    : "mode_deep_desc",
+              )}
+            >
+              <ModeGlyph aria-hidden="true" className="size-3" />
+              {modeLabel}
+            </span>
           ) : null}
         </div>
         {/* the ROOT run anchors the thread (every later run is its
