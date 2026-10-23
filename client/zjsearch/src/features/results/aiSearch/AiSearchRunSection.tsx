@@ -931,7 +931,10 @@ function AskArchiveCard({ clarify }: { clarify: string }) {
   );
 }
 
-type StructurePick = { kind: "free"; shape: TemplateShape } | { kind: "template"; template: ReportTemplate };
+type StructurePick =
+  | { kind: "direct" }
+  | { kind: "free"; shape: TemplateShape }
+  | { kind: "template"; template: ReportTemplate };
 
 /** The run header's delete control (hover-revealed trash; TWO-STEP like
     every destructive control here -- the first click arms a danger pill,
@@ -1010,12 +1013,18 @@ function RunDeleteButton({ onConfirm }: { onConfirm: () => void }) {
     server pairs the pending shape with a canonical steer notice, so the
     researcher's remaining rounds adapt).  Picking a free option
     withdraws a previously-picked template (run/control action=template
-    without a payload).  ``shape`` is the run's CURRENT shape -- null on
-    a run that has none yet (the neutral direct-answer face; any pick
-    counts as a flip).  The pick window closes when the WRITER takes
-    over -- the outline lands (the card swaps to the active-structure
-    view) or the write phase opens without one (the single-write
-    fallback; both swap to the fixed identity). */
+    without a payload).  THE DIRECT-ANSWER ROW is pinned first: the run's
+    birth format and the face of a run that carries no shape yet -- the
+    current format is always the highlighted selection, any other pick
+    counts as a flip, and confirming the direct row takes the run BACK to
+    a plain answer (the server withdraws every pending deliverable
+    signal; a route-outline run rejects it -- the structure came with the
+    request).  ``shape`` is the run's CURRENT shape -- null on a run that
+    has none yet.  The model's own set_deliverable flip adopts the
+    submitted face ONLY while the reader picked nothing.  The pick window
+    closes when the WRITER takes over -- the outline lands (the card
+    swaps to the active-structure view) or the write phase opens without
+    one (the single-write fallback; both swap to the fixed identity). */
 function OutputStructureCard({
   onPick,
   onClearTemplate,
@@ -1024,15 +1033,18 @@ function OutputStructureCard({
 }: {
   onPick: (template: ReportTemplate) => Promise<boolean>;
   onClearTemplate: () => Promise<boolean>;
-  onSetShape?: (shape: TemplateShape) => Promise<boolean>;
+  onSetShape?: (shape: TemplateShape | null) => Promise<boolean>;
   shape: TemplateShape | null;
 }) {
   const t = useT();
   const locale = useLocale();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
-  // the SUBMITTED pick's id (free:<shape> or a template id); "" on a
-  // shape-less run before any pick
-  const [current, setCurrent] = useState(() => (shape ? `free:${shape}` : ""));
+  // the SUBMITTED pick's id ("direct", free:<shape> or a template id) --
+  // the direct answer is every run's birth format
+  const [current, setCurrent] = useState(() => (shape ? `free:${shape}` : "direct"));
+  // the reader's OWN direct submit happened ("direct" doubles as the
+  // never-picked face, so the model's late flip must not overwrite it)
+  const [directPicked, setDirectPicked] = useState(false);
   const [open, setOpen] = useState(false);
   // the PREVIEW pick (unconfirmed) and the submitted shape flip (drives
   // the submitted note -- only a shape flip steers the researcher)
@@ -1054,8 +1066,8 @@ function OutputStructureCard({
   // explicit reader pick outranks the model's flip at the write boundary,
   // and the card must keep telling that truth)
   useEffect(() => {
-    setCurrent((prev) => (prev === "" && shape ? `free:${shape}` : prev));
-  }, [shape]);
+    setCurrent((prev) => (prev === "direct" && !directPicked && shape ? `free:${shape}` : prev));
+  }, [shape, directPicked]);
   const all: ReportTemplate[] = [...templatePresets(themeLocaleTag(locale)), ...templates];
   const options: Array<{
     id: string;
@@ -1064,6 +1076,13 @@ function OutputStructureCard({
     count: number;
     icon: LucideIcon;
   }> = [
+    {
+      id: "direct",
+      label: t("ai_output_structure_direct"),
+      sub: t("ai_output_structure_direct_sub"),
+      count: 0,
+      icon: Zap,
+    },
     {
       id: "free:report",
       label: t("report_template_free"),
@@ -1086,8 +1105,12 @@ function OutputStructureCard({
       icon: TEMPLATE_SHAPE_ICONS[template.shape ?? "report"],
     })),
   ];
-  const pickId = (pick: StructurePick): string => (pick.kind === "free" ? `free:${pick.shape}` : pick.template.id);
+  const pickId = (pick: StructurePick): string =>
+    pick.kind === "direct" ? "direct" : pick.kind === "free" ? `free:${pick.shape}` : pick.template.id;
   const pickOf = (id: string): StructurePick | null => {
+    if (id === "direct") {
+      return { kind: "direct" };
+    }
     if (id.startsWith("free:")) {
       return { kind: "free", shape: id === "free:deck" ? "deck" : "report" };
     }
@@ -1096,19 +1119,7 @@ function OutputStructureCard({
   };
   const submitted = pickOf(current);
   const shown = chosen ?? submitted;
-  // the shape-less run's neutral face: the direct answer is the current
-  // "structure" until something flips it
-  const neutral =
-    shape === null
-      ? {
-          id: "",
-          label: t("ai_output_structure_direct"),
-          sub: t("ai_output_structure_direct_sub"),
-          count: 0,
-          icon: Zap,
-        }
-      : null;
-  const shownOption = options.find((option) => option.id === (shown ? pickId(shown) : current)) ?? neutral ?? undefined;
+  const shownOption = options.find((option) => option.id === (shown ? pickId(shown) : current));
   const effective: TemplateShape | null = flipped ?? shape;
   const previewing = chosen !== null && (!submitted || pickId(chosen) !== pickId(submitted));
   const confirm = () => {
@@ -1118,6 +1129,29 @@ function OutputStructureCard({
     const nextId = pickId(chosen);
     if (submitted && nextId === pickId(submitted)) {
       setChosen(null);
+      return;
+    }
+    if (chosen.kind === "direct") {
+      // the back-to-the-direct-answer pick: every pending deliverable
+      // signal withdraws server-side (template + shape + the model's
+      // minted flip).  A route-outline run rejects it (the structure came
+      // with the request) -- the failed call reverts the face and says so.
+      const prevId = current;
+      const prevFlipped = flipped;
+      setDirectPicked(true);
+      setCurrent("direct");
+      setFlipped(null);
+      setChosen(null);
+      setOpen(false);
+      if (onSetShape) {
+        void onSetShape(null).then((ok) => {
+          if (!ok) {
+            setCurrent(prevId);
+            setFlipped(prevFlipped);
+            flashToast(t("ai_deliverable_direct_locked"), { tone: "danger" });
+          }
+        });
+      }
       return;
     }
     const shapeChanged =
@@ -1278,17 +1312,26 @@ function OutputStructureCard({
 }
 
 /** The structure's FIXED identity face -- icon + what this run's output
-    structure IS (the template's own name, or the free smart-report/smart-deck
-    shape) with its one-line description.  Non-interactive by design: the
-    pick lane is consumed ONCE at the write boundary, so a structure
-    change past it is a new run, not a hidden control.  Shared by the
-    active card (outline landed) and the no-outline record -- the card
-    NEVER vanishes once the writer has taken over or the run settled. */
-function StructureFace({ deck, templateName }: { deck: boolean; templateName?: string }) {
+    structure IS (the template's own name, the free smart-report/smart-deck
+    shape, or the direct answer a plain run kept) with its one-line
+    description.  Non-interactive by design: the pick lane is consumed
+    ONCE at the write boundary, so a structure change past it is a new
+    run, not a hidden control.  Shared by the active card (outline
+    landed) and the no-outline record -- the card NEVER vanishes once the
+    writer has taken over or the run settled. */
+function StructureFace({ deck, direct, templateName }: { deck: boolean; direct?: boolean; templateName?: string }) {
   const t = useT();
-  const Icon = deck ? TEMPLATE_SHAPE_ICONS.deck : TEMPLATE_SHAPE_ICONS.report;
-  const label = templateName ?? (deck ? t("template_free_deck") : t("report_template_free"));
-  const sub = templateName ? t("template_fixed_sub") : deck ? t("template_deck_hint") : t("ai_output_structure_free");
+  const Icon = direct ? Zap : deck ? TEMPLATE_SHAPE_ICONS.deck : TEMPLATE_SHAPE_ICONS.report;
+  const label = direct
+    ? t("ai_output_structure_direct")
+    : (templateName ?? (deck ? t("template_free_deck") : t("report_template_free")));
+  const sub = direct
+    ? t("ai_output_structure_direct_sub")
+    : templateName
+      ? t("template_fixed_sub")
+      : deck
+        ? t("template_deck_hint")
+        : t("ai_output_structure_free");
   return (
     <div className="flex items-center gap-2 rounded-lg border border-line px-2.5 py-2">
       <span className="shrink-0 text-ink-3">
@@ -1378,19 +1421,20 @@ function ActiveStructureCard({
   );
 }
 
-/** The no-outline record's output-structure card: a report/deck run whose writer
-    answered WITHOUT a minted skeleton (the outline gate fell back to the
-    single write), an interrupted research, a settled replay -- the shape
-    identity stays visible where the picker would hide it.  While the run
-    still researches (or awaits clarify) the PICKER occupies this slot
-    instead; the write phase swaps to this fixed face. */
-function StructureIdentityCard({ deck }: { deck: boolean }) {
+/** The rail's output-structure card for a run WITHOUT a minted skeleton:
+    a report/deck run whose writer answered WITHOUT one (the outline gate
+    fell back to the single write), an interrupted research -- and the
+    PLAIN run's own settled record (``direct``: the run kept its birth
+    format, the face says so).  While the run still researches (or awaits
+    clarify) the PICKER occupies this slot instead; the write phase swaps
+    to this fixed face. */
+function StructureIdentityCard({ deck, direct }: { deck: boolean; direct?: boolean }) {
   const t = useT();
   return (
     <section aria-label={t("ai_output_structure")} className="mb-5">
       <RailHeader icon={ListTree} title={t("ai_output_structure")} />
       <div className="mt-3">
-        <StructureFace deck={deck} />
+        <StructureFace deck={deck} direct={direct} />
       </div>
     </section>
   );
@@ -1442,10 +1486,12 @@ function AiSearchRunSectionImpl({
   onSetTemplate?: (template: ReportTemplate) => Promise<boolean>;
   /** withdraw a previously-picked template (the picker's free options) */
   onClearTemplate?: () => Promise<boolean>;
-  /** the report rail's shape flip (report|deck, research phase only):
-      the server pairs the pending write-boundary shape with a canonical
-      steer notice that adapts the researcher's remaining rounds */
-  onSetShape?: (shape: TemplateShape) => Promise<boolean>;
+  /** the report rail's shape flip (report | deck | null = the
+      direct-answer pick, research phase only): the server pairs the
+      pending write-boundary shape with a canonical steer notice that
+      adapts the researcher's remaining rounds; null withdraws every
+      pending deliverable signal (a route-outline run rejects it) */
+  onSetShape?: (shape: TemplateShape | null) => Promise<boolean>;
   /** delete THIS run (storage + timeline fold) -- settled runs only */
   onDeleteRun?: (runNo: number) => void;
   /** ONE settled section's rewrite (the failed section's chip): the
@@ -2119,8 +2165,8 @@ function AiSearchRunSectionImpl({
                 run.browser ?? Object.values(run.browserSessions ?? {}).find((item) => item.img) ?? null;
               return mirror ? <BrowserMirrorSection sessions={run.browserSessions} view={mirror} /> : null;
             })()}
-            {/* the output-structure card lives through EVERY run's research
-                phase now (all three tiers can flip the deliverable -- the
+            {/* the output-structure card lives through EVERY run's whole
+                life now (all three tiers can flip the deliverable -- the
                 model's set_deliverable and the reader's pick share one
                 write-boundary lane), and the structure is FIXED once the
                 writer takes over: before that the card is the run-time
@@ -2129,15 +2175,13 @@ function AiSearchRunSectionImpl({
                 write boundary on it is read-only -- the outline landed
                 (the active structure's identity face + status rows) or
                 the single-write fallback runs without one (the shape
-                identity alone).  A run that never carried a shape keeps
-                the card only while it lives -- the settled record of a
-                plain answer shows no structure card. */}
+                identity alone).  EVERY settled record keeps the card: a
+                shaped run wears its report/deck identity, a plain run
+                wears the direct-answer face -- the structure section is
+                the run's format record, never a hole. */}
             {(() => {
               const shapeSignal = run.mode === "report" || run.mode === "deck";
               const live = streaming || run.status === "awaiting";
-              if (!shapeSignal && !(live && onSetTemplate)) {
-                return null;
-              }
               if (run.outline) {
                 return (
                   <ActiveStructureCard
@@ -2162,7 +2206,7 @@ function AiSearchRunSectionImpl({
                   />
                 );
               }
-              return shapeSignal ? <StructureIdentityCard deck={run.mode === "deck"} /> : null;
+              return <StructureIdentityCard deck={run.mode === "deck"} direct={!shapeSignal} />;
             })()}
             {run.attachments?.length ? (
               <section aria-label={t("ai_attach_section")} className="mb-5">

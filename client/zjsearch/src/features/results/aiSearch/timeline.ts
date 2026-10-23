@@ -282,6 +282,11 @@ export interface AiSearchRun {
   /** the depth this run RAN with -- the pill displays it (the truthful
       last-run value), picking a new depth affects the next run */
   mode: AiSearchMode;
+  /** the run's BIRTH format (the mode at creation / at the last
+      clarify-restart): the direct-answer steer folds `mode` back here
+      (the model's settled set_deliverable row folds it forward, the
+      reader's withdrawal folds it back -- both replay-stable) */
+  mode0: AiSearchMode;
   /** the user pressed stop: a settled run without an answer is then
       intentional, not a failure (the failed box must not fire) */
   stopped?: boolean;
@@ -639,6 +644,7 @@ export function applyEvent(
         startedAt: Number(event.startedAt) || run.startedAt,
         endedAt: null,
         mode: (event.mode as AiSearchMode) ?? run.mode,
+        mode0: (event.mode as AiSearchMode) ?? run.mode0,
       };
       return { ...core, runs, phase: "streaming" };
     }
@@ -666,6 +672,7 @@ export function applyEvent(
         startedAt: Number(event.startedAt) || run.startedAt,
         endedAt: null,
         mode: (event.mode as AiSearchMode) ?? run.mode,
+        mode0: (event.mode as AiSearchMode) ?? run.mode0,
       };
       return { ...core, runs, phase: "streaming", error: null };
     }
@@ -715,6 +722,7 @@ export function applyEvent(
         endedAt: null,
         stages: [],
         mode: (event.mode as AiSearchMode) ?? run.mode,
+        mode0: (event.mode as AiSearchMode) ?? run.mode0,
       };
       return { ...core, runs, phase: "streaming" };
     }
@@ -844,7 +852,17 @@ export function applyEvent(
         delivery: String(event.delivery ?? "guide") === "preempt" ? "preempt" : "guide",
         status: String(event.status ?? "drained") === "discarded" ? "discarded" : "drained",
       });
-      runs[lastIdx] = { ...run, steps };
+      const next = { ...run, steps };
+      // the direct-answer pick's structured steer: the run's output shape
+      // folds back to its birth format -- the model's settled
+      // set_deliverable row folded run.mode FORWARD, the reader's
+      // withdrawal folds it BACK (the event is journaled, replays re-derive
+      // the same reversal; the rail's structure card then drops at settle
+      // like any never-shaped run's)
+      if (String((event as { shape?: unknown }).shape ?? "") === "direct") {
+        next.mode = run.mode0;
+      }
+      runs[lastIdx] = next;
       return { ...core, runs };
     }
     case "compact": {
@@ -1428,6 +1446,7 @@ export function emptyRun(runNo: number, q: string, mode: AiSearchMode): AiSearch
     startedAt: Date.now(),
     endedAt: null,
     mode,
+    mode0: mode,
     stages: [],
     gaps: [],
     decisions: [],

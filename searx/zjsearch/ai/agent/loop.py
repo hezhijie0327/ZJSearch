@@ -451,10 +451,12 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     loop_warned = False
     compactor = compact.Compactor(cfg, compact_state=compact_state, tally=run_state.tally) if researching else None
 
-    def poll_control() -> str | None:
+    def poll_control() -> tuple[str, dict] | None:
         """Fold the host's boundary directives into the loop's state;
-        RETURNS the one drained steer text (the caller injects it and
-        yields the steer event) or ``None``."""
+        RETURNS the one drained steer as ``(text, extra_fields)`` -- the
+        caller injects the text and yields the steer event with the
+        fields spread on top (the control endpoints' structured meta) --
+        or ``None``."""
         nonlocal stop_requested, halt_message, carried_error
         if control is None:
             return None
@@ -463,7 +465,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning("zjsearch loop: control poll failed: %r", exc)
             return None
-        steer_text = None
+        steered: tuple[str, dict] | None = None
         for directive in directives:
             action = str(directive.get("action") or "")
             if action == "stop":
@@ -476,8 +478,11 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 halt_message = halt_message or _WRAP_NOTE
                 carried_error = carried_error or _WRAP_HALT
             elif action == "steer":
-                steer_text = str(directive.get("text") or "") or None
-        return steer_text
+                text = str(directive.get("text") or "")
+                if text:
+                    extra = {k: v for k, v in directive.items() if k not in ("action", "text")}
+                    steered = (text, extra)
+        return steered
 
     def inject_steering(text: str) -> None:
         """One steered course correction as the newest user message."""
@@ -614,15 +619,22 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     yield wire.settle("error", halt="the model asked an unusable question")
                 return
             if not calls:
-                steer_text = poll_control()
+                steered = poll_control()
                 if stop_requested:
                     yield {"e": "close", "id": entry}
                     break
-                if steer_text:
+                if steered:
                     # a steer outranks the ledger-closure contract: the
                     # steered course correction takes the next user slot
                     # and the run keeps researching on it
-                    yield {"e": "steer", "text": steer_text, "delivery": "guide", "status": "drained"}
+                    steer_text, steer_extra = steered
+                    yield {
+                        "e": "steer",
+                        "text": steer_text,
+                        "delivery": "guide",
+                        "status": "drained",
+                        **steer_extra,
+                    }
                     inject_steering(steer_text)
                     continue
                 if str((meta or {}).get("finish") or "") == "length" and turn_text and length_continues < 3:
@@ -730,11 +742,18 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                     else:
                         loop_warned = False
                     last_call_sig = sig
-            steer_text = poll_control()
+            steered = poll_control()
             if stop_requested:
                 break
-            if steer_text:
-                yield {"e": "steer", "text": steer_text, "delivery": "guide", "status": "drained"}
+            if steered:
+                steer_text, steer_extra = steered
+                yield {
+                    "e": "steer",
+                    "text": steer_text,
+                    "delivery": "guide",
+                    "status": "drained",
+                    **steer_extra,
+                }
                 inject_steering(steer_text)
 
         if stop_requested:
@@ -753,8 +772,14 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
             except Exception as exc:  # pylint: disable=broad-except
                 logger.warning("zjsearch loop: steer drain failed: %r", exc)
                 leftovers = []
-            for text in leftovers:
-                yield {"e": "steer", "text": text, "delivery": "guide", "status": "discarded"}
+            for text, steer_extra in leftovers:
+                yield {
+                    "e": "steer",
+                    "text": text,
+                    "delivery": "guide",
+                    "status": "discarded",
+                    **steer_extra,
+                }
         if late_feed is not None:
             # the write phase's bounded lane wait (final=True): detached
             # background work gets its last chance to settle and flush --

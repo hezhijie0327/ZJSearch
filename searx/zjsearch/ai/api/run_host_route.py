@@ -3,7 +3,7 @@
 REATTACH endpoint -- replay a run's event buffer after ``after_seq`` and
 follow the live tail; the SAME run, never a restart), ``POST
 /zjsearch/ask/run/control`` (the inbound control plane -- stop /
-steer / preempt / wrap / template), ``POST /zjsearch/ask/run/keepalive``
+steer / preempt / wrap / template / shape), ``POST /zjsearch/ask/run/keepalive``
 (the backgrounded tab's heartbeat -- the detach grace counts from the
 last beat, so a living tab whose fetch the OS dropped keeps its run
 alive), ``POST /zjsearch/ask/run/journal`` (the LATE COLLECTOR -- a
@@ -57,6 +57,9 @@ _SHAPE_STEER: dict[str, str] = {
     "report": "The output format switched to a written report: for any remaining"
     " research, favor narrative evidence -- argument chains, mechanisms and"
     " cause-effect material; gathered material need not be redone.",
+    "direct": "The reader took the run back to the direct answer: the deliverable"
+    " outline was withdrawn and the final answer will be written as one piece"
+    " -- keep researching as usual; gathered material need not be redone.",
 }
 
 
@@ -118,16 +121,36 @@ def _control_view() -> t.Any:
             else:
                 handle.control.set_template(template)
     elif action == "shape":
-        # the rail's output-structure SHAPE flip (report|deck), TWO lanes
-        # one action: the pending shape rebinds the synthesizer's dialect
-        # at the write boundary, and -- the same moment -- a canonical
-        # steer notice joins the guide queue so the RESEARCHER adapts its
-        # remaining rounds (slide-ready points / narrative evidence).
-        # Latest flip wins; a no-op flip (same pending shape) does not
-        # burn a guide slot.
+        # the rail's output-structure SHAPE flip (report|deck|direct), TWO
+        # lanes one action: the pending shape rebinds the synthesizer's
+        # dialect at the write boundary, and -- the same moment -- a
+        # canonical steer notice joins the guide queue so the RESEARCHER
+        # adapts its remaining rounds (slide-ready points / narrative
+        # evidence).  Latest flip wins; a no-op flip (same pending shape)
+        # does not burn a guide slot.  "direct" is the back-to-the-plain-
+        # answer pick: every pending deliverable signal withdraws (the
+        # template lane AND the shape lane) and the boundary's direct
+        # intent outranks the model's minted flip skeleton -- a
+        # route-outline run rejects it (the structure came with the
+        # request; taking the run back to a plain answer is a new search).
         shape = str(payload.get("shape") or "")
-        if shape not in ("report", "deck"):
-            error = "shape must be report / deck"
+        if shape == "direct":
+            if getattr(handle, "structure_fixed", False):
+                error = "this run's structure came with the request"
+            else:
+                handle.control.clear_template()
+                if handle.control.set_shape("direct"):
+                    # best-effort: a full guide queue must not block the
+                    # pick -- the boundary honors the pending intent either
+                    # way.  The meta is the STRUCTURED half of the notice:
+                    # the drained steer event carries shape="direct", which
+                    # is what lets the client fold the run's output-shape
+                    # state back to the run's birth format (replay-stable)
+                    handle.control.steer(
+                        _SHAPE_STEER["direct"], preempt=False, meta={"shape": "direct"}
+                    )
+        elif shape not in ("report", "deck"):
+            error = "shape must be report / deck / direct"
         elif handle.control.set_shape(shape):
             # best-effort: a full guide queue must not block the flip --
             # the write boundary honors the pending shape either way

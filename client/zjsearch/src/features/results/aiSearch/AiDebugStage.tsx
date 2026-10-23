@@ -242,9 +242,12 @@ export function AiDebugStage() {
         onRegenerate={() => {
           pick(scenario.id);
         }}
-        onSetShape={() => {
+        onSetShape={(shape) => {
           // the same stub for the shape segment: the flip's local mirror
-          // (pending note + re-filtered list) is QA-able without a host
+          // (pending note + re-filtered list) and the direct-answer pick's
+          // face flip are QA-able without a host (null = the direct pick;
+          // the route-outline 422 revert needs a real run host)
+          void shape;
           return Promise.resolve(true);
         }}
         onSetTemplate={() => {

@@ -310,7 +310,24 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     resolves the winner in priority order -- route outline → reader
     template pick → reader shape pick → the tool's minted skeleton →
     defer to the single write (`loop.run`'s synthesizer may return None,
-    the one defer verdict; a raised exception still settles error).  The
+    the one defer verdict; a raised exception still settles error); THE
+    DIRECT-ANSWER PICK runs the lane backwards: the rail picker's pinned
+    直接回答 row rides the same `action=shape` channel with
+    `shape: "direct"` -- the endpoint withdraws the pending template and
+    shape and the boundary's direct intent OUTRANKS the model's minted
+    flip (skeleton consumed and discarded, the run defers to the single
+    write, a canonical steer notice tells the researcher), while a
+    route-outline run rejects it with a 422 (`handle.structure_fixed`,
+    set at registration: the structure came with the request -- taking
+    the run back to a plain answer is a new search).  The pick's steer
+    carries the STRUCTURED half (`meta={"shape": "direct"}` through the
+    ControlBox queue, spread onto the drained steer event) and that field
+    is what folds the client's `run.mode` BACK to the run's birth format
+    (`mode0`, captured at creation) -- the model's settled
+    set_deliverable row folds the mode forward, the reader's withdrawal
+    folds it back, both replay-stable off journaled events, so a
+    flip-then-revert run's settled record drops the structure card like
+    any never-shaped run's.  The
     handler mints the flip outline immediately (fail-open: no skeleton,
     no flip, an honest feed) and answers with an acknowledgement -- the
     outline EVENT still lands at the write boundary, so a flip run's
@@ -318,7 +335,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     already carries a route outline the tool only moves the DIALECT
     (the rail's own `set_shape` channel).  The client folds the settled
     tool row into `run.mode`, which is the rail structure card's gate --
-    one fold lights the picker, the TOC and the DocumentView; the AI
+    one fold lights the picker, the TOC and the DocumentView; the
+    picker's 直接回答 row is the card's birth face and its CURRENT
+    SELECTION display (the model's flip adopts the face only while the
+    reader picked nothing -- an explicit direct pick is sticky, and a
+    rejected direct confirm reverts with a danger toast); the AI
     Overview itself stays the loop's zero-tool single-write task (no
     Searches state, nothing to hang the machinery on -- its speed rung
     of shape_ladder is untouched); the executor splits into `registry` ([n]/dedup/gallery
@@ -491,10 +512,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
 
 - The AI run's RIGHT RAIL is one uniform surface (five sections plus
   the browser session's TRANSIENT card pinned FIRST while it lives and
-  the OUTPUT STRUCTURE card standing through every run's live research
-  phase — the shape picker on all three tiers since the deliverable
-  flip; a run that never carries a shape drops the card at settle, one
-  that does keeps its identity face for the record,
+  the OUTPUT STRUCTURE card standing through EVERY run's whole life —
+  the shape picker during research on all three tiers since the
+  deliverable flip; every settled record keeps the card as the run's
+  FORMAT RECORD: a shaped run wears its identity face (active structure
+  with section rows when an outline landed, the bare identity
+  otherwise), a plain run wears the direct-answer face — the section is
+  never a hole,
   one section language — icon+title+count header, 13px body rows, cap-
   and-expand): 浏览器实况 (the browse mirror — live frames, the
   takeover entry, the mobile wait bar; unmounts at the settle) →

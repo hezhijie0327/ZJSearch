@@ -236,6 +236,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_deliverable_pending: "确认中…",
   ai_deliverable_report: "报告",
   ai_deliverable_deck: "演示",
+  ai_deliverable_direct_locked: "本次输出结构由请求指定，无法切回直接回答",
   report_template_free: "智能报告",
   ai_search_running: "检索中…",
   ai_search_row_failed: "失败",

@@ -88,7 +88,7 @@ class ControlBox:
         self._lock = threading.Lock()
         self._stop = False
         self._preempt: str | None = None
-        self._steers: "deque[str]" = deque()
+        self._steers: "deque[tuple[str, dict | None]]" = deque()
         self._pending_template: dict | None = None
         self._pending_shape: str | None = None
 
@@ -100,16 +100,20 @@ class ControlBox:
         with self._lock:
             return self._stop
 
-    def steer(self, text: str, preempt: bool = False) -> bool:
+    def steer(self, text: str, preempt: bool = False, meta: dict | None = None) -> bool:
         """Queue one steering message; ``False`` when the guide lane's
-        queue is full (the endpoint answers 422)."""
+        queue is full (the endpoint answers 422).  ``meta`` rides the
+        drained steer EVENT as top-level fields -- the structured lane the
+        control endpoints use to say WHY they steered (the direct-answer
+        pick's ``{"shape": "direct"}`` is what lets the client fold the
+        run's output-shape state back, replay-stable)."""
         with self._lock:
             if preempt:
                 self._preempt = text
                 return True
             if len(self._steers) >= MAX_PENDING_STEERS:
                 return False
-            self._steers.append(text)
+            self._steers.append((text, meta))
             return True
 
     def interrupt(self) -> tuple[str, str] | None:
@@ -137,14 +141,15 @@ class ControlBox:
                 return ("preempt", self._preempt)
         return None
 
-    def poll_steer(self) -> str | None:
-        """The boundary's ONE guide-lane drain (FIFO)."""
+    def poll_steer(self) -> tuple[str, dict | None]:
+        """The boundary's ONE guide-lane drain (FIFO): the text plus the
+        endpoint's meta (``None`` on a plain user steer)."""
         with self._lock:
             if self._steers:
                 return self._steers.popleft()
-        return None
+        return ("", None)
 
-    def drain_steers(self) -> list[str]:
+    def drain_steers(self) -> list[tuple[str, dict | None]]:
         """Everything the guide lane never delivered (the write phase
         closed the lane -- the leftovers surface as visible discards)."""
         with self._lock:
@@ -174,12 +179,14 @@ class ControlBox:
             self._pending_template = None
 
     def set_shape(self, shape: str) -> bool:
-        """The rail's output-structure shape flip (report|deck): one
+        """The rail's output-structure shape flip (report|deck|direct): one
         PENDING output shape for the write boundary -- the synthesizer
-        rebinds its slide/report dialect before the first section streams.
-        Returns whether the pending value CHANGED (the control endpoint
-        steers the researcher only on a real flip -- flip-flops must not
-        burn guide queue slots)."""
+        rebinds its slide/report dialect before the first section streams,
+        and the "direct" sentinel (the reader's back-to-the-plain-answer
+        pick) outranks the model's minted flip there.  Returns whether the
+        pending value CHANGED (the control endpoint steers the researcher
+        only on a real flip -- flip-flops must not burn guide queue
+        slots)."""
         with self._lock:
             changed = self._pending_shape != shape
             self._pending_shape = shape
@@ -357,9 +364,9 @@ class RunHandle:
             return [{"action": "stop"}]
         if self._wrap or self.grace_expired():
             out.append({"action": "wrap"})
-        text = self.control.poll_steer()
-        if text is not None:
-            out.append({"action": "steer", "text": text})
+        steer = self.control.poll_steer()
+        if steer[0]:
+            out.append({"action": "steer", "text": steer[0], **(steer[1] or {})})
         return out
 
     def wrap(self) -> None:
@@ -373,7 +380,7 @@ class RunHandle:
         """The loop's mid-turn observation (see :py:meth:`ControlBox.interrupt`)."""
         return self.control.interrupt()
 
-    def drain_steers(self) -> list[str]:
+    def drain_steers(self) -> list[tuple[str, dict | None]]:
         """The guide lane's undelivered leftovers (visible discards)."""
         return self.control.drain_steers()
 

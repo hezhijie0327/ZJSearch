@@ -778,11 +778,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     def _take_deck() -> bool | None:
         """The rail's shape-flip channel: the pending report|deck pick
         consumed at the write boundary (``None`` = no flip -- the
-        request-time shape stands)."""
+        request-time shape stands; a "direct" pick is not a dialect and
+        reads as ``None`` here -- the boundary's resolver owns it)."""
         if handle is None:
             return None
         shape = handle.control.take_shape()
-        return None if shape is None else shape == "deck"
+        return None if shape in (None, "direct") else shape == "deck"
 
     def _take_template(deck: bool) -> dict[str, t.Any] | None:
         """The rail's output-structure channel: consume the ControlBox's
@@ -822,7 +823,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         3. the reader's shape pick on an outline-less run -- a free
            outline minted in the picked dialect;
         4. the ``set_deliverable`` tool's already-minted skeleton (the
-           model's flip; the reader's picks above outrank it).
+           model's flip; the reader's picks above outrank it -- the
+           reader's DIRECT pick ("direct" on the shape channel) outranks
+           it too: the minted skeleton is discarded and the boundary
+           defers to the single write).
 
         ``None`` = no signal claimed the boundary -- the run defers to the
         single write.  A template whose adaptation gate failed defers too
@@ -835,7 +839,9 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             eff_outline: dict[str, t.Any] | None = outline
             eff_deck = deck_requested
         else:
-            shape_pick = _take_deck()
+            raw_pick = handle.control.take_shape() if handle is not None else None
+            shape_pick = None if raw_pick in (None, "direct") else raw_pick == "deck"
+            direct_pick = raw_pick == "direct"
             template_pick = handle.control.take_template() if handle is not None else None
             flip = state.take_flip_deliverable()
             eff_deck = shape_pick if shape_pick is not None else bool((flip or {}).get("deck"))
@@ -852,6 +858,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     deck=eff_deck,
                     tz=user_tz,
                 )
+            elif direct_pick:
+                # the reader took the run back to the DIRECT answer: the
+                # flip skeleton consumed above dies with the intent -- the
+                # boundary defers to the single write
+                return None
             elif flip is not None:
                 eff_outline = flip.get("outline")
             elif shape_pick is not None:
@@ -955,6 +966,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # journal keeps the ending for the late collector across restarts
     # and beyond the terminal TTL.
     handle = run_host.register(linger=True)
+    # the route-time outline is FIXED against the direct-answer pick: the
+    # control endpoint rejects it through this flag (the structure came
+    # with the request -- taking the run back to a plain answer is a new
+    # search, not a mid-run control; dialect/template rebinds stay legal)
+    handle.structure_fixed = outline is not None
     # every research run journals: the tail a disconnected client missed
     # is exactly what nothing else preserves (the client's evt log stops
     # at its disconnect, the host buffer dies with the process / the

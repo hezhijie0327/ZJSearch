@@ -143,8 +143,11 @@ export interface AiSearchState extends Core {
   setTemplate(template: ReportTemplate): Promise<boolean>;
   /** the rail's shape flip (report|deck, research phase only): ONE
       pending shape the write boundary honors AND a canonical steer notice
-      that adapts the researcher's remaining rounds (both server-composed) */
-  setShape(shape: TemplateShape): Promise<boolean>;
+      that adapts the researcher's remaining rounds (both server-composed).
+      null = the direct-answer pick: every pending deliverable signal
+      withdraws and the boundary defers to the single write (a
+      route-outline run rejects it -- resolves false). */
+  setShape(shape: TemplateShape | null): Promise<boolean>;
   /** withdraw a previously-picked template (the free options of the
       unified picker): the write boundary consumes nothing */
   clearTemplate(): Promise<boolean>;
@@ -1282,7 +1285,8 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     }
   };
 
-  const setShape = (shape: TemplateShape): Promise<boolean> => control("shape", { shape, lang: langRef.current });
+  const setShape = (shape: TemplateShape | null): Promise<boolean> =>
+    control("shape", { shape: shape ?? "direct", lang: langRef.current });
 
   const clearTemplate = (): Promise<boolean> => {
     // the unified picker's free options: withdraw a previously-picked

@@ -53,6 +53,10 @@ bug and :py:func:`encode` refuses it):
                         the round boundary or via preempt) or visibly
                         dies (discarded: the write phase had already
                         opened).  The pending state lives client-side.
+                        A CONTROL-endpoint steer may carry extra
+                        structured fields spread on top (the
+                        direct-answer pick's ``shape: "direct"`` -- the
+                        client's replay-stable output-shape reversal).
 ``gallery``             a validated inline image group
                         ``{items: [{u, n}]}``.
 ``browser``             the interactive browser session's MIRROR frame:
