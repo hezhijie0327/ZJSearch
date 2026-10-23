@@ -192,7 +192,16 @@ async def _launch() -> "BrowserContext":
         launch_kwargs["exclude_addons"] = [DefaultAddons.UBO]
     _merge_params(launch_kwargs)
     try:
-        context = await AsyncNewBrowser(pw, **launch_kwargs)
+        # THE LAUNCH CEILING: a launch whose geoip lookup dies (ip-api's
+        # free tier is 45 req/min PER EXIT IP -- a shared proxy exit
+        # exhausts it and the lookup's retry ladder just HANGS, observed
+        # live: the exact launch that errors in seconds with a bare
+        # kwarg set never returns once the addon set rides along) must
+        # fail into the renderer's honest error instead of wedging the
+        # read queue forever.  A warmed launch costs ~10s; the install
+        # prefetch keeps a cold one in the same range -- 3 minutes is
+        # headroom, not a guess.
+        context = await asyncio.wait_for(AsyncNewBrowser(pw, **launch_kwargs), timeout=180.0)
     except Exception as exc:  # pylint: disable=broad-except
         retried = False
         if "failed to launch" in str(exc).lower():

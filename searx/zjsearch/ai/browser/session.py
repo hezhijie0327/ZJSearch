@@ -119,6 +119,50 @@ _SNAPSHOT_JS = _SNAPSHOT_JS_TEMPLATE % (
 )
 """The main frame's scan: the budgets every stored thread knows."""
 
+_ANNOTATE_JS = """
+() => {
+  document.getElementById('__zjs_ann')?.remove();
+  const COLORS = { A: '#96CEB4', BUTTON: '#FF6B6B', INPUT: '#4ECDC4',
+                   SELECT: '#45B7D1', TEXTAREA: '#FF8C42' };
+  const root = document.createElement('div');
+  root.id = '__zjs_ann';
+  root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+  let n = 0;
+  for (const el of document.querySelectorAll('[data-zjs-ref]')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) continue;
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+    const color = COLORS[el.tagName] || '#DDA0DD';
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;'
+      + 'width:' + r.width + 'px;height:' + r.height + 'px;'
+      + 'border:2px dashed ' + color + ';border-radius:2px;';
+    const tag = document.createElement('div');
+    tag.textContent = el.getAttribute('data-zjs-ref');
+    const above = r.top > 18;
+    tag.style.cssText = 'position:fixed;'
+      + 'left:' + (r.left + r.width / 2) + 'px;top:' + (above ? r.top - 18 : r.top + 2) + 'px;'
+      + 'transform:translateX(-50%);background:' + color + ';color:#fff;'
+      + 'font:bold 11px Menlo,Consolas,monospace;line-height:14px;'
+      + 'padding:1px 4px;border-radius:3px;white-space:nowrap;'
+      + 'text-shadow:0 1px 1px rgba(0,0,0,.35);';
+    root.append(box, tag);
+    n++;
+  }
+  if (n) document.documentElement.appendChild(root);
+  return n;
+}
+"""
+"""The MIRROR ANNOTATION pass (the browser-use visual): every scanned
+element's dashed type-colored outline + its ref badge painted IN THE
+PAGE, for ONE capture only -- the injected layer is removed right after
+the bytes land, so the model's own screenshots and the next scan never
+see it.  Reads the LIVE geometry at capture time (the scan-time boxes
+would go stale across scrolls); fixed positioning is per-frame, so the
+child frames annotate under their own coordinate space."""
+
+_ANNOTATE_REMOVE_JS = "() => { document.getElementById('__zjs_ann')?.remove(); }"
+
 
 class SessionError(Exception):
     """A session action failed -- the message travels to the model."""
@@ -686,12 +730,54 @@ def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
 
 
 def frame(session_id: str = LEAD) -> dict[str, t.Any]:
-    """The mirror frame: the same capture at mirror quality, PLUS the
-    action mark when one has been tracked -- px/py viewport space, pk
-    the action kind, name the touched element's own name (the client
-    draws the cursor, its click ripple and the i18n'd intent label)."""
-    out = screenshot_b64(session_id, quality=55)
-    mark = getattr(get(session_id), "mark", None)
+    """The mirror frame: the viewport capture at mirror quality wearing
+    the ref annotation overlay (browser-use's visual -- every scanned
+    element's dashed outline + ref badge, injected for THIS capture and
+    removed after: the model's own screenshots stay clean and the page
+    is untouched between frames), PLUS the action mark when one has been
+    tracked -- px/py viewport space, pk the action kind, name the
+    touched element's own name (the client draws the cursor, its click
+    ripple and the i18n'd intent label)."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            frames: list[t.Any] = []
+            try:
+                marked = int(await page.evaluate(_ANNOTATE_JS))
+                for frame in _live_frames(page)[:3]:
+                    try:
+                        if await frame.evaluate(_ANNOTATE_JS):
+                            frames.append(frame)
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        continue  # a frame that forbids evaluation reads as bare
+                if marked:
+                    # one paint cycle: the overlay's fixed-position divs
+                    # must reach the compositor before the bytes land
+                    await page.wait_for_timeout(60)
+                raw = await page.screenshot(type="jpeg", quality=55)
+            finally:
+                try:
+                    await page.evaluate(_ANNOTATE_REMOVE_JS)
+                except Exception:  # pylint: disable=broad-exception-caught
+                    pass
+                for frame in frames:
+                    try:
+                        await frame.evaluate(_ANNOTATE_REMOVE_JS)
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        pass
+            vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
+            return {
+                "img": base64.b64encode(raw).decode("ascii"),
+                "w": int(vp["width"]),
+                "h": int(vp["height"]),
+                "url": str(page.url),
+                "title": await page.title(),
+            }
+
+        out = _run(run())
+    mark = sess.mark
     if mark:
         out.update(mark)
     return out
