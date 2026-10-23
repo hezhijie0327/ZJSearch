@@ -416,55 +416,6 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         ],
         tx,
       );
-      // THE LEDGER'S TAG FLOW-BACK: the findings' concept tags (the
-      // model's write-time topic naming, 1-3 per fact) land on the
-      // knowledge rows of the sources each fact cites -- the source rows'
-      // tags stop being mechanical title tokens and become the research's
-      // own semantic vocabulary (the tag graph, the directory and the
-      // recall's tag legs all read this field).  Dedup + cap 12 in SQL.
-      const n2hash = new Map<number, string>();
-      for (const source of run.sources ?? []) {
-        const n = Number(source.n ?? 0) || 0;
-        if (n > 0 && source.url) {
-          n2hash.set(n, urlHash(String(source.url)));
-        }
-      }
-      const factTagSets = new Map<string, Set<string>>();
-      for (const fact of run.findings ?? []) {
-        const record = fact as { status?: unknown; tags?: unknown; refs?: unknown } | null;
-        if (record?.status !== "active" || !Array.isArray(record.tags)) {
-          continue;
-        }
-        const tags = record.tags.map((tag) => String(tag ?? "").trim()).filter(Boolean);
-        if (!tags.length) {
-          continue;
-        }
-        for (const ref of Array.isArray(record.refs) ? record.refs : []) {
-          const hash = n2hash.get(Number(ref) || 0);
-          if (!hash) {
-            continue;
-          }
-          const set = factTagSets.get(hash) ?? new Set<string>();
-          for (const tag of tags) {
-            set.add(tag);
-          }
-          factTagSets.set(hash, set);
-        }
-      }
-      for (const [hash, set] of factTagSets) {
-        const merged = JSON.stringify([...set]);
-        const search = segmentKeywords(...[...set]).slice(0, 1000);
-        await pgQuery(
-          `UPDATE knowledge SET tags = (
-             SELECT COALESCE(jsonb_agg(tag), '[]'::jsonb) FROM (
-               SELECT DISTINCT t AS tag FROM jsonb_array_elements_text(knowledge.tags || $1::jsonb) AS t
-             ) merged LIMIT 12
-           ), search_text = search_text || ' ' || $2
-           WHERE id = $3`,
-          [merged, search, `src:${hash}`],
-          tx,
-        );
-      }
       // the task card + the clarify archive
       if ((run.plan ?? []).length > 0) {
         await pgQuery(
@@ -558,6 +509,55 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
             segmentKeywords(title, host, snippet).slice(0, 4000),
             now,
           ],
+          tx,
+        );
+      }
+      // THE LEDGER'S TAG FLOW-BACK: the findings' concept tags (the
+      // model's write-time topic naming, 1-3 per fact) land on the
+      // knowledge rows of the sources each fact cites -- the source rows'
+      // tags stop being mechanical title tokens and become the research's
+      // own semantic vocabulary (the tag graph, the directory and the
+      // recall's tag legs all read this field).  Dedup + cap 12 in SQL.
+      const n2hash = new Map<number, string>();
+      for (const source of run.sources ?? []) {
+        const n = Number(source.n ?? 0) || 0;
+        if (n > 0 && source.url) {
+          n2hash.set(n, urlHash(String(source.url)));
+        }
+      }
+      const factTagSets = new Map<string, Set<string>>();
+      for (const fact of run.findings ?? []) {
+        const record = fact as { status?: unknown; tags?: unknown; refs?: unknown } | null;
+        if (record?.status !== "active" || !Array.isArray(record.tags)) {
+          continue;
+        }
+        const tags = record.tags.map((tag) => String(tag ?? "").trim()).filter(Boolean);
+        if (!tags.length) {
+          continue;
+        }
+        for (const ref of Array.isArray(record.refs) ? record.refs : []) {
+          const hash = n2hash.get(Number(ref) || 0);
+          if (!hash) {
+            continue;
+          }
+          const set = factTagSets.get(hash) ?? new Set<string>();
+          for (const tag of tags) {
+            set.add(tag);
+          }
+          factTagSets.set(hash, set);
+        }
+      }
+      for (const [hash, set] of factTagSets) {
+        const merged = JSON.stringify([...set]);
+        const search = segmentKeywords(...[...set]).slice(0, 1000);
+        await pgQuery(
+          `UPDATE knowledge SET tags = (
+             SELECT COALESCE(jsonb_agg(tag), '[]'::jsonb) FROM (
+               SELECT DISTINCT t AS tag FROM jsonb_array_elements_text(knowledge.tags || $1::jsonb) AS t
+             ) merged LIMIT 12
+           ), search_text = search_text || ' ' || $2
+           WHERE id = $3`,
+          [merged, search, `src:${hash}`],
           tx,
         );
       }
