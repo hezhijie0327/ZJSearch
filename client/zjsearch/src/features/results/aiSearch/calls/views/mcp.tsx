@@ -44,7 +44,7 @@ function ToolMatches({ tools }: { tools: AiToolMatch[] }) {
       {shown.map((tool) => (
         <div className={CELL} key={tool.name}>
           <div className="flex items-center gap-2">
-            <span className="min-w-0 truncate font-medium text-ink">{tool.name}</span>
+            <span className="min-w-0 truncate font-mono text-xs font-medium text-ink-2">{tool.name}</span>
             <span
               className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs ${
                 tool.server ? "bg-accent-soft text-accent" : "bg-surface text-ink-3"
