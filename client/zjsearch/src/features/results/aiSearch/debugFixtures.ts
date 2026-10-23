@@ -13,6 +13,9 @@ import type { AiSearchMode } from "@/features/results/aiSearch/timeline.ts";
 
 export interface DebugScenario {
   id: string;
+  /** the SHORT zh picker name -- the long English label stays the option's
+      secondary line (the QA surface's own description) */
+  name: string;
   label: string;
   q: string;
   mode: AiSearchMode;
@@ -92,6 +95,7 @@ function calls(items: Array<Record<string, unknown>>, id = 1): Record<string, un
     decision card, sources, findings, plan -- the whole surface. */
 const FULL_STAGE: DebugScenario = {
   id: "full",
+  name: "全工具行",
   label: "all tool rows × states (report in progress)",
   q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研",
   mode: "report",
@@ -801,6 +805,7 @@ const FULL_STAGE: DebugScenario = {
 
 const AWAITING_STAGE: DebugScenario = {
   id: "awaiting",
+  name: "澄清门",
   label: "clarify gate (awaiting)",
   q: "帮我调研一下新能源车的电池",
   mode: "balanced",
@@ -921,6 +926,7 @@ const AWAITING_STAGE: DebugScenario = {
 
 const STOPPED_STAGE: DebugScenario = {
   id: "stopped",
+  name: "已停止",
   label: "stopped state (title keying)",
   q: "深度对比三家 CDMO 的合规记录",
   mode: "report",
@@ -959,6 +965,7 @@ const STOPPED_STAGE: DebugScenario = {
 
 const FAILED_STAGE: DebugScenario = {
   id: "failed",
+  name: "失败态",
   label: "failed state (receipt + continue)",
   q: "深度对比三家 CDMO 的合规记录",
   mode: "report",
@@ -1016,6 +1023,7 @@ const FAILED_STAGE: DebugScenario = {
 
 const DONE_STAGE: DebugScenario = {
   id: "done",
+  name: "单轮作答",
   label: "single-write done (balanced)",
   q: "Kimi K3 的上下文长度是多少?",
   mode: "balanced",
@@ -1102,6 +1110,7 @@ const DONE_STAGE: DebugScenario = {
     write-think toggle at the deck's top (hidden while it writes). */
 const DECK_STAGE: DebugScenario = {
   id: "deck",
+  name: "演示文稿",
   label: "deck done (deck)",
   q: "多肽原料药产业格局 × 深圳置业价格锚点速览",
   mode: "deck",
@@ -1212,6 +1221,7 @@ const DECK_STAGE: DebugScenario = {
     top once settled. */
 const SHAPE_FLIP_STAGE: DebugScenario = {
   id: "shape-flip",
+  name: "形态切换",
   label: "shape flip (guide injection · boundary flip)",
   q: "多肽原料药产业格局速览",
   mode: "report",
@@ -1318,6 +1328,7 @@ const SHAPE_FLIP_STAGE: DebugScenario = {
     DocumentView, the settled record keeps the structure card. */
 const MODEL_FLIP_STAGE: DebugScenario = {
   id: "model-flip",
+  name: "交付翻转",
   label: "set_deliverable flip (balanced → report)",
   q: "帮我调研一下固态电池的产业化现状",
   mode: "balanced",
@@ -1520,6 +1531,7 @@ const TINY_JPEG =
     log, the screenshot's shot bytes persist). */
 const BROWSER_STAGE: DebugScenario = {
   id: "browser",
+  name: "登录协作",
   label: "browser login collaboration (mirror frame × wait user × screenshot)",
   q: "打开小红书的探索页,登录后看看首页热门内容",
   mode: "balanced",
@@ -1831,6 +1843,7 @@ const BROWSER_STAGE: DebugScenario = {
     (the guide lane's visible death). */
 const STEER_STAGE: DebugScenario = {
   id: "steer",
+  name: "引导注入",
   label: "guide (boundary injection · preempt · undelivered)",
   q: "对比主流新能源品牌 2025 年的销量与产能布局",
   mode: "balanced",
@@ -1931,6 +1944,7 @@ const STEER_STAGE: DebugScenario = {
     a SUBAGENT browser frame (agent-tagged -- the rail card's tab strip). */
 const SUB_STAGE: DebugScenario = {
   id: "sub",
+  name: "子代理",
   label: "subagents (delegation row · folded sub-timeline · browser tabs)",
   q: "调研全球动力电池产业:头部厂商产能;固态电池路线;钠离子进展",
   mode: "deep",
@@ -2111,6 +2125,7 @@ const SUB_STAGE: DebugScenario = {
     would have shipped unnoticed. */
 const PANORAMA_STAGE: DebugScenario = {
   id: "panorama",
+  name: "全景",
   label: "panorama (gallery · follow-up · title · memory · tags · gates)",
   q: "全景模拟:答案尾部的每个面",
   mode: "balanced",
@@ -2244,6 +2259,7 @@ const PANORAMA_STAGE: DebugScenario = {
     paid_ok: true (the sticky approval) and real results flow. */
 const PAID_STAGE: DebugScenario = {
   id: "paid",
+  name: "付费确认",
   label: "paid engine confirmation (hold · ask_user · approved re-run)",
   q: "用 bocha 查一下 2026 年的国产 GPU 新品发布",
   mode: "balanced",
@@ -2490,6 +2506,7 @@ export const AI_OVERVIEW_SCENARIOS: AiOverviewDebugScenario[] = [OVERVIEW_STREAM
     replacement and re-mints it `done`. */
 const REWRITE_STAGE: DebugScenario = {
   id: "rewrite",
+  name: "章节重写",
   label: "failed section → rewrite (report, post-settle lane)",
   q: "国产 GPU 显存生态现状调研",
   mode: "report",
@@ -2617,6 +2634,7 @@ const REWRITE_STAGE: DebugScenario = {
     is server-painted and cannot be faked by the fold. */
 const BROWSER_OPS_STAGE: DebugScenario = {
   id: "browser-ops",
+  name: "浏览器操作",
   label: "browser ops (annotated frame × tab strip × scroll-to-text × multi)",
   q: "在浏览器里查安吉云上草原,开个新标签对比,再滚到百科条目",
   mode: "balanced",

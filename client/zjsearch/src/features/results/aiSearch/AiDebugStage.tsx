@@ -2,6 +2,7 @@
 
 import { ChevronLeft, ChevronRight, FlaskConical, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Dropdown } from "@/components/Dropdown.tsx";
 import { AiAnswerCard } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
@@ -138,97 +139,95 @@ export function AiDebugStage() {
   }
   return (
     <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-      <div className="sticky top-14 z-10 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 py-3 backdrop-blur-md sm:-mx-6 sm:px-6">
+      <div className="sticky top-14 z-10 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 py-2.5 backdrop-blur-md sm:-mx-6 sm:px-6">
+        {/* ONE compact row: the brand, the scenario picker (a dropdown -- the
+            old 14-pill wall wrapped six lines), and the event transport */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+          <span className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-ink">
             <FlaskConical aria-hidden="true" className="size-4 text-accent" />
             {t("ai_debug_stage")}
           </span>
-          {DEBUG_SCENARIOS.map((item) => (
+          <Dropdown
+            ariaLabel={t("ai_debug_stage")}
+            onChange={(value) => {
+              pick(value);
+            }}
+            options={DEBUG_SCENARIOS.map((item) => ({
+              hint: item.label,
+              label: item.name,
+              value: item.id,
+            }))}
+            value={scenarioId}
+            variant="boxed"
+          />
+          {/* the EVENT TRANSPORT: scrub the wire timeline like a video -- any
+              intermediate state is a freezable QA surface */}
+          <div className="ml-auto flex items-center gap-2">
             <button
-              aria-pressed={item.id === scenarioId}
-              className={`rounded-full border px-3 py-1 text-[13px] transition-colors ${
-                item.id === scenarioId
-                  ? "border-accent-strong bg-accent-soft font-medium text-accent"
-                  : "border-line text-ink-3 hover:text-ink"
-              }`}
-              key={item.id}
+              aria-label={t("ai_debug_restart")}
+              className={`grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink ${playing ? "text-accent" : ""}`}
               onClick={() => {
-                pick(item.id);
+                pick(scenario.id);
               }}
+              title={t("ai_debug_restart")}
               type="button"
             >
-              {item.label}
+              <RotateCcw aria-hidden="true" className="size-3.5" />
             </button>
-          ))}
-        </div>
-        {/* the EVENT TRANSPORT: scrub the wire timeline like a video -- any
-            intermediate state is a freezable QA surface */}
-        <div className="mt-2.5 flex items-center gap-2">
-          <button
-            aria-label={t("ai_debug_restart")}
-            className={`grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink ${playing ? "text-accent" : ""}`}
-            onClick={() => {
-              pick(scenario.id);
-            }}
-            title={t("ai_debug_restart")}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" className="size-3.5" />
-          </button>
-          <button
-            aria-label={t("ai_debug_step_back")}
-            className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
-            onClick={() => {
-              step(-1);
-            }}
-            title={t("ai_debug_step_back")}
-            type="button"
-          >
-            <ChevronLeft aria-hidden="true" className="size-4" />
-          </button>
-          <button
-            aria-label={playing ? t("ai_debug_pause") : t("ai_debug_play")}
-            className={`grid size-8 shrink-0 place-items-center rounded-full transition-colors ${
-              playing ? "bg-accent-soft text-accent" : "border border-line text-ink-2 hover:text-ink"
-            }`}
-            onClick={() => {
-              setPlaying(!playing);
-            }}
-            title={playing ? t("ai_debug_pause") : t("ai_debug_play")}
-            type="button"
-          >
-            {playing ? (
-              <Pause aria-hidden="true" className="size-3.5" />
-            ) : (
-              <Play aria-hidden="true" className="size-3.5" />
-            )}
-          </button>
-          <button
-            aria-label={t("ai_debug_step_fwd")}
-            className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
-            onClick={() => {
-              step(1);
-            }}
-            title={t("ai_debug_step_fwd")}
-            type="button"
-          >
-            <ChevronRight aria-hidden="true" className="size-4" />
-          </button>
-          <input
-            aria-label={t("ai_debug_timeline")}
-            className="zjs-range min-w-0 flex-1"
-            max={total}
-            min={0}
-            onChange={(event) => {
-              seek(Number(event.target.value));
-            }}
-            type="range"
-            value={at}
-          />
-          <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3">
-            {at}/{total} · {lastKind}
-          </span>
+            <button
+              aria-label={t("ai_debug_step_back")}
+              className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
+              onClick={() => {
+                step(-1);
+              }}
+              title={t("ai_debug_step_back")}
+              type="button"
+            >
+              <ChevronLeft aria-hidden="true" className="size-4" />
+            </button>
+            <button
+              aria-label={playing ? t("ai_debug_pause") : t("ai_debug_play")}
+              className={`grid size-8 shrink-0 place-items-center rounded-full transition-colors ${
+                playing ? "bg-accent-soft text-accent" : "border border-line text-ink-2 hover:text-ink"
+              }`}
+              onClick={() => {
+                setPlaying(!playing);
+              }}
+              title={playing ? t("ai_debug_pause") : t("ai_debug_play")}
+              type="button"
+            >
+              {playing ? (
+                <Pause aria-hidden="true" className="size-3.5" />
+              ) : (
+                <Play aria-hidden="true" className="size-3.5" />
+              )}
+            </button>
+            <button
+              aria-label={t("ai_debug_step_fwd")}
+              className="grid size-7 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2/50 hover:text-ink"
+              onClick={() => {
+                step(1);
+              }}
+              title={t("ai_debug_step_fwd")}
+              type="button"
+            >
+              <ChevronRight aria-hidden="true" className="size-4" />
+            </button>
+            <input
+              aria-label={t("ai_debug_timeline")}
+              className="zjs-range min-w-0 flex-1"
+              max={total}
+              min={0}
+              onChange={(event) => {
+                seek(Number(event.target.value));
+              }}
+              type="range"
+              value={at}
+            />
+            <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3">
+              {at}/{total} · {lastKind}
+            </span>
+          </div>
         </div>
       </div>
       <AiSearchRunSection
