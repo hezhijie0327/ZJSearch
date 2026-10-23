@@ -166,6 +166,12 @@ def _act_press(args: dict[str, t.Any], session_id: str) -> ActionResult:
 
 
 def _act_scroll(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    text = str(args.get("text") or "").strip()
+    if text:
+        # the TARGETED scroll: bring the first page region matching the
+        # text into view (the element's box rides the action mark)
+        state = session.scroll_to_text(session_id, text)
+        return _state_result(f"scrolled to {text[:60]!r}.", state, session_id)
     state = session.scroll(session_id, str(args.get("direction") or "down"))
     return ActionResult(
         feed=f"scrolled {args.get('direction')}. {_obs(state)}",
@@ -263,6 +269,104 @@ def _act_close(_args: dict[str, t.Any], session_id: str) -> ActionResult:
     return ActionResult(feed="the browser session is closed", frames=[])
 
 
+def _tab_line(tabs: list[dict[str, t.Any]]) -> str:
+    return "\n".join(
+        f"  [{tab['index']}]{'' if tab.get('active') else ''} {tab['title'] or '(untitled)'} ({tab['url']})"
+        for tab in tabs
+    )
+
+
+def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """The session's tab strip: new (open+activate, the outline rides) /
+    switch (activate, the page's own outline rides -- refs are per-page) /
+    close (a closed active activates its neighbour) / list."""
+    op = str(args.get("op") or "list")
+    if op == "new":
+        url = _guard_open_url(str(args.get("url") or ""))
+        state = session.tab_new(session_id, url)
+        return _outline_result(
+            f"new tab opened and active: {state['url']} -- {state['title']}\n\n{state['snapshot']}",
+            state,
+            session_id,
+        )
+    if op == "switch":
+        state = session.tab_switch(session_id, args.get("index"))
+        return _outline_result(
+            f"switched to tab [{state['index']}]: {state['url']} -- {state['title']}"
+            " (refs are per-page -- this page's outline follows)\n\n"
+            f"{state['snapshot']}",
+            state,
+            session_id,
+        )
+    if op == "close":
+        state = session.tab_close(session_id, args.get("index"))
+        remaining = state.get("tabs") or []
+        feed = f"closed tab [{state.get('closed')}]."
+        if remaining:
+            feed += f" the strip now:\n{_tab_line(remaining)}"
+        else:
+            feed += " no tabs remain -- the next action opens a fresh page."
+        return ActionResult(
+            feed=feed,
+            frames=[{**session.frame(session_id), "agent": session_id}],
+            page=None,
+        )
+    state = session.tab_list(session_id)
+    tabs = state.get("tabs") or []
+    feed = "tabs:" if tabs else "no open tabs -- open one with tab op=new."
+    if tabs:
+        feed += f"\n{_tab_line(tabs)}"
+    return ActionResult(
+        feed=feed,
+        frames=[{**session.frame(session_id), "agent": session_id}],
+    )
+
+
+_MAX_MULTI_STEPS = 5
+"""One batch's step budget -- a multi is a latency tool (skip model
+rounds between mechanical steps), not a whole-flow script."""
+
+
+def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """BATCHED actions in ONE call (browser-use's multi_act): each step
+    is a full action object, executed in order; the first failure stops
+    the batch (its error rides the feed).  Each step contributes its
+    FIRST feed line; the LAST successful step's visual result (frames /
+    page / snapshot / image) is the batch's -- an intermediate
+    navigation's outline is superseded by the final state, and a step
+    after a navigation fails fast with the re-snapshot recipe (the
+    batch's own stop)."""
+    raw = args.get("steps")
+    if not isinstance(raw, list) or not raw:
+        return ActionResult(feed="error: multi needs steps -- a non-empty list of action objects")
+    steps = raw[:_MAX_MULTI_STEPS]
+    feeds: list[str] = []
+    last: ActionResult | None = None
+    for i, step in enumerate(steps, 1):
+        if not isinstance(step, dict):
+            feeds.append(f"{i}. error: a step must be an action object")
+            break
+        result = _dispatch(step, session_id)
+        first = str(result.feed).split("\n", 1)[0]
+        feeds.append(f"{i}. {step.get('action')}: {first}")
+        if first.startswith("error:"):
+            break
+        last = result
+    if len(raw) > _MAX_MULTI_STEPS:
+        feeds.append(f"(the batch was cut at {_MAX_MULTI_STEPS} steps)")
+    feed = "\n".join(feeds)
+    if last is None:
+        return ActionResult(feed=feed)
+    return ActionResult(
+        feed=feed,
+        frames=last.frames,
+        image=last.image,
+        page=last.page,
+        snapshot=last.snapshot,
+        elements=last.elements,
+    )
+
+
 _ACTORS = {
     "open": _act_open,
     "snapshot": _act_snapshot,
@@ -275,6 +379,8 @@ _ACTORS = {
     "select": _act_select,
     "drag": _act_drag,
     "read": _act_read,
+    "tab": _act_tab,
+    "multi": _act_multi,
     "close": _act_close,
 }
 
@@ -289,6 +395,13 @@ def run_action(args: dict[str, t.Any], session_id: str = session.LEAD) -> Action
     the whole model-driven stretch, and the frame doubles as the
     timeline row's visual (volatile, never persisted).  The frames carry
     the ``agent`` tag (the client's tab strip keys on it)."""
+    return _dispatch(args, session_id)
+
+
+def _dispatch(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """One action object -> one ActionResult (the batch's step engine is
+    the same dispatch): unknown actions and SessionErrors degrade to
+    feed text -- an action never raises into the executor."""
     actor = _ACTORS.get(str(args.get("action") or ""))
     if actor is None:
         return ActionResult(feed=f"error: unknown action {args.get('action')!r}")

@@ -522,6 +522,8 @@ export const EN = {
   ai_browser_act_type: "Type",
   ai_browser_act_press: "Press",
   ai_browser_act_scroll: "Scroll",
+  ai_browser_act_tab: "Tab",
+  ai_browser_act_multi: "Multi-step",
   ai_browser_act_screenshot: "Screenshot",
   ai_browser_act_hover: "Hover",
   ai_browser_act_select: "Select",

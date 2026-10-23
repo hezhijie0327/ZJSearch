@@ -73,6 +73,8 @@ _ACTIONS = (
     "select",
     "drag",
     "read",
+    "tab",
+    "multi",
     "wait_user",
     "close",
 )
@@ -102,6 +104,17 @@ select a native dropdown's options, drag between two viewport points
 wait_user while the USER operates the page in the live mirror (sign-in,
 verification -- anything human-only).
 
+MORE SESSION SURFACES: scroll accepts text= to bring the first page
+region matching it into view (the targeted alternative to the blind
+wheel).  tab manages the session's page strip -- op=new opens a url in
+a new active tab (its outline rides back), op=switch activates one (refs
+are PER-PAGE: the page's own outline follows the switch), op=close
+closes one, op=list shows the strip.  multi batches up to 5 action
+objects as steps -- executed in order, first failure stops the batch:
+use it for mechanical chains (scroll -> type -> submit), NOT for steps
+that need judgment between them (each step's result deserves a read
+before the next decision).
+
 Reach for a read when a source's snippet promises exactly the detail
 you still need; for the session when a read cannot see through or
 interaction is the only way through -- the plain read is always first.
@@ -125,9 +138,25 @@ drove.""",
                     "type": "string",
                     "description": 'click/type/hover/select: the snapshot ref (e12; child-frame elements are f1e5).  screenshot: capture that ONE element as a close-up instead of the whole viewport -- give ref OR x/y/w/h, not both.',
                 },
-                "text": {"type": "string", "description": "type: the text to fill."},
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},
                 "key": {"type": "string", "description": "press: the key (Enter, Escape, Tab...)."},
+                "text": {
+                    "type": "string",
+                    "description": 'type: the text to fill.  scroll: give text= to scroll THAT text into view instead of wheeling.',
+                },
+                "op": {
+                    "type": "string",
+                    "description": "tab: new (open url into a new active tab) / switch / close / list.",
+                },
+                "index": {
+                    "type": "integer",
+                    "description": "tab: the tab index from the strip (switch / close).",
+                },
+                "steps": {
+                    "type": "array",
+                    "description": "multi: up to 5 action objects, executed in order (first failure stops the batch).",
+                    "items": {"type": "object"},
+                },
                 "x": {"type": "integer", "description": "click: viewport X when clicking by COORDINATES instead of ref.  screenshot: region left edge (with y/w/h)."},
                 "y": {"type": "integer", "description": "click: viewport Y when clicking by COORDINATES instead of ref.  screenshot: region top edge (with x/w/h)."},
                 "w": {"type": "integer", "description": "screenshot: region width (with x/y/h) -- crops that viewport rectangle instead of the full viewport."},

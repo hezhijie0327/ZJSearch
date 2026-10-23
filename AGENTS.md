@@ -224,7 +224,15 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     native picker), native text
     extraction over the live DOM (`read` — the reader's pipeline, the
     reader's `max_chars` cap), and the raw input primitives the user's
-    Lightbox takeover forwards.  The `screenshot` action is AIMED:
+    Lightbox takeover forwards.  The session also carries a TAB STRIP
+    (`tab` op=new/switch/close/list — refs are PER-PAGE, a switch rides
+    the page's own fresh outline; the active page is the mirror's
+    frame), a TARGETED SCROLL (`scroll` with `text=` brings the first
+    matching region into view, the element's box riding the action
+    mark) and the BATCHED `multi` (up to 5 action objects executed in
+    order under one call, first failure stopping the batch — a latency
+    tool for mechanical chains, never for steps that need judgment
+    between them).  The `screenshot` action is AIMED:
     without `ref` it is the whole viewport, with `ref` it captures ONE
     element as a close-up (`locator.screenshot`, auto-scrolls; the
     captcha/canvas/chart use — the crop IS what the model sees next

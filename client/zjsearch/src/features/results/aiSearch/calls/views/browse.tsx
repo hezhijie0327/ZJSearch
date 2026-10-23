@@ -9,6 +9,8 @@ import {
   Globe,
   Hourglass,
   Keyboard,
+  Layers,
+  ListChecks,
   ListTree,
   LogOut,
   type LucideIcon,
@@ -58,6 +60,8 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   select: ChevronsUpDown,
   drag: MoveHorizontal,
   read: BookOpenText,
+  tab: Layers,
+  multi: ListChecks,
   wait_user: Hourglass,
   close: LogOut,
 };
