@@ -812,6 +812,13 @@ def region_b64(
         return _run(run())
 
 
+def ref_name(session_id: str, ref: str) -> str:
+    """The snapshot directory's name for one ref (the ref itself when
+    unknown) -- the capture marks' label vocabulary (the aimed
+    screenshot's close-up names its element the same way)."""
+    return get(session_id).names.get(str(ref)) or str(ref)
+
+
 def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
     """The ACTION layer's mark (the capture primitives stay pure -- they
     serve mirror frames too, and a frame capture must never overwrite the

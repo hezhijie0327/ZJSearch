@@ -656,11 +656,16 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
   const sessionTabs = leadActive ? (activeView.tabs ?? []) : [];
   const shown = peek ?? activeView;
   const peekTo = (index: number) => {
-    void postBrowserInput({ type: "peek", index }).then((frame) => {
-      if (frame) {
-        setPeek({ ...activeView, ...frame, tabs: activeView.tabs });
-      }
-    });
+    void postBrowserInput({ type: "peek", index })
+      .then((frame) => {
+        if (frame) {
+          setPeek({ ...activeView, ...frame, tabs: activeView.tabs });
+        }
+      })
+      .catch(() => {
+        // a cold engine's first peek can outlive the fetch budget (the
+        // launch runs on) -- the strip stays live, a second click succeeds
+      });
   };
   return (
     <section aria-label={t("ai_browser_live")} className="mb-5">
