@@ -162,6 +162,12 @@ export function safeParse(text: string): unknown {
 
 // ------------------------------------------------------------------ tags
 
+// the english function-word class (the IR-standard stopword list -- every
+// search engine ships one): the first of TWO genericity signals.  The
+// second is the corpus-frequency gate at the graph/vocabulary queries (a
+// tag whose row share exceeds 60% is a function word in ANY language, the
+// BM25 IDF principle applied to the tag namespace) -- the list catches the
+// universal class, the share gate adapts to every corpus and language.
 const GENERIC_TAGS = new Set([
   "the",
   "a",
@@ -245,11 +251,11 @@ const GENERIC_TAGS = new Set([
   "https",
 ]);
 
-/** The GENERIC-TAG GATE: a tag must carry meaning on its own -- English
-    function words (the/a/of/... turned the tag graph into a hairball whose
-    biggest cluster WAS the stopwords), bare digits and one-glyph tokens
-    are refused.  Wired at every tag doorway: the seed layer, the graph
-    snapshot, the recall vocabulary. */
+/** The GENERIC-TAG GATE: a tag must carry meaning on its own -- the
+    english function-word class and bare digits/one-glyph tokens are
+    refused at every tag doorway (the seed layer, the graph snapshot, the
+    recall vocabulary); the corpus-frequency gate at the two corpus-level
+    queries adds the adaptive second signal. */
 export function isGenericTag(tag: string): boolean {
   const clean = (tag || "").trim().toLowerCase();
   if (clean.length < 2) {

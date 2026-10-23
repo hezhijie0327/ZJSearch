@@ -302,10 +302,14 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   const navigateThread = (id: string) => {
     // panel context: the drawer fades while the main view swaps to the
     // thread (a thread is a work surface, not a panel page); standalone
-    // the close is a no-op
+    // the close is a no-op.  The ROUTER's navigate owns the history dance
+    // (a raw pushState+popstate raced the AI takeover's own thread-URL
+    // pushState -- the takeover enters the thread without the router
+    // learning the url, so the popstate guard could mismatch and skip
+    // the load; the takeover page's drawer was exactly where the jump
+    // silently died).
     closeOverlay();
-    window.history.pushState({}, "", threadUrl(id));
-    window.dispatchEvent(new PopStateEvent("popstate"));
+    navigate(threadUrl(id));
   };
 
   const goHome = () => {
