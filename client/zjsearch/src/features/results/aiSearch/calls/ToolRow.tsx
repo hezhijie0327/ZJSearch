@@ -24,6 +24,9 @@ import { useT } from "@/lib/i18n.ts";
 
 export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
+  // MUTUALLY EXCLUSIVE expansions: the rendered result and the debug panes
+  // never open together -- opening one collapses the other (the row speaks
+  // with one voice at a time)
   const [open, setOpen] = useState(false);
   const [debug, setDebug] = useState(false);
   const view = TOOL_VIEWS[call.tool] ?? TOOL_VIEWS.search_web;
@@ -63,9 +66,15 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
         metric={metric ?? ""}
         onToggle={() => {
           setOpen(!open);
+          if (!open) {
+            setDebug(false);
+          }
         }}
         onToggleDebug={() => {
           setDebug(!debug);
+          if (!debug) {
+            setOpen(false);
+          }
         }}
         open={open}
       />
