@@ -158,30 +158,57 @@ function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tab
   );
 }
 
-/** The multi action's rendered result: the numbered per-step lines --
-    the service composes them, the row shows the batch's shape (which
-    steps ran, which failed, where it stopped). */
-function MultiSteps({ feed }: { feed: string }) {
-  const steps = feed.split("\n").filter((line) => /^\d+\. /.test(line));
-  if (!steps.length) {
+/** The multi action's rendered result: one row per STEP -- the step's own
+    icon + localized verb (the label() vocabulary, driven off the step's
+    action args) + the settled tail (the observation, urls decoded for
+    display), failed steps in danger red.  The service composes the feed
+    lines the tails read from; the batch's shape (which steps ran, which
+    failed, where it stopped) is the args/steps x feed pairing. */
+function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["t"] }) {
+  const readable = (line: string) =>
+    line.replace(/https?:\/\/[^\s)]+/g, (url) => {
+      try {
+        return decodeURI(url);
+      } catch {
+        return url;
+      }
+    });
+  const raw = (call.args as Record<string, unknown> | undefined)?.steps;
+  const steps = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
+  const lines = call.feed?.split("\n").filter((line) => /^\d+\. /.test(line)) ?? [];
+  if (!steps.length || !lines.length) {
     return null;
   }
   return (
     <ol className="mt-1 space-y-0.5">
-      {steps.map((line) => {
+      {steps.map((step, i) => {
+        const action = String(step.action ?? "");
+        const Icon = ACTION_ICONS[action] ?? AppWindow;
+        const line = readable(lines[i] ?? "");
         const cut = line.indexOf(". ");
-        const failed = line.slice(cut).includes("error:");
+        let tail = cut > 0 ? line.slice(cut + 2) : line;
+        // the service's tail leads with the ENGLISH action name ("scroll:")
+        // -- the localized verb is already rendered beside it
+        tail = tail.replace(/^[a-z_]+: /, "");
+        const failed = tail.includes("error:");
+        const verb = browseView.label({
+          call: { args: step, tool: "browse", id: 0, q: "", category: "", status: "ok" } as ToolRowProps["call"],
+          results: [],
+          t,
+        });
         return (
-          <li className="flex min-w-0 items-start gap-1.5 text-xs" key={line.slice(0, 24)}>
+          <li className="flex min-w-0 items-center gap-1.5 text-xs" key={i}>
             <span
               className={`shrink-0 rounded px-1 font-mono leading-4 ${
                 failed ? "bg-danger/10 text-danger" : "bg-accent-soft text-accent"
               }`}
             >
-              {line.slice(0, cut)}
+              {i + 1}
             </span>
-            <span className={`min-w-0 flex-1 ${failed ? "text-danger" : "text-ink-2"}`} dir="auto">
-              {line.slice(cut + 2)}
+            <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
+            <span className={`shrink-0 font-medium ${failed ? "text-danger" : "text-ink-2"}`}>{verb}</span>
+            <span className={`min-w-0 flex-1 truncate ${failed ? "text-danger" : "text-ink-3"}`} dir="auto">
+              {tail}
             </span>
           </li>
         );
@@ -389,7 +416,7 @@ export const browseView: ToolView = {
     if (action === "multi") {
       return (
         <>
-          <MultiSteps feed={call.feed ?? ""} />
+          <MultiSteps call={call} t={t} />
           {call.page ? <LocationLine page={call.page} /> : null}
           {call.snapshot ? <BrowserOutline snapshot={call.snapshot} t={t} /> : null}
         </>
