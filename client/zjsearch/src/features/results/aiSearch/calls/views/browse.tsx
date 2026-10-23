@@ -120,11 +120,13 @@ function BrowserOutline({ snapshot, t }: { snapshot: string; t: ToolRowProps["t"
   );
 }
 
-/** The screenshot action's rendered result: the shot at full row width
-    (click zooms through the shared image lightbox), the page line under
-    it.  The shot PERSISTS (the stream consumer keeps shot-marked
-    bytes); mirror-frame rows and pre-marking replays show the honest
-    placeholder instead. */
+/** The screenshot action's rendered result: the shot as a FIXED-HEIGHT
+    thumb (a viewport shot and an element close-up read at the same scale
+    -- a full-width render let a tall close-up shove the whole timeline
+    around), the page line under it; the click opens the shared image
+    lightbox at full size.  The shot PERSISTS (the stream consumer keeps
+    shot-marked bytes); mirror-frame rows and pre-marking replays show
+    the honest placeholder instead. */
 function BrowserShot({ call, t }: ToolRowProps): ReactNode {
   const [zoom, setZoom] = useState(false);
   const page = call.page;
@@ -133,7 +135,7 @@ function BrowserShot({ call, t }: ToolRowProps): ReactNode {
       {call.img ? (
         <button
           aria-label={t("ai_browser_zoom")}
-          className="block w-full cursor-zoom-in overflow-hidden rounded-xl border border-line bg-ink/5"
+          className="block w-fit cursor-zoom-in overflow-hidden rounded-xl border border-line bg-ink/5"
           onClick={() => {
             setZoom(true);
           }}
@@ -141,7 +143,7 @@ function BrowserShot({ call, t }: ToolRowProps): ReactNode {
         >
           <img
             alt={page?.title || page?.url || t("ai_browser_act_screenshot")}
-            className="w-full object-contain"
+            className="h-40 w-auto object-contain"
             src={call.img}
           />
         </button>
