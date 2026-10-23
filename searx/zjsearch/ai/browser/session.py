@@ -122,8 +122,14 @@ _SNAPSHOT_JS = _SNAPSHOT_JS_TEMPLATE % (
 _ANNOTATE_JS = """
 () => {
   document.getElementById('__zjs_ann')?.remove();
-  const COLORS = { A: '#96CEB4', BUTTON: '#FF6B6B', INPUT: '#4ECDC4',
-                   SELECT: '#45B7D1', TEXTAREA: '#FF8C42' };
+  // THE FAMILY ANNOTATION PALETTE (DESIGN.md S3, the registered extension):
+  // fixed light-variant values -- the layer paints into a JPEG (canvas
+  // exemption class).  Green = goes somewhere, red = triggers, gold =
+  // accepts input (the brand gradient's deep end -- the most-tagged type
+  // wears the brand), gray = everything else.
+  const COLORS = { A: '#15803d', BUTTON: '#dc2626', INPUT: '#e09f0a',
+                   TEXTAREA: '#e09f0a', SELECT: '#6b675c' };
+  const DARK = '#241d0e';
   const root = document.createElement('div');
   root.id = '__zjs_ann';
   root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
@@ -132,7 +138,7 @@ _ANNOTATE_JS = """
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
     if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
-    const color = COLORS[el.tagName] || '#DDA0DD';
+    const color = COLORS[el.tagName] || '#6b675c';
     const box = document.createElement('div');
     box.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;'
       + 'width:' + r.width + 'px;height:' + r.height + 'px;'
@@ -142,10 +148,11 @@ _ANNOTATE_JS = """
     const above = r.top > 18;
     tag.style.cssText = 'position:fixed;'
       + 'left:' + (r.left + r.width / 2) + 'px;top:' + (above ? r.top - 18 : r.top + 2) + 'px;'
-      + 'transform:translateX(-50%);background:' + color + ';color:#fff;'
+      + 'transform:translateX(-50%);background:' + color + ';'
+      + 'color:' + (color === '#e09f0a' ? DARK : '#fff') + ';'
       + 'font:bold 11px Menlo,Consolas,monospace;line-height:14px;'
       + 'padding:1px 4px;border-radius:3px;white-space:nowrap;'
-      + 'text-shadow:0 1px 1px rgba(0,0,0,.35);';
+      + 'text-shadow:0 1px 1px rgba(0,0,0,.15);';
     root.append(box, tag);
     n++;
   }
@@ -180,6 +187,10 @@ class _Session:  # pylint: disable=too-few-public-methods
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.page: "Page | None" = None
+        # the session's TAB SET (``pages[active] is page`` -- the active
+        # one): the model can open/switch/close pages inside one session
+        self.pages: list["Page"] = []
+        self.active: int = 0
         self.wait_done = threading.Event()
         self.mark: dict[str, t.Any] | None = None
         self.names: dict[str, str] = {}
@@ -211,15 +222,20 @@ def close(session_id: str) -> None:
     if sess is None:
         return
     with sess.lock:
-        page = sess.page
+        pages = list(sess.pages) + ([] if sess.page is None else [sess.page])
+        seen: set[int] = set()
+        pages = [pg for pg in pages if id(pg) not in seen and not seen.add(id(pg))]
         sess.page = None
-        if page is not None:
+        sess.pages = []
+        sess.active = 0
+        for page in pages:
             gate.visual_pages.pop(id(page), None)
         sess.wait_done.set()
 
         async def run() -> None:
-            if page is not None and not page.is_closed():
-                await page.close()
+            for page in pages:
+                if not page.is_closed():
+                    await page.close()
 
         _run(run())
 
@@ -253,6 +269,13 @@ def _run(coro: t.Any, timeout: float = 45.0) -> t.Any:
 async def _ensure_page(sess: _Session) -> "Page":
     if sess.page is not None and not sess.page.is_closed():
         return sess.page
+    # the active page died (crash / closed tab): a surviving tab takes
+    # over before a new page is minted -- the tab set outlives one page
+    sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+    if sess.pages:
+        sess.active = 0
+        sess.page = sess.pages[0]
+        return sess.page
     context = await _context()
     page = await context.new_page()
     await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
@@ -263,6 +286,8 @@ async def _ensure_page(sess: _Session) -> "Page":
         gate.visual_pages.pop(id(sess.page), None)
     gate.visual_pages[id(page)] = page
     sess.page = page
+    sess.pages = [page]
+    sess.active = 0
     return page
 
 
@@ -805,6 +830,180 @@ def extract(session_id: str, max_chars: int | None) -> dict[str, str]:
     except PageReadError as exc:
         raise SessionError(str(exc)) from exc
     return {"url": page_state["url"], "title": title, "text": text}
+
+
+def _tab_view(pages: "list[Page]", active: int) -> list[dict[str, t.Any]]:
+    """The tab strip's wire shape: index + url + title + the active mark
+    (closed pages skipped -- a crashed tab reads as absent)."""
+    out = []
+    for idx, page in enumerate(pages):
+        if page.is_closed():
+            continue
+        out.append(
+            {
+                "index": idx,
+                "url": str(page.url),
+                "title": "",
+                "active": idx == active,
+            }
+        )
+    return out
+
+
+async def _tab_titles(pages: "list[Page]", views: list[dict[str, t.Any]]) -> None:
+    """Fill the views' titles best-effort (a page's title() is ASYNC and
+    can throw on a torn-down document; the url line stands alone)."""
+    for view in views:
+        try:
+            view["title"] = (await pages[view["index"]].title())[:120]
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+
+
+def _register_tab(sess: _Session, page: "Page") -> None:
+    """One new page joins the tab set and takes the active slot (the
+    gate's visual-page registry rides along, the replaced page's entry
+    dropped)."""
+    if sess.page is not None:
+        gate.visual_pages.pop(id(sess.page), None)
+    gate.visual_pages[id(page)] = page
+    sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+    sess.pages.append(page)
+    sess.active = len(sess.pages) - 1
+    sess.page = page
+
+
+def tab_new(session_id: str, url: str) -> dict[str, t.Any]:
+    """Open one NEW tab and make it active (the URL is the service's
+    gate- checked public http(s) one): goto, settle, fresh outline --
+    the model lands reading the new page, the old tab sleeps beside it."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            context = await _context()
+            page = await context.new_page()
+            await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+            try:
+                await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
+            except Exception as exc:  # pylint: disable=broad-except
+                await page.close()
+                raise SessionError(f"could not open the page ({_brief(exc)})") from exc
+            await _settle_page(page)
+            _register_tab(sess, page)
+            outline = await _snapshot_page(sess, page)
+            return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
+
+        return _run(run())
+
+
+def tab_switch(session_id: str, index: t.Any) -> dict[str, t.Any]:
+    """Activate one existing tab: the page's own outline rides back (refs
+    are PER-PAGE -- the model must re-read the vocabulary before it
+    acts), the previous tab sleeps untouched."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            try:
+                idx = int(index)
+            except (TypeError, ValueError):
+                raise SessionError("tab switch needs an integer index (see tab list)") from None
+            sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+            if idx < 0 or idx >= len(sess.pages):
+                raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
+            if sess.page is not None:
+                gate.visual_pages.pop(id(sess.page), None)
+            sess.active = idx
+            sess.page = sess.pages[idx]
+            gate.visual_pages[id(sess.page)] = sess.page
+            outline = await _snapshot_page(sess, sess.page)
+            return {"index": idx, "url": str(sess.page.url), "title": await sess.page.title(), "snapshot": outline}
+
+        return _run(run())
+
+
+def tab_close(session_id: str, index: t.Any) -> dict[str, t.Any]:
+    """Close one tab: a closed ACTIVE tab activates its neighbour (the
+    last one closes the session's pages entirely -- the next action
+    opens fresh).  Closing a background tab leaves the active page
+    alone."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            try:
+                idx = int(index)
+            except (TypeError, ValueError):
+                raise SessionError("tab close needs an integer index (see tab list)") from None
+            sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+            if idx < 0 or idx >= len(sess.pages):
+                raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
+            dying = sess.pages.pop(idx)
+            gate.visual_pages.pop(id(dying), None)
+            if not dying.is_closed():
+                await dying.close()
+            if sess.page is dying or not sess.pages:
+                sess.page = sess.pages[min(idx, len(sess.pages) - 1)] if sess.pages else None
+                sess.active = min(idx, len(sess.pages) - 1) if sess.pages else 0
+            views = _tab_view(sess.pages, sess.active)
+            await _tab_titles(sess.pages, views)
+            return {"closed": idx, "tabs": views}
+
+        return _run(run())
+
+
+def tab_list(session_id: str) -> dict[str, t.Any]:
+    """The tab strip: index / url / title / active mark per live tab."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+            if sess.page is not None and sess.page not in sess.pages:
+                sess.pages.append(sess.page)
+            views = _tab_view(sess.pages, sess.active)
+            await _tab_titles(sess.pages, views)
+            return {"tabs": views}
+
+        return _run(run())
+
+
+def scroll_to_text(session_id: str, text: str) -> dict[str, t.Any]:
+    """Scroll the FIRST page region matching ``text`` into view -- the
+    targeted alternative to the blind wheel (a section heading, a form
+    legend, a result far down).  The element's box rides the action mark
+    (the mirror shows WHAT was scrolled to), the outline is untouched
+    (refs survive a scroll)."""
+    clean = str(text or "").strip()[:200]
+    if not clean:
+        raise SessionError("scroll needs text to scroll to")
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            loc = page.get_by_text(clean, exact=False).first
+            try:
+                await loc.scroll_into_view_if_needed(timeout=_ACTION_TIMEOUT_MS)
+                box = await loc.bounding_box(timeout=1_500)
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                raise SessionError(
+                    f"no visible text matching {clean[:60]!r} on this page ({_brief(exc)}) --"
+                    " scroll blind or snapshot first"
+                ) from exc
+            if box:
+                sess.mark = {
+                    "px": int(box["x"] + box["width"] / 2),
+                    "py": int(box["y"] + box["height"] / 2),
+                    "pk": "scroll",
+                    "name": clean[:60],
+                    "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])],
+                }
+            await page.wait_for_timeout(300)
+            return {"url": str(page.url), "title": await page.title()}
+
+        return _run(run())
 
 
 def close_page(session_id: str = LEAD) -> None:
