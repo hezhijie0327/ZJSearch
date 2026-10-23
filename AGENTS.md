@@ -304,7 +304,24 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     bold-lead opening, sections when facets warrant, lists/tables/
     callouts by content, citations on load-bearing claims) and the tier
     sets only the LENGTH budget (COMPACT/MODERATE/THOROUGH -- the AI
-    Overview consumes the speed rung verbatim); the executor splits into `registry` ([n]/dedup/gallery
+    Overview consumes the speed rung verbatim); THE DELIVERABLE FLIP
+    (tools/set_deliverable, EVERY tier's surface): the model commits the
+    run's output shape (report/deck) mid-research and the write boundary
+    resolves the winner in priority order -- route outline → reader
+    template pick → reader shape pick → the tool's minted skeleton →
+    defer to the single write (`loop.run`'s synthesizer may return None,
+    the one defer verdict; a raised exception still settles error).  The
+    handler mints the flip outline immediately (fail-open: no skeleton,
+    no flip, an honest feed) and answers with an acknowledgement -- the
+    outline EVENT still lands at the write boundary, so a flip run's
+    timeline reads exactly like a native report run; on a run that
+    already carries a route outline the tool only moves the DIALECT
+    (the rail's own `set_shape` channel).  The client folds the settled
+    tool row into `run.mode`, which is the rail structure card's gate --
+    one fold lights the picker, the TOC and the DocumentView; the AI
+    Overview itself stays the loop's zero-tool single-write task (no
+    Searches state, nothing to hang the machinery on -- its speed rung
+    of shape_ladder is untouched); the executor splits into `registry` ([n]/dedup/gallery
     whitelist), `coverage` (the task card's bidirectional-containment
     tracker), `feed` (the writer's compact [n] block builder), `rank`
     (the search_web RANKING CASCADE: engine order → BM25 via the classic
@@ -473,7 +490,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the report document carry the silence).
 
 - The AI run's RIGHT RAIL is one uniform surface (five sections plus
-  the browser session's TRANSIENT card pinned FIRST while it lives,
+  the browser session's TRANSIENT card pinned FIRST while it lives and
+  the OUTPUT STRUCTURE card standing through every run's live research
+  phase — the shape picker on all three tiers since the deliverable
+  flip; a run that never carries a shape drops the card at settle, one
+  that does keeps its identity face for the record,
   one section language — icon+title+count header, 13px body rows, cap-
   and-expand): 浏览器实况 (the browse mirror — live frames, the
   takeover entry, the mobile wait bar; unmounts at the settle) →

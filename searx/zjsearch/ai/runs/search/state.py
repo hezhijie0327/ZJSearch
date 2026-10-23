@@ -447,6 +447,17 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         self.deliverable_entities: list[str] = []
         # the single-write entity gate runs ONCE, on the first update_plan
         self.entity_gate_done = False
+        # THE DELIVERABLE FLIP (the set_deliverable tool's lane): the
+        # route stashes its route-time outline (or None) plus the outline
+        # gate's context (the clarified direction, the knowledge base's
+        # metadata recall) so the tool handler can mint a flip outline
+        # with the same inputs; the handler writes the minted skeleton
+        # here and the route's write-boundary synthesizer consumes it
+        # (last intent after the rail's own picks).
+        self.route_outline: dict[str, t.Any] | None = None
+        self.clarified_direction: str = ""
+        self.prior_topics: list[str] | None = None
+        self.flip_deliverable: dict[str, t.Any] | None = None
         # the run's attachments (sanitized {name, text}), the entity gate's
         # extraction context (the attachment may name the actors the answer
         # makes claims about)
@@ -584,6 +595,14 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         out = self.image_injections
         self.image_injections = []
         return out
+
+    def take_flip_deliverable(self) -> dict[str, t.Any] | None:
+        """The set_deliverable tool's minted flip, consumed ONCE at the
+        write boundary (ControlBox.take_shape semantics): ``{"outline",
+        "deck", "template"?}`` or ``None`` -- no flip happened."""
+        flip = self.flip_deliverable
+        self.flip_deliverable = None
+        return flip
 
     def ledger_open_items(self) -> tuple[list[str], list[str]]:
         """The ledger's OPEN items: (open subtask titles, open gap

@@ -15,6 +15,7 @@ import { messageSubtaskView } from "@/features/results/aiSearch/calls/views/mess
 import { recallHistoryView } from "@/features/results/aiSearch/calls/views/recallHistory.ts";
 import { recordFindingsView } from "@/features/results/aiSearch/calls/views/recordFindings.tsx";
 import { searchWebView } from "@/features/results/aiSearch/calls/views/searchWeb.ts";
+import { setDeliverableView } from "@/features/results/aiSearch/calls/views/setDeliverable.tsx";
 import { updatePlanView } from "@/features/results/aiSearch/calls/views/updatePlan.tsx";
 import type { AiSearchCall } from "@/features/results/aiSearch/useAiSearch.ts";
 
@@ -40,4 +41,5 @@ export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
   inspect_image: inspectImageView,
   delegate_research: delegateResearchView,
   message_subtask: messageSubtaskView,
+  set_deliverable: setDeliverableView,
 };

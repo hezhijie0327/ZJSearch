@@ -362,7 +362,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     display: t.Callable[[list[dict[str, t.Any]]], list[dict[str, t.Any]]] | None = None,
     writer: t.Callable[[str | None], list[dict[str, t.Any]] | t.Any] | None = None,
     post_round_injections: t.Callable[[], list[dict[str, t.Any]]] | None = None,
-    synthesizer: t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]] | None = None,
+    synthesizer: t.Callable[[t.Any], t.Iterator[dict[str, t.Any]] | None] | None = None,
     writer_sources: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     gallery_validator: t.Callable[[str], list[dict[str, t.Any]]] | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
@@ -399,6 +399,12 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     - ``display(calls) -> rows``: the timeline rows of one turn's calls.
     - ``writer(halt) -> messages`` (an awaitable return is bridged onto
       the shared loop), ``writer_sources() -> entries``: the WRITE phase.
+    - ``synthesizer(tally) -> iterator | None``: the REPORT write phase
+      (per-section events + the settle).  Returning ``None`` DEFERS to
+      the writer above -- no outline was claimed at the boundary (the
+      deliverable flip never fired); a raised exception settles as an
+      error, never a silent fallback mid-document.  Pass ``writer``
+      alongside whenever the synthesizer can defer.
     - ``gallery_validator(body) -> items``: the ``zjs-images`` fence
       whitelist (invented urls are dropped server-side).
     - ``control``: the RUN HOST handle (duck-typed: ``directives()``,
@@ -791,17 +797,27 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 if entries:
                     yield {"e": "sources", "items": entries}
             if synthesizer is not None:
-                # the REPORT synthesizer owns the whole write phase: it
-                # streams per-section events and the settle itself (its
-                # usage lands in the same tally)
+                # the REPORT synthesizer owns the write phase when it takes
+                # it: it streams per-section events and the settle itself
+                # (its usage lands in the same tally).  Returning None is
+                # the DEFER verdict -- no outline was claimed (the
+                # deliverable flip never fired, the reader never picked a
+                # shape) -- and the single-write branch below answers; the
+                # decision is the call's first act, so a defer can never
+                # follow a streamed section.  A RAISED exception still
+                # settles as an error: a half-written document must not
+                # silently become a thread answer.
                 try:
-                    yield from synthesizer(run_state.tally)
+                    sections = synthesizer(run_state.tally)
                 except Exception as exc:  # pylint: disable=broad-except
                     logger.warning("zjsearch loop: synthesizer failed: %r", exc)
                     yield wire.settle(
                         "error", halt=f"the report synthesis failed: {exc}", **run_state.tally.settle_kwargs()
                     )
-                return
+                    return
+                if sections is not None:
+                    yield from sections
+                    return
             try:
                 built = writer(halt_message)
             except Exception as exc:  # pylint: disable=broad-except

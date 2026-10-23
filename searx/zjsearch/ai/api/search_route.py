@@ -365,15 +365,17 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # research phase is the POINT of the call
         clarify_state = "answered"
         clarifications = ""
-    # the REPORT shape: an outline-driven, per-section document -- only
-    # for the deep modes (the ladder rung still sizes the research), and
-    # always subject to the outline gate (a malformed skeleton falls back
-    # to the single-write answer shape below)
-    report_requested = bool(payload.get("report")) and mode in ("balanced", "deep")
+    # the REPORT shape: an outline-driven, per-section document -- EVERY
+    # mode serves it now (the write-boundary flip lane resolved the old
+    # balanced/deep gate; a speed run's flipped document is honestly thin
+    # because its corpus is), always subject to the outline gate (a
+    # malformed skeleton falls back to the single-write answer shape
+    # below)
+    report_requested = bool(payload.get("report"))
     # the DECK shape: the SAME outline-driven machinery on the SLIDE output
     # contract (the synthesizer takes the deck flag) -- mutually exclusive
     # with the report flag, the established shape wins the ambiguity
-    deck_requested = bool(payload.get("deck")) and mode in ("balanced", "deep") and not report_requested
+    deck_requested = bool(payload.get("deck")) and not report_requested
     # everything outline-driven downstream (template parsing, the
     # continue-restore, the gates, the synthesizer injection) reads the
     # union; only the PROMPTS care which shape it is
@@ -666,6 +668,13 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         tz=user_tz,
     )
     state.question_held = research_q
+    # THE DELIVERABLE FLIP's route-side stash: the outline gate's context
+    # travels on the state so the set_deliverable handler can mint a flip
+    # skeleton with the same inputs the route-time gate used (the flip
+    # lane reads back through state.take_flip_deliverable at the boundary)
+    state.route_outline = outline
+    state.clarified_direction = clarifications if clarify_state == "answered" else ""
+    state.prior_topics = prior_topics
     if resume is not None:
         # the dead attempt's [n] registry rejoins the run: a repeat of a
         # known url reuses ITS number (no duplicate source), the page-dedup
@@ -799,6 +808,80 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             deck=deck,
             tz=user_tz,
         )
+
+    def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]] | None:
+        """The write boundary's SHAPE RESOLVER -- the four flip signals in
+        priority order, the last explicit intent winning:
+
+        1. the route-time outline (the request's own report/deck shape) --
+           the rail's dialect pick rebinds it, a template pick re-mints it
+           (both consumed inside the synthesizer's opening, as always);
+        2. the reader's template pick on an outline-less run -- re-minted
+           right here (the same adaptation gate the route-time outline
+           used);
+        3. the reader's shape pick on an outline-less run -- a free
+           outline minted in the picked dialect;
+        4. the ``set_deliverable`` tool's already-minted skeleton (the
+           model's flip; the reader's picks above outrank it).
+
+        ``None`` = no signal claimed the boundary -- the run defers to the
+        single write.  A template whose adaptation gate failed defers too
+        (the reader asked for THAT structure; a different skeleton would
+        be a lie).  Consumed control channels stay consumed (one
+        resolution per run) -- the delegating ``make_synthesizer`` calls
+        see empty lanes and rebind nothing.
+        """
+        if outline is not None:
+            eff_outline: dict[str, t.Any] | None = outline
+            eff_deck = deck_requested
+        else:
+            shape_pick = _take_deck()
+            template_pick = handle.control.take_template() if handle is not None else None
+            flip = state.take_flip_deliverable()
+            eff_deck = shape_pick if shape_pick is not None else bool((flip or {}).get("deck"))
+            if template_pick is not None:
+                eff_outline = report_outline.build_outline_from_template(
+                    cfg,
+                    research_q,
+                    lang,
+                    clarifications if clarify_state == "answered" else "",
+                    template_pick,
+                    account=state.account,
+                    attachments=outline_attachments,
+                    prior_topics=prior_topics,
+                    deck=eff_deck,
+                    tz=user_tz,
+                )
+            elif flip is not None:
+                eff_outline = flip.get("outline")
+            elif shape_pick is not None:
+                eff_outline = report_outline.build_outline(
+                    cfg,
+                    research_q,
+                    lang,
+                    clarifications if clarify_state == "answered" else "",
+                    account=state.account,
+                    attachments=outline_attachments,
+                    prior_topics=prior_topics,
+                    deck=shape_pick,
+                    tz=user_tz,
+                )
+            else:
+                return None
+        if eff_outline is None:
+            return None
+        real = report_synth.make_synthesizer(
+            cfg,
+            state,
+            eff_outline,
+            research_q,
+            lang,
+            take_template=_take_template,
+            take_deck=_take_deck,
+            deck=eff_deck,
+            handle=handle,
+        )
+        return real(tally)
 
     def assign_past_sources() -> list[dict[str, t.Any]]:
         """Number the recalled past-research sources AFTER the live feed's
@@ -977,24 +1060,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         ask_tool=ASK_USER_TOOL,
         ask_shape=_ask_shape,
         display=lambda calls: [display_item(idx, call) for idx, call in enumerate(calls, 1)],
-        **(
-            {
-                "synthesizer": report_synth.make_synthesizer(
-                    cfg,
-                    state,
-                    outline,
-                    research_q,
-                    lang,
-                    take_template=_take_template,
-                    take_deck=_take_deck,
-                    deck=deck_requested,
-                    handle=handle,
-                ),
-                "writer": None,
-            }
-            if outline is not None
-            else {"writer": write}
-        ),
+        # THE SHAPE RESOLVER rides every run (all three tiers): a run whose
+        # boundary claims no outline defers to the single write below --
+        # speed's AI-Overview-feel answer is exactly that defer
+        synthesizer=synthesizer,
+        writer=write,
         writer_sources=assign_past_sources,
         gallery_validator=gallery_validator,
         control=handle,

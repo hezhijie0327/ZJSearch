@@ -97,7 +97,8 @@ export interface AiSearchCall {
     | "inspect_image"
     | "browse"
     | "delegate_research"
-    | "message_subtask";
+    | "message_subtask"
+    | "set_deliverable";
   /** mcp rows: the server-scoped tool label (without the namespace);
       memory rows: "save" | "search" */
   name?: string;
@@ -991,7 +992,22 @@ export function applyEvent(
         }
         return { ...step, calls: step.calls.map(settled) };
       });
-      runs[lastIdx] = { ...run, steps };
+      // THE DELIVERABLE FLIP's client surface: a settled set_deliverable
+      // row re-shapes the run -- run.mode drives the rail's structure card
+      // and stays a pure event fold, so journal replays re-derive it.
+      const flipped = run.steps
+        .filter((step) => step.kind === "calls" && step.entry === entryId)
+        .flatMap((step) => (step.kind === "calls" ? step.calls : []))
+        .find((call) => call.id === callId);
+      const flipShape =
+        flipped?.tool === "set_deliverable" && event.status === "ok"
+          ? String(flipped.q || (flipped.args as Record<string, unknown> | undefined)?.shape || "")
+          : "";
+      runs[lastIdx] = {
+        ...run,
+        steps,
+        ...(flipShape === "report" || flipShape === "deck" ? { mode: flipShape as AiSearchMode } : {}),
+      };
       archive();
       return { ...core, runs };
     }
@@ -1372,6 +1388,7 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "browse",
   "delegate_research",
   "message_subtask",
+  "set_deliverable",
 ]);
 
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {

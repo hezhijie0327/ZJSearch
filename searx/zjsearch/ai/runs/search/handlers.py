@@ -50,6 +50,7 @@ from searx.zjsearch.ai.runs.search.state import (
     state_block,
 )
 from searx.zjsearch.ai.llm.decision import features as decision_features
+from searx.zjsearch.ai.runs.report import outline as report_outline
 from searx.zjsearch.ai.tools import (
     ASK_USER_TOOL,
     paid_bangs,
@@ -65,9 +66,11 @@ from searx.zjsearch.ai.tools import (
     parse_build_table_call,
     parse_plan_call,
     parse_inspect_image_call,
+    parse_set_deliverable_call,
     BUILD_TABLE_TOOL,
     RECALL_HISTORY_TOOL,
     LIST_ENGINES_TOOL,
+    SET_DELIVERABLE_TOOL,
     UPDATE_PLAN_TOOL,
     MEMORY_TOOL,
 )
@@ -492,6 +495,113 @@ and the referee advises when a subtask's evidence runs thin."""
                         "call": wire_id,
                         "status": "ok",
                         "q": summary,
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
+                    },
+                )
+                continue
+            if tool_name == SET_DELIVERABLE_TOOL:
+                # the deliverable flip: a CONTROL call in the paid-bang
+                # family -- it flips the run's output shape and answers
+                # with an acknowledgement; the document itself is written
+                # at the write boundary (the route's synthesizer consumes
+                # the minted skeleton).  No outline event here on purpose:
+                # every report run's TOC lands at the write boundary, so
+                # the flip run's timeline reads exactly like a native one.
+                shape = parse_set_deliverable_call(call)
+                if shape is None:
+                    feed_text = (
+                        'error: set_deliverable needs shape="report" (a written,'
+                        ' section-structured document) or "deck" (a presentation'
+                        " outline)."
+                    )
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "q": "",
+                            "ms": int((time.monotonic() - started) * 1000),
+                            "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
+                        },
+                    )
+                    continue
+                if self.route_outline is not None:
+                    # the run already carries a route-time skeleton: the
+                    # structure is fixed, only the DIALECT may move -- the
+                    # same control channel the reader's rail picker drives
+                    # (temporal: a later reader pick still overwrites)
+                    if self.run_control is not None:
+                        self.run_control.set_shape(shape)
+                    feed_text = (
+                        f"this run already writes an outline-driven document; the"
+                        f" {'deck' if shape == 'deck' else 'report'} dialect is noted for"
+                        " the write phase. Keep researching -- the structure does not"
+                        " change."
+                    )
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "ok",
+                            "q": shape,
+                            "ms": int((time.monotonic() - started) * 1000),
+                            "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
+                        },
+                    )
+                    continue
+                outline = report_outline.build_outline(
+                    self.cfg,
+                    self.question_held,
+                    self.lang,
+                    self.clarified_direction,
+                    account=self.account,
+                    attachments=self.attached_files,
+                    prior_topics=self.prior_topics,
+                    deck=(shape == "deck"),
+                    tz=self.tz,
+                )
+                if outline is None:
+                    # fail-open: no skeleton, no flip -- the run keeps its
+                    # direct-answer shape and the model learns it honestly
+                    feed_text = (
+                        "the outline gate could not mint a skeleton this time -- the"
+                        " run keeps its direct-answer shape. Continue researching"
+                        " normally; the answer will be written as usual."
+                    )
+                    feeds[wire_id - 1] = feed_text
+                    yield (
+                        "call",
+                        {
+                            "call": wire_id,
+                            "status": "error",
+                            "q": shape,
+                            "ms": int((time.monotonic() - started) * 1000),
+                            "feed": feed_text[:800],
+                            "raw": feed_text[:50_000],
+                        },
+                    )
+                    continue
+                self.flip_deliverable = {"outline": outline, "deck": shape == "deck"}
+                feed_text = (
+                    f"deliverable shape set to {shape}: an outline of"
+                    f' {len(outline["sections"])} sections ("{outline["title"]}") was'
+                    " minted. Keep researching exactly as planned -- every source you"
+                    " gather is what the sections will cite; the document itself is"
+                    " written at the write phase."
+                )
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "ok",
+                        "q": shape,
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
                         "raw": feed_text[:50_000],

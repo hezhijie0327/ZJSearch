@@ -23,6 +23,7 @@ from searx.zjsearch.ai.tools.memory import MEMORY_TOOL
 from searx.zjsearch.ai.tools.recall_history import RECALL_HISTORY_TOOL
 from searx.zjsearch.ai.tools.list_engines import LIST_ENGINES_TOOL
 from searx.zjsearch.ai.tools.record_findings import RECORD_FINDINGS_TOOL
+from searx.zjsearch.ai.tools.set_deliverable import SET_DELIVERABLE_TOOL, parse_set_deliverable_call
 from searx.zjsearch.ai.tools.update_plan import UPDATE_PLAN_TOOL, parse_plan_call
 from searx.zjsearch.ai.tools.browse import BROWSE_TOOL
 from searx.zjsearch.ai.tools.delegate_research import DELEGATE_RESEARCH_TOOL
@@ -49,6 +50,11 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         # the findings ledger write: a fixed row label (the settlement's
         # label carries the count); the raw facts ride the debug pane
         return {"id": idx, "tool": RECORD_FINDINGS_TOOL, "q": "", "args": raw_args(call)}
+    if call_name == SET_DELIVERABLE_TOOL:
+        # the deliverable flip: the committed shape is the row's label
+        # (the client renders it through the shape's own icon)
+        shape = parse_set_deliverable_call(call)
+        return {"id": idx, "tool": SET_DELIVERABLE_TOOL, "q": shape or "", "args": raw_args(call)}
     if call_name == EVALUATE_TOOL:
         return decision_row(idx, call)
     if call_name == ASK_USER_TOOL:

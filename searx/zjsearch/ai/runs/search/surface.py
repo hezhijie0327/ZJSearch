@@ -39,6 +39,7 @@ from searx.zjsearch.ai.tools import (
     recall_history_spec,
     record_findings_spec,
     search_web_spec,
+    set_deliverable_spec,
     update_plan_spec,
 )
 from searx.zjsearch.ai.tools import browse as browse_tool
@@ -101,6 +102,11 @@ def build_tool_surface(
     if browser_on:
         specs.append(browse_tool.browse_spec())
     specs.append(ask_user_spec())
+    # the deliverable flip: EVERY tier carries it -- the shape is the
+    # model's judgment (a deliverable-naming request must not depend on
+    # the reader finding the rail picker), and the outline gate it
+    # triggers is one cheap completion any mode affords
+    specs.append(set_deliverable_spec())
     if research_tier:
         specs.append(update_plan_spec())
     if has_outline:

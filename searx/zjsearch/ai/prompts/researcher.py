@@ -43,6 +43,7 @@ from searx.zjsearch.ai.tools import (
     DELEGATE_RESEARCH_TOOL,
     RECORD_FINDINGS_TOOL,
     SEARCH_WEB_TOOL,
+    SET_DELIVERABLE_TOOL,
     UPDATE_PLAN_TOOL,
 )
 
@@ -144,6 +145,17 @@ def _examples(toolset: t.AbstractSet[str], mode: str) -> str:
           in the same round; the digest returns as a <task_result>.
 """
     )
+    deliverable = (
+        ""
+        if SET_DELIVERABLE_TOOL not in toolset
+        else """
+        - A request that names a DELIVERABLE ("write a research report
+          on X", "give me a briefing deck"): set_deliverable (report /
+          deck) in the FIRST round, then research exactly as usual --
+          every source you gather is what a section will cite; the
+          document is written at the write phase, not by the call.
+"""
+    )
     return shared.block(
         "examples",
         f"""\
@@ -157,6 +169,7 @@ def _examples(toolset: t.AbstractSet[str], mode: str) -> str:
 {disconfirm}
         - "Should I pick A or B?": both sides before any verdict -- search_web
           ("A pros cons", "B pros cons"){plan}.
+{deliverable}
 {delegate}
         - A second round opens with reflection on the results so far ("[4]
           covers the official specs, but pricing is missing -- this round

@@ -995,24 +995,27 @@ function RunDeleteButton({ onConfirm }: { onConfirm: () => void }) {
   );
 }
 
-/** The rail's output-structure control (report/deck runs, RESEARCH phase only):
+/** The rail's output-structure control (RESEARCH phase only, every tier):
     the run-time pick rides run/control to the write boundary -- the
-    synthesizer re-mints the outline from it before the first section
-    streams.  ONE MERGED LIST: the two free options (smart report / smart deck,
-    pinned top, each wearing its shape icon) lead, then every preset and
-    user template -- report and deck side by side, the locked
-    FileText|Presentation icons are the only shape signal (no category
-    filter).  EVERYTHING IS TWO-STEP: clicking an option only PREVIEWS
-    (the trigger + section rows mirror it, nothing is sent -- users
-    clicking around to look must never fire a control); the explicit
-    confirm-switch pill submits, and a pick whose shape differs from the run's
-    also flips the output format (the server pairs the pending shape with
-    a canonical steer notice, so the researcher's remaining rounds
-    adapt).  Picking a free option withdraws a previously-picked template
-    (run/control action=template without a payload).  The pick window
-    closes when the WRITER takes over -- the outline lands (the card
-    swaps to the active-structure view) or the write phase opens without
-    one (the single-write fallback; both swap to the fixed identity). */
+    write-boundary shape resolver re-mints or mints the outline from it
+    before the first section streams.  ONE MERGED LIST: the two free
+    options (smart report / smart deck, pinned top, each wearing its
+    shape icon) lead, then every preset and user template -- report and
+    deck side by side, the locked FileText|Presentation icons are the
+    only shape signal (no category filter).  EVERYTHING IS TWO-STEP:
+    clicking an option only PREVIEWS (the trigger + section rows mirror
+    it, nothing is sent -- users clicking around to look must never fire
+    a control); the explicit confirm-switch pill submits, and a pick
+    whose shape differs from the run's also flips the output format (the
+    server pairs the pending shape with a canonical steer notice, so the
+    researcher's remaining rounds adapt).  Picking a free option
+    withdraws a previously-picked template (run/control action=template
+    without a payload).  ``shape`` is the run's CURRENT shape -- null on
+    a run that has none yet (the neutral direct-answer face; any pick
+    counts as a flip).  The pick window closes when the WRITER takes
+    over -- the outline lands (the card swaps to the active-structure
+    view) or the write phase opens without one (the single-write
+    fallback; both swap to the fixed identity). */
 function OutputStructureCard({
   onPick,
   onClearTemplate,
@@ -1022,13 +1025,14 @@ function OutputStructureCard({
   onPick: (template: ReportTemplate) => Promise<boolean>;
   onClearTemplate: () => Promise<boolean>;
   onSetShape?: (shape: TemplateShape) => Promise<boolean>;
-  shape: TemplateShape;
+  shape: TemplateShape | null;
 }) {
   const t = useT();
   const locale = useLocale();
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
-  // the SUBMITTED pick's id (free:<shape> or a template id)
-  const [current, setCurrent] = useState(() => `free:${shape}`);
+  // the SUBMITTED pick's id (free:<shape> or a template id); "" on a
+  // shape-less run before any pick
+  const [current, setCurrent] = useState(() => (shape ? `free:${shape}` : ""));
   const [open, setOpen] = useState(false);
   // the PREVIEW pick (unconfirmed) and the submitted shape flip (drives
   // the submitted note -- only a shape flip steers the researcher)
@@ -1045,6 +1049,13 @@ function OutputStructureCard({
       cancelled = true;
     };
   }, []);
+  // the model's own set_deliverable flip folds run.mode -- adopt it as
+  // the submitted face ONLY while the reader has picked nothing (an
+  // explicit reader pick outranks the model's flip at the write boundary,
+  // and the card must keep telling that truth)
+  useEffect(() => {
+    setCurrent((prev) => (prev === "" && shape ? `free:${shape}` : prev));
+  }, [shape]);
   const all: ReportTemplate[] = [...templatePresets(themeLocaleTag(locale)), ...templates];
   const options: Array<{
     id: string;
@@ -1085,20 +1096,33 @@ function OutputStructureCard({
   };
   const submitted = pickOf(current);
   const shown = chosen ?? submitted;
-  const shownOption = options.find((option) => option.id === (shown ? pickId(shown) : current));
-  const effective: TemplateShape = flipped ?? shape;
-  const previewing = chosen !== null && pickId(chosen) !== pickId(submitted ?? { kind: "free", shape });
+  // the shape-less run's neutral face: the direct answer is the current
+  // "structure" until something flips it
+  const neutral =
+    shape === null
+      ? {
+          id: "",
+          label: t("ai_output_structure_direct"),
+          sub: t("ai_output_structure_direct_sub"),
+          count: 0,
+          icon: Zap,
+        }
+      : null;
+  const shownOption = options.find((option) => option.id === (shown ? pickId(shown) : current)) ?? neutral ?? undefined;
+  const effective: TemplateShape | null = flipped ?? shape;
+  const previewing = chosen !== null && (!submitted || pickId(chosen) !== pickId(submitted));
   const confirm = () => {
     if (!chosen) {
       return;
     }
     const nextId = pickId(chosen);
-    if (nextId === pickId(submitted ?? { kind: "free", shape })) {
+    if (submitted && nextId === pickId(submitted)) {
       setChosen(null);
       return;
     }
     const shapeChanged =
-      chosen.kind === "free" ? chosen.shape !== effective : (chosen.template.shape ?? "report") !== effective;
+      effective === null ||
+      (chosen.kind === "free" ? chosen.shape !== effective : (chosen.template.shape ?? "report") !== effective);
     if (chosen.kind === "free") {
       // a free option withdraws any picked template (harmless no-op when
       // none was pending)
@@ -1118,7 +1142,7 @@ function OutputStructureCard({
     // clicking the submitted option cancels the preview; anything else
     // only PREVIEWS -- the confirm pill is the one send button
     const pick = pickOf(id);
-    setChosen(pick && pickId(pick) !== pickId(submitted ?? { kind: "free", shape }) ? pick : null);
+    setChosen(pick && (!submitted || pickId(pick) !== pickId(submitted)) ? pick : null);
     setOpen(false);
   };
   return (
@@ -2095,39 +2119,51 @@ function AiSearchRunSectionImpl({
                 run.browser ?? Object.values(run.browserSessions ?? {}).find((item) => item.img) ?? null;
               return mirror ? <BrowserMirrorSection sessions={run.browserSessions} view={mirror} /> : null;
             })()}
-            {/* the output-structure card lives through the WHOLE report/deck run,
-                and the structure is FIXED once the writer takes over:
-                before that the card is the run-time template pick (the
-                write boundary is the last chance to re-mint -- research
-                streaming and the clarify wait alike); from the write
-                boundary on it is read-only -- the outline landed (the
-                active structure's identity face + status rows) or the
-                single-write fallback runs without one (the shape identity
-                alone) -- and it STAYS for the settled record, so the user
-                always sees which structure the run used */}
-            {run.mode === "report" || run.mode === "deck" ? (
-              run.outline ? (
-                <ActiveStructureCard
-                  deck={run.deck === true}
-                  onRewrite={
-                    onRewriteSection && !streaming && (rewriting == null || rewriting.runNo === run.runNo)
-                      ? handleRewrite
-                      : undefined
-                  }
-                  outline={run.outline}
-                  rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
-                />
-              ) : (streaming || run.status === "awaiting") && run.stage !== "write" && onSetTemplate ? (
-                <OutputStructureCard
-                  onClearTemplate={() => onClearTemplate?.() ?? Promise.resolve(false)}
-                  onPick={onSetTemplate}
-                  onSetShape={onSetShape}
-                  shape={run.mode}
-                />
-              ) : (
-                <StructureIdentityCard deck={run.mode === "deck"} />
-              )
-            ) : null}
+            {/* the output-structure card lives through EVERY run's research
+                phase now (all three tiers can flip the deliverable -- the
+                model's set_deliverable and the reader's pick share one
+                write-boundary lane), and the structure is FIXED once the
+                writer takes over: before that the card is the run-time
+                pick (the write boundary is the last chance to re-mint --
+                research streaming and the clarify wait alike); from the
+                write boundary on it is read-only -- the outline landed
+                (the active structure's identity face + status rows) or
+                the single-write fallback runs without one (the shape
+                identity alone).  A run that never carried a shape keeps
+                the card only while it lives -- the settled record of a
+                plain answer shows no structure card. */}
+            {(() => {
+              const shapeSignal = run.mode === "report" || run.mode === "deck";
+              const live = streaming || run.status === "awaiting";
+              if (!shapeSignal && !(live && onSetTemplate)) {
+                return null;
+              }
+              if (run.outline) {
+                return (
+                  <ActiveStructureCard
+                    deck={run.deck === true}
+                    onRewrite={
+                      onRewriteSection && !streaming && (rewriting == null || rewriting.runNo === run.runNo)
+                        ? handleRewrite
+                        : undefined
+                    }
+                    outline={run.outline}
+                    rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
+                  />
+                );
+              }
+              if (live && run.stage !== "write" && onSetTemplate) {
+                return (
+                  <OutputStructureCard
+                    onClearTemplate={() => onClearTemplate?.() ?? Promise.resolve(false)}
+                    onPick={onSetTemplate}
+                    onSetShape={onSetShape}
+                    shape={run.mode === "report" || run.mode === "deck" ? run.mode : null}
+                  />
+                );
+              }
+              return shapeSignal ? <StructureIdentityCard deck={run.mode === "deck"} /> : null;
+            })()}
             {run.attachments?.length ? (
               <section aria-label={t("ai_attach_section")} className="mb-5">
                 <RailHeader count={run.attachments.length} icon={Paperclip} title={t("ai_attach_section")} />

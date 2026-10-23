@@ -105,6 +105,12 @@ from searx.zjsearch.ai.tools.search_web import (
     parse_call,
     search_web_spec,
 )
+from searx.zjsearch.ai.tools.set_deliverable import (
+    SET_DELIVERABLE_TOOL,
+    INSTRUCTIONS as SET_DELIVERABLE_INSTRUCTIONS,
+    parse_set_deliverable_call,
+    set_deliverable_spec,
+)
 from searx.zjsearch.ai.tools.update_plan import (
     UPDATE_PLAN_TOOL,
     INSTRUCTIONS as UPDATE_PLAN_INSTRUCTIONS,
@@ -139,6 +145,7 @@ TOOL_INSTRUCTIONS: dict[str, str] = {
     MESSAGE_SUBTASK_TOOL: MESSAGE_SUBTASK_INSTRUCTIONS,
     INSPECT_IMAGE_TOOL: INSPECT_IMAGE_INSTRUCTIONS,
     BUILD_TABLE_TOOL: BUILD_TABLE_INSTRUCTIONS,
+    SET_DELIVERABLE_TOOL: SET_DELIVERABLE_INSTRUCTIONS,
 }
 """Tool name -> its INSTRUCTIONS doctrine.  The MCP symmetry holds in
 full: EVERY tool carries instructions the way every MCP server does --
@@ -166,6 +173,7 @@ __all__ = [
     "RECORD_FINDINGS_TOOL",
     "SEARCH_CATEGORIES",
     "SEARCH_WEB_TOOL",
+    "SET_DELIVERABLE_TOOL",
     "TOOL_INSTRUCTIONS",
     "UPDATE_PLAN_TOOL",
     "paid_bangs",
@@ -194,9 +202,11 @@ __all__ = [
     "parse_plan_call",
     "parse_query",
     "parse_record_findings_call",
+    "parse_set_deliverable_call",
     "raw_args",
     "recall_history_spec",
     "record_findings_spec",
     "search_web_spec",
+    "set_deliverable_spec",
     "update_plan_spec",
 ]

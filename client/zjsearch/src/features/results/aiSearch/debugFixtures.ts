@@ -1308,6 +1308,199 @@ const SHAPE_FLIP_STAGE: DebugScenario = {
   ],
 };
 
+/** THE MODEL'S OWN DELIVERABLE FLIP end to end: a plain balanced run -- the
+    structure picker standing with the neutral 直接回答 face -- whose model
+    calls set_deliverable in round 1.  The settled tool row folds run.mode
+    to "report" (the picker's face lights up; a reader pick here would
+    still outrank the model at the boundary), the research continues one
+    more round unchanged, and the outline lands AT THE WRITE BOUNDARY
+    like every native report run -- the document renders through
+    DocumentView, the settled record keeps the structure card. */
+const MODEL_FLIP_STAGE: DebugScenario = {
+  id: "model-flip",
+  label: "set_deliverable flip (balanced → report)",
+  q: "帮我调研一下固态电池的产业化现状",
+  mode: "balanced",
+  events: [
+    { e: "client.start", runNo: 1, q: "帮我调研一下固态电池的产业化现状", mode: "balanced" },
+    { ...base },
+    { e: "phase", name: "plan" },
+    {
+      e: "say",
+      id: 1,
+      t: "请求点名了交付物(调研报告):先切换输出形态,再按技术路线、产业化进度、主要玩家三条线检索。",
+    },
+    calls([
+      {
+        id: 1,
+        tool: "search_web",
+        q: "固态电池 产业化 现状 2025",
+        status: "pending",
+        args: { query: "固态电池 产业化 现状 2025" },
+      },
+      {
+        id: 2,
+        tool: "set_deliverable",
+        q: "report",
+        status: "pending",
+        args: { shape: "report" },
+      },
+    ]),
+    {
+      e: "sources",
+      items: [
+        {
+          n: 1,
+          title: "全固态电池产业化路线图 2025",
+          url: "https://battery.example.com/roadmap",
+          netloc: "battery.example.com",
+          round: 1,
+          id: 1,
+          idx: 0,
+          content: "硫化物路线量产时间点集中在 2027 年前后,头部厂商中试线已跑通。",
+        },
+        {
+          n: 2,
+          title: "固态电池装车测试进展汇总",
+          url: "https://ev.example.com/tests",
+          netloc: "ev.example.com",
+          round: 1,
+          id: 2,
+          idx: 0,
+          content: "两家整车厂的示范装车已完成冬季标定,能量密度 360Wh/kg。",
+        },
+      ],
+    },
+    { e: "call", id: 1, call: 1, status: "ok", n: 2, ms: 2140, feed: "plan: 5 deep lines [1][2]" },
+    {
+      e: "call",
+      id: 1,
+      call: 2,
+      status: "ok",
+      q: "report",
+      ms: 1730,
+      feed: 'deliverable shape set to report: an outline of 4 sections ("固态电池产业化现状调研报告") was minted. Keep researching exactly as planned -- every source you gather is what the sections will cite; the document itself is written at the write phase.',
+    },
+    { e: "close", id: 1 },
+    { e: "open", id: 2, kind: "research", round: 2 },
+    {
+      e: "think",
+      id: 2,
+      t: "路线与装车有了[1][2],还缺成本侧和玩家名单 -- 本轮补产业链报价与产能布局。",
+    },
+    calls([
+      {
+        id: 1,
+        tool: "search_web",
+        q: "固态电池 成本 产能布局 头部厂商",
+        status: "ok",
+        n: 3,
+        ms: 1810,
+        args: { query: "固态电池 成本 产能布局 头部厂商" },
+      },
+    ]),
+    {
+      e: "sources",
+      items: [
+        {
+          n: 3,
+          title: "固态电解质成本下降路径分析",
+          url: "https://industry.example.com/cost",
+          netloc: "industry.example.com",
+          round: 2,
+          id: 3,
+          idx: 0,
+          content: "规模化后硫化物电解质成本有望降至 15 美元/kWh 以下。",
+        },
+      ],
+    },
+    { e: "call", id: 2, call: 1, status: "ok", n: 3, ms: 1810, feed: "plan: 5 deep lines [3]" },
+    { e: "close", id: 2 },
+    { e: "open", id: 3, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "think",
+      id: 3,
+      t: "三线材料齐了:路线[1]、装车[2]、成本与产能[3]。执行摘要先给判断;进度章收数字;玩家章点名头部并留风险一句。",
+    },
+    {
+      e: "outline",
+      title: "固态电池产业化现状调研报告",
+      subtitle: "",
+      sections: [
+        { id: "summary", title: "执行摘要", status: "done" },
+        { id: "s1", title: "技术路线与量产时间表", status: "writing" },
+        { id: "s2", title: "装车进度与性能表现", status: "pending" },
+        { id: "s3", title: "成本走势与产能布局", status: "pending" },
+      ],
+    },
+    {
+      e: "section",
+      id: "summary",
+      t: "**基线判断.** 全固态电池处于中试向量产过渡的早段:硫化物路线的量产时间点集中在 2027 年前后[1],示范装车已完成冬季标定、能量密度 360Wh/kg[2]。成本是最大变量,规模化后电解质有望降至 15 美元/kWh 以下[3]。",
+    },
+    {
+      e: "section",
+      id: "s1",
+      t: "三条电解质路线中,硫化物凭离子电导率领先成为主流选择,头部厂商的中试线已跑通[1]。量产窗口的共识在 2027 年前后,半固态作为过渡方案先行上车[1]。\n\n> [!IMPORTANT] 节奏判断\n> 2025-2027 是工艺定型期:设备与材料供应商的订单结构比整车发布更能说明真实进度[1]。",
+    },
+    {
+      e: "outline",
+      title: "固态电池产业化现状调研报告",
+      subtitle: "",
+      sections: [
+        { id: "summary", title: "执行摘要", status: "done" },
+        { id: "s1", title: "技术路线与量产时间表", status: "done" },
+        { id: "s2", title: "装车进度与性能表现", status: "writing" },
+        { id: "s3", title: "成本走势与产能布局", status: "pending" },
+      ],
+    },
+    {
+      e: "section",
+      id: "s2",
+      t: "两家整车厂的示范装车已完成冬季标定,能量密度 360Wh/kg[2],续航与充电曲线达到设计目标。半固态车型先行放量,全固态的公开工况数据仍集中在厂商口径[2]。",
+    },
+    {
+      e: "section",
+      id: "s3",
+      t: "成本是产业化的最大变量:规模化后硫化物电解质有望降至 15 美元/kWh 以下[3],头部厂商的产能布局集中在 2026-2028 年落地[1][3]。",
+    },
+    {
+      e: "outline",
+      title: "固态电池产业化现状调研报告",
+      subtitle: "",
+      sections: [
+        { id: "summary", title: "执行摘要", status: "done" },
+        { id: "s1", title: "技术路线与量产时间表", status: "done" },
+        { id: "s2", title: "装车进度与性能表现", status: "done" },
+        { id: "s3", title: "成本走势与产能布局", status: "done" },
+      ],
+    },
+    {
+      e: "related",
+      items: ["半固态路线会存在多久?", "固态电池成本何时与液态打平?", "哪些整车厂已锁定固态电池产能?"],
+    },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 11200,
+        output: 890,
+        thoughts: 620,
+        cached: 3600,
+        cache_write: 0,
+        research: { input: 8400, output: 560 },
+        write: { input: 2800, output: 330 },
+        gates: { input: 460, output: 24, calls: 2 },
+        rerank: { calls: 2, tokens: 1180 },
+        decision: null,
+      },
+      model: "deepseek-flash",
+    },
+  ],
+};
+
 const TINY_JPEG =
   "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAASACADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDxeiiiqAKKKKACiiigAooooA//2Q==";
 
@@ -2411,6 +2604,7 @@ export const DEBUG_SCENARIOS: DebugScenario[] = [
   PAID_STAGE,
   DECK_STAGE,
   SHAPE_FLIP_STAGE,
+  MODEL_FLIP_STAGE,
   PANORAMA_STAGE,
   STEER_STAGE,
   SUB_STAGE,
