@@ -526,6 +526,7 @@ export const EN = {
   ai_browser_tab_switch: "Switch tab",
   ai_browser_tab_close: "Close tab",
   ai_browser_tab_list: "Tabs",
+  ai_browser_tab_peek: "Previewing",
   ai_browser_act_multi: "Batch",
   ai_browser_act_back: "Back",
   ai_browser_act_forward: "Forward",

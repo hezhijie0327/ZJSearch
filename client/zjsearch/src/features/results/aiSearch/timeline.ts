@@ -412,6 +412,11 @@ export interface AiSearchRun {
     x2?: number;
     y2?: number;
     name?: string;
+    /** the session's IN-SESSION tab strip (index/url/title/active) --
+        the rail card renders it when the session holds more than one
+        page, and a background tab's peek frame replaces the view
+        locally until the model's next frame */
+    tabs?: Array<{ index: number; url: string; title: string; active: boolean }>;
   } | null;
   /** ALL live browser sessions keyed by session id (v2.1 R3B: the lead
       plus one per delegating subagent -- the rail card's tab strip).
@@ -1074,6 +1079,16 @@ export function applyEvent(
         ...(Array.isArray(event.box) ? { box: event.box.map(Number) } : {}),
         ...(event.x2 !== undefined && event.y2 !== undefined ? { x2: Number(event.x2), y2: Number(event.y2) } : {}),
         ...(event.name !== undefined ? { name: String(event.name) } : {}),
+        ...(Array.isArray(event.tabs)
+          ? {
+              tabs: (event.tabs as Array<Record<string, unknown>>).map((t) => ({
+                index: Number(t.index) || 0,
+                url: String(t.url ?? ""),
+                title: String(t.title ?? ""),
+                active: t.active === true,
+              })),
+            }
+          : {}),
       };
       runs[lastIdx] = {
         ...run,

@@ -34,6 +34,19 @@ def _browser_input_view() -> flask.Response:
     if kind == "done":
         session.finish_wait(session_id)
         return flask.jsonify({"ok": True})
+    if kind == "peek":
+        # the rail card's MANUAL tab preview: one annotated frame of the
+        # requested in-session tab (the model's mirror follows the ACTIVE
+        # page; the viewer may look at a page the model parked) --
+        # read-only, no switch, the model's lane never notices
+        try:
+            index = int(payload.get("index"))
+        except (TypeError, ValueError):
+            return flask.jsonify({"error": "peek needs an integer tab index"}), 422
+        try:
+            return flask.jsonify({"ok": True, "frame": session.frame(session_id, tab_index=index)})
+        except session.SessionError as exc:
+            return flask.jsonify({"error": str(exc)}), 502
     if kind not in ("click", "drag", "wheel", "type", "key", "back", "forward", "reload"):
         return (
             flask.jsonify({"error": "type must be click / drag / wheel / type / key / back / forward / reload"}),

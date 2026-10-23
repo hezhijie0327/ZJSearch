@@ -819,7 +819,7 @@ def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
     get(session_id).mark = mark
 
 
-def frame(session_id: str = LEAD) -> dict[str, t.Any]:
+def frame(session_id: str = LEAD, tab_index: int | None = None) -> dict[str, t.Any]:
     """The mirror frame: the viewport capture at mirror quality wearing
     the ref annotation overlay (browser-use's visual -- every scanned
     element's dashed outline + ref badge, injected for THIS capture and
@@ -827,12 +827,21 @@ def frame(session_id: str = LEAD) -> dict[str, t.Any]:
     is untouched between frames), PLUS the action mark when one has been
     tracked -- px/py viewport space, pk the action kind, name the
     touched element's own name (the client draws the cursor, its click
-    ripple and the i18n'd intent label)."""
+    ripple and the i18n'd intent label).  ``tab_index`` peeks ONE
+    background tab (the rail's manual preview -- the viewer may look at
+    a page the model parked): read-only, the pointer mark rides only the
+    active page's own frame.  Every frame carries the session's tab
+    strip so the client can offer the peek lane at all."""
     sess = get(session_id)
     with sess.lock:
 
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
+            if tab_index is not None:
+                sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+                idx = int(tab_index)
+                if 0 <= idx < len(sess.pages):
+                    page = sess.pages[idx]
             frames: list[t.Any] = []
             try:
                 marked = int(await page.evaluate(_ANNOTATE_JS))
@@ -858,16 +867,20 @@ def frame(session_id: str = LEAD) -> dict[str, t.Any]:
                     except Exception:  # pylint: disable=broad-exception-caught
                         pass
             vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
-            return {
+            out = {
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(vp["width"]),
                 "h": int(vp["height"]),
                 "url": str(page.url),
                 "title": await page.title(),
             }
+            views = _tab_view(sess.pages, sess.active)
+            await _tab_titles(sess.pages, views)
+            out["tabs"] = views
+            return out
 
         out = _run(run())
-    mark = sess.mark
+    mark = sess.mark if tab_index is None else None
     if mark:
         out.update(mark)
     return out

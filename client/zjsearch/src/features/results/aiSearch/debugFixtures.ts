@@ -2693,6 +2693,18 @@ const BROWSER_OPS_STAGE: DebugScenario = {
       pk: "scroll",
       name: "百度百科",
       box: [160, 690, 640, 34],
+      // the session's IN-SESSION tab strip: the rail card renders it when
+      // the session holds more than one page -- the viewer peeks a parked
+      // tab (a captured frame overlays locally)
+      tabs: [
+        { index: 0, url: "https://cn.bing.com/search?q=安吉云上草原", title: "安吉云上草原 - Search", active: true },
+        {
+          index: 1,
+          url: "https://www.bing.com/search?q=安吉云上草原+门票价格",
+          title: "安吉云上草原门票价格 - Search",
+          active: false,
+        },
+      ],
     },
     {
       e: "call",

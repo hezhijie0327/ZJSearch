@@ -6,6 +6,7 @@ import {
   BookOpenText,
   Camera,
   ChevronsUpDown,
+  CornerDownRight,
   Globe,
   History,
   Hourglass,
@@ -180,7 +181,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
     return null;
   }
   return (
-    <ol className="mt-1 space-y-0.5">
+    <ol className="mt-1 space-y-1.5">
       {steps.map((step, i) => {
         const action = String(step.action ?? "");
         const Icon = ACTION_ICONS[action] ?? AppWindow;
@@ -188,7 +189,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         const cut = line.indexOf(". ");
         let tail = cut > 0 ? line.slice(cut + 2) : line;
         // the service's tail leads with the ENGLISH action name ("scroll:")
-        // -- the localized verb is already rendered beside it
+        // -- the localized verb is rendered on the step's own line
         tail = tail.replace(/^[a-z_]+: /, "");
         const failed = tail.includes("error:");
         const verb = browseView.label({
@@ -196,20 +197,46 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
           results: [],
           t,
         });
+        // TWO LINES per step: the verb line (what the model did) and the
+        // destination line (where the session landed -- the observation's
+        // "now:" page); a failed step's second line carries the error
+        const nowAt = tail.indexOf(". now: ");
+        const dest = nowAt > 0 ? tail.slice(nowAt + 7).replace(/\s*\([^)]*\)\s*$/, "") : "";
+        const rest = nowAt > 0 ? tail.slice(0, nowAt) : tail;
         return (
-          <li className="flex min-w-0 items-center gap-1.5 text-xs" key={i}>
+          <li className="flex min-w-0 items-start gap-1.5 text-xs" key={i}>
             <span
-              className={`shrink-0 rounded px-1 font-mono leading-4 ${
+              className={`mt-px shrink-0 rounded px-1 font-mono leading-4 ${
                 failed ? "bg-danger/10 text-danger" : "bg-accent-soft text-accent"
               }`}
             >
               {i + 1}
             </span>
-            <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
-            <span className={`shrink-0 font-medium ${failed ? "text-danger" : "text-ink-2"}`}>{verb}</span>
-            <span className={`min-w-0 flex-1 truncate ${failed ? "text-danger" : "text-ink-3"}`} dir="auto">
-              {tail}
-            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
+                <span className={`min-w-0 flex-1 truncate font-medium ${failed ? "text-danger" : "text-ink-2"}`}>
+                  {verb}
+                </span>
+                {!dest && !failed ? (
+                  <span className="shrink-0 truncate text-ink-3" dir="auto">
+                    {rest}
+                  </span>
+                ) : null}
+              </div>
+              {dest ? (
+                <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
+                  <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate" dir="auto">
+                    {dest}
+                  </span>
+                </div>
+              ) : failed ? (
+                <div className="mt-0.5 truncate ps-[18px] text-danger" dir="auto">
+                  {tail}
+                </div>
+              ) : null}
+            </div>
           </li>
         );
       })}

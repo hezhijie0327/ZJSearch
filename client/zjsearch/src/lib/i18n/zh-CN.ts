@@ -523,6 +523,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_browser_tab_switch: "切换标签页",
   ai_browser_tab_close: "关闭标签页",
   ai_browser_tab_list: "标签页列表",
+  ai_browser_tab_peek: "预览中",
   ai_browser_act_multi: "批量操作",
   ai_browser_act_back: "后退",
   ai_browser_act_forward: "前进",

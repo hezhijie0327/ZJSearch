@@ -16,6 +16,7 @@ export type BrowserInputPayload =
   | { type: "back" }
   | { type: "forward" }
   | { type: "reload" }
+  | { type: "peek"; index: number }
   | { type: "done" };
 
 /** The fresh mirror frame the input route returns after every forwarded
@@ -31,6 +32,9 @@ export interface BrowserInputFrame {
   px?: number;
   py?: number;
   pk?: string;
+  /** the session's in-session tab strip (the rail's peek lane renders
+      it; the model's own frames carry it too) */
+  tabs?: Array<{ index: number; url: string; title: string; active: boolean }>;
 }
 
 let token = "";

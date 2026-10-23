@@ -627,6 +627,10 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
   const t = useT();
   const [tab, setTab] = useState("lead");
   const [full, setFull] = useState(false);
+  // the IN-SESSION tab peek: the viewer's manual look at a page the
+  // model parked -- one captured frame overlaid locally, superseded by
+  // the model's next wire frame (the fold replaces run.browser)
+  const [peek, setPeek] = useState<MirrorView | null>(null);
   const windowOpen = useRef(false);
   useEffect(() => {
     if (view.waitLeft === undefined) {
@@ -643,6 +647,21 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
   const activeView = (multi ? sessions?.[tab] : undefined) ?? view;
   const leadActive = tab === "lead" || !multi;
   const waiting = leadActive && view.waitLeft !== undefined;
+  // any wire frame supersedes the peek (the fold replaces the view) --
+  // activeView is the TRIGGER (a new object identity per frame), not a read
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the derived view's identity IS the change signal
+  useEffect(() => {
+    setPeek(null);
+  }, [activeView]);
+  const sessionTabs = leadActive ? (activeView.tabs ?? []) : [];
+  const shown = peek ?? activeView;
+  const peekTo = (index: number) => {
+    void postBrowserInput({ type: "peek", index }).then((frame) => {
+      if (frame) {
+        setPeek({ ...activeView, ...frame, tabs: activeView.tabs });
+      }
+    });
+  };
   return (
     <section aria-label={t("ai_browser_live")} className="mb-5">
       <div className="flex items-center gap-2 px-1">
@@ -704,6 +723,46 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
             </span>
           )}
         </div>
+        {leadActive && sessionTabs.length > 1 ? (
+          // the IN-SESSION tab strip: the pages the MODEL holds -- the
+          // viewer may peek a parked one (a captured frame overlaid
+          // locally); the model's next frame returns the card to live
+          <div
+            className={`flex items-center gap-1 overflow-x-auto border-b border-line bg-surface-2/40 px-1.5 py-1 ${SCROLLBAR_NONE}`}
+          >
+            {sessionTabs.map((t2) => {
+              const peeking = peek !== null && peek.url === t2.url;
+              return (
+                <button
+                  aria-pressed={peeking || (t2.active && peek === null)}
+                  className={`inline-flex min-w-0 max-w-44 shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs transition-colors ${
+                    peeking || (t2.active && peek === null)
+                      ? "border-accent-strong bg-accent-soft font-medium text-accent"
+                      : "border-line text-ink-3 hover:text-ink"
+                  }`}
+                  key={t2.index}
+                  onClick={() => {
+                    if (t2.active) {
+                      setPeek(null);
+                    } else {
+                      peekTo(t2.index);
+                    }
+                  }}
+                  title={t2.title || t2.url}
+                  type="button"
+                >
+                  <span className="shrink-0 font-mono leading-none">[{t2.index}]</span>
+                  <span className="truncate">{t2.title || t2.url}</span>
+                </button>
+              );
+            })}
+            {peek ? (
+              <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-xs font-medium text-accent-contrast">
+                {t("ai_browser_tab_peek")}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {leadActive ? (
           <button
             aria-label={t("ai_browser_full")}
@@ -712,12 +771,12 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
             type="button"
           >
             <img
-              alt={activeView.title || activeView.url}
+              alt={shown.title || shown.url}
               className="w-full object-contain object-top"
-              src={`data:image/jpeg;base64,${activeView.img}`}
-              style={{ aspectRatio: `${activeView.w || VIEWPORT_W()} / ${activeView.h || VIEWPORT_H()}` }}
+              src={`data:image/jpeg;base64,${shown.img}`}
+              style={{ aspectRatio: `${shown.w || VIEWPORT_W()} / ${shown.h || VIEWPORT_H()}` }}
             />
-            <ActionMark view={activeView} />
+            <ActionMark view={shown} />
           </button>
         ) : (
           <div className="relative">
