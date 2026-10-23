@@ -159,3 +159,104 @@ export function safeParse(text: string): unknown {
     return {};
   }
 }
+
+// ------------------------------------------------------------------ tags
+
+const GENERIC_TAGS = new Set([
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "of",
+  "in",
+  "on",
+  "to",
+  "for",
+  "from",
+  "with",
+  "by",
+  "at",
+  "as",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "this",
+  "that",
+  "these",
+  "those",
+  "it",
+  "its",
+  "not",
+  "no",
+  "but",
+  "if",
+  "then",
+  "than",
+  "so",
+  "we",
+  "you",
+  "they",
+  "he",
+  "she",
+  "his",
+  "her",
+  "their",
+  "our",
+  "your",
+  "my",
+  "me",
+  "us",
+  "them",
+  "what",
+  "which",
+  "who",
+  "how",
+  "why",
+  "when",
+  "where",
+  "will",
+  "can",
+  "could",
+  "should",
+  "would",
+  "may",
+  "might",
+  "do",
+  "does",
+  "did",
+  "done",
+  "have",
+  "has",
+  "had",
+  "get",
+  "got",
+  "use",
+  "used",
+  "using",
+  "new",
+  "com",
+  "www",
+  "http",
+  "https",
+]);
+
+/** The GENERIC-TAG GATE: a tag must carry meaning on its own -- English
+    function words (the/a/of/... turned the tag graph into a hairball whose
+    biggest cluster WAS the stopwords), bare digits and one-glyph tokens
+    are refused.  Wired at every tag doorway: the seed layer, the graph
+    snapshot, the recall vocabulary. */
+export function isGenericTag(tag: string): boolean {
+  const clean = (tag || "").trim().toLowerCase();
+  if (clean.length < 2) {
+    return true;
+  }
+  if (/^\d+([.,]\d+)*$/.test(clean)) {
+    return true;
+  }
+  return GENERIC_TAGS.has(clean);
+}

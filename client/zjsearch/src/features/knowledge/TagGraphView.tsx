@@ -36,6 +36,11 @@ interface SimNode {
   vx: number;
   vy: number;
   pinned: boolean;
+  /** the node's CONSTELLATION center -- connected components sit in their
+      own grid slot and the weak pull keeps them there, so unrelated
+      themes never intermingle into one hairball */
+  cx: number;
+  cy: number;
 }
 
 const KIND_LABEL: Record<
@@ -159,15 +164,73 @@ export function TagGraphView({
     }
     const rng = mulberry32(42);
     const maxUses = Math.max(...graph.nodes.map((node) => node.uses), 1);
-    simRef.current = graph.nodes.map((node) => ({
-      tag: node.tag,
-      uses: node.uses,
-      x: LAYOUT_W / 2 + (rng() - 0.5) * LAYOUT_W * 0.6,
-      y: LAYOUT_H / 2 + (rng() - 0.5) * LAYOUT_H * 0.6,
-      vx: 0,
-      vy: 0,
-      pinned: false,
-    }));
+    // THE CONSTELLATION LAYOUT: connected components (over the co-occurrence
+    // edges) are the graph's real themes -- each gets its own grid slot as
+    // a center, members initialize around it, and the weak pull keeps the
+    // constellation there.  Unrelated themes (WoW vs LobeHub vs nginx)
+    // read as separate sky regions instead of one hairball.
+    const parent = new Map<string, string>();
+    const find = (tag: string): string => {
+      const root = parent.get(tag) ?? tag;
+      if (root !== tag) {
+        parent.set(tag, find(root));
+        return parent.get(tag) as string;
+      }
+      return root;
+    };
+    for (const node of graph.nodes) {
+      parent.set(node.tag, node.tag);
+    }
+    for (const edge of graph.edges) {
+      if (!parent.has(edge.a) || !parent.has(edge.b)) {
+        continue;
+      }
+      const ra = find(edge.a);
+      const rb = find(edge.b);
+      if (ra !== rb) {
+        parent.set(ra, rb);
+      }
+    }
+    const components = new Map<string, string[]>();
+    for (const node of graph.nodes) {
+      const root = find(node.tag);
+      const list = components.get(root) ?? [];
+      list.push(node.tag);
+      components.set(root, list);
+    }
+    const ordered = [...components.values()].sort(
+      (a, b) =>
+        b.reduce((sum, t) => sum + (graph.nodes.find((n) => n.tag === t)?.uses ?? 0), 0) -
+        a.reduce((sum, t) => sum + (graph.nodes.find((n) => n.tag === t)?.uses ?? 0), 0),
+    );
+    const cols = Math.max(1, Math.ceil(Math.sqrt(ordered.length)));
+    const cellW = LAYOUT_W / cols;
+    const cellH = LAYOUT_H / Math.max(1, Math.ceil(ordered.length / cols));
+    const centers = new Map<string, { x: number; y: number; spread: number }>();
+    ordered.forEach((members, index) => {
+      const gx = index % cols;
+      const gy = Math.floor(index / cols);
+      const uses = members.reduce((sum, t) => sum + (graph.nodes.find((n) => n.tag === t)?.uses ?? 0), 0);
+      const spread =
+        Math.min(cellW, cellH) * (0.22 + 0.12 * Math.min(1, members.length / 8) + 0.1 * Math.min(1, uses / 40));
+      for (const member of members) {
+        centers.set(member, { x: cellW * (gx + 0.5), y: cellH * (gy + 0.5), spread });
+      }
+    });
+    simRef.current = graph.nodes.map((node) => {
+      const home = centers.get(node.tag) ?? { x: LAYOUT_W / 2, y: LAYOUT_H / 2, spread: 120 };
+      return {
+        tag: node.tag,
+        uses: node.uses,
+        x: home.x + (rng() - 0.5) * home.spread * 2,
+        y: home.y + (rng() - 0.5) * home.spread * 2,
+        vx: 0,
+        vy: 0,
+        pinned: false,
+        cx: home.x,
+        cy: home.y,
+      };
+    });
     edgesRef.current = graph.edges;
     selectedRef.current = null;
     setSelected(null);
@@ -298,6 +361,11 @@ export function TagGraphView({
         if (node.pinned) {
           continue;
         }
+        // the constellation pull: home in on the component's own slot --
+        // weak enough that springs shape the cluster, strong enough that
+        // neighboring themes never drift into one blob
+        node.vx += (node.cx - node.x) * 0.012 * alpha;
+        node.vy += (node.cy - node.y) * 0.012 * alpha;
         node.vx *= 0.82;
         node.vy *= 0.82;
         node.x += Math.max(-8, Math.min(8, node.vx));

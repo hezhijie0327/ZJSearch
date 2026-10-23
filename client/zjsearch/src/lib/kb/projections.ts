@@ -18,7 +18,7 @@
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
 import { fetchJson } from "@/lib/http.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
-import { aiTokenValue, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
+import { aiTokenValue, embedModelName, enqueue, isGenericTag, safeParse } from "@/lib/kb/shared.ts";
 import { invalidateStatsCache } from "@/lib/kb/stats.ts";
 import { pgQuery, pgTransaction, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
 
@@ -126,13 +126,13 @@ function autoTitle(run: RunSnapshot): string | null {
 function deriveTags(run: RunSnapshot): string[] {
   const raw = new Set<string>();
   for (const token of segmentKeywords(run.q).split(" ")) {
-    if (token.length >= 2) {
+    if (token.length >= 2 && !isGenericTag(token)) {
       raw.add(token);
     }
   }
   for (const task of run.plan ?? []) {
     const title = String(task.title ?? "").trim();
-    if (title && title.length <= 30) {
+    if (title && title.length <= 30 && !isGenericTag(title)) {
       raw.add(title);
     }
   }
@@ -148,6 +148,9 @@ function deriveTags(run: RunSnapshot): string[] {
     seeds into concept tags later. */
 function seedTags(...parts: string[]): string[] {
   return segmentKeywords(...parts)
+    .split(" ")
+    .filter((token) => token.length >= 2 && !isGenericTag(token))
+    .join(" ")
     .split(" ")
     .filter((token) => token.length >= 2)
     .slice(0, 12);
