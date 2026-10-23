@@ -61,7 +61,7 @@ function addressOf(url: string): string {
     frame).  The SERVER ships the vocabulary (the action kind + the
     element's own name from its snapshot directory); the CLIENT speaks
     the sentence -- the same i18n'd action keys the timeline rows use,
-    so the label reads 点击 门票预订, not "clicked e194".  A synthetic
+    so the label names the element, never the machine ref.  A synthetic
     overlay -- viewport screenshots never contain one -- so the viewer
     sees WHAT the model did, not just where its cursor rests.  Everything
     is optional; old frames render bare. */

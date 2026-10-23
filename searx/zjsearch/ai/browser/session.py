@@ -427,7 +427,7 @@ _NAME_LINE_RE = re.compile(r"^((?:f\d+)?e\d+)\t[^\t]*\t(.*)$")
 def _index_names(outline: str) -> dict[str, str]:
     """The snapshot outline's ref -> accessible-name directory -- the
     action mark's vocabulary (the mirror label names the element it
-    touched, "clicked 门票预订", not the machine ref).  Rebuilt WHOLESALE
+    touched, not the machine ref).  Rebuilt WHOLESALE
     per scan: refs die to re-renders, the model's next action addresses
     the current outline, and an unbounded dict must not outlive them."""
     out: dict[str, str] = {}
@@ -477,9 +477,9 @@ async def _mark_ref_action(
     """Best-effort ACTION MARK of one ref-targeted action: the element's
     bounding box + landing point ride the next mirror frame, and the
     takeover viewer sees WHICH element the action touched -- labeled by
-    the element's OWN name from the snapshot directory (an unknown ref
-    falls back to the raw id; an explicit ``name`` -- the typed text,
-    the chosen options -- outranks the lookup).  An unresolvable
+    the element's OWN name from the snapshot directory (the machine ref
+    only when the directory does not know it; an explicit ``name`` --
+    the typed text, the chosen options -- outranks the lookup).  An unresolvable
     box (detached mid-race, zero-size) degrades to the point-only mark;
     the mark is a visibility aid, never action-critical.  The VERB is
     the client's (``pk`` + the i18n'd action key) -- the server ships
