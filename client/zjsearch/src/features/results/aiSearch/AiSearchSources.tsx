@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Award, BookOpen, Globe, History, Server } from "lucide-react";
+import { Award, BookOpen, Bot as BotGlyph, Globe, History, Server } from "lucide-react";
 import { useState } from "react";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
@@ -30,9 +30,16 @@ import { useCapExpand } from "@/lib/useCapExpand.ts";
     without-icon cards render identically. */
 function SourceFavicon({ source }: { source: AiSearchSource }) {
   const [failed, setFailed] = useState(false);
+  // the browser MINT wears the agent mark (the session tab's glyph): this
+  // [n] was DRIVEN -- open / read / a click navigation / a popup -- never
+  // searched, so the favicon slot would be a lie either way (the session
+  // never resolves favicons for driven pages)
+  const Bot = source.browser;
   return (
     <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-[5px] bg-surface ring-1 ring-line">
-      {source.favicon && !failed ? (
+      {Bot ? (
+        <BotGlyph aria-hidden="true" className="size-3 text-accent" />
+      ) : source.favicon && !failed ? (
         <img
           alt=""
           aria-hidden="true"

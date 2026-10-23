@@ -230,6 +230,10 @@ export interface AiSearchSource {
   category?: string;
   /** browse read this page in full (the card's read-in-full badge) */
   crawled?: boolean;
+  /** the browser MINT -- this [n] was DRIVEN (open / read / a click
+      navigation / a popup), not searched: the source card wears the
+      agent mark instead of the favicon-glyph fallback */
+  browser?: boolean;
   /** the result's snippet from the SearXNG result payload -- the source's
       knowledge-projection body (uncrawled sources stay searchable) */
   content?: string;
@@ -1131,6 +1135,7 @@ export function applyEvent(
           url,
           netloc: String(item.netloc ?? ""),
           favicon: String(item.favicon ?? ""),
+          browser: item.browser === true,
           img: String(item.img ?? "") || undefined,
           category: String(item.category ?? "") || undefined,
           crawled: Boolean(item.crawled),
@@ -1153,6 +1158,7 @@ export function applyEvent(
         const existing = merged.find((candidate) => candidate.n === source.n);
         if (existing) {
           existing.crawled = existing.crawled || source.crawled;
+          existing.browser = existing.browser || source.browser;
           existing.img = existing.img ?? source.img;
         } else {
           merged.push(source);

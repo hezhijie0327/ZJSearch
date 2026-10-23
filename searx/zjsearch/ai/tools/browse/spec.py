@@ -49,6 +49,10 @@ canvas widget, a chart), and screenshot with x/y/w/h crops that
 VIEWPORT rectangle instead (the same coordinate space you click in) --
 for a corner, a caption strip, or a spread of widgets no single element
 wraps.  So aim before you shoot: ref for a thing, x/y/w/h for a place.
+QR-CODE LOGINS especially: when the wall shows a QR code, screenshot
+THE QR ELEMENT (its ref) BEFORE wait_user -- the close-up lands in the
+human's timeline row big enough to scan from the couch; a full-page
+shot leaves it thumbnail-sized.
 Child-frame refs are
 prefixed with their frame index (f1e5) -- embedded widgets live there; a
 screenshot of the frame's box plus coordinate clicks is how you work

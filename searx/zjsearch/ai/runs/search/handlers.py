@@ -170,6 +170,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                         "url": url,
                         "netloc": netloc,
                         "favicon": "",
+                        # the browser MINT: the client's source card shows
+                        # the agent mark instead of the favicon-glyph
+                        # fallback -- the reader sees this [n] was driven,
+                        # not searched
+                        "browser": True,
                         "pretty_url": url,
                         "published_date": "",
                         "crawled": crawled,

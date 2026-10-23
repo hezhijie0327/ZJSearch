@@ -2640,10 +2640,13 @@ const BROWSER_OPS_STAGE: DebugScenario = {
       title: "安吉云上草原 - Search",
       // the REAL annotated frame: dashed outlines + ref badges painted by
       // the capture-time overlay (links green / buttons red / inputs gold /
-      // the rest gray) -- the model's own screenshots stay bare
+      // the rest gray) -- the model's own screenshots stay bare.  The wait
+      // window rides the SAME frame: the rail card shows the countdown AND
+      // the gold 完成 chip (the takeover-minimized finish affordance).
       img: BING_ANN_JPEG,
       w: 1920,
       h: 1080,
+      wait_left: 174,
     },
     {
       e: "call",
@@ -2755,6 +2758,7 @@ const BROWSER_OPS_STAGE: DebugScenario = {
           netloc: "cn.bing.com",
           favicon: "",
           crawled: true,
+          browser: true,
         },
         {
           n: 2,
@@ -2766,9 +2770,22 @@ const BROWSER_OPS_STAGE: DebugScenario = {
           netloc: "www.bing.com",
           favicon: "",
           crawled: false,
+          browser: true,
         },
       ],
     },
+    { e: "open", id: 9, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "think",
+      id: 9,
+      t: "两个搜索页 + 百科条目互相印证:门票 260 元、缆车 280 元[1][2]。浏览器探索的页面已在来源里,直接给结论。",
+    },
+    {
+      e: "answer",
+      t: "安吉云上草原门票 **260 元/人**,上下缆车另收 **280 元**[1];百科条目与票价细节已核对[2]。",
+    },
+    { e: "close", id: 9 },
     {
       e: "settle",
       status: "done",
