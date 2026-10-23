@@ -12,7 +12,7 @@ import { listEnginesView } from "@/features/results/aiSearch/calls/views/listEng
 import { mcpView } from "@/features/results/aiSearch/calls/views/mcp.tsx";
 import { memoryView } from "@/features/results/aiSearch/calls/views/memory.tsx";
 import { messageSubtaskView } from "@/features/results/aiSearch/calls/views/messageSubtask.ts";
-import { recallHistoryView } from "@/features/results/aiSearch/calls/views/recallHistory.ts";
+import { recallHistoryView } from "@/features/results/aiSearch/calls/views/recallHistory.tsx";
 import { recordFindingsView } from "@/features/results/aiSearch/calls/views/recordFindings.tsx";
 import { searchWebView } from "@/features/results/aiSearch/calls/views/searchWeb.ts";
 import { setDeliverableView } from "@/features/results/aiSearch/calls/views/setDeliverable.tsx";
