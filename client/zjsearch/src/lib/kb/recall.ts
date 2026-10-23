@@ -11,7 +11,7 @@
     The graph is a query, not a table. */
 
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
-import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, isGenericTag, type KnowledgeItem, rowToItem } from "@/lib/kb/shared.ts";
+import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
@@ -113,7 +113,7 @@ async function tagVocabulary(): Promise<string[]> {
      WHERE kind IN ('source', 'answer', 'document', 'memory', 'run') AND tags <> '[]'::jsonb
      ORDER BY tag`,
   );
-  const tags = (rows ?? []).map((row) => row.tag).filter((tag) => !isGenericTag(tag));
+  const tags = (rows ?? []).map((row) => row.tag);
   vocabularyCache = { tags, at: Date.now() };
   return tags;
 }
@@ -472,10 +472,7 @@ export async function graphSnapshot(limit = 40): Promise<TagGraph> {
   // the GENERIC-TAG GATE at the view's door: over-fetch x3 then drop the
   // function words -- the existing rows keep their raw seeds, the graph
   // just refuses to draw the hairball they would make
-  const nodes = (nodeRows ?? [])
-    .map((row) => ({ tag: row.tag, uses: Number(row.uses) || 0 }))
-    .filter((node) => !isGenericTag(node.tag))
-    .slice(0, limit);
+  const nodes = (nodeRows ?? []).map((row) => ({ tag: row.tag, uses: Number(row.uses) || 0 })).slice(0, limit);
   if (nodes.length < 2) {
     return { nodes, edges: [] };
   }

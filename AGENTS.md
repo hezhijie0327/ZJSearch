@@ -318,11 +318,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (`runs/search/`: profile/prompts/gates/tools/executor/route;
     THREE tiers, three products on ONE loop -- Search (speed: the
     AI-Overview feel, one round, the minimal toolset: search/calculate/
-    ask_user/memory, inspect_image only when the request carries
-    images), Deep Search (balanced: the probe
+    ask_user/memory/record_findings, inspect_image only when the request
+    carries images), Deep Search (balanced: the probe
     ladder 12-60 rounds, the plan + ledger machinery), Deep Research
     (deep: the ladder 15-120, decomposition, the ONLY tier with the
-    delegation tools) -- the tiers differ in budget/decomposition/
+    delegation tools) -- the findings LEDGER is on EVERY tier since the
+    tags became findings-only (see the tag source below) -- the tiers differ in budget/decomposition/
     toolset/output-shape; the OUTPUT GRAMMAR is one (`spine.shape_ladder`:
     bold-lead opening, sections when facets warrant, lists/tables/
     callouts by content, citations on load-bearing claims) and the tier
@@ -2009,9 +2010,14 @@ fact optionally carries 1-3 SHORT concept tags the model names at write
 time (`tags` in the findings schema, zero extra calls; dedup merges
 union them, cap 6; the promotion ops carry them over) — the findings
 card renders them as meta chips, and settleRun folds the active facts'
-tags into the run row's tag set (extractor tags win the base, fact tags
-fill the tail, cap 12), so a graph tag resolves to the runs whose
-established facts carry it.  THE TAGS ARE TAUGHT, NOT HOPED FOR
+tags into the run row's tag set (cap 12).  THE TAGS ARE THE ONLY SOURCE
+(2026-10-24): the mechanical seed layer (query/title tokens via
+deriveTags/seedTags) is GONE — run/source/document rows are born
+untagged and the settle's flow-back lands the citing facts' tags on the
+cited source rows (n -> url_hash, per-source distinct merge, cap 12) —
+the graph, the directory and the recall's three tag legs read ONLY the
+model's own semantic vocabulary, so the GENERIC_TAGS stopword
+enumeration left with the seeds that needed it.  THE TAGS ARE TAUGHT, NOT HOPED FOR
 (2026-10-14): an optional schema field's description alone is a coin
 flip on the model noticing it (a balanced run's 20 facts carried zero)
 — the `<findings>` block carries the binding sentence (every fact

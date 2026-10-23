@@ -82,13 +82,18 @@ def build_tool_surface(
         search_web_spec(browser_on, with_info=research_tier),
         calculate_spec(),
         memory_spec(),
+        # the LEDGER on every tier (the owner's call): the findings' concept
+        # tags are the tag namespace's SOURCE OF TRUTH -- a speed run that
+        # records one fact names its own topics, and every surface reading
+        # tags (the graph, the directory, the recall's tag legs) reads
+        # semantics instead of query tokens
+        record_findings_spec(),
     ]
     if research_tier:
-        # the research machinery: ledger, the deployment inventory, the
-        # structured tie-break and the history recall -- inline, not
-        # discovered: the index round trip is a per-run tax the small
-        # bounded internal set must not pay
-        specs.append(record_findings_spec())
+        # the research machinery: the deployment inventory, the structured
+        # tie-break and the history recall -- inline, not discovered: the
+        # index round trip is a per-run tax the small bounded internal set
+        # must not pay
         specs.append(list_engines_spec())
         if judge_on:
             specs.append(evaluate_spec())

@@ -18,7 +18,7 @@
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
 import { fetchJson } from "@/lib/http.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
-import { aiTokenValue, embedModelName, enqueue, isGenericTag, safeParse } from "@/lib/kb/shared.ts";
+import { aiTokenValue, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
 import { invalidateStatsCache } from "@/lib/kb/stats.ts";
 import { pgQuery, pgTransaction, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
 
@@ -116,44 +116,6 @@ function autoTitle(run: RunSnapshot): string | null {
     return null;
   }
   return base.length > 24 ? `${base.slice(0, 24)}…` : base;
-}
-
-/** The mechanical tag layer: query tokens + the model's own task titles
-    -- zero cost, always present; the normalization pass
-    (scheduleTagNormalize) later folds these into concept tags.  Hosts
-    and the mode name are deliberately NOT tags: they turned the tag
-    graph into a host cloud (shipped and reverted within a day). */
-function deriveTags(run: RunSnapshot): string[] {
-  const raw = new Set<string>();
-  for (const token of segmentKeywords(run.q).split(" ")) {
-    if (token.length >= 2 && !isGenericTag(token)) {
-      raw.add(token);
-    }
-  }
-  for (const task of run.plan ?? []) {
-    const title = String(task.title ?? "").trim();
-    if (title && title.length <= 30 && !isGenericTag(title)) {
-      raw.add(title);
-    }
-  }
-  return [...raw].slice(0, 12);
-}
-
-/** The mechanical seed for the NON-run kinds (the deriveTags shape, fed
-    from the row's own text): searched sources (title), crawled documents
-    (title), memories (content) -- the tag graph's kind set reads all of
-    them, so an untagged row is an invisible one.  Hosts stay BANNED (the
-    host-cloud revert) -- the graph's node query filters dotted tokens
-    anyway.  The normalization pass (scheduleTagNormalize) folds the
-    seeds into concept tags later. */
-function seedTags(...parts: string[]): string[] {
-  return segmentKeywords(...parts)
-    .split(" ")
-    .filter((token) => token.length >= 2 && !isGenericTag(token))
-    .join(" ")
-    .split(" ")
-    .filter((token) => token.length >= 2)
-    .slice(0, 12);
 }
 
 /** The cited [n] set of an answer -- the (run, source, cited) fact's
@@ -278,7 +240,7 @@ export function saveOverview(input: {
           String(source.title ?? "").slice(0, 300),
           snippet,
           JSON.stringify(meta),
-          JSON.stringify(seedTags(String(source.title ?? ""))),
+          JSON.stringify([]),
           segmentKeywords(String(source.title ?? ""), String(source.domain ?? ""), snippet).slice(0, 4000),
           now,
         ],
@@ -345,10 +307,11 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
       const now = Date.now();
       const citedSet = citedNumbers(String(run.answer ?? ""));
       // the tag layers: the extractor's concept tags (the late `tags`
-      // event) win the base, deriveTags is the mechanical fallback -- and
-      // the LEDGER's fact tags (the model's write-time topic naming) fill
-      // the tail: the tag graph's evidence layer, so a topic tag resolves
-      // to the runs whose established facts carry it
+      // event) and the LEDGER's fact tags (the model's write-time topic
+      // naming) are the ONLY tag sources -- the mechanical query-token
+      // seeds are gone (they turned the tag graph into a stopword
+      // hairball): a run that recorded no findings carries no tags, and
+      // that is the honest state
       const factTags = (run.findings ?? []).flatMap((fact) => {
         const record = fact as { status?: unknown; tags?: unknown } | null;
         if (record?.status !== "active" || !Array.isArray(record.tags)) {
@@ -356,7 +319,7 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
         }
         return record.tags.map((tag) => String(tag ?? "").trim()).filter(Boolean);
       });
-      const tags = [...new Set([...(run.tags?.length ? run.tags : deriveTags(run)), ...factTags])].slice(0, 12);
+      const tags = [...new Set([...(run.tags ?? []), ...factTags])].slice(0, 12);
       // the run's head row (startRun may have pre-inserted it as
       // "streaming" -- this upsert settles it)
       await pgQuery(
@@ -571,11 +534,10 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           continue; // this run already counted this source
         }
         const snippet = String(source.content ?? "").slice(0, 500);
-        // the seed layer: the searched result joins the tag graph's
-        // vocabulary from its title (the normalize pass folds the seeds
-        // into concept tags); first insert wins -- later runs only bump
-        // the ref/cited counters
-        const sourceTags = JSON.stringify(seedTags(title));
+        // born UNTAGGED: the tags come from the findings ledger's
+        // flow-back (the settle's fact-tag pass merges the citing facts'
+        // concept tags) -- title tokens are search material, not tags
+        const sourceTags = JSON.stringify([]);
         await pgQuery(
           `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, refs, cited, tags, search_text, created, updated, occurred_at)
            VALUES ($1, 'source', $2, $3, $4, $5, $6, '{}'::jsonb, 1, $7, $8::jsonb, $9, $10, $10, $10)
@@ -673,12 +635,8 @@ export function archiveDocument(url: string, title: string, markdown: string): v
         title.slice(0, 300),
         markdown.slice(0, 60000),
         JSON.stringify({ chars: markdown.length, fetchedAt: now }),
-        // the seed layer from the page's TITLE: the old [host] tag was
-        // invisible by construction (hosts are banned tags -- the
-        // host-cloud revert -- and the graph's node query filters dotted
-        // tokens anyway), so crawled pages never appeared in the tag
-        // graph; the normalize pass folds the seeds into concept tags
-        JSON.stringify(seedTags(title)),
+        // born UNTAGGED (the tags come from the findings' flow-back when
+        // a fact cites the page)
         segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000),
         now,
       ],
@@ -704,13 +662,8 @@ export function archiveAttachments(
     const now = Date.now();
     for (const doc of docs) {
       const hash = urlHash(doc.name);
-      // the mechanical tag layer (deriveTags' shape): the file name's
-      // tokens -- enough to place the row in the tag graph's vocabulary,
-      // the normalize pass later folds them into concept tags
-      const tags = segmentKeywords(doc.name)
-        .split(" ")
-        .filter((token) => token.length >= 2)
-        .slice(0, 12);
+      // born UNTAGGED (the findings' flow-back names the rows a fact cites)
+      const tags: string[] = [];
       await pgQuery(
         `INSERT INTO knowledge (id, kind, thread_id, run_id, url_hash, url, host, title, body, meta, status, tags, search_text, created, updated, occurred_at)
          VALUES ($1, 'document', $2, $3, $4, NULL, '', $5, $6, $7::jsonb, 'done', $8::jsonb, $9, $10, $10, $10)
@@ -779,7 +732,7 @@ export function saveMemory(content: string): void {
       `INSERT INTO knowledge (id, kind, body, status, tags, search_text, created, updated, occurred_at)
        SELECT $1, 'memory', $2, 'done', $3::jsonb, $4, $5, $5, $5
        WHERE NOT EXISTS (SELECT 1 FROM knowledge WHERE kind = 'memory' AND body = $2)`,
-      [`mem:${newMemoryId()}`, text, JSON.stringify(seedTags(text)), segmentKeywords(text).slice(0, 300), now],
+      [`mem:${newMemoryId()}`, text, JSON.stringify([]), segmentKeywords(text).slice(0, 300), now],
     );
     void embedPending();
     scheduleTagNormalize();
