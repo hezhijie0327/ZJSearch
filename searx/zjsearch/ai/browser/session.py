@@ -29,6 +29,8 @@ import logging
 import re
 import threading
 import typing as t
+import uuid
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from searx.network.client import get_loop
@@ -191,6 +193,11 @@ class _Session:  # pylint: disable=too-few-public-methods
         # one): the model can open/switch/close pages inside one session
         self.pages: list["Page"] = []
         self.active: int = 0
+        # the DOWNLOAD LEDGER: terminal entries only (saved / rejected /
+        # failed), appended by the capture tasks; the service drains the
+        # new tail after every mutating action and speaks it into the feed
+        self.downloads: list[dict[str, t.Any]] = []
+        self.download_cursor: int = 0
         self.wait_done = threading.Event()
         self.mark: dict[str, t.Any] | None = None
         self.names: dict[str, str] = {}
@@ -285,6 +292,7 @@ async def _ensure_page(sess: _Session) -> "Page":
     if sess.page is not None:
         gate.visual_pages.pop(id(sess.page), None)
     gate.visual_pages[id(page)] = page
+    page.on("download", lambda dl: _schedule_download(sess, dl))
     sess.page = page
     sess.pages = [page]
     sess.active = 0
@@ -502,6 +510,42 @@ async def _mark_ref_action(
     sess.mark = mark
 
 
+_OCCLUSION_JS = """
+([x, y, sel]) => {
+  const el = document.querySelector(sel);
+  if (!el) return null;
+  const landed = document.elementFromPoint(x, y);
+  if (!landed) return 'nothing (the point is off-document)';
+  if (landed === el || el.contains(landed) || landed.contains(el)) return null;
+  const t = (landed.textContent || '').trim().slice(0, 60);
+  return landed.tagName + (landed.id ? '#' + landed.id : '') + (t ? ' "' + t + '"' : '');
+}
+"""
+
+
+async def _assert_not_occluded(holder: "Page | object", sel: str, box: "list[int] | None") -> None:
+    """The click's landing check (the browser-use lesson): something the
+    scan saw as the topmost interactive element can still be COVERED at
+    click time -- a consent overlay, a cookie banner, a sticky bar.
+    elementFromPoint at the box center answers in one evaluate; a foreign
+    element fails the action FAST with the occluder's own description
+    (the 15s actionability timeout would say only 'intercepts pointer
+    events'), and pointer-events:none scrims skip the probe by nature."""
+    if not box:
+        return
+    probe = [
+        int(box[0] + box[2] / 2),
+        int(box[1] + box[3] / 2),
+        sel,
+    ]
+    try:
+        occluder = await holder.evaluate(_OCCLUSION_JS, probe)
+    except Exception:  # pylint: disable=broad-exception-caught
+        return  # a frame that forbids evaluation reads as unprobeable -- click anyway
+    if occluder:
+        raise SessionError(f"blocked: {occluder} covers this element -- dismiss it first, then re-click")
+
+
 def click(session_id: str, ref: str) -> dict[str, t.Any]:
     sess = get(session_id)
     with sess.lock:
@@ -509,10 +553,31 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
+            known = {id(pg) for pg in page.context.pages}
             holder, sel = await _resolve_holder(page, ref)
             await _mark_ref_action(sess, holder, sel, "click", ref)
+            await _assert_not_occluded(holder, sel, (sess.mark or {}).get("box"))
             await holder.click(sel, timeout=_ACTION_TIMEOUT_MS)
-            return await _post_action_state(sess, page, before, 600)
+            state = await _post_action_state(sess, page, before, 600)
+            # the POPUP check (target=_blank): a page the click spawned is
+            # pulled INTO the tab set and activated -- the model asked to go
+            # there, and an untracked popup would be an orphan the strip
+            # never shows
+            newcomer = next(
+                (pg for pg in page.context.pages if id(pg) not in known and not pg.is_closed()), None
+            )
+            if newcomer is not None:
+                await newcomer.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+                _register_tab(sess, newcomer)
+                await _settle_page(newcomer)
+                outline = await _snapshot_page(sess, newcomer)
+                state = {
+                    "url": str(newcomer.url),
+                    "title": await newcomer.title(),
+                    "snapshot": outline,
+                    "popup": True,
+                }
+            return state
 
         return _run(run())
 
@@ -867,6 +932,7 @@ def _register_tab(sess: _Session, page: "Page") -> None:
     if sess.page is not None:
         gate.visual_pages.pop(id(sess.page), None)
     gate.visual_pages[id(page)] = page
+    page.on("download", lambda dl: _schedule_download(sess, dl))
     sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
     sess.pages.append(page)
     sess.active = len(sess.pages) - 1
@@ -1002,6 +1068,121 @@ def scroll_to_text(session_id: str, text: str) -> dict[str, t.Any]:
                 }
             await page.wait_for_timeout(300)
             return {"url": str(page.url), "title": await page.title()}
+
+        return _run(run())
+
+
+def _schedule_download(sess: _Session, download: t.Any) -> None:
+    """The page's download event lands on the shared loop -- spawn the
+    capture task there (the session lock is taken INSIDE the task, at
+    the terminal append, never across the save's network wait)."""
+    asyncio.get_running_loop().create_task(_capture_download(sess, download))
+
+
+async def _capture_download(sess: _Session, download: t.Any) -> None:
+    """One download to a TERMINAL ledger entry -- the only states the
+    service's drain ever speaks.  THE SECURITY GATE: only extensions the
+    stack's converter actually reads are ever saved (pdf / office /
+    text) -- an executable or archive hitting the download event is
+    DELETED UNREAD and recorded as rejected, so nothing unparseable is
+    ever on disk because a page offered it.  Size rides the converter's
+    own ceiling."""
+    # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.core import convert
+
+    name = str(download.suggested_filename or "download.bin").strip()[:120] or "download.bin"
+    extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if not convert.supported(extension):
+        sess.downloads.append(
+            {
+                "name": name,
+                "state": "rejected",
+                "reason": "only readable documents (pdf / office / text) are ever saved -- this kind is refused",
+            }
+        )
+        try:
+            await download.delete()
+        except Exception:  # pylint: disable=broad-exception-caught
+            pass
+        return
+    dest = Path("/tmp") / f"zjs-dl-{uuid.uuid4().hex}-{Path(name).name}"
+    try:
+        await asyncio.wait_for(download.save_as(str(dest)), timeout=90.0)
+        size = dest.stat().st_size
+        if size > 20 * 1024 * 1024:
+            dest.unlink(missing_ok=True)
+            sess.downloads.append({"name": name, "state": "rejected", "reason": "larger than the 20 MB read ceiling"})
+            return
+        sess.downloads.append({"name": name, "state": "saved", "path": str(dest), "bytes": size})
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        dest.unlink(missing_ok=True)
+        sess.downloads.append({"name": name, "state": "failed", "reason": str(exc)[:120]})
+
+
+def drain_downloads(session_id: str = LEAD) -> list[dict[str, t.Any]]:
+    """The ledger tail the service has not spoken yet (terminal entries
+    in arrival order) -- called after every mutating action so the feed
+    names what the page made the browser download, refusals included."""
+    sess = get(session_id)
+    with sess.lock:
+        new = sess.downloads[sess.download_cursor :]
+        sess.download_cursor = len(sess.downloads)
+        return new
+
+
+def read_download(session_id: str, name: str) -> dict[str, str]:
+    """One CAPTURED download as readable text -- the converter runs
+    OUTSIDE the session lock (a slow pdf must not block the actions)."""
+    clean = str(name or "").strip()
+    sess = get(session_id)
+    with sess.lock:
+        entry = next((d for d in sess.downloads if d.get("name") == clean and d.get("state") == "saved"), None)
+        path = str(entry.get("path") or "") if entry else ""
+    if entry is None:
+        known = ", ".join(d.get("name", "?") for d in sess.downloads[-6:]) or "none"
+        raise SessionError(f"no captured download named {clean!r} -- captured: {known}")
+    # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.core import convert
+
+    try:
+        text = convert.to_markdown(Path(path).read_bytes(), Path(path).suffix.lstrip("."))
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        raise SessionError(f"the download {clean!r} could not be converted: {exc}") from exc
+    # READ-ONCE THEN DESTROY: the text now lives in the transcript -- the
+    # bytes leave the disk the moment they are read (a re-read answers
+    # honestly instead of pretending the file is still around)
+    try:
+        Path(path).unlink()
+    except OSError:
+        pass
+    entry["state"] = "consumed"
+    entry.pop("path", None)
+    return {"name": clean, "text": text}
+
+
+def history(session_id: str, op: str) -> dict[str, t.Any]:
+    """The model's OWN history lane (the takeover's back/forward/reload,
+    mirrored onto the tool surface): back / forward walk the active
+    page's session history (the post-state's outline rides when the url
+    changed), reload re-fetches in place (the outline ALWAYS rides -- the
+    refresh exists to see the page anew)."""
+    clean = str(op or "").strip().lower()
+    if clean not in ("back", "forward", "reload"):
+        raise SessionError("history needs op=back / forward / reload")
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            before = str(page.url)
+            if clean == "back":
+                await page.go_back(timeout=_ACTION_TIMEOUT_MS)
+            elif clean == "forward":
+                await page.go_forward(timeout=_ACTION_TIMEOUT_MS)
+            else:
+                await page.reload(timeout=_ACTION_TIMEOUT_MS)
+                return await _post_action_state(sess, page, "", 600)
+            return await _post_action_state(sess, page, before, 500)
 
         return _run(run())
 

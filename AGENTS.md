@@ -232,7 +232,22 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     mark) and the BATCHED `multi` (up to 5 action objects executed in
     order under one call, first failure stopping the batch — a latency
     tool for mechanical chains, never for steps that need judgment
-    between them).  The `screenshot` action is AIMED:
+    between them).  The click is GUARDED: a landing-point elementFromPoint
+    probe fails fast with the occluder's own description when an overlay
+    covers the target (no 15s actionability timeout), and a spawned
+    popup (target=_blank) is pulled into the tab set and activated with
+    its own outline.  `history` (op=back / forward / reload) mirrors the
+    takeover's history lane onto the tool surface.  DOWNLOADS are gated
+    by the converter: only readable documents (pdf / office / text /
+    data, max 20 MB) are ever saved -- anything else is deleted unread
+    and the refusal is SPOKEN into the feed (`REJECTED download ...`) --
+    a capture is read back with `read` + `download=<filename>`, and the
+    read is once-then-destroyed (the bytes leave the disk the moment
+    they are converted).  EVERY action that lands a fresh outline
+    registers the page into the [n] registry (open, click-through,
+    tab new/switch, popup alike) -- an explored page is citable even
+    when the model never ran an explicit open on it.  The `screenshot`
+    action is AIMED:
     without `ref` it is the whole viewport, with `ref` it captures ONE
     element as a close-up (`locator.screenshot`, auto-scrolls; the
     captcha/canvas/chart use — the crop IS what the model sees next

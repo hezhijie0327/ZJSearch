@@ -49,12 +49,34 @@ def _navigated_tail(snapshot: str) -> str:
     return "\n\n-- the action navigated: every old ref is dead, the fresh" f" outline is below --\n\n{snapshot}"
 
 
+def _download_lines(session_id: str) -> str:
+    """The session's download tail, spoken into the feed -- SAVINGS name
+    the read-back lane, REJECTIONS are loud (the viewer must see the
+    browser refused a file, not silently dropped it): the security gate
+    only ever saves what the converter can read."""
+    entries = session.drain_downloads(session_id)
+    if not entries:
+        return ""
+    lines = []
+    for entry in entries:
+        name = str(entry.get("name") or "download")
+        state = str(entry.get("state") or "")
+        if state == "saved":
+            kb = max(1, round(int(entry.get("bytes") or 0) / 1024))
+            lines.append(f'downloaded {name} ({kb} KB) -- read it with read and download="{name}"')
+        elif state == "rejected":
+            lines.append(f"REJECTED download {name}: {entry.get('reason')}")
+        else:
+            lines.append(f"download failed: {name} ({entry.get('reason')})")
+    return "\n".join(lines) + "\n"
+
+
 def _outline_result(feed: str, state: dict[str, t.Any], session_id: str) -> ActionResult:
     """An outline-bearing action (open / snapshot): the outline is both
     the model's feed and the settlement's ``snapshot``/``elements``."""
     frame = session.frame(session_id)
     return ActionResult(
-        feed=feed,
+        feed=feed + _download_lines(session_id),
         frames=[{**frame, "agent": session_id}],
         page=_page(state),
         snapshot=str(state["snapshot"]),
@@ -72,6 +94,7 @@ def _state_result(verb: str, state: dict[str, t.Any], session_id: str) -> Action
     snapshot = state.get("snapshot")
     if snapshot:
         feed += _navigated_tail(str(snapshot))
+    feed += _download_lines(session_id)
     return ActionResult(
         feed=feed,
         frames=[{**session.frame(session_id), "agent": session_id}],
@@ -123,7 +146,16 @@ def _act_click(args: dict[str, t.Any], session_id: str) -> ActionResult:
         # as one box, canvas hit-regions)
         state = session.click_xy(session_id, args.get("x"), args.get("y"))
         return _state_result(f"clicked at {args.get('x')},{args.get('y')}.", state, session_id)
-    return _state_result("clicked.", session.click(session_id, str(args.get("ref") or "")), session_id)
+    state = session.click(session_id, str(args.get("ref") or ""))
+    if state.get("popup"):
+        # the click spawned a page (target=_blank): it is IN the tab set
+        # and active now, its own outline riding below
+        return _outline_result(
+            f"the click opened a NEW TAB -- it is active now: {state['url']} -- {state['title']}\n\n{state['snapshot']}",
+            state,
+            session_id,
+        )
+    return _state_result("clicked.", state, session_id)
 
 
 def _act_hover(args: dict[str, t.Any], session_id: str) -> ActionResult:
@@ -174,7 +206,7 @@ def _act_scroll(args: dict[str, t.Any], session_id: str) -> ActionResult:
         return _state_result(f"scrolled to {text[:60]!r}.", state, session_id)
     state = session.scroll(session_id, str(args.get("direction") or "down"))
     return ActionResult(
-        feed=f"scrolled {args.get('direction')}. {_obs(state)}",
+        feed=f"scrolled {args.get('direction')}. {_obs(state)}\n{_download_lines(session_id)}",
         frames=[{**session.frame(session_id), "agent": session_id}],
         page=_page(state),
     )
@@ -250,7 +282,22 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
     )
 
 
-def _act_read(_args: dict[str, t.Any], session_id: str) -> ActionResult:
+def _act_history(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    op = str(args.get("op") or "")
+    state = session.history(session_id, op)
+    return _state_result(f"{op}.", state, session_id)
+
+
+def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    name = str(args.get("download") or "").strip()
+    if name:
+        # a CAPTURED download instead of the live page (pdf / office /
+        # text -- the security gate only ever saved readable kinds)
+        doc = session.read_download(session_id, name)
+        return ActionResult(
+            feed=f"{name}\n\n{doc['text']}",
+            frames=[{**session.frame(session_id), "agent": session_id}],
+        )
     # the read lane's cap is the shared extraction budget (lazy import:
     # the read module pulls the render engine)
     # pylint: disable=import-outside-toplevel
@@ -379,6 +426,7 @@ _ACTORS = {
     "select": _act_select,
     "drag": _act_drag,
     "read": _act_read,
+    "history": _act_history,
     "tab": _act_tab,
     "multi": _act_multi,
     "close": _act_close,

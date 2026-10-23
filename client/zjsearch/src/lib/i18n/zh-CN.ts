@@ -519,6 +519,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_browser_act_type: "输入",
   ai_browser_act_press: "按键",
   ai_browser_act_scroll: "滚动",
+  ai_browser_act_history: "历史",
   ai_browser_act_tab: "标签页",
   ai_browser_act_multi: "多步",
   ai_browser_act_screenshot: "截图",

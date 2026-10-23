@@ -73,6 +73,7 @@ _ACTIONS = (
     "select",
     "drag",
     "read",
+    "history",
     "tab",
     "multi",
     "wait_user",
@@ -106,14 +107,23 @@ verification -- anything human-only).
 
 MORE SESSION SURFACES: scroll accepts text= to bring the first page
 region matching it into view (the targeted alternative to the blind
-wheel).  tab manages the session's page strip -- op=new opens a url in
-a new active tab (its outline rides back), op=switch activates one (refs
-are PER-PAGE: the page's own outline follows the switch), op=close
-closes one, op=list shows the strip.  multi batches up to 5 action
-objects as steps -- executed in order, first failure stops the batch:
-use it for mechanical chains (scroll -> type -> submit), NOT for steps
-that need judgment between them (each step's result deserves a read
-before the next decision).
+wheel).  history walks the active page (op=back / forward / reload --
+reload always returns the fresh outline).  tab manages the session's
+page strip -- op=new opens a url in a new active tab (its outline rides
+back), op=switch activates one (refs are PER-PAGE: the page's own
+outline follows the switch), op=close closes one, op=list shows the
+strip; a click on a target=_blank link ACTIVATES the spawned tab
+automatically.  multi batches up to 5 action objects as steps --
+executed in order, first failure stops the batch: use it for mechanical
+chains (scroll -> type -> submit), NOT for steps that need judgment
+between them (each step's result deserves a read before the next
+decision).
+
+DOWNLOADS: a download the page triggers is captured ONLY when this
+stack can actually read it (pdf / docx / pptx / xlsx / xls / csv /
+json / xml / txt / md / html, max 20 MB) -- the feed names every capture
+AND every refusal (executables and unknown kinds are deleted unread,
+never saved).  Read a captured file with read + download="<filename>".
 
 Reach for a read when a source's snippet promises exactly the detail
 you still need; for the session when a read cannot see through or
@@ -146,7 +156,11 @@ drove.""",
                 },
                 "op": {
                     "type": "string",
-                    "description": "tab: new (open url into a new active tab) / switch / close / list.",
+                    "description": "tab: new (open url into a new active tab) / switch / close / list.  history: back / forward / reload.",
+                },
+                "download": {
+                    "type": "string",
+                    "description": 'read: the captured download\'s filename (from the feed\'s download lines) to read INSTEAD of the live page.',
                 },
                 "index": {
                     "type": "integer",

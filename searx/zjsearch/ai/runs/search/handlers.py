@@ -232,7 +232,14 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             extra["n"] = result.elements
         gathered = False
         cite = ""
-        if action == "open" and result.page and result.page["url"]:
+        if result.snapshot is not None and result.page and result.page["url"]:
+            # ANY action that landed a fresh outline registers the page --
+            # the explicit open, the click-through navigation, the tab
+            # strip's new/switch and a click-spawned popup alike: the
+            # outline is the identity material, and an EXPLORED page must
+            # be citable even when the model never ran an open on it (the
+            # old open-only gate left click-explored sources invisible to
+            # the writer)
             cite = yield from self._browser_source(rnd, wire_id, result.page["url"], result.page["title"], False, "")
             gathered = bool(cite)
             if cite:

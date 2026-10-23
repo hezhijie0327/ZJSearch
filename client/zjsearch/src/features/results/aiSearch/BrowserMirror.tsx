@@ -649,9 +649,26 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
         <LivePulse />
         <h3 className="text-base font-semibold text-ink">{t("ai_browser_live")}</h3>
         {waiting ? (
-          <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
-            {t("ai_browser_wait", { s: String(view.waitLeft) })}
-          </span>
+          <>
+            <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
+              {t("ai_browser_wait", { s: String(view.waitLeft) })}
+            </span>
+            {/* the operation window's DONE affordance at the card level:
+                the takeover holds the primary button, but the takeover is
+                minimizable -- a viewer who closed it must not wait out the
+                countdown to tell the model the page is ready */}
+            <button
+              className="inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full bg-accent-strong px-2.5 py-0.5 text-xs font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+              onClick={() => {
+                void postBrowserInput({ type: "done" });
+              }}
+              title={t("ai_browser_done_hint")}
+              type="button"
+            >
+              <Check aria-hidden="true" className="size-3" />
+              {t("ai_browser_done")}
+            </button>
+          </>
         ) : null}
       </div>
       <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
