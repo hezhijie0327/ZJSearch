@@ -34,7 +34,15 @@ function pageLabel(url: string | undefined): string {
   }
   try {
     const parsed = new URL(url);
-    const path = parsed.pathname === "/" ? "" : parsed.pathname + parsed.search;
+    const raw = parsed.pathname === "/" ? "" : parsed.pathname + parsed.search;
+    // the raw path is percent-encoded mojibake for CJK queries -- decode
+    // for the human eye (a malformed sequence keeps the raw form)
+    let path = raw;
+    try {
+      path = decodeURIComponent(raw);
+    } catch {
+      /* keep the raw form */
+    }
     return parsed.hostname + path;
   } catch {
     return url;
@@ -78,10 +86,10 @@ function LocationLine({ page }: { page: { url: string; title: string } }) {
   return (
     <div className="mt-1 flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs">
       <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
-      <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
-        {page.title || page.url}
+      <span className="min-w-0 flex-1 truncate font-medium text-ink-2" dir="auto">
+        {page.title || pageLabel(page.url)}
       </span>
-      <span className="hidden shrink-0 font-mono text-xs text-ink-3 sm:inline">{pageLabel(page.url)}</span>
+      <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(page.url)}</span>
     </div>
   );
 }
@@ -336,6 +344,11 @@ export const browseView: ToolView = {
         return t(call.n === 1 ? "ai_browser_element_one" : "ai_browser_elements", { n: String(call.n) });
       case "read":
         return t("ai_page_chars", { n: String(call.chars ?? 0) });
+      case "multi":
+        if (!call.n) {
+          return null;
+        }
+        return t(call.n === 1 ? "ai_browser_element_one" : "ai_browser_elements", { n: String(call.n) });
       case "screenshot":
         return t("ai_browser_shot_done");
       case "wait_user":
@@ -370,6 +383,7 @@ export const browseView: ToolView = {
         <>
           <MultiSteps feed={call.feed ?? ""} />
           {call.page ? <LocationLine page={call.page} /> : null}
+          {call.snapshot ? <BrowserOutline snapshot={call.snapshot} t={t} /> : null}
         </>
       );
     }
