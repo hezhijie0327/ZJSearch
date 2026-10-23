@@ -268,6 +268,13 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             clean = f"{result.page['title']}\n\n{text}"
             extra["text"] = clean
             extra["chars"] = len(clean)
+        elif action == "read":
+            # a CAPTURED download's read: the text has no page url (the
+            # origin page is the citable source) -- the reading pane still
+            # renders it, nothing is archived
+            body = feed.split("\n\n", 1)[-1]
+            extra["text"] = body
+            extra["chars"] = len(body)
         return feed, extra, gathered
 
     def _browser_call(self, call, wire_id, feeds):

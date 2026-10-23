@@ -342,13 +342,21 @@ export const browseView: ToolView = {
           return null;
         }
         return t(call.n === 1 ? "ai_browser_element_one" : "ai_browser_elements", { n: String(call.n) });
-      case "read":
-        return t("ai_page_chars", { n: String(call.chars ?? 0) });
       case "multi":
+      case "click":
+      case "type":
+      case "press":
+      case "history":
+      case "tab":
         if (!call.n) {
           return null;
         }
         return t(call.n === 1 ? "ai_browser_element_one" : "ai_browser_elements", { n: String(call.n) });
+      case "read":
+        if (call.chars) {
+          return t("ai_page_chars", { n: String(call.chars) });
+        }
+        return null;
       case "screenshot":
         return t("ai_browser_shot_done");
       case "wait_user":
@@ -397,7 +405,12 @@ export const browseView: ToolView = {
       action === "drag" ||
       action === "history"
     ) {
-      return call.page ? <LocationLine page={call.page} /> : null;
+      return (
+        <>
+          {call.page ? <LocationLine page={call.page} /> : null}
+          {call.snapshot ? <BrowserOutline snapshot={call.snapshot} t={t} /> : null}
+        </>
+      );
     }
     // read / wait_user carry the reading pane through the DEFAULT body
     // (call.text -> CallContent); returning null falls through to it
