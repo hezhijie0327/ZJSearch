@@ -529,11 +529,17 @@ and the referee advises when a subtask's evidence runs thin."""
                         },
                     )
                     continue
-                if self.route_outline is not None:
-                    # the run already carries a route-time skeleton: the
-                    # structure is fixed, only the DIALECT may move -- the
-                    # same control channel the reader's rail picker drives
-                    # (temporal: a later reader pick still overwrites)
+                peek_shape = getattr(self.run_control, "peek_shape", None)
+                route_skeleton = self.route_outline is not None and (
+                    peek_shape is None or peek_shape() != "direct"
+                )
+                if route_skeleton:
+                    # the run already carries a route-time skeleton (and
+                    # the reader has not taken it back to the direct
+                    # answer): the structure is fixed, only the DIALECT
+                    # may move -- the same control channel the reader's
+                    # rail picker drives (temporal: a later reader pick
+                    # still overwrites)
                     if self.run_control is not None:
                         self.run_control.set_shape(shape)
                     feed_text = (

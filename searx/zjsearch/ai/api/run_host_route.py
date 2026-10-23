@@ -130,25 +130,24 @@ def _control_view() -> t.Any:
         # does not burn a guide slot.  "direct" is the back-to-the-plain-
         # answer pick: every pending deliverable signal withdraws (the
         # template lane AND the shape lane) and the boundary's direct
-        # intent outranks the model's minted flip skeleton -- a
-        # route-outline run rejects it (the structure came with the
-        # request; taking the run back to a plain answer is a new search).
+        # intent outranks the model's minted flip skeleton -- the route
+        # outline too (the pick is temporal on EVERY run: the structure
+        # the request brought is withdrawn exactly like the model's minted
+        # skeleton; a template picked after it re-mints, a flip after it
+        # loses to the pending direct).
         shape = str(payload.get("shape") or "")
         if shape == "direct":
-            if getattr(handle, "structure_fixed", False):
-                error = "this run's structure came with the request"
-            else:
-                handle.control.clear_template()
-                if handle.control.set_shape("direct"):
-                    # best-effort: a full guide queue must not block the
-                    # pick -- the boundary honors the pending intent either
-                    # way.  The meta is the STRUCTURED half of the notice:
-                    # the drained steer event carries shape="direct", which
-                    # is what lets the client fold the run's output-shape
-                    # state back to the run's birth format (replay-stable)
-                    handle.control.steer(
-                        _SHAPE_STEER["direct"], preempt=False, meta={"shape": "direct"}
-                    )
+            handle.control.clear_template()
+            if handle.control.set_shape("direct"):
+                # best-effort: a full guide queue must not block the
+                # pick -- the boundary honors the pending intent either
+                # way.  The meta is the STRUCTURED half of the notice:
+                # the drained steer event carries shape="direct", which
+                # is what lets the client fold the run's output-shape
+                # state back to the plain depth (replay-stable)
+                handle.control.steer(
+                    _SHAPE_STEER["direct"], preempt=False, meta={"shape": "direct"}
+                )
         elif shape not in ("report", "deck"):
             error = "shape must be report / deck / direct"
         elif handle.control.set_shape(shape):

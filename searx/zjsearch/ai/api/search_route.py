@@ -775,110 +775,79 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
 
     past_ref: list[dict[str, t.Any]] = []
 
-    def _take_deck() -> bool | None:
-        """The rail's shape-flip channel: the pending report|deck pick
-        consumed at the write boundary (``None`` = no flip -- the
-        request-time shape stands; a "direct" pick is not a dialect and
-        reads as ``None`` here -- the boundary's resolver owns it)."""
-        if handle is None:
-            return None
-        shape = handle.control.take_shape()
-        return None if shape in (None, "direct") else shape == "deck"
-
-    def _take_template(deck: bool) -> dict[str, t.Any] | None:
-        """The rail's output-structure channel: consume the ControlBox's
-        pending template and RE-MINT the outline from it right here (the
-        same adaptation gate the route-time outline used -- question,
-        clarified direction and attachment heads all apply); ``deck`` is the
-        boundary-resolved shape (a run-time flip re-mints in the flipped
-        dialect).  ``None`` = no pick."""
-        if handle is None:
-            return None
-        template = handle.control.take_template()
-        if template is None:
-            return None
-        return report_outline.build_outline_from_template(
-            cfg,
-            research_q,
-            lang,
-            clarifications if clarify_state == "answered" else "",
-            template,
-            account=state.account,
-            attachments=outline_attachments,
-            prior_topics=prior_topics,
-            deck=deck,
-            tz=user_tz,
-        )
-
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]] | None:
-        """The write boundary's SHAPE RESOLVER -- the four flip signals in
-        priority order, the last explicit intent winning:
+        """The write boundary's SHAPE RESOLVER -- the flip signals
+        consumed ONCE here (the temporal rule: the LAST explicit intent
+        wins -- a pick the endpoint made after another simply replaced
+        it in the ControlBox, so co-pending signals read in the order
+        template > direct > the rest):
 
-        1. the route-time outline (the request's own report/deck shape) --
-           the rail's dialect pick rebinds it, a template pick re-mints it
-           (both consumed inside the synthesizer's opening, as always);
-        2. the reader's template pick on an outline-less run -- re-minted
-           right here (the same adaptation gate the route-time outline
-           used);
-        3. the reader's shape pick on an outline-less run -- a free
-           outline minted in the picked dialect;
+        1. the reader's DIRECT pick with no later template pending --
+           every deliverable signal dies with the intent: the route
+           outline (the structure the request brought) exactly like the
+           model's minted skeleton -- the boundary defers to the single
+           write;
+        2. the reader's template pick -- re-minted right here over ANY
+           prior structure (the same adaptation gate the route-time
+           outline used), in the boundary-resolved dialect;
+        3. the route-time outline -- the rail's dialect pick rebinds it;
         4. the ``set_deliverable`` tool's already-minted skeleton (the
-           model's flip; the reader's picks above outrank it -- the
-           reader's DIRECT pick ("direct" on the shape channel) outranks
-           it too: the minted skeleton is discarded and the boundary
-           defers to the single write).
+           model's flip; the reader's picks above outrank it);
+        5. the reader's shape pick on an outline-less run -- a free
+           outline minted in the picked dialect.
 
-        ``None`` = no signal claimed the boundary -- the run defers to the
-        single write.  A template whose adaptation gate failed defers too
-        (the reader asked for THAT structure; a different skeleton would
-        be a lie).  Consumed control channels stay consumed (one
-        resolution per run) -- the delegating ``make_synthesizer`` calls
-        see empty lanes and rebind nothing.
+        ``None`` = no signal claimed the boundary -- the run defers to
+        the single write.  A template whose adaptation gate failed
+        defers too (the reader asked for THAT structure; a different
+        skeleton would be a lie).  Consumed control channels stay
+        consumed (one resolution per run) -- the delegating
+        ``make_synthesizer`` calls see empty lanes and rebind nothing.
         """
-        if outline is not None:
-            eff_outline: dict[str, t.Any] | None = outline
-            eff_deck = deck_requested
-        else:
-            raw_pick = handle.control.take_shape() if handle is not None else None
-            shape_pick = None if raw_pick in (None, "direct") else raw_pick == "deck"
-            direct_pick = raw_pick == "direct"
-            template_pick = handle.control.take_template() if handle is not None else None
-            flip = state.take_flip_deliverable()
+        raw_pick = handle.control.take_shape() if handle is not None else None
+        direct_pick = raw_pick == "direct"
+        template_pick = handle.control.take_template() if handle is not None else None
+        flip = state.take_flip_deliverable()
+        shape_pick = None if raw_pick in (None, "direct") else raw_pick == "deck"
+        if direct_pick and template_pick is None:
+            return None
+        route = outline is not None
+        if template_pick is not None:
+            eff_deck = shape_pick if shape_pick is not None else (
+                deck_requested if route else bool((flip or {}).get("deck"))
+            )
+            eff_outline: dict[str, t.Any] | None = report_outline.build_outline_from_template(
+                cfg,
+                research_q,
+                lang,
+                clarifications if clarify_state == "answered" else "",
+                template_pick,
+                account=state.account,
+                attachments=outline_attachments,
+                prior_topics=prior_topics,
+                deck=eff_deck,
+                tz=user_tz,
+            )
+        elif route:
+            eff_outline = outline
+            eff_deck = shape_pick if shape_pick is not None else deck_requested
+        elif flip is not None:
+            eff_outline = flip.get("outline")
             eff_deck = shape_pick if shape_pick is not None else bool((flip or {}).get("deck"))
-            if template_pick is not None:
-                eff_outline = report_outline.build_outline_from_template(
-                    cfg,
-                    research_q,
-                    lang,
-                    clarifications if clarify_state == "answered" else "",
-                    template_pick,
-                    account=state.account,
-                    attachments=outline_attachments,
-                    prior_topics=prior_topics,
-                    deck=eff_deck,
-                    tz=user_tz,
-                )
-            elif direct_pick:
-                # the reader took the run back to the DIRECT answer: the
-                # flip skeleton consumed above dies with the intent -- the
-                # boundary defers to the single write
-                return None
-            elif flip is not None:
-                eff_outline = flip.get("outline")
-            elif shape_pick is not None:
-                eff_outline = report_outline.build_outline(
-                    cfg,
-                    research_q,
-                    lang,
-                    clarifications if clarify_state == "answered" else "",
-                    account=state.account,
-                    attachments=outline_attachments,
-                    prior_topics=prior_topics,
-                    deck=shape_pick,
-                    tz=user_tz,
-                )
-            else:
-                return None
+        elif shape_pick is not None:
+            eff_deck = shape_pick
+            eff_outline = report_outline.build_outline(
+                cfg,
+                research_q,
+                lang,
+                clarifications if clarify_state == "answered" else "",
+                account=state.account,
+                attachments=outline_attachments,
+                prior_topics=prior_topics,
+                deck=shape_pick,
+                tz=user_tz,
+            )
+        else:
+            return None
         if eff_outline is None:
             return None
         real = report_synth.make_synthesizer(
@@ -887,8 +856,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             eff_outline,
             research_q,
             lang,
-            take_template=_take_template,
-            take_deck=_take_deck,
             deck=eff_deck,
             handle=handle,
         )
@@ -966,11 +933,20 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # journal keeps the ending for the late collector across restarts
     # and beyond the terminal TTL.
     handle = run_host.register(linger=True)
-    # the route-time outline is FIXED against the direct-answer pick: the
-    # control endpoint rejects it through this flag (the structure came
-    # with the request -- taking the run back to a plain answer is a new
-    # search, not a mid-run control; dialect/template rebinds stay legal)
-    handle.structure_fixed = outline is not None
+    # the direct-answer pick's STATE-SIDE withdrawal: the drained steer's
+    # structured meta reaches back here (the loop's round boundary, the
+    # driver thread) so the remaining research rounds see the withdrawal
+    # too -- the route skeleton and its entity screen stop steering the
+    # researcher, and the model's own set_deliverable lane behaves like
+    # the outline-less run's from that moment (the write boundary holds
+    # the verdict either way; this only keeps the in-flight prompts
+    # honest)
+    def _withdraw_route_shape(meta: t.Any) -> None:
+        if isinstance(meta, dict) and meta.get("shape") == "direct":
+            state.route_outline = None
+            state.deliverable_entities = []
+
+    handle.on_steer = _withdraw_route_shape
     # every research run journals: the tail a disconnected client missed
     # is exactly what nothing else preserves (the client's evt log stops
     # at its disconnect, the host buffer dies with the process / the

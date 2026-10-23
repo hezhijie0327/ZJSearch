@@ -192,6 +192,15 @@ class ControlBox:
             self._pending_shape = shape
             return changed
 
+    def peek_shape(self) -> str | None:
+        """The NON-destructive observation of the pending shape -- the
+        research lane's set_deliverable dispatcher consults it so a
+        route-skeleton run already taken back to the direct answer stops
+        answering "the structure does not change" (and stops letting a
+        dialect flip overwrite the reader's pending direct)."""
+        with self._lock:
+            return self._pending_shape
+
     def take_shape(self) -> str | None:
         """The synthesizer's boundary consume (one shot)."""
         with self._lock:
@@ -229,6 +238,12 @@ class RunHandle:
         # browser mirror's img bytes already stripped), so a journal is a
         # byte-verbatim attach backlog.  Wired by the search route.
         self.journal: t.Callable[[int, str], None] | None = None
+        # the structured steer's state-side reaction (optional): called
+        # with the steer's meta dict when a meta-carrying steer DRAINS at
+        # the round boundary -- the direct-answer pick's withdrawal clears
+        # the route skeleton for the remaining rounds.  Wired by the
+        # search route; fail-open (directives() guards it).
+        self.on_steer: t.Callable[[dict], None] | None = None
         # the report synthesizer's SECTION REWRITE lane (synth.py registers
         # the entry when the write phase opens): ``callable(section_id)``
         # re-streams one settled section against the run's own write
@@ -358,7 +373,11 @@ class RunHandle:
         """The loop's round-boundary control poll: an explicit user stop
         wins over wrap/grace, and the boundary's ONE steer drain rides
         along (both are terminal/steering for the research phase -- the
-        stop skips the writer, the wrap walks into it)."""
+        stop skips the writer, the wrap walks into it).  A meta-carrying
+        steer first notifies ``on_steer`` (the run's state-side reaction
+        to its OWN structured controls -- the direct-answer pick's
+        withdrawal clears the route skeleton while the research is still
+        running; fail-open: a broken hook never blocks the drain)."""
         out: list[dict[str, t.Any]] = []
         if self.control.stopped():
             return [{"action": "stop"}]
@@ -366,6 +385,11 @@ class RunHandle:
             out.append({"action": "wrap"})
         steer = self.control.poll_steer()
         if steer[0]:
+            if steer[1] and self.on_steer is not None:
+                try:
+                    self.on_steer(steer[1])
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("zjsearch run host: on_steer hook failed: %r", exc)
             out.append({"action": "steer", "text": steer[0], **(steer[1] or {})})
         return out
 

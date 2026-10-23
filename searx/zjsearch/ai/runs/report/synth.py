@@ -108,28 +108,18 @@ def make_synthesizer(
     outline: dict[str, t.Any],
     question: str,
     lang: str,
-    take_template: t.Callable[[bool], dict[str, t.Any] | None] | None = None,
-    take_deck: t.Callable[[], bool | None] | None = None,
     deck: bool = False,
     handle: t.Any = None,
 ) -> t.Callable[[t.Any], t.Iterator[dict[str, t.Any]]]:
     """Bind the run's state and outline; returns the synthesizer the loop
-    calls with the tally at write-phase time.  The citation gate's
+    calls with the tally at write-phase time.  ``outline`` and ``deck``
+    arrive BOUNDARY-RESOLVED -- the route's shape resolver consumed every
+    pending control-channel pick (template re-mint, dialect flip, the
+    direct withdrawal) before minting them, so this scope holds the
+    run's final structure.  The citation gate's
     verdicts land in ``state.judgments`` (the Decisions card).
-    ``take_template`` is the rail's output-structure channel: ONE pending
-    template consumed at the write boundary -- a template the user picked
-    while the research ran REPLACES
-    the route-time outline before the first section streams (the rebuilt
-    skeleton arrives as the first ``outline`` snapshot; the client's TOC
-    follows automatically); it receives the boundary-resolved shape (a
-    run-time shape flip re-mints in the flipped dialect).  ``take_deck``
-    is the shape-flip half of the same channel: the pending report|deck
-    pick rebinds the section dialect at the boundary (slide vs prose, the
-    executive summary added/dropped, the snapshot's ``shape`` field).
-    ``deck`` is the request-time shape the flips default from -- the
-    machinery (packed context, streaming, citation gate + rewrite) is the
-    report's own either way.  ``handle`` is the run host's handle: when
-    given, the write phase registers the SECTION REWRITE LANE on it (a
+    ``handle`` is the run host's handle: when given, the write phase
+    registers the SECTION REWRITE LANE on it (a
     settled run's failed section re-streams against this closure's own
     write materials -- outline, written map, corpus, artifacts all stay
     live for the handle's terminal TTL)."""
@@ -146,27 +136,7 @@ def make_synthesizer(
     claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
-        nonlocal outline, deck, section_system, claim_re
         tally.phase = "write"
-        # the write boundary's shape consume: the rail's last output-structure
-        # flip (if any) rebinds the dialect HERE -- the section prompt,
-        # the claim gate's sampling window, the executive summary and the
-        # snapshot's shape field all follow the flipped value
-        flipped = take_deck() if take_deck is not None else None
-        if flipped is not None and flipped != deck:
-            logger.info(
-                "zjsearch report: output shape flipped at the write boundary (%s)", "deck" if flipped else "report"
-            )
-            deck = flipped
-            section_system = deck_prompts.DECK_SECTION_SYSTEM if deck else report_prompts.SECTION_SYSTEM
-            claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
-        # the boundary's template consume: the rail's last output-structure
-        # pick (if any) re-mints the skeleton HERE -- the research ran on
-        # its own ledger either way, only the document's shape changes
-        rebuilt = take_template(deck) if take_template is not None else None
-        if rebuilt is not None:
-            logger.info("zjsearch report: outline re-minted from a run-time template pick")
-            outline = rebuilt
         # the fixed lead section's structural identity is English-only
         # (machine contract; the section CONTENT is the model's, in the
         # run language via language_directive)

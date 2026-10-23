@@ -145,8 +145,8 @@ export interface AiSearchState extends Core {
       pending shape the write boundary honors AND a canonical steer notice
       that adapts the researcher's remaining rounds (both server-composed).
       null = the direct-answer pick: every pending deliverable signal
-      withdraws and the boundary defers to the single write (a
-      route-outline run rejects it -- resolves false). */
+      withdraws on EVERY run (a route outline included) and the boundary
+      defers to the single write. */
   setShape(shape: TemplateShape | null): Promise<boolean>;
   /** withdraw a previously-picked template (the free options of the
       unified picker): the write boundary consumes nothing */

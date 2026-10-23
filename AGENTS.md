@@ -307,23 +307,31 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     Overview consumes the speed rung verbatim); THE DELIVERABLE FLIP
     (tools/set_deliverable, EVERY tier's surface): the model commits the
     run's output shape (report/deck) mid-research and the write boundary
-    resolves the winner in priority order -- route outline → reader
-    template pick → reader shape pick → the tool's minted skeleton →
-    defer to the single write (`loop.run`'s synthesizer may return None,
-    the one defer verdict; a raised exception still settles error); THE
-    DIRECT-ANSWER PICK runs the lane backwards: the rail picker's pinned
-    直接回答 row rides the same `action=shape` channel with
-    `shape: "direct"` -- the endpoint withdraws the pending template and
-    shape and the boundary's direct intent OUTRANKS the model's minted
-    flip (skeleton consumed and discarded, the run defers to the single
-    write, a canonical steer notice tells the researcher), while a
-    route-outline run rejects it with a 422 (`handle.structure_fixed`,
-    set at registration: the structure came with the request -- taking
-    the run back to a plain answer is a new search).  The pick's steer
+    resolves the winner in priority order -- reader template pick →
+    reader direct pick (no later template pending) → route outline → the
+    tool's minted skeleton → defer to the single write (`loop.run`'s
+    synthesizer may return None, the one defer verdict; a raised
+    exception still settles error); THE DIRECT-ANSWER PICK runs the lane
+    backwards: the rail picker's pinned 直接回答 row rides the same
+    `action=shape` channel with `shape: "direct"` -- the endpoint
+    withdraws the pending template and shape and the boundary's direct
+    intent OUTRANKS the model's minted flip AND the route outline alike
+    (skeleton consumed and discarded, the run defers to the single
+    write, a canonical steer notice tells the researcher; the pick is
+    temporal on EVERY run -- a template picked after it re-mints, a flip
+    after it loses to the pending direct), and the drained steer's meta
+    reaches back state-side through `handle.on_steer` (the search
+    route's round-boundary hook) so the remaining rounds see the
+    withdrawal too: `state.route_outline` and
+    `state.deliverable_entities` clear, and the model's set_deliverable
+    lane drops its route-skeleton dialect-only branch (guarded by
+    `ControlBox.peek_shape` for the pre-drain window) and mints like any
+    outline-less run.  The pick's steer
     carries the STRUCTURED half (`meta={"shape": "direct"}` through the
     ControlBox queue, spread onto the drained steer event) and that field
-    is what folds the client's `run.mode` BACK to the run's birth format
-    (`mode0`, captured at creation) -- the model's settled
+    is what folds the client's `run.mode` BACK to the run's birth PLAIN
+    depth (`mode0`, captured at creation -- report/deck are formats on
+    the deep tier, the fold strips the format and the tier stands) -- the model's settled
     set_deliverable row folds the mode forward, the reader's withdrawal
     folds it back, both replay-stable off journaled events, so a
     flip-then-revert run's settled record drops the structure card like
@@ -338,8 +346,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     one fold lights the picker, the TOC and the DocumentView; the
     picker's 直接回答 row is the card's birth face and its CURRENT
     SELECTION display (the model's flip adopts the face only while the
-    reader picked nothing -- an explicit direct pick is sticky, and a
-    rejected direct confirm reverts with a danger toast); the AI
+    reader picked nothing -- an explicit direct pick is sticky, a failed
+    confirm reverts with the 未送达 toast); the AI
     Overview itself stays the loop's zero-tool single-write task (no
     Searches state, nothing to hang the machinery on -- its speed rung
     of shape_ladder is untouched); the executor splits into `registry` ([n]/dedup/gallery

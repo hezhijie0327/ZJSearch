@@ -283,9 +283,11 @@ export interface AiSearchRun {
       last-run value), picking a new depth affects the next run */
   mode: AiSearchMode;
   /** the run's BIRTH format (the mode at creation / at the last
-      clarify-restart): the direct-answer steer folds `mode` back here
-      (the model's settled set_deliverable row folds it forward, the
-      reader's withdrawal folds it back -- both replay-stable) */
+      clarify-restart): the direct-answer steer folds `mode` back to the
+      birth PLAIN depth (report/deck are formats on the deep tier -- the
+      fold strips the format, the tier stands; the model's settled
+      set_deliverable row folds it forward, the reader's withdrawal
+      folds it back -- both replay-stable) */
   mode0: AiSearchMode;
   /** the user pressed stop: a settled run without an answer is then
       intentional, not a failure (the failed box must not fire) */
@@ -854,13 +856,15 @@ export function applyEvent(
       });
       const next = { ...run, steps };
       // the direct-answer pick's structured steer: the run's output shape
-      // folds back to its birth format -- the model's settled
+      // folds back to its PLAIN depth -- the model's settled
       // set_deliverable row folded run.mode FORWARD, the reader's
       // withdrawal folds it BACK (the event is journaled, replays re-derive
       // the same reversal; the rail's structure card then drops at settle
-      // like any never-shaped run's)
+      // like any never-shaped run's).  A report/deck birth is a FORMAT on
+      // the deep tier -- withdrawing it lands on the tier's plain depth,
+      // so the settled record wears the direct face like the run now is.
       if (String((event as { shape?: unknown }).shape ?? "") === "direct") {
-        next.mode = run.mode0;
+        next.mode = run.mode0 === "report" || run.mode0 === "deck" ? "deep" : run.mode0;
       }
       runs[lastIdx] = next;
       return { ...core, runs };

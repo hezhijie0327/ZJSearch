@@ -235,7 +235,6 @@ export const EN = {
   ai_deliverable_pending: "committing…",
   ai_deliverable_report: "report",
   ai_deliverable_deck: "deck",
-  ai_deliverable_direct_locked: "This run's structure came with the request — it cannot return to the direct answer",
   report_template_free: "Smart report",
   ai_search_running: "searching…",
   ai_search_row_failed: "failed",

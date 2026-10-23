@@ -1018,13 +1018,14 @@ function RunDeleteButton({ onConfirm }: { onConfirm: () => void }) {
     current format is always the highlighted selection, any other pick
     counts as a flip, and confirming the direct row takes the run BACK to
     a plain answer (the server withdraws every pending deliverable
-    signal; a route-outline run rejects it -- the structure came with the
-    request).  ``shape`` is the run's CURRENT shape -- null on a run that
-    has none yet.  The model's own set_deliverable flip adopts the
-    submitted face ONLY while the reader picked nothing.  The pick window
-    closes when the WRITER takes over -- the outline lands (the card
-    swaps to the active-structure view) or the write phase opens without
-    one (the single-write fallback; both swap to the fixed identity). */
+    signal -- on EVERY run: a route outline dies with the intent exactly
+    like the model's minted flip).  ``shape`` is the run's CURRENT
+    shape -- null on a run that has none yet.  The model's own
+    set_deliverable flip adopts the submitted face ONLY while the reader
+    picked nothing.  The pick window closes when the WRITER takes
+    over -- the outline lands (the card swaps to the active-structure
+    view) or the write phase opens without one (the single-write
+    fallback; both swap to the fixed identity). */
 function OutputStructureCard({
   onPick,
   onClearTemplate,
@@ -1134,8 +1135,8 @@ function OutputStructureCard({
     if (chosen.kind === "direct") {
       // the back-to-the-direct-answer pick: every pending deliverable
       // signal withdraws server-side (template + shape + the model's
-      // minted flip).  A route-outline run rejects it (the structure came
-      // with the request) -- the failed call reverts the face and says so.
+      // minted flip -- a route outline included).  A failed call (the
+      // transport, never the server's verdict now) reverts the face.
       const prevId = current;
       const prevFlipped = flipped;
       setDirectPicked(true);
@@ -1148,7 +1149,7 @@ function OutputStructureCard({
           if (!ok) {
             setCurrent(prevId);
             setFlipped(prevFlipped);
-            flashToast(t("ai_deliverable_direct_locked"), { tone: "danger" });
+            flashToast(t("ai_steer_failed"), { tone: "danger" });
           }
         });
       }
