@@ -10,6 +10,7 @@ import type { KeyboardEvent } from "react";
     above its own panel).  Controlled: value + onChange from the caller. */
 export function PanelSearch({
   ariaLabel,
+  className,
   clearLabel,
   onChange,
   onClear,
@@ -18,6 +19,8 @@ export function PanelSearch({
   value,
 }: {
   ariaLabel: string;
+  /** the caller's spacing (mt-3 etc.) -- the box itself is width-fluid */
+  className?: string;
   /** the X button's label -- rendering it also REQUIRES onClear */
   clearLabel?: string;
   onChange: (value: string) => void;
@@ -31,7 +34,9 @@ export function PanelSearch({
 }) {
   const showClear = onClear !== undefined && value.length > 0;
   return (
-    <div className="relative flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 transition-colors focus-within:border-accent">
+    <div
+      className={`relative flex w-full items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 transition-colors focus-within:border-accent ${className ?? ""}`}
+    >
       <Search aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
       <input
         aria-label={ariaLabel}

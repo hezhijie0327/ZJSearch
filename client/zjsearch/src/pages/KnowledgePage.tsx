@@ -445,6 +445,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             {contentTab ? (
               <PanelSearch
                 ariaLabel={t("knowledge_search_placeholder")}
+                className="mt-3"
                 clearLabel={t("clear")}
                 onChange={(value) => setQuery(value)}
                 onClear={() => setQuery("")}
