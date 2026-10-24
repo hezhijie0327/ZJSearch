@@ -337,10 +337,9 @@ export const EN = {
   knowledge_memory_save: "Save",
   knowledge_memory_forget: "Forget",
   knowledge_memory_forgot: "Forgotten",
-  knowledge_memory_empty_line:
-    "The agent saves durable facts automatically while researching; you can also add one yourself.",
-  knowledge_kind_empty: "Nothing of this kind yet.",
-  knowledge_kind_empty_line: "Content lands here as you search and research with AI.",
+  knowledge_memory_empty_line: "Durable facts saved during research are archived here; add one manually above.",
+  knowledge_kind_empty: "Nothing in this category yet.",
+  knowledge_kind_empty_line: "Content from AI search and research is archived here automatically.",
   knowledge_source_empty_line: "Sources cited during research are archived here automatically.",
   knowledge_doc_empty_line: "Pages read during research are archived here automatically.",
   knowledge_answer_empty_line: "The AI overview from classic searches is archived here.",
