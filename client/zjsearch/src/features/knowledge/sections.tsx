@@ -518,7 +518,7 @@ export function MemorySection({
             className="py-6"
             icon={MemoryStick}
             line={t("knowledge_memory_empty_line")}
-            title={t("knowledge_memory_empty")}
+            title={t("knowledge_kind_empty")}
           />
         ) : (
           <div className="relative px-5 py-4 sm:px-6">

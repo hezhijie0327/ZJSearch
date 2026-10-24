@@ -343,7 +343,7 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
               className="py-4"
               icon={LayoutTemplate}
               line={t("template_none_line")}
-              title={t("template_none")}
+              title={t("knowledge_kind_empty")}
             />
           ) : (
             <p className="px-5 py-10 text-center text-[13px] text-ink-3">{t("no_results_found")}</p>

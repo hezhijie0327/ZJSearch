@@ -337,7 +337,6 @@ export const EN = {
   knowledge_memory_save: "Save",
   knowledge_memory_forget: "Forget",
   knowledge_memory_forgot: "Forgotten",
-  knowledge_memory_empty: "No memories yet.",
   knowledge_memory_empty_line:
     "The agent saves durable facts automatically while researching; you can also add one yourself.",
   knowledge_kind_empty: "Nothing of this kind yet.",
@@ -436,7 +435,6 @@ export const EN = {
   template_optional_short: "optional",
   template_add_section: "Add section",
   template_save: "Save",
-  template_none: "No user templates yet.",
   template_none_line: "Create one -- every report or deck run can follow its structure.",
   template_invalid: "Invalid template: at least two titled sections are required.",
   template_free_deck: "Smart deck",
