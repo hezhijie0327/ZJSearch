@@ -4,8 +4,10 @@
     the grouped search results, the memory surface (LobeHub's timeline +
     cards), the inspector reading pane (morphic), the admin drawer (the
     old preferences PgliteTab's duties) and the shared confirm dialog.
-    Page-private to KnowledgePage -- nothing here exports beyond it. */
+    Page-private to KnowledgePage -- nothing here exports beyond it
+    EXCEPT the glyph identity map, which the drawer's views wear too. */
 
+import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
   ArrowUp,
@@ -18,9 +20,11 @@ import {
   ExternalLink,
   FileText,
   Gauge,
-  Layers,
+  Globe,
+  LayoutTemplate,
   MemoryStick,
   MessageCircleQuestion,
+  Network,
   Pencil,
   Plus,
   Printer,
@@ -51,6 +55,22 @@ import type { ThreadSummary } from "@/lib/kb/recall.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";
 import { printDocument } from "@/lib/print.ts";
+
+/** The ONE glyph identity per knowledge surface: the segment tab, the kind
+    directory's empty note and each view's own empty state wear the same
+    icon -- one map, so they cannot drift apart again (the Layers-era
+    empties once disagreed with every tab they lived under). */
+export const KNOWLEDGE_KIND_ICONS = {
+  answer: Sparkles,
+  run: MessageCircleQuestion,
+  source: Globe,
+  document: FileText,
+  memory: MemoryStick,
+  graph: Network,
+  templates: LayoutTemplate,
+  admin: Database,
+} as const;
+
 import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
 import { CHIP_GHOST, CHIP_OUTLINE, CHIP_OUTLINE_IDLE } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
@@ -176,7 +196,7 @@ export function ThreadRows({
   const shown = reportsOnly ? threads.filter((thread) => thread.reports > 0) : threads;
   if (threads.length === 0) {
     return (
-      <PaperEmpty icon={Sparkles} line={t("knowledge_empty_hint")} title={t("knowledge_empty")}>
+      <PaperEmpty icon={KNOWLEDGE_KIND_ICONS.run} line={t("knowledge_empty_hint")} title={t("knowledge_empty")}>
         {onHome ? (
           <button
             className="inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
@@ -1147,12 +1167,15 @@ export function InspectorView({
 export function KindItemRows({
   items,
   label,
+  emptyIcon,
   emptyLine,
   onOpenInspector,
   onOpenThread,
   onPin,
   onRemove,
 }: {
+  /** the kind's own glyph -- the same one its segment tab wears */
+  emptyIcon: LucideIcon;
   items: KnowledgeItem[];
   onOpenInspector: (item: KnowledgeItem) => void;
   onOpenThread: (item: KnowledgeItem) => void;
@@ -1166,7 +1189,11 @@ export function KindItemRows({
   const t = useT();
   if (items.length === 0) {
     return (
-      <PaperEmpty icon={Layers} line={emptyLine ?? t("knowledge_kind_empty_line")} title={t("knowledge_kind_empty")} />
+      <PaperEmpty
+        icon={emptyIcon}
+        line={emptyLine ?? t("knowledge_kind_empty_line")}
+        title={t("knowledge_kind_empty")}
+      />
     );
   }
   return (

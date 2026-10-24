@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Check, FileText, LayoutTemplate, LoaderCircle, Pencil, Plus, Presentation, Trash2 } from "lucide-react";
+import { Check, FileText, LoaderCircle, Pencil, Plus, Presentation, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Card } from "@/components/SettingParts.tsx";
+import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/sections.tsx";
 import {
   type ReportTemplate,
   TEMPLATE_SHAPE_ICONS,
@@ -341,7 +342,7 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
             // + guidance, inside the card's own frame
             <PaperEmpty
               className="py-4"
-              icon={LayoutTemplate}
+              icon={KNOWLEDGE_KIND_ICONS.templates}
               line={t("template_none_line")}
               title={t("knowledge_kind_empty")}
             />

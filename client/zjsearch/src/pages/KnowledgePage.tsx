@@ -1,17 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import {
-  Database,
-  FileText,
-  Globe,
-  LayoutTemplate,
-  LibraryBig,
-  MemoryStick,
-  MessageCircleQuestion,
-  Network,
-  Sparkles,
-  Star,
-} from "lucide-react";
+import { LibraryBig, Star } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
@@ -23,6 +12,7 @@ import {
   ConfirmDialog,
   InspectorView,
   KindItemRows,
+  KNOWLEDGE_KIND_ICONS,
   MemorySection,
   SearchResults,
   ThreadRows,
@@ -390,14 +380,22 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   const contentTab = kind !== "graph" && kind !== "admin";
   const listTab = kind === "run" || kind === "answer" || kind === "source" || kind === "document";
   const viewTabs: Array<{ id: KindFilter | "graph" | "templates" | "admin"; label: string; icon: ReactNode }> = [
-    { id: "answer", label: t("knowledge_kind_answer"), icon: <Sparkles className="size-3.5" /> },
-    { id: "run", label: t("knowledge_kind_run"), icon: <MessageCircleQuestion className="size-3.5" /> },
-    { id: "source", label: t("knowledge_kind_source"), icon: <Globe className="size-3.5" /> },
-    { id: "document", label: t("knowledge_kind_document"), icon: <FileText className="size-3.5" /> },
-    { id: "memory", label: t("knowledge_kind_memory"), icon: <MemoryStick className="size-3.5" /> },
-    { id: "graph", label: t("knowledge_graph"), icon: <Network className="size-3.5" /> },
-    { id: "templates", label: t("knowledge_tab_templates"), icon: <LayoutTemplate className="size-3.5" /> },
-    { id: "admin", label: t("knowledge_admin"), icon: <Database className="size-3.5" /> },
+    { id: "answer", label: t("knowledge_kind_answer"), icon: <KNOWLEDGE_KIND_ICONS.answer className="size-3.5" /> },
+    { id: "run", label: t("knowledge_kind_run"), icon: <KNOWLEDGE_KIND_ICONS.run className="size-3.5" /> },
+    { id: "source", label: t("knowledge_kind_source"), icon: <KNOWLEDGE_KIND_ICONS.source className="size-3.5" /> },
+    {
+      id: "document",
+      label: t("knowledge_kind_document"),
+      icon: <KNOWLEDGE_KIND_ICONS.document className="size-3.5" />,
+    },
+    { id: "memory", label: t("knowledge_kind_memory"), icon: <KNOWLEDGE_KIND_ICONS.memory className="size-3.5" /> },
+    { id: "graph", label: t("knowledge_graph"), icon: <KNOWLEDGE_KIND_ICONS.graph className="size-3.5" /> },
+    {
+      id: "templates",
+      label: t("knowledge_tab_templates"),
+      icon: <KNOWLEDGE_KIND_ICONS.templates className="size-3.5" />,
+    },
+    { id: "admin", label: t("knowledge_admin"), icon: <KNOWLEDGE_KIND_ICONS.admin className="size-3.5" /> },
   ];
   const graphOpen = kind === "graph";
 
@@ -535,6 +533,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   <BootRowsCard rows={5} />
                 ) : (
                   <KindItemRows
+                    emptyIcon={KNOWLEDGE_KIND_ICONS[kind]}
                     emptyLine={
                       kind === "source"
                         ? t("knowledge_source_empty_line")

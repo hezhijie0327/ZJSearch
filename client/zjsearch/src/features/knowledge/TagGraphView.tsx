@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Network, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelSearch } from "@/components/PanelSearch.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
+import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/sections.tsx";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { graphSnapshot, itemsByTag, type TagGraph } from "@/lib/kb/recall.ts";
@@ -736,7 +737,7 @@ export function TagGraphView({
         // + title + guidance on the torn note -- not a bare paragraph
         <PaperEmpty
           className="mt-3"
-          icon={Network}
+          icon={KNOWLEDGE_KIND_ICONS.graph}
           line={t("knowledge_graph_empty_line")}
           title={t("knowledge_graph_empty")}
         />
