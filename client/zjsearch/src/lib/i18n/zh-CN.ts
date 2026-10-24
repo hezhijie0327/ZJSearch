@@ -294,6 +294,7 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_kind_call: "搜索与阅读",
   knowledge_kind_task: "任务卡",
   knowledge_kind_clarify: "澄清记录",
+  knowledge_time_filter: "按时间筛选",
   knowledge_time_any: "任意时间",
   knowledge_time_week: "一周内",
   knowledge_time_month: "一月内",

@@ -293,6 +293,7 @@ export const EN = {
   knowledge_kind_call: "Searches & reads",
   knowledge_kind_task: "Task cards",
   knowledge_kind_clarify: "Clarifications",
+  knowledge_time_filter: "Filter by time",
   knowledge_time_any: "Any time",
   knowledge_time_week: "This week",
   knowledge_time_month: "This month",

@@ -11,7 +11,7 @@ import {
   Title,
 } from "@/features/results/cardParts.tsx";
 import { useT } from "@/lib/i18n.ts";
-import { META_ROW } from "@/lib/styles.ts";
+import { CHIP_ACCENT_SOFT, META_ROW } from "@/lib/styles.ts";
 
 /** General file-download layout, sharing the transfer-card language of the
     torrent card: type icon tile, compact stat strip, primary action. */
@@ -84,7 +84,7 @@ export function FileCard({ result, globals }: CardProps) {
               )
             ) : (
               <a
-                className="mt-2 inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:bg-accent-strong hover:text-accent-contrast"
+                className={`mt-2 ${CHIP_ACCENT_SOFT}`}
                 download
                 href={result.embedded}
                 rel="noreferrer"

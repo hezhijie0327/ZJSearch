@@ -86,7 +86,17 @@ import { listTemplates } from "@/lib/kb/templates.ts";
 import { holdBackTail } from "@/lib/markdownParts.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml, printDocument } from "@/lib/print.ts";
-import { CHIP, CHIP_BTN, META_TOGGLE, PAPER_STRIP } from "@/lib/styles.ts";
+import {
+  CHIP,
+  CHIP_ACCENT,
+  CHIP_BTN,
+  CHIP_GHOST,
+  CHIP_OUTLINE,
+  CHIP_OUTLINE_ACTIVE,
+  CHIP_OUTLINE_IDLE,
+  META_TOGGLE,
+  PAPER_STRIP,
+} from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 
 /**
@@ -832,11 +842,7 @@ function AskCard({
                   return (
                     <button
                       aria-pressed={on}
-                      className={`rounded-full border px-3 py-1.5 text-[13px] transition-colors ${
-                        on
-                          ? "border-accent-strong bg-accent-soft font-medium text-accent"
-                          : "border-line text-ink-2 hover:text-ink"
-                      }`}
+                      className={`${CHIP_OUTLINE} ${on ? CHIP_OUTLINE_ACTIVE : CHIP_OUTLINE_IDLE}`}
                       key={option}
                       onClick={() => {
                         toggle(qi, option, question.type);
@@ -1233,7 +1239,7 @@ function OutputStructureCard({
               {t("template_shape_confirm", { name: shownOption?.label ?? "" })}
             </button>
             <button
-              className="rounded-full px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              className={CHIP_GHOST}
               onClick={() => {
                 setChosen(null);
               }}
@@ -2099,11 +2105,7 @@ function AiSearchRunSectionImpl({
               only the writing re-runs). */}
           {!streaming && !failed && !run.answer.trim() && totalCalls > 0 && isLast && onContinue ? (
             <div className="mt-1">
-              <button
-                className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
-                onClick={onContinue}
-                type="button"
-              >
+              <button className={CHIP_ACCENT} onClick={onContinue} type="button">
                 {run.stopped ? (
                   <Play aria-hidden="true" className="size-3.5" />
                 ) : (
@@ -2138,11 +2140,7 @@ function AiSearchRunSectionImpl({
                       primary action whenever this run actually gathered
                       material) */}
                   {onContinue && !run.answer.trim() && totalCalls > 0 ? (
-                    <button
-                      className="inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
-                      onClick={onContinue}
-                      type="button"
-                    >
+                    <button className={CHIP_ACCENT} onClick={onContinue} type="button">
                       <Play aria-hidden="true" className="size-3.5" />
                       {t("ai_continue_research")}
                     </button>
@@ -2152,11 +2150,7 @@ function AiSearchRunSectionImpl({
                       click to re-run -- the retry re-asks the SAME question
                       as a fresh run */}
                   <button
-                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] transition-colors ${
-                      onContinue && !run.answer.trim() && totalCalls > 0
-                        ? "border border-line text-ink-2 hover:text-ink"
-                        : "border border-accent-strong/40 bg-accent-soft font-medium text-accent hover:text-accent-hover"
-                    }`}
+                    className={`${CHIP_OUTLINE} ${onContinue && !run.answer.trim() && totalCalls > 0 ? CHIP_OUTLINE_IDLE : CHIP_OUTLINE_ACTIVE}`}
                     onClick={onRegenerate}
                     type="button"
                   >
@@ -2164,11 +2158,7 @@ function AiSearchRunSectionImpl({
                     {t("regenerate")}
                   </button>
                   {onFallback ? (
-                    <button
-                      className="inline-flex items-center rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:text-ink"
-                      onClick={onFallback}
-                      type="button"
-                    >
+                    <button className={`${CHIP_OUTLINE} ${CHIP_OUTLINE_IDLE}`} onClick={onFallback} type="button">
                       {t("ai_search_try_classic")}
                     </button>
                   ) : null}

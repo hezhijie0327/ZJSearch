@@ -15,12 +15,12 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
+import { Dropdown } from "@/components/Dropdown.tsx";
 import { PanelSearch } from "@/components/PanelSearch.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import {
   AdminView,
   ConfirmDialog,
-  Dropdown,
   InspectorView,
   KindItemRows,
   MemorySection,
@@ -49,7 +49,14 @@ import { listKind, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.t
 import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
-import { SEGMENT, SEGMENT_ACTIVE, SEGMENT_IDLE } from "@/lib/styles.ts";
+import {
+  CHIP_OUTLINE,
+  CHIP_OUTLINE_ACTIVE,
+  CHIP_OUTLINE_IDLE,
+  SEGMENT,
+  SEGMENT_ACTIVE,
+  SEGMENT_IDLE,
+} from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { KnowledgePageData } from "@/lib/types.ts";
 import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
@@ -393,8 +400,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     { id: "admin", label: t("knowledge_admin"), icon: <Database className="size-3.5" /> },
   ];
   const graphOpen = kind === "graph";
-  const timeLabel =
-    time === "any" ? t("knowledge_time_any") : time === "week" ? t("knowledge_time_week") : t("knowledge_time_month");
 
   return (
     <Shell embedded={embedded} globals={globals}>
@@ -457,29 +462,20 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             {/* ── toolbar: the time/pinned filters, list kinds only ── */}
             {listTab ? (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                <Dropdown label={timeLabel}>
-                  {(["any", "week", "month"] as TimeFilter[]).map((option) => (
-                    <button
-                      className="block w-full px-3 py-2 text-start text-[13px] text-ink transition-colors hover:bg-surface-2"
-                      key={option}
-                      onClick={() => setTime(option)}
-                      type="button"
-                    >
-                      {option === "any"
-                        ? t("knowledge_time_any")
-                        : option === "week"
-                          ? t("knowledge_time_week")
-                          : t("knowledge_time_month")}
-                    </button>
-                  ))}
-                </Dropdown>
+                <Dropdown
+                  ariaLabel={t("knowledge_time_filter")}
+                  onChange={(value) => setTime(value as TimeFilter)}
+                  options={[
+                    { label: t("knowledge_time_any"), value: "any" },
+                    { label: t("knowledge_time_week"), value: "week" },
+                    { label: t("knowledge_time_month"), value: "month" },
+                  ]}
+                  value={time}
+                  variant="chip"
+                />
                 <button
                   aria-pressed={pinnedOnly}
-                  className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-[13px] transition-colors ${
-                    pinnedOnly
-                      ? "bg-accent-soft font-medium text-accent"
-                      : "border border-line text-ink-3 hover:bg-surface-2 hover:text-ink"
-                  }`}
+                  className={`${CHIP_OUTLINE} ${pinnedOnly ? CHIP_OUTLINE_ACTIVE : CHIP_OUTLINE_IDLE}`}
                   onClick={() => setPinnedOnly((prev) => !prev)}
                   type="button"
                 >

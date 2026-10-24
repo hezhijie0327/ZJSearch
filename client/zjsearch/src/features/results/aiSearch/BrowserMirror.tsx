@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
 import { postBrowserInput, sessionViewport } from "@/lib/browserInput.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
@@ -669,32 +670,34 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
   };
   return (
     <section aria-label={t("ai_browser_live")} className="mb-5">
-      <div className="flex items-center gap-2 px-1">
-        <LivePulse />
-        <h3 className="text-base font-semibold text-ink">{t("ai_browser_live")}</h3>
-        {waiting ? (
-          <>
-            <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
-              {t("ai_browser_wait", { s: String(view.waitLeft) })}
-            </span>
-            {/* the operation window's DONE affordance at the card level:
+      <RailHeader
+        icon={LivePulse}
+        title={t("ai_browser_live")}
+        trailing={
+          waiting ? (
+            <>
+              <span className="shrink-0 font-mono text-xs tabular-nums text-ink-3" title={t("ai_browser_wait_hint")}>
+                {t("ai_browser_wait", { s: String(view.waitLeft) })}
+              </span>
+              {/* the operation window's DONE affordance at the card level:
                 the takeover holds the primary button, but the takeover is
                 minimizable -- a viewer who closed it must not wait out the
                 countdown to tell the model the page is ready */}
-            <button
-              className="inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full bg-accent-strong px-2.5 py-0.5 text-xs font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
-              onClick={() => {
-                void postBrowserInput({ type: "done" });
-              }}
-              title={t("ai_browser_done_hint")}
-              type="button"
-            >
-              <Check aria-hidden="true" className="size-3" />
-              {t("ai_browser_done")}
-            </button>
-          </>
-        ) : null}
-      </div>
+              <button
+                className="inline-flex min-h-6 shrink-0 items-center gap-1 rounded-full bg-accent-strong px-2.5 py-0.5 text-xs font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+                onClick={() => {
+                  void postBrowserInput({ type: "done" });
+                }}
+                title={t("ai_browser_done_hint")}
+                type="button"
+              >
+                <Check aria-hidden="true" className="size-3" />
+                {t("ai_browser_done")}
+              </button>
+            </>
+          ) : null
+        }
+      />
       <div className="mt-3 overflow-hidden rounded-xl border border-line bg-ink/5">
         {entries.length > 0 ? (
           // the session tabs: ALWAYS at least the lead's own tab (a browser

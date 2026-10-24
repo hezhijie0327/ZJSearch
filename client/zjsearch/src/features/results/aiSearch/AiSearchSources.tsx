@@ -260,10 +260,7 @@ export function AiSearchSourcesSkeleton() {
   const t = useT();
   return (
     <section aria-busy="true" aria-label={t("ai_search_sources")}>
-      <div className="flex items-center gap-2">
-        <BookOpen aria-hidden="true" className="size-4.5 shrink-0 text-ink-3" />
-        <h3 className="text-base font-semibold text-ink">{t("ai_search_sources")}</h3>
-      </div>
+      <RailHeader icon={BookOpen} title={t("ai_search_sources")} />
       <div className="mt-3 flex flex-col gap-2">
         {/* one REAL card's resting height (title 2 lines + snippet slot +
             meta row) -- the swap must not grow the rail */}

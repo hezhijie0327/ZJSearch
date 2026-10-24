@@ -29,7 +29,7 @@ import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { holdBackTail, MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
-import { HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
+import { CHIP_ACCENT, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
 /** mermaid is initialized ONCE per palette (global state — re-running
@@ -1191,7 +1191,7 @@ export function AiAnswerCard({
             {/* a transient failure (gateway hiccup, rate limit) is worth one
               click to re-run -- the retry re-asks the SAME question */}
             <button
-              className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover"
+              className={`mt-2 ${CHIP_ACCENT}`}
               onClick={() => {
                 state.regenerate();
               }}

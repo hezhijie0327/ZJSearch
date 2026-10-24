@@ -3,7 +3,7 @@
 import { ChevronLeft, Info, RefreshCw, Search, SearchX } from "lucide-react";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { useT } from "@/lib/i18n.ts";
-import { PAPER_STRIP } from "@/lib/styles.ts";
+import { CHIP_ACCENT_SOFT, PAPER_STRIP } from "@/lib/styles.ts";
 import type { SearchPageData } from "@/lib/types.ts";
 
 export function NoResults({
@@ -70,7 +70,7 @@ export function Corrections({ data, onSearch }: { data: SearchPageData; onSearch
       <span className="text-ink-3">{t("try_searching_for")}</span>
       {data.corrections.map((correction) => (
         <button
-          className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:bg-accent-strong hover:text-accent-contrast"
+          className={CHIP_ACCENT_SOFT}
           dir="auto"
           key={correction.q}
           onClick={() => {

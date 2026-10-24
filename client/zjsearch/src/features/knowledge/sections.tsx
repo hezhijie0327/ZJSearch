@@ -11,7 +11,6 @@ import {
   ArrowUp,
   Brain,
   Check,
-  ChevronDown,
   ChevronLeft,
   Copy,
   Database,
@@ -31,7 +30,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
@@ -54,6 +52,7 @@ import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";
 import { printDocument } from "@/lib/print.ts";
 import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
+import { CHIP_GHOST, CHIP_OUTLINE, CHIP_OUTLINE_IDLE } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** The knowledge META chip: a 12px bordered chip for row meta and hero
@@ -581,11 +580,7 @@ function MemoryComposer({
         value={draft}
       />
       <div className="mt-2 flex items-center justify-end gap-2">
-        <button
-          className="rounded-full px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-          onClick={onCancel}
-          type="button"
-        >
+        <button className={CHIP_GHOST} onClick={onCancel} type="button">
           {t("ai_delete_cancel")}
         </button>
         <button
@@ -945,7 +940,7 @@ export function InspectorView({
           {item.threadId ? (
             item.kind === "run" ? (
               <button
-                className="rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                className={`${CHIP_OUTLINE} ${CHIP_OUTLINE_IDLE}`}
                 onClick={() => onOpenThread(item.threadId ?? "")}
                 type="button"
               >
@@ -1486,38 +1481,6 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** A tiny dropdown (the row menus): closes on outside click. */
-export function Dropdown({ children, label }: { children: ReactNode; label: string }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [open]);
-  return (
-    <div className="relative" ref={ref}>
-      <button
-        aria-expanded={open}
-        className="flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-        onClick={() => setOpen((prev) => !prev)}
-        type="button"
-      >
-        {label}
-        <ChevronDown aria-hidden="true" className="size-3.5" />
-      </button>
-      {open ? (
-        <div className="absolute start-0 top-9 z-20 w-40 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-          {children}
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { useT } from "@/lib/i18n.ts";
 import { newTabLinkProps, resultHost } from "@/lib/link.ts";
 import { useSettings } from "@/lib/settings.ts";
 import type { ResultItem } from "@/lib/types.ts";
+import { useZoomPan } from "@/lib/zoomPan.ts";
 
 /** The viewer is a fixed DARK media overlay in every palette (like photo
     viewers everywhere): tiles-over-image chrome uses its own zinc scale at
@@ -91,39 +92,10 @@ export function Lightbox({
   const settings = useSettings();
   const result = results[index];
   const touchStartX = useRef<number | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [dragging, setDragging] = useState(false);
-  const dragStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
   // active=false the moment closing starts: focus returns to the trigger
   // immediately instead of after the exit animation unmounts the viewer
   const dialogRef = useDialogFocus<HTMLDivElement>(!closing);
-
-  const resetZoom = useCallback(() => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-  }, []);
-
-  // wheel zoom, non-passive so the page never scrolls behind the viewer
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el) {
-      return;
-    }
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      setZoom((prev) => {
-        // allow zooming out to 50% so small thumbnails can shrink to context
-        const next = Math.min(5, Math.max(0.5, prev * (event.deltaY < 0 ? 1.15 : 1 / 1.15)));
-        return Math.round(next * 100) / 100;
-      });
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      el.removeEventListener("wheel", onWheel);
-    };
-  }, []);
+  const { contentProps, pct, resetZoom, stageRef, zoom, zoomBy } = useZoomPan();
 
   // reset whenever another image is opened (resetZoom itself is stable)
   // biome-ignore lint/correctness/useExhaustiveDependencies: index change must re-run the reset
@@ -199,17 +171,14 @@ export function Lightbox({
         resetZoom();
       } else if (zoomIn || zoomOut) {
         // keyboard path of the wheel zoom: same 0.5×–5× window, ±15% steps
-        setZoom((prev) => {
-          const next = Math.min(5, Math.max(0.5, prev * (zoomIn ? 1.15 : 1 / 1.15)));
-          return Math.round(next * 100) / 100;
-        });
+        zoomBy(zoomIn ? 1 : -1);
       }
     };
     window.addEventListener("keydown", onKeyDown, { capture: true });
     return () => {
       window.removeEventListener("keydown", onKeyDown, { capture: true });
     };
-  }, [closing, close, nav, resetZoom]);
+  }, [closing, close, nav, resetZoom, zoomBy]);
 
   if (!result) {
     return null;
@@ -274,7 +243,7 @@ export function Lightbox({
           ) : null}
           {zoom !== 1 ? (
             <span className="whitespace-nowrap text-zinc-400" dir="ltr">
-              {Math.round(zoom * 100)}%
+              {pct}%
             </span>
           ) : null}
         </div>
@@ -299,35 +268,8 @@ export function Lightbox({
         <div
           aria-label={result.title_text}
           className={`flex items-center justify-center ${zoom > 1 ? "touch-none" : ""}`}
-          onDoubleClick={() => {
-            resetZoom();
-          }}
-          onPointerDown={(event) => {
-            if (zoom <= 1) {
-              return;
-            }
-            dragStart.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y };
-            setDragging(true);
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }}
-          onPointerMove={(event) => {
-            const start = dragStart.current;
-            if (!start) {
-              return;
-            }
-            setOffset({ x: start.ox + (event.clientX - start.x), y: start.oy + (event.clientY - start.y) });
-          }}
-          onPointerUp={(event) => {
-            dragStart.current = null;
-            setDragging(false);
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }}
           role="img"
-          style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-            transition: dragging ? "none" : "transform 150ms ease-out",
-            cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "zoom-in",
-          }}
+          {...contentProps}
         >
           <ProgressiveImage alt={imageAlt(result)} full={result.img_src ?? ""} thumbnail={thumbSrc} />
         </div>

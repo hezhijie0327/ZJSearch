@@ -109,12 +109,29 @@ export const CHIP_BTN =
   "grid size-7 place-items-center rounded-full text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink";
 
 /** Outlined chip on the 13px control tier (choice chips, filter pills):
-    the unselected shape; the selected language per the design contract is
-    border-accent-strong + bg-accent-soft + font-medium + text-accent. */
+    one shape, two states -- pair the shape with CHIP_OUTLINE_IDLE or
+    CHIP_OUTLINE_ACTIVE (the selected language per the design contract:
+    border-accent-strong + bg-accent-soft + font-medium + text-accent). */
 export const CHIP_OUTLINE =
-  "inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors";
+  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] transition-colors";
+export const CHIP_OUTLINE_IDLE = "border-line text-ink-3 hover:bg-surface-2 hover:text-ink";
 export const CHIP_OUTLINE_ACTIVE =
   "border-accent-strong bg-accent-soft font-medium text-accent hover:text-accent-hover";
+
+/** Borderless ghost pill on the same tier: the quiet half of a pill pair
+    (cancel/dismiss beside a primary pill). */
+export const CHIP_GHOST =
+  "inline-flex items-center rounded-full px-3 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink";
+
+/** Accent action chip on the 13px control tier (in-flow continue /
+    regenerate-style actions): the soft accent fill with a hairline ring. */
+export const CHIP_ACCENT =
+  "inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover";
+
+/** Soft accent action pill without the ring (empty-state actions, card
+    download chips); hover deepens to the accent-strong fill. */
+export const CHIP_ACCENT_SOFT =
+  "inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:bg-accent-strong hover:text-accent-contrast";
 
 /** Corner badge over media (duration / filesize): the 12px meta floor on a
     fixed-dark scrim, readable over any thumbnail in every palette.  Numerals

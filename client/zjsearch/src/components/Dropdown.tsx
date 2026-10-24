@@ -42,8 +42,9 @@ export function Dropdown({
   ariaLabel?: string;
   /** which edge of the trigger the menu aligns to */
   align?: "start" | "end";
-  /** bare: light text trigger (search filters); boxed: bordered control (preferences) */
-  variant?: "bare" | "boxed";
+  /** bare: light text trigger (search filters); boxed: bordered control
+      (preferences); chip: the 13px pill chip (chip-row toolbars) */
+  variant?: "bare" | "boxed" | "chip";
   /** show this text on the trigger instead of the selected option label */
   triggerLabel?: string;
   /** extra classes for the trigger (active state styling etc.) */
@@ -182,6 +183,12 @@ export function Dropdown({
     }
   };
 
+  // the chip-row toolbar trigger: the 13px pill chip (the design contract's
+  // chip language) -- shape stays put while open, only the colors raise
+  const chipTrigger =
+    "relative flex items-center gap-1 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-3 transition-colors " +
+    (open ? "bg-surface-2 text-ink" : (triggerClassName ?? "hover:bg-surface-2 hover:text-ink"));
+
   return (
     <div className="relative" ref={rootRef}>
       <button
@@ -189,13 +196,17 @@ export function Dropdown({
         aria-haspopup="listbox"
         aria-label={ariaLabel}
         className={
-          variant === "bare"
-            ? `relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] transition-colors ${
-                open ? "bg-surface-2 text-ink" : (triggerClassName ?? "text-ink-2 hover:bg-surface-2/70 hover:text-ink")
-              }`
-            : `flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 text-[13px] transition-colors ${
-                open ? "border-ink-3" : "border-line hover:border-ink-3"
-              } bg-surface text-ink ${triggerClassName ?? ""}`
+          variant === "chip"
+            ? chipTrigger
+            : variant === "bare"
+              ? `relative flex items-center gap-1.5 rounded-lg px-4 py-2 text-[13px] transition-colors ${
+                  open
+                    ? "bg-surface-2 text-ink"
+                    : (triggerClassName ?? "text-ink-2 hover:bg-surface-2/70 hover:text-ink")
+                }`
+              : `flex h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border px-3 text-[13px] transition-colors ${
+                  open ? "border-ink-3" : "border-line hover:border-ink-3"
+                } bg-surface text-ink ${triggerClassName ?? ""}`
         }
         onClick={() => {
           if (open) {
