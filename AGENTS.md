@@ -1204,7 +1204,9 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
 - **17px/1.8 `text-[17px] leading-[1.8]`: the LONG-FORM reading scale**
   (DESIGN.md §4 — 中文衬线长文, the blog's explicit `.prose` prescription):
   every AI editorial content root — thread answers, the report document,
-  the AI Overview content, the knowledge inspector's stored answers.
+  the knowledge inspector's stored answers — while the AI Overview rides
+  the SAME em-based recipe on a 14px root (the results column's regular
+  body tier: the same document, proportionally scaled down).
   The MD element recipe rides em of this root: headings follow the blog's
   six-step chain (34/25.5/21.3/19.1/17/14.9 — h1 2em extrabold, h2 1.5em,
   h3 1.25em, h4 1.125em, h5 1em w600, h6 0.875em w600), tables/inline

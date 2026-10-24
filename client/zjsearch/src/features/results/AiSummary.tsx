@@ -1149,9 +1149,12 @@ export function AiAnswerCard({
           under the header row (the thinking header carries the same margin,
           so both paths share the rhythm) */}
         {hasAnswer ? (
-          // the long-form reading scale (DESIGN.md §4, the blog's .prose
-          // 17px/1.8 -- the overview IS the answer in classic mode)
-          <div className="mt-2 text-[17px] font-serif leading-[1.8] text-ink">
+          // the long-form reading RECIPE on the results page's regular
+          // body tier: the same shared MD document on a 14px root -- the
+          // em-based recipe (headings/tables/code) scales the whole thing
+          // proportionally, and the overview sits IN the 14px snippet
+          // column instead of towering over it
+          <div className="mt-2 text-sm font-serif leading-[1.8] text-ink">
             {/* streaming renders uncapped (active=false); once settled the
               shared clamp-and-reveal takes over the preview cap */}
             <ClampReveal
