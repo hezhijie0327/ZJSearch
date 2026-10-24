@@ -9,14 +9,13 @@ import {
   MemoryStick,
   MessageCircleQuestion,
   Network,
-  Search,
   Sparkles,
   Star,
-  X,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
+import { PanelSearch } from "@/components/PanelSearch.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import {
   AdminView,
@@ -444,29 +443,14 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
             {/* ── search ── */}
             {contentTab ? (
-              <div className="mt-3 flex items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 transition-colors focus-within:border-accent">
-                <Search aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
-                <input
-                  aria-label={t("knowledge_search_placeholder")}
-                  className="h-7 w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={
-                    kind === "templates" ? t("knowledge_search_templates") : t("knowledge_search_placeholder")
-                  }
-                  type="text"
-                  value={query}
-                />
-                {query ? (
-                  <button
-                    aria-label={t("clear")}
-                    className="grid size-6 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                    onClick={() => setQuery("")}
-                    type="button"
-                  >
-                    <X aria-hidden="true" className="size-3.5" />
-                  </button>
-                ) : null}
-              </div>
+              <PanelSearch
+                ariaLabel={t("knowledge_search_placeholder")}
+                clearLabel={t("clear")}
+                onChange={(value) => setQuery(value)}
+                onClear={() => setQuery("")}
+                placeholder={kind === "templates" ? t("knowledge_search_templates") : t("knowledge_search_placeholder")}
+                value={query}
+              />
             ) : null}
 
             {/* ── toolbar: the time/pinned filters, list kinds only ── */}

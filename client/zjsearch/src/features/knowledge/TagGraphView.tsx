@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Network, Search, X } from "lucide-react";
+import { Network, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PanelSearch } from "@/components/PanelSearch.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -672,60 +673,54 @@ export function TagGraphView({
 
   return (
     <div>
-      <div className="relative flex items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-3 transition-colors focus-within:border-accent">
-        <Search aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
-        <input
-          aria-label={t("knowledge_graph_search")}
-          className="h-7 w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
-          onChange={(event) => setSearch(event.target.value)}
-          onKeyDown={(event) => {
-            // Escape clears the box instead of closing the whole drawer
-            if (event.key === "Escape") {
-              event.stopPropagation();
+      <PanelSearch
+        ariaLabel={t("knowledge_graph_search")}
+        onChange={(value) => setSearch(value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setSearch("");
+          }
+          if (event.key === "Enter") {
+            const q = search.trim().toLowerCase();
+            const hit = graph?.nodes
+              .filter((node) => node.tag.toLowerCase().includes(q))
+              .map((node) => node.tag)
+              .find(Boolean);
+            if (hit) {
+              focusNode(hit);
               setSearch("");
             }
-            if (event.key === "Enter") {
-              const q = search.trim().toLowerCase();
-              const hit = graph?.nodes
-                .filter((node) => node.tag.toLowerCase().includes(q))
-                .map((node) => node.tag)
-                .find(Boolean);
-              if (hit) {
-                focusNode(hit);
-                setSearch("");
-              }
+          }
+        }}
+        placeholder={t("knowledge_graph_search")}
+        value={search}
+      />
+      {search.trim() ? (
+        <div className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
+          {(() => {
+            const q = search.trim().toLowerCase();
+            const hits = (graph?.nodes ?? []).filter((node) => node.tag.toLowerCase().includes(q)).slice(0, 6);
+            if (hits.length === 0) {
+              return <p className="px-3 py-2 text-xs text-ink-3">{t("knowledge_thread_no_match")}</p>;
             }
-          }}
-          placeholder={t("knowledge_graph_search")}
-          type="text"
-          value={search}
-        />
-        {search.trim() ? (
-          <div className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-            {(() => {
-              const q = search.trim().toLowerCase();
-              const hits = (graph?.nodes ?? []).filter((node) => node.tag.toLowerCase().includes(q)).slice(0, 6);
-              if (hits.length === 0) {
-                return <p className="px-3 py-2 text-xs text-ink-3">{t("knowledge_thread_no_match")}</p>;
-              }
-              return hits.map((node) => (
-                <button
-                  className="block w-full truncate px-3 py-1.5 text-start text-[13px] text-ink transition-colors hover:bg-surface-2"
-                  key={node.tag}
-                  onClick={() => {
-                    focusNode(node.tag);
-                    setSearch("");
-                  }}
-                  type="button"
-                >
-                  {node.tag}
-                  <span className="ms-1.5 text-ink-3">{node.uses}</span>
-                </button>
-              ));
-            })()}
-          </div>
-        ) : null}
-      </div>
+            return hits.map((node) => (
+              <button
+                className="block w-full truncate px-3 py-1.5 text-start text-[13px] text-ink transition-colors hover:bg-surface-2"
+                key={node.tag}
+                onClick={() => {
+                  focusNode(node.tag);
+                  setSearch("");
+                }}
+                type="button"
+              >
+                {node.tag}
+                <span className="ms-1.5 text-ink-3">{node.uses}</span>
+              </button>
+            ));
+          })()}
+        </div>
+      ) : null}
       {error ? (
         <div className="mt-3 rounded-2xl border border-line bg-surface px-4 py-10 text-center text-sm text-ink-3">
           {t("knowledge_graph_error")}
