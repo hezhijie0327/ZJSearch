@@ -304,10 +304,6 @@ export function ThreadRows({
                 {t("knowledge_badge_report", { n: String(thread.reports) })}
               </span>
             ) : null}
-            <span className={META_CHIP}>{t("knowledge_row_runs", { n: String(thread.runs) })}</span>
-            {thread.sources > 0 ? (
-              <span className={META_CHIP}>{t("knowledge_row_sources", { n: String(thread.sources) })}</span>
-            ) : null}
           </div>
         </div>
       ))}
@@ -498,21 +494,8 @@ export function MemorySection({
   if (loading) {
     return <BootRowsCard rows={3} />;
   }
-  // group by day for the timeline view (LobeHub's GroupedVirtuoso shape,
-  // minus the virtualization -- browser-local scale is hundreds of rows)
-  const groups = new Map<string, MemoryRow[]>();
-  for (const memory of memories) {
-    const day = formatDate(new Date(memory.updated).toISOString());
-    const list = groups.get(day) ?? [];
-    list.push(memory);
-    groups.set(day, list);
-  }
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* the ONE band language: a "memory · N" label band with the add
-          action at its
-          right edge -- the floating pill above a bare timeline read as a
-          different tab design */}
+    <div className="space-y-4 animate-fade-in">
       {adding ? (
         <MemoryComposer
           onCancel={() => setAdding(false)}
@@ -523,50 +506,30 @@ export function MemorySection({
           placeholder={t("knowledge_memory_add")}
           submitLabel={t("knowledge_memory_save")}
         />
-      ) : null}
-      <Card>
-        <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
-          <p className="text-xs font-medium text-ink-3">
-            {t("knowledge_kind_memory")} · {memories.length}
-          </p>
-          <button
-            className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-ink-3 transition-colors hover:bg-surface hover:text-ink"
-            onClick={() => setAdding(true)}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="size-3.5" />
-            {t("knowledge_memory_add")}
-          </button>
+      ) : (
+        <button
+          className="flex w-full items-center gap-2 rounded-xl border border-dashed border-line px-4 py-3 text-start text-[13px] text-ink-3 transition-colors hover:border-accent hover:text-ink"
+          onClick={() => setAdding(true)}
+          type="button"
+        >
+          <Plus aria-hidden="true" className="size-3.5 shrink-0" />
+          {t("knowledge_memory_add")}
+        </button>
+      )}
+      {memories.length === 0 ? (
+        <PaperEmpty
+          className="py-6"
+          icon={MemoryStick}
+          line={t("knowledge_memory_empty_line")}
+          title={t("knowledge_kind_empty")}
+        />
+      ) : (
+        <div className="space-y-0.5">
+          {memories.map((memory) => (
+            <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
+          ))}
         </div>
-        {memories.length === 0 ? (
-          <PaperEmpty
-            className="py-6"
-            icon={MemoryStick}
-            line={t("knowledge_memory_empty_line")}
-            title={t("knowledge_kind_empty")}
-          />
-        ) : (
-          <div className="relative px-5 py-4 sm:px-6">
-            <div className="relative ps-5">
-              <span aria-hidden="true" className="absolute inset-block-0 start-2 w-px bg-line" />
-              {[...groups.entries()].map(([day, rows]) => (
-                <div className="mb-5" key={day}>
-                  <p className="relative mb-2 text-xs font-medium text-ink-3">
-                    <span
-                      aria-hidden="true"
-                      className="absolute -start-[13px] top-1 size-2 rounded-full bg-accent-strong"
-                    />
-                    {day}
-                  </p>
-                  {rows.map((memory) => (
-                    <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </Card>
+      )}
     </div>
   );
 }
@@ -696,9 +659,12 @@ function MemoryCard({
   }
   return (
     <div className="group flex items-start rounded-xl px-2 py-2.5 transition-colors hover:bg-surface-2">
-      <p className="min-w-0 flex-1 break-words text-[13px] leading-relaxed text-ink" dir="auto">
-        {memory.content}
-      </p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm leading-relaxed text-ink" dir="auto">
+          {memory.content}
+        </p>
+        <p className="mt-0.5 text-xs text-ink-3">{formatDate(new Date(memory.updated).toISOString())}</p>
+      </div>
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <button
           aria-label={t("knowledge_memory_edit")}
@@ -1204,16 +1170,34 @@ export function KindItemRows({
     <Card>
       {label ? <SectionLabel label={label} /> : null}
       {items.map((item) => {
-        const opens = item.kind === "source" || item.kind === "document";
+        const isSource = item.kind === "source";
+        const favicon = isSource ? (item.meta?.favicon as string | undefined) : undefined;
         return (
           <div
-            className="group flex items-start gap-3 px-5 py-5 transition-colors hover:bg-surface-2/40 sm:px-6"
+            className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
             key={item.id}
           >
+            {isSource ? (
+              favicon ? (
+                <img
+                  alt=""
+                  className="mt-0.5 size-8 shrink-0 rounded-lg border border-line bg-surface object-contain p-0.5"
+                  src={favicon}
+                />
+              ) : (
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
+                  <Globe aria-hidden="true" className="size-4" />
+                </span>
+              )
+            ) : (
+              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
+                <FileText aria-hidden="true" className="size-4" />
+              </span>
+            )}
             <button
               className="min-w-0 flex-1 text-start"
               onClick={() => {
-                if (opens) {
+                if (isSource || item.kind === "document") {
                   onOpenInspector(item);
                   return;
                 }
@@ -1223,18 +1207,14 @@ export function KindItemRows({
               }}
               type="button"
             >
-              <span className="line-clamp-2 font-serif text-base font-semibold leading-snug text-ink">
-                {item.title || item.body.slice(0, 90) || item.url}
-              </span>
-              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+              <span className="line-clamp-1 text-sm font-medium leading-snug text-ink">{item.title || item.url}</span>
+              {isSource && item.body ? (
+                <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">{item.body}</span>
+              ) : null}
+              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
+                {item.host ? <span className="truncate">{item.host}</span> : null}
                 <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
-                {item.host ? <span className={META_CHIP}>{item.host}</span> : null}
-                {item.cited > 0 ? (
-                  <span className={META_CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
-                ) : null}
-                {item.refs > 0 ? (
-                  <span className={META_CHIP}>{t("knowledge_source_refs", { n: String(item.refs) })}</span>
-                ) : null}
+                {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
               </span>
             </button>
             <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />

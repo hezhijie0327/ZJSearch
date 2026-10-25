@@ -263,7 +263,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // subscription must stay a plain select) and merged into the rows
   const [modesById, setModesById] = useState<Record<string, string[]>>({});
   // biome-ignore lint/correctness/useExhaustiveDependencies: the tags refresh on the same bumps as the directory listing
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the tags refresh on the same bumps as the directory listing
   useEffect(() => {
     let cancelled = false;
     listThreadModes()
