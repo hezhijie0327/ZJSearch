@@ -343,6 +343,7 @@ export const EN = {
   knowledge_crawl: "Crawl full text",
   knowledge_crawl_failed: "Crawl failed — the page could not be read.",
   knowledge_source_crawled: "Full text saved",
+  knowledge_full_text: "Full text",
   knowledge_page_prev: "Previous page",
   knowledge_page_next: "Next page",
   knowledge_memory_placeholder: "Capture a memory…",

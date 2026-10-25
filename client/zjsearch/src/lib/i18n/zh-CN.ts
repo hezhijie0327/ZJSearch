@@ -342,6 +342,7 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_crawl: "爬取全文",
   knowledge_crawl_failed: "爬取失败 — 该页面无法读取。",
   knowledge_source_crawled: "全文已存",
+  knowledge_full_text: "全文",
   knowledge_page_prev: "上一页",
   knowledge_page_next: "下一页",
   knowledge_memory_placeholder: "记一条记忆…",

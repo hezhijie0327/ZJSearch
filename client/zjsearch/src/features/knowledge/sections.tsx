@@ -75,7 +75,7 @@ export const KNOWLEDGE_KIND_ICONS = {
 } as const;
 
 import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
-import { CHIP_OUTLINE, CHIP_OUTLINE_IDLE } from "@/lib/styles.ts";
+import { CHIP_OUTLINE, CHIP_OUTLINE_IDLE, READ_PANE } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** The knowledge META chip: a 12px bordered chip for row meta and hero
@@ -339,6 +339,19 @@ function rowHost(item: KnowledgeItem): string {
   } catch {
     return "";
   }
+}
+
+/** The reading pane's text: the scrape stores markdown, the pane reads
+    plain -- images drop, links keep their text, heading/emphasis marks
+    drop, line structure survives. */
+function paneText(md: string): string {
+  return md
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/(^|[\s(])[*_`~]+([^*_`\n]*)[*_`~]+/g, "$1$2")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** The source row's favicon cell: the row's stored url first, then the
@@ -765,9 +778,14 @@ export function InspectorView({
   onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
-  // a crawled source reads like a document: the inspector loads the
-  // full body and renders it through the same markdown pane
-  const isDocument = item.kind === "document" || (item.kind === "source" && Boolean(item.meta?.crawled));
+  const isDocument = item.kind === "document";
+  // a crawled source reads in the MACHINE pane (the run's reading-pane
+  // language -- collected material, not the answer's editorial voice)
+  // and the ORIGINAL search snippet leads it; the head line skips
+  // itself when it is just the body's own opening (rows born without
+  // a snippet wear the page opening there)
+  const isCrawledSource = item.kind === "source" && Boolean(item.meta?.crawled);
+  const snippetLine = isCrawledSource && item.body && !(body ?? "").startsWith(item.body) ? item.body : null;
   const sources: Array<{ n: number; url: string; title: string; host: string }> =
     item.kind === "run"
       ? (extras?.sources ?? [])
@@ -1076,6 +1094,35 @@ export function InspectorView({
               ) : (
                 <p className="text-[13px] text-ink-3">…</p>
               )
+            ) : isCrawledSource ? (
+              <>
+                {snippetLine ? (
+                  <div className="rounded-lg bg-surface-2/40 px-3 py-2.5 text-[13px] leading-relaxed text-ink-2">
+                    {snippetLine}
+                  </div>
+                ) : null}
+                {body === null ? (
+                  <div aria-busy="true" className="space-y-3">
+                    <span className="zjs-skeleton block h-4 w-full" />
+                    <span className="zjs-skeleton block h-4 w-[93%]" />
+                    <span className="zjs-skeleton block h-4 w-[70%]" />
+                  </div>
+                ) : body === "" ? (
+                  <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
+                ) : (
+                  <>
+                    <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-3">
+                      {t("knowledge_full_text")}
+                    </p>
+                    <div
+                      className={`relative ${READ_PANE} max-h-[32rem] overflow-y-auto overscroll-contain`}
+                      dir="auto"
+                    >
+                      {paneText(body)}
+                    </div>
+                  </>
+                )}
+              </>
             ) : !isDocument ? (
               item.body ? (
                 <>
