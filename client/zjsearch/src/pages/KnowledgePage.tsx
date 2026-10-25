@@ -35,7 +35,7 @@ import {
   toggleThreadPin,
   updateMemory,
 } from "@/lib/kb/projections.ts";
-import { listKind, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
+import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -64,7 +64,7 @@ import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
  * event-sourced knowledge table uniquely enables.
  */
 
-type KindFilter = "run" | "source" | "document" | "memory";
+type KindFilter = "run" | "reading" | "memory";
 type TimeFilter = "any" | "week" | "month";
 
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -183,7 +183,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
   // ── the kind directory (a filter chip's own listing, non-search) ────
   const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
-  const kindListing = !searching && (kind === "source" || kind === "document");
+  const kindListing = !searching && kind === "reading";
   // biome-ignore lint/correctness/useExhaustiveDependencies: listingBump only re-fetches the one-shot listing
   useEffect(() => {
     if (!kindListing || threadsLen < -1) {
@@ -191,7 +191,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       return;
     }
     let cancelled = false;
-    listKind(kind, 40)
+    listReading(40)
       .then((rows) => {
         if (!cancelled) setKindItems(rows);
       })
@@ -386,16 +386,11 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // row only the four list kinds (memories are a timeline -- they neither
   // pin nor take a time filter, the timeline groups by day itself)
   const contentTab = kind !== "graph" && kind !== "admin";
-  const listTab = kind === "run" || kind === "source" || kind === "document";
+  const listTab = kind === "run" || kind === "reading";
   const viewTabs: Array<{ id: KindFilter | "graph" | "templates" | "admin"; label: string; icon: ReactNode }> = [
     // the research directory leads: the overview lives INSIDE its threads
     { id: "run", label: t("knowledge_kind_run"), icon: <KNOWLEDGE_KIND_ICONS.run className="size-3.5" /> },
-    { id: "source", label: t("knowledge_kind_source"), icon: <KNOWLEDGE_KIND_ICONS.source className="size-3.5" /> },
-    {
-      id: "document",
-      label: t("knowledge_kind_document"),
-      icon: <KNOWLEDGE_KIND_ICONS.document className="size-3.5" />,
-    },
+    { id: "reading", label: t("knowledge_tab_reading"), icon: <KNOWLEDGE_KIND_ICONS.reading className="size-3.5" /> },
     { id: "memory", label: t("knowledge_kind_memory"), icon: <KNOWLEDGE_KIND_ICONS.memory className="size-3.5" /> },
     { id: "graph", label: t("knowledge_graph"), icon: <KNOWLEDGE_KIND_ICONS.graph className="size-3.5" /> },
     {
@@ -541,8 +536,8 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   <BootRowsCard rows={5} />
                 ) : (
                   <KindItemRows
-                    emptyIcon={KNOWLEDGE_KIND_ICONS[kind]}
-                    emptyLine={kind === "source" ? t("knowledge_source_empty_line") : t("knowledge_doc_empty_line")}
+                    emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
+                    emptyLine={t("knowledge_reading_empty_line")}
                     items={kindItems}
                     onOpenInspector={setView}
                     onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}

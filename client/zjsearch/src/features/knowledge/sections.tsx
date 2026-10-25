@@ -61,6 +61,7 @@ import { printDocument } from "@/lib/print.ts";
     icon -- one map, so they cannot drift apart again (the Layers-era
     empties once disagreed with every tab they lived under). */
 export const KNOWLEDGE_KIND_ICONS = {
+  reading: Globe,
   run: MessageCircleQuestion,
   source: Globe,
   document: FileText,
@@ -483,7 +484,6 @@ export function MemorySection({
   onSave,
 }: {
   memories: MemoryRow[];
-  /** the memory subscription is still resolving — hold the card's shape */
   loading?: boolean;
   onAdd: (content: string) => void;
   onForget: (id: string) => void;
@@ -506,30 +506,36 @@ export function MemorySection({
           placeholder={t("knowledge_memory_add")}
           submitLabel={t("knowledge_memory_save")}
         />
-      ) : (
-        <button
-          className="flex w-full items-center gap-2 rounded-xl border border-dashed border-line px-4 py-3 text-start text-[13px] text-ink-3 transition-colors hover:border-accent hover:text-ink"
-          onClick={() => setAdding(true)}
-          type="button"
-        >
-          <Plus aria-hidden="true" className="size-3.5 shrink-0" />
-          {t("knowledge_memory_add")}
-        </button>
-      )}
-      {memories.length === 0 ? (
-        <PaperEmpty
-          className="py-6"
-          icon={MemoryStick}
-          line={t("knowledge_memory_empty_line")}
-          title={t("knowledge_kind_empty")}
-        />
-      ) : (
-        <div className="space-y-0.5">
-          {memories.map((memory) => (
-            <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
-          ))}
+      ) : null}
+      <Card>
+        <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
+          <p className="text-xs font-medium text-ink-3">
+            {t("knowledge_kind_memory")} · {memories.length}
+          </p>
+          <button
+            className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-ink-3 transition-colors hover:bg-surface hover:text-ink"
+            onClick={() => setAdding(true)}
+            type="button"
+          >
+            <Plus aria-hidden="true" className="size-3.5" />
+            {t("knowledge_memory_add")}
+          </button>
         </div>
-      )}
+        {memories.length === 0 ? (
+          <PaperEmpty
+            className="py-6"
+            icon={MemoryStick}
+            line={t("knowledge_memory_empty_line")}
+            title={t("knowledge_kind_empty")}
+          />
+        ) : (
+          <div className="space-y-0.5">
+            {memories.map((memory) => (
+              <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

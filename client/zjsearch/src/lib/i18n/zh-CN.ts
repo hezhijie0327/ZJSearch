@@ -290,6 +290,8 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_page_subtitle: "过去的研究、来源与文献 —— 仅存于本浏览器。",
   knowledge_search_placeholder: "搜索全部知识…",
   knowledge_kind_run: "研究",
+  knowledge_tab_reading: "资料",
+  knowledge_reading_empty_line: "调研引用的来源与一路读过的全文会自动归档到这里。",
   knowledge_kind_source: "来源",
   knowledge_kind_document: "全文",
   knowledge_kind_memory: "记忆",

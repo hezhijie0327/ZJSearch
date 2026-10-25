@@ -289,6 +289,9 @@ export const EN = {
   knowledge_page_subtitle: "Past research, sources and documents -- browser-local.",
   knowledge_search_placeholder: "Search all knowledge...",
   knowledge_kind_run: "Research",
+  knowledge_tab_reading: "Library",
+  knowledge_reading_empty_line:
+    "Sources cited during research and full texts read along the way are archived here automatically.",
   knowledge_kind_source: "Sources",
   knowledge_kind_document: "Full texts",
   knowledge_kind_memory: "Memory",

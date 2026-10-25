@@ -261,6 +261,13 @@ export async function listThreadModes(): Promise<Record<string, string[]>> {
   return out;
 }
 
+/** The reading materials: the sources the research cited + the full
+    texts archived from the reader -- one directory, newest first. */
+export async function listReading(limit = 40): Promise<KnowledgeItem[]> {
+  const [sources, documents] = await Promise.all([listKind("source", limit), listKind("document", limit)]);
+  return [...sources, ...documents].sort((a, b) => b.updated - a.updated).slice(0, limit);
+}
+
 export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary[]> {
   await pg();
   sweepStaleRuns();
