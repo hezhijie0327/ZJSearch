@@ -31,6 +31,7 @@ def install(app: flask.Flask) -> None:
     feature is enabled and fully configured."""
     from searx.zjsearch.ai.api import (  # pylint: disable=import-outside-toplevel
         browser_input_route,
+        browser_read_route,
         decision_route,
         embed_route,
         knowledge_page,
@@ -44,6 +45,7 @@ def install(app: flask.Flask) -> None:
     )
 
     thread_page.install(app)
+    browser_read_route.install(app)
     debug_page.install(app)
     knowledge_page.install(app)
     search_route.install(app)

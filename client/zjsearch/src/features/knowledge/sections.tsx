@@ -14,6 +14,7 @@ import {
   Brain,
   Check,
   ChevronLeft,
+  CloudDownload,
   Copy,
   Database,
   DatabaseZap,
@@ -22,6 +23,7 @@ import {
   Gauge,
   Globe,
   LayoutTemplate,
+  LoaderCircle,
   MemoryStick,
   MessageCircleQuestion,
   Network,
@@ -1099,6 +1101,7 @@ export function KindItemRows({
   label,
   emptyIcon,
   emptyLine,
+  onCrawl,
   onOpenInspector,
   onOpenThread,
   onPin,
@@ -1115,8 +1118,24 @@ export function KindItemRows({
   label?: string;
   /** the empty state's guidance line (the caller knows the kind) */
   emptyLine?: string;
+  /** manual full-text crawl for a source row (the browser read lane) */
+  onCrawl?: (item: KnowledgeItem) => Promise<void>;
 }) {
   const t = useT();
+  const [crawlBusy, setCrawlBusy] = useState<Record<string, boolean>>({});
+  const crawl = (item: KnowledgeItem) => {
+    if (!onCrawl || crawlBusy[item.id]) {
+      return;
+    }
+    setCrawlBusy((prev) => ({ ...prev, [item.id]: true }));
+    void Promise.resolve(onCrawl(item)).finally(() => {
+      setCrawlBusy((prev) => {
+        const next = { ...prev };
+        delete next[item.id];
+        return next;
+      });
+    });
+  };
   if (items.length === 0) {
     return (
       <PaperEmpty
@@ -1177,6 +1196,24 @@ export function KindItemRows({
                 {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
               </span>
             </button>
+            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+              {isSource ? (
+                <button
+                  aria-label={t("knowledge_crawl")}
+                  className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+                  disabled={Boolean(crawlBusy[item.id])}
+                  onClick={() => crawl(item)}
+                  title={t("knowledge_crawl")}
+                  type="button"
+                >
+                  {crawlBusy[item.id] ? (
+                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+                  ) : (
+                    <CloudDownload aria-hidden="true" className="size-3.5" />
+                  )}
+                </button>
+              ) : null}
+            </div>
             <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
           </div>
         );

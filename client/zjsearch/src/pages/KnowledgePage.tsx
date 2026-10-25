@@ -19,10 +19,12 @@ import {
 } from "@/features/knowledge/sections.tsx";
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
+import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { loadDocument, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
+  archiveDocument,
   deleteItem,
   deleteSource,
   deleteThread,
@@ -36,7 +38,7 @@ import {
   updateMemory,
 } from "@/lib/kb/projections.ts";
 import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
-import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
+import { aiTokenValue, type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
 import {
@@ -281,6 +283,22 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   const pinItem = (item: KnowledgeItem, on: boolean) => {
     toggleItemPin(item.id, on);
     setListingBump((b) => b + 1);
+  };
+  const crawlItem = async (item: KnowledgeItem) => {
+    if (!item.url) {
+      return;
+    }
+    try {
+      const result = await fetchJson<{ title: string; markdown: string }>("/zjsearch/browser/read", {
+        method: "POST",
+        headers: { "Content-type": "application/json" },
+        body: JSON.stringify({ tk: aiTokenValue(), url: item.url }),
+      });
+      archiveDocument(item.url, result.title || item.title, result.markdown);
+      setListingBump((b) => b + 1);
+    } catch {
+      flashToast(t("knowledge_crawl_failed"), { tone: "danger" });
+    }
   };
   const removeItem = (item: KnowledgeItem, after?: () => void) => {
     setConfirming({
@@ -539,6 +557,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                     emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
                     emptyLine={t("knowledge_reading_empty_line")}
                     items={kindItems}
+                    onCrawl={crawlItem}
                     onOpenInspector={setView}
                     onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
                     onPin={pinItem}

@@ -542,7 +542,8 @@ export function archiveDocument(url: string, title: string, markdown: string): v
         JSON.stringify({ chars: markdown.length, fetchedAt: now }),
         // born UNTAGGED (the tags come from the findings' flow-back when
         // a fact cites the page)
-        segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000),
+        JSON.stringify(segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000)),
+        now,
         now,
       ],
     );
