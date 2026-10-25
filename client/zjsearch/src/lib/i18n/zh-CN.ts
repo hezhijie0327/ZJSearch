@@ -214,6 +214,8 @@ export const ZH_CN: Record<StringKey, string> = {
   license: "许可证",
   show_less: "收起",
   ai_answer: "AI 概览",
+  ai_followup_placeholder: "继续追问…",
+  ai_followup_action: "转入 AI 搜索",
   ai_search: "AI 搜索",
   ai_search_failed: "搜索失败",
   ai_halt_stopped_by_user: "已按你的要求停止研究",

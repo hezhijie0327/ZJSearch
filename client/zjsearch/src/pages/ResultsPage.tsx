@@ -388,9 +388,30 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     if (handoff) {
       window.sessionStorage.removeItem("zjs-attach-handoff");
     }
+    // the overview card's follow-up: the ask rides the AI search with the
+    // overview answer as the conversation's opening history -- the same
+    // sessionStorage hand-off pattern the staged attachments use
+    const followupHandoff = window.sessionStorage.getItem("zjs-overview-followup");
+    let handoffHistory: Array<{ q: string; a: string }> | undefined;
+    if (followupHandoff) {
+      try {
+        handoffHistory = [JSON.parse(followupHandoff) as { q: string; a: string }];
+      } catch {
+        handoffHistory = undefined;
+      }
+      window.sessionStorage.removeItem("zjs-overview-followup");
+    }
     // the template PICK is the run rail's output-structure control -- the start
     // request carries no template (the run-time pick rides run/control)
-    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language, handoffAttachments);
+    aiSearch.start(
+      data.q,
+      aiLang,
+      researchMode,
+      filterValues.search_language,
+      handoffAttachments,
+      undefined,
+      handoffHistory,
+    );
   });
   // AI Overview auto-open (audit/QA deep link): `&ai_overview=1` opens the
   // answer card WITHOUT a click once the results settled -- the Lighthouse

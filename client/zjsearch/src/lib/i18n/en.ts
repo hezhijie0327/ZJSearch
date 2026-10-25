@@ -211,6 +211,8 @@ export const EN = {
   license: "License",
   show_less: "Show less",
   ai_answer: "AI Overview",
+  ai_followup_placeholder: "Ask a follow-up…",
+  ai_followup_action: "Ask in AI search",
   ai_search: "AI Search",
   ai_search_failed: "Search failed",
   ai_halt_stopped_by_user: "Research stopped at your request",

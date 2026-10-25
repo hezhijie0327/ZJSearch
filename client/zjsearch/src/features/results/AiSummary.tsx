@@ -4,7 +4,7 @@
 // enough to ride the results stylesheet; the woff2 fonts load on demand)
 import "katex/dist/katex.min.css";
 
-import { ArrowUpRight, Brain, ChevronDown, Copy, FileText, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Brain, ChevronDown, Copy, FileText, RefreshCw, Sparkles } from "lucide-react";
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
@@ -1045,6 +1045,8 @@ export function AiAnswerCard({
   const t = useT();
   const { search } = useRouter();
   const [thinkForced, setThinkForced] = useState<boolean | null>(null);
+  // the follow-up composer's draft
+  const [followup, setFollowup] = useState("");
   // a regenerate / new query starts a fresh run: drop the manual fold so
   // the new run's reasoning follows the auto behaviour again
   useEffect(() => {
@@ -1082,7 +1084,7 @@ export function AiAnswerCard({
           <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
             <Sparkles className="size-3.5" />
           </span>
-          <span className="text-[13px] font-medium text-ink">{t("ai_answer")}</span>
+          <span className="text-sm font-medium text-ink">{t("ai_answer")}</span>
           {!streaming ? (
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
               <button
@@ -1180,6 +1182,49 @@ export function AiAnswerCard({
           </div>
         ) : streaming && !hasThink ? (
           <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>
+        ) : null}
+        {/* the follow-up: the question rides the AI search with THIS
+            answer as the conversation's opening history -- a sessionStorage
+            hand-off survives the navigation (the staged attachments' exact
+            channel) and the takeover's first POST carries it, so the next
+            run builds on what's established */}
+        {state.phase === "done" && hasAnswer && q ? (
+          <form
+            className="zjs-print-hide mt-3 flex items-center gap-2 border-t border-line pt-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const question = followup.trim();
+              if (!question) {
+                return;
+              }
+              window.sessionStorage.setItem("zjs-overview-followup", JSON.stringify({ q, a: answer.slice(0, 2000) }));
+              setFollowup("");
+              void search({ q: question, ai: true });
+            }}
+          >
+            <input
+              aria-label={t("ai_followup_placeholder")}
+              className="h-9 min-w-0 flex-1 rounded-full border border-line bg-surface px-3.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+              onChange={(event) => {
+                setFollowup(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                }
+              }}
+              placeholder={t("ai_followup_placeholder")}
+              value={followup}
+            />
+            <button
+              aria-label={t("ai_followup_action")}
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+              title={t("ai_followup_action")}
+              type="submit"
+            >
+              <ArrowUp aria-hidden="true" className="size-4" />
+            </button>
+          </form>
         ) : null}
         {failed ? (
           <div className="mt-2 text-xs text-danger">
