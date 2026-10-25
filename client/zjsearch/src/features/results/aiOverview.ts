@@ -140,17 +140,22 @@ export function buildAiContext(
   results: ResultItem[],
   infoboxes: InfoboxData[],
   recalled: Array<{ url: string; title: string; text: string }> = [],
-): string {
+): { context: string; sources: Array<{ n: number; url: string; title: string }> } {
   const lines: string[] = [];
+  // the URL-bearing entries in their [n] order -- the run's seeded registry
+  // cites positionally against this exact list
+  const sources: Array<{ n: number; url: string; title: string }> = [];
   let index = 0;
   for (const result of results.slice(0, DEEP_SOURCES)) {
     index += 1;
+    sources.push({ n: index, url: result.url, title: result.title_text });
     lines.push(
       `[${index}] ${resultHost(result.url, result.netloc)}${dateOf(result)}: ${result.title_text}: ${result.content_text.slice(0, DEEP_SNIPPET_CHARS)}`,
     );
   }
   for (const result of results.slice(DEEP_SOURCES, DEEP_SOURCES + SHALLOW_SOURCES)) {
     index += 1;
+    sources.push({ n: index, url: result.url, title: result.title_text });
     lines.push(`[${index}] ${resultHost(result.url, result.netloc)}: ${result.title_text}`);
   }
   const infobox = infoboxes[0];
@@ -168,7 +173,7 @@ export function buildAiContext(
       `[${index}] ${resultHost(hit.url, undefined)}: ${hit.title} (from your past research, read in full; may be outdated): ${hit.text.slice(0, RECALLED_CHARS)}`,
     );
   }
-  return lines.join("\n");
+  return { context: lines.join("\n"), sources };
 }
 
 /** Split a streamed Quick Answer into its `<think>` block and the visible

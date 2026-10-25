@@ -246,7 +246,7 @@ export function renumberCitations(text: string, map: CitationMap, linkAnchor?: s
     global n has no local slot (a phantom) stays untouched.  Run on the
     PRINT CLONE only -- the live screen keeps its global chips.  The live
     chip shapes are matched by their TEXT ([n] and nothing else): the
-    thread's chips are `[${n}]`-labeled BUTTONS (AiSummary, aria-label
+    thread's chips are `[${n}]`-labeled BUTTONS (AIOverview, aria-label
     "open_source {n}"), the run section's locator chips carry
     `data-cite-n`, the deck's marpit slides render `a[href^="#ref-"]`
     anchors. */

@@ -76,7 +76,7 @@ export interface GlobalData {
   about_url: string;
   search_syntax_url: string;
   rtl: boolean;
-  ai?: AiCapability;
+  ai_overview?: AiCapability;
   /** AI Search mode capability (same token shape): absent when the
       zjsearch.feature.ai_search flag is off — the client hides its mode switch */
   ai_search?: AiCapability;

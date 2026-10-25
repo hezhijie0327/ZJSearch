@@ -4,7 +4,7 @@
 // enough to ride the results stylesheet; the woff2 fonts load on demand)
 import "katex/dist/katex.min.css";
 
-import { ArrowUp, ArrowUpRight, Brain, ChevronDown, Copy, FileText, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Brain, ChevronDown, Copy, FileText, RefreshCw, Search, Sparkles } from "lucide-react";
 import { Children, isValidElement, memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Markdown from "react-markdown";
@@ -27,6 +27,9 @@ import { cn } from "@/lib/cn.ts";
 import { buildAnswerMarkdown } from "@/lib/exporters.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
+import { appendRunEvents } from "@/lib/kb/events.ts";
+import { settleRun, startRun } from "@/lib/kb/projections.ts";
+import { newThreadId, threadUrl } from "@/lib/kb/shared.ts";
 import { holdBackTail, MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { CHIP_ACCENT, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
@@ -64,9 +67,9 @@ async function mermaidFor(dark: boolean) {
 /**
  * The whole-page AI Overview.  The server puts an {@link AiCapability}
  * into the page-data globals only when the feature is configured;
- * ResultsPage hosts the state (`useAiAnswer`) and renders the entry in the
- * results meta row (`AiAnswerTrigger`) plus the answer card at the top of
- * the answers area (`AiAnswerCard`).  The stream is plain text: the model's
+ * ResultsPage hosts the state (`useOverview`) and renders the entry in the
+ * results meta row (`OverviewTrigger`) plus the answer card at the top of
+ * the answers area (`OverviewCard`).  The stream is plain text: the model's
  * reasoning arrives wrapped in <think>...</think> (rendered as a block that
  * is expanded live while the reasoning streams and folds once the answer
  * starts, height-capped and tail-following inside), the answer is markdown
@@ -78,62 +81,81 @@ async function mermaidFor(dark: boolean) {
  * which the card renders under its failed label.
  */
 
-type AiAnswerPhase = "idle" | "streaming" | "done" | "error";
+type OverviewPhase = "idle" | "streaming" | "done" | "error";
 
-interface AiAnswerState {
-  phase: AiAnswerPhase;
-  /** the asked question (the MD/PDF exports' title + filename base) */
-  query: string;
-  /** raw stream text: <think> block (when the model reasons) followed by
-      the visible markdown answer with [n] citations */
-  text: string;
-  open: boolean;
-  /** the transport's error message (HTTP status + upstream reason) when
-      phase === "error" — rendered under the card's failed label */
-  error: string | null;
-  /** ask the question for the current results (or re-ask after an error) */
-  start: (q: string, context: string, images?: string[]) => void;
-  toggle: (q: string, context: string, images?: string[]) => void;
-  /** re-run the last question against the same results */
-  regenerate: () => void;
-  /** drop everything (a new search invalidates the answer) */
-  reset: () => void;
+interface OverviewStep {
+  id: number;
+  tool: string;
+  label: string;
+  status: string;
 }
 
+type OverviewSourceSeed = { n: number; url: string; title: string };
+
+interface OverviewState {
+  phase: OverviewPhase;
+  query: string;
+  text: string;
+  open: boolean;
+  error: string | null;
+  threadId: string;
+  steps: OverviewStep[];
+  start: (q: string, context: string, images?: string[], sources?: OverviewSourceSeed[]) => void;
+  toggle: (q: string, context: string, images?: string[], sources?: OverviewSourceSeed[]) => void;
+  regenerate: () => void;
+  reset: () => void;
+}
 /** ResultsPage-level state: the trigger chip lives in the results meta row,
     the card at the top of the answers area — one hook owns the stream so
     both stay in sync.  Same abort discipline everywhere: the controller is
     captured at start, aborted on unmount / re-ask / collapse, and every
     settled callback re-checks the signal. */
-export function useAiAnswer(capability: AiCapability | undefined, lang: string): AiAnswerState {
-  const [phase, setPhase] = useState<AiAnswerPhase>("idle");
+export function useOverview(capability: AiCapability | undefined, lang: string): OverviewState {
+  const [phase, setPhase] = useState<OverviewPhase>("idle");
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState("");
+  const [steps, setSteps] = useState<OverviewStep[]>([]);
   const abortRef = useRef<AbortController | null>(null);
-  const lastAskRef = useRef<{ context: string; images: string[]; q: string } | null>(null);
+  const lastAskRef = useRef<{ context: string; images: string[]; q: string; sources: OverviewSourceSeed[] } | null>(
+    null,
+  );
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const start = (q: string, context: string, images: string[] = []) => {
+  const start = (q: string, context: string, images: string[] = [], sources: OverviewSourceSeed[] = []) => {
     if (!capability) {
       return;
     }
     abortRef.current?.abort();
-    lastAskRef.current = { context, images, q };
+    lastAskRef.current = { context, images, q, sources };
     const controller = new AbortController();
     abortRef.current = controller;
+    // THE OVERVIEW IS A RUN: it rides the search route's "overview" tier
+    // and records like one -- run row + evt log in the browser store, so
+    // the thread page resumes the conversation and a follow-up is the
+    // native run 2 (the sessionStorage hand-off carries the thread id).
+    const tid = newThreadId();
+    setThreadId(tid);
     setPhase("streaming");
     setText("");
+    setSteps([]);
     setError(null);
     setOpen(true);
-    // the endpoint streams the SAME timeline NDJSON as search (closed-set
-    // wire events); this hook adapts it into the card's raw-text rendering
-    // contract: <think> markers around the reasoning, the meta sentinel at
-    // the tail (both parsed back out by splitAnswerStream/extractRunMeta)
+    const runId = `${tid}:1`;
+    const startedAt = Date.now();
+    startRun(tid, { runNo: 1, q, mode: "overview", startedAt });
+    appendRunEvents(runId, [{ e: "client.start", q, runNo: 1, mode: "overview", startedAt }]);
     let accumulated = "";
     let thinkOpen = false;
     let lineBuffer = "";
+    let meta: { finish: string | null; model: string | null; usage: unknown } = {
+      finish: null,
+      model: null,
+      usage: null,
+    };
+    let runTags: string[] = [];
     const consume = (line: string) => {
       if (!line) {
         return;
@@ -144,6 +166,7 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
       } catch {
         return;
       }
+      appendRunEvents(runId, [event]);
       const kind = event.e;
       if (kind === "think") {
         if (!thinkOpen) {
@@ -162,17 +185,45 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
           accumulated += "</think>";
           thinkOpen = false;
         }
-        const meta = {
-          finish: event.finish ?? null,
-          model: event.model ?? null,
+        meta = {
+          finish: (event.finish as string | null) ?? null,
+          model: (event.model as string | null) ?? null,
           usage: event.usage ?? null,
         };
         accumulated += `\n<<<zjs-meta:${JSON.stringify(meta)}>>>`;
+      } else if (kind === "tags") {
+        runTags = ((event.items as unknown[]) ?? []).map((tag) => String(tag)).filter(Boolean);
+      } else if (kind === "calls") {
+        const items = (event.items as Array<Record<string, unknown>>) ?? [];
+        setSteps((prev) => [
+          ...prev,
+          ...items.map((item) => ({
+            id: Number(item.id) || 0,
+            tool: String(item.tool ?? ""),
+            label: String(item.url || item.q || item.tool || ""),
+            status: "pending",
+          })),
+        ]);
+      } else if (kind === "call") {
+        const callId = Number(event.call) || 0;
+        const status = String(event.status ?? "ok");
+        setSteps((prev) => prev.map((step) => (step.id === callId ? { ...step, status } : step)));
       }
     };
     void fetchStream(
-      "/zjsearch/ask/overview",
-      { context, images, lang, q, tk: capability.tk, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      "/zjsearch/ask/search",
+      {
+        clarify_state: "skipped",
+        context,
+        images,
+        lang,
+        mode: "overview",
+        q,
+        sources,
+        thread: tid,
+        tk: capability.tk,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      },
       (chunk) => {
         lineBuffer += chunk;
         const lines = lineBuffer.split("\n");
@@ -191,12 +242,41 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
         if (!controller.signal.aborted) {
           setText(accumulated);
           setPhase("done");
+          const { answer } = splitAnswerStream(accumulated);
+          settleRun(tid, {
+            runNo: 1,
+            q,
+            status: "done",
+            mode: "overview",
+            answer,
+            startedAt,
+            endedAt: Date.now(),
+            finish: meta.finish,
+            model: meta.model,
+            usage: meta.usage,
+            sources: sources.map((source) => ({ n: source.n, url: source.url, title: source.title })),
+            tags: runTags,
+          });
         }
       })
       .catch((err: unknown) => {
         if (!controller.signal.aborted) {
-          setError(err instanceof Error ? err.message : String(err));
+          const message = err instanceof Error ? err.message : String(err);
+          setError(message);
           setPhase(accumulated ? "done" : "error");
+          const { answer } = splitAnswerStream(accumulated);
+          settleRun(tid, {
+            runNo: 1,
+            q,
+            status: "error",
+            mode: "overview",
+            error: message,
+            answer,
+            startedAt,
+            endedAt: Date.now(),
+            sources: sources.map((source) => ({ n: source.n, url: source.url, title: source.title })),
+            tags: runTags,
+          });
         }
       });
   };
@@ -204,13 +284,13 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
   const regenerate = () => {
     const last = lastAskRef.current;
     if (last && phase !== "streaming") {
-      start(last.q, last.context, last.images);
+      start(last.q, last.context, last.images, last.sources);
     }
   };
 
-  const toggle = (q: string, context: string, images?: string[]) => {
+  const toggle = (q: string, context: string, images?: string[], sources?: OverviewSourceSeed[]) => {
     if (phase === "idle" || phase === "error") {
-      start(q, context, images);
+      start(q, context, images, sources);
       return;
     }
     if (phase === "streaming") {
@@ -230,20 +310,33 @@ export function useAiAnswer(capability: AiCapability | undefined, lang: string):
     lastAskRef.current = null;
     setPhase("idle");
     setText("");
+    setSteps([]);
     setError(null);
     setOpen(false);
   };
 
-  return { error, open, phase, query: lastAskRef.current?.q ?? "", regenerate, reset, start, text, toggle };
+  return {
+    error,
+    open,
+    phase,
+    query: lastAskRef.current?.q ?? "",
+    start,
+    steps,
+    text,
+    threadId,
+    toggle,
+    regenerate,
+    reset,
+  };
 }
 
 /** Meta-row entry (the 12px toggle tier of "found N results · took X s"). */
-export function AiAnswerTrigger({
+export function OverviewTrigger({
   phase,
   open,
   onToggle,
 }: {
-  phase: AiAnswerPhase;
+  phase: OverviewPhase;
   /** the card's visibility — the trigger is its disclosure */
   open: boolean;
   onToggle: () => void;
@@ -258,7 +351,11 @@ export function AiAnswerTrigger({
       type="button"
     >
       <Sparkles className="size-3 shrink-0" />
-      {phase === "streaming" ? t("ai_answering") : phase === "error" ? t("ai_answer_failed") : t("ai_answer")}
+      {phase === "streaming"
+        ? t("ai_overview_running")
+        : phase === "error"
+          ? t("ai_overview_failed")
+          : t("ai_overview")}
       <ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
     </button>
   );
@@ -1029,13 +1126,13 @@ export function ThinkScroll({ active, text }: { active: boolean; text: string })
     live while the model thinks and folded once the answer starts
     (Google behaviour); a long overview settles truncated with a show-more pill.
     The header's refresh chip re-runs the question. */
-export function AiAnswerCard({
+export function OverviewCard({
   state,
   sourceMeta = [],
   onCite,
   q,
 }: {
-  state: AiAnswerState;
+  state: OverviewState;
   /** favicon + domain + title per result, in citation order (position = [n]) */
   sourceMeta?: AiSourceMeta[];
   onCite?: (index: number) => void;
@@ -1043,10 +1140,12 @@ export function AiAnswerCard({
   q?: string;
 }) {
   const t = useT();
-  const { search } = useRouter();
+  const { navigate, search } = useRouter();
   const [thinkForced, setThinkForced] = useState<boolean | null>(null);
   // the follow-up composer's draft
   const [followup, setFollowup] = useState("");
+  // the compact process list's manual override
+  const [processForced, setProcessForced] = useState<boolean | null>(null);
   // a regenerate / new query starts a fresh run: drop the manual fold so
   // the new run's reasoning follows the auto behaviour again
   useEffect(() => {
@@ -1065,6 +1164,7 @@ export function AiAnswerCard({
   // once the answer starts arriving so the result takes over (manual
   // override wins)
   const thinkOpen = thinkForced ?? (thinking && !hasAnswer);
+  const processOpen = processForced ?? (streaming && !hasAnswer);
   // a finished stream with neither answer nor reasoning content is a
   // failure; a user stop keeps the partial content without an error label
   const failed = state.phase === "error" || (state.phase === "done" && !hasAnswer && !hasThink);
@@ -1084,7 +1184,7 @@ export function AiAnswerCard({
           <span className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-accent">
             <Sparkles className="size-3.5" />
           </span>
-          <span className="text-sm font-medium text-ink">{t("ai_answer")}</span>
+          <span className="text-sm font-medium text-ink">{t("ai_overview")}</span>
           {!streaming ? (
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
               <button
@@ -1101,7 +1201,7 @@ export function AiAnswerCard({
               {state.phase === "done" && hasAnswer ? (
                 <CopyChip
                   value={buildAnswerMarkdown(
-                    q || t("ai_answer"),
+                    q || t("ai_overview"),
                     answer.trim(),
                     sourceMeta
                       .filter((source) => Number.isInteger(source.n))
@@ -1128,6 +1228,32 @@ export function AiAnswerCard({
             </div>
           ) : null}
         </div>
+        {state.steps.length > 0 ? (
+          <div className="zjs-print-hide mt-2">
+            <button
+              aria-expanded={processOpen}
+              className={`${META_TOGGLE} text-xs`}
+              onClick={() => {
+                setProcessForced(!processOpen);
+              }}
+              type="button"
+            >
+              <Search className="size-3 shrink-0" />
+              {t("ai_overview_process")}
+              <ChevronDown className={`size-3.5 transition-transform ${processOpen ? "rotate-180" : ""}`} />
+            </button>
+            <Collapse className={processOpen ? "mt-1" : ""} open={processOpen}>
+              <div className="space-y-0.5 rounded-lg bg-surface-2/50 px-3 py-2">
+                {state.steps.map((step) => (
+                  <p className="truncate text-xs text-ink-3" key={step.id} title={step.label}>
+                    {step.status === "pending" ? "… " : "✓ "}
+                    {step.label}
+                  </p>
+                ))}
+              </div>
+            </Collapse>
+          </div>
+        ) : null}
         {hasThink ? (
           <div className="zjs-print-hide mt-2">
             <button
@@ -1181,7 +1307,7 @@ export function AiAnswerCard({
             </ClampReveal>
           </div>
         ) : streaming && !hasThink ? (
-          <p className="mt-2 text-xs text-ink-3">{t("ai_answering")}</p>
+          <p className="mt-2 text-xs text-ink-3">{t("ai_overview_running")}</p>
         ) : null}
         {/* the follow-up: the question rides the AI search with THIS
             answer as the conversation's opening history -- a sessionStorage
@@ -1197,9 +1323,12 @@ export function AiAnswerCard({
               if (!question) {
                 return;
               }
-              window.sessionStorage.setItem("zjs-overview-followup", JSON.stringify({ q, a: answer.slice(0, 2000) }));
+              window.sessionStorage.setItem(
+                "zjs-overview-thread",
+                JSON.stringify({ q: question, thread: state.threadId }),
+              );
               setFollowup("");
-              void search({ q: question, ai: true });
+              navigate(threadUrl(state.threadId));
             }}
           >
             <input
@@ -1228,7 +1357,7 @@ export function AiAnswerCard({
         ) : null}
         {failed ? (
           <div className="mt-2 text-xs text-danger">
-            <p>{t("ai_answer_failed")}</p>
+            <p>{t("ai_overview_failed")}</p>
             {state.error ? (
               // the transport's own reason (HTTP status + upstream message),
               // truncated server-side — a broken endpoint must be readable

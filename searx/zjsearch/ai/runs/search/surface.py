@@ -74,7 +74,6 @@ def build_tool_surface(
     and the report/deck outline.  PURE: no settings reads -- the MCP
     servers' specs (the discovery index's content) are process state
     consulted through :py:func:`search_tools.tools_surface`."""
-    research_tier = mode in ("balanced", "deep")
     delegating = mode == "deep" and depth_rung >= 2
     specs: list[dict[str, t.Any]] = [
         # with_info: the desc's list_engines pointer is accurate when the

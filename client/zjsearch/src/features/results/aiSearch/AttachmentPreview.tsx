@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
-import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
+import { MarkdownAnswer } from "@/features/results/AIOverview.tsx";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";

@@ -288,7 +288,7 @@ export function RouterProvider({
       configureEmbeddings(parsed.globals?.embedding ? { token: parsed.globals.embedding.tk } : null);
       configureRerank(parsed.globals?.rerank ? { token: parsed.globals.rerank.tk } : null);
       configureDecision(parsed.globals?.decision ? { token: parsed.globals.decision.tk } : null);
-      const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai;
+      const aiCapLanding = parsed.globals?.ai_search ?? parsed.globals?.ai_overview;
       configureKnowledge({ aiToken: aiCapLanding?.tk, embedModel: parsed.globals?.embedding?.model });
       configureBrowserInput(aiCapLanding?.tk, Number(aiCapLanding?.vw), Number(aiCapLanding?.vh));
       setData(parsed);

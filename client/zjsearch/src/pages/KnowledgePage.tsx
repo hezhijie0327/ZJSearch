@@ -64,7 +64,7 @@ import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
  * event-sourced knowledge table uniquely enables.
  */
 
-type KindFilter = "run" | "answer" | "source" | "document" | "memory";
+type KindFilter = "run" | "overview" | "source" | "document" | "memory";
 type TimeFilter = "any" | "week" | "month";
 
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -127,7 +127,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // ── view tab: the overview archive (the classic page's AI overview) leads,
   // then the research threads, sources, documents, memories; the graph is
   // a VIEW (global, memory rows carry no tags) and admin closes the bar ──
-  const [kind, setKind] = useState<KindFilter | "graph" | "templates" | "admin">("answer");
+  const [kind, setKind] = useState<KindFilter | "graph" | "templates" | "admin">("overview");
   // the one-shot listings (feed / kind directories) are not live: a bump
   // re-fetches them after a pin or a delete lands
   const [listingBump, setListingBump] = useState(0);
@@ -183,7 +183,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
   // ── the kind directory (a filter chip's own listing, non-search) ────
   const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
-  const kindListing = !searching && (kind === "answer" || kind === "source" || kind === "document");
+  const kindListing = !searching && (kind === "overview" || kind === "source" || kind === "document");
   // biome-ignore lint/correctness/useExhaustiveDependencies: listingBump only re-fetches the one-shot listing
   useEffect(() => {
     if (!kindListing || threadsLen < -1) {
@@ -254,7 +254,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
         cancelled = true;
       };
     }
-    if (inspected?.kind === "answer") {
+    if (inspected?.kind === "answer" || inspected?.kind === "overview") {
       // the overview archive's full text: the listing rows carry the
       // 600-char head excerpt only
       let cancelled = false;
@@ -378,9 +378,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // row only the four list kinds (memories are a timeline -- they neither
   // pin nor take a time filter, the timeline groups by day itself)
   const contentTab = kind !== "graph" && kind !== "admin";
-  const listTab = kind === "run" || kind === "answer" || kind === "source" || kind === "document";
+  const listTab = kind === "run" || kind === "overview" || kind === "source" || kind === "document";
   const viewTabs: Array<{ id: KindFilter | "graph" | "templates" | "admin"; label: string; icon: ReactNode }> = [
-    { id: "answer", label: t("knowledge_kind_answer"), icon: <KNOWLEDGE_KIND_ICONS.answer className="size-3.5" /> },
+    {
+      id: "overview",
+      label: t("knowledge_kind_overview"),
+      icon: <KNOWLEDGE_KIND_ICONS.overview className="size-3.5" />,
+    },
     { id: "run", label: t("knowledge_kind_run"), icon: <KNOWLEDGE_KIND_ICONS.run className="size-3.5" /> },
     { id: "source", label: t("knowledge_kind_source"), icon: <KNOWLEDGE_KIND_ICONS.source className="size-3.5" /> },
     {
@@ -539,7 +543,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                         ? t("knowledge_source_empty_line")
                         : kind === "document"
                           ? t("knowledge_doc_empty_line")
-                          : kind === "answer"
+                          : kind === "overview"
                             ? t("knowledge_answer_empty_line")
                             : undefined
                     }

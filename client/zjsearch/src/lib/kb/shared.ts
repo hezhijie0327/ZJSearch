@@ -56,6 +56,7 @@ export function threadUrl(id: string): string {
 export type KnowledgeKind =
   | "run"
   | "answer"
+  | "overview"
   | "source"
   | "source_ref"
   | "document"
@@ -63,6 +64,13 @@ export type KnowledgeKind =
   | "call"
   | "task"
   | "clarify";
+
+/** A fresh conversation identity (the thread url's uuid). */
+export function newThreadId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-4${Math.random().toString(16).slice(2, 11)}`;
+}
 
 /** One knowledge row as the UI consumes it (evt rows never surface). */
 export interface KnowledgeItem {

@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, FlaskConical, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dropdown } from "@/components/Dropdown.tsx";
-import { AiAnswerCard } from "@/features/results/AiSummary.tsx";
+import { OverviewCard } from "@/features/results/AIOverview.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import {
@@ -266,7 +266,7 @@ export function AiDebugStage() {
 }
 
 /** The AI Overview debug stage's surface (/zjsearch/debug/overview):
-    the REAL AiAnswerCard fed by fixture raw-text streams -- the chunks
+    the REAL OverviewCard fed by fixture raw-text streams -- the chunks
     replay exactly what the wire would stream (think markers, markdown
     answer, the trailing run-meta sentinel), the transport scrubs any
     mid-stream state, and the fixture's sources ride the card's citation
@@ -320,6 +320,8 @@ export function AiOverviewDebugStage() {
     phase,
     query: scenario.q,
     text,
+    threadId: "",
+    steps: [],
     open: true,
     error: phase === "error" ? (scenario.error ?? "error") : null,
     start: () => {
@@ -427,7 +429,7 @@ export function AiOverviewDebugStage() {
         </div>
       </div>
       <div className="space-y-3">
-        <AiAnswerCard q={scenario.q} sourceMeta={scenario.sources} state={state} />
+        <OverviewCard q={scenario.q} sourceMeta={scenario.sources} state={state} />
         {scenario.sources.length > 0 ? (
           <p className="text-xs text-ink-3">
             {scenario.sources.length} fixture sources riding the card's citation chips

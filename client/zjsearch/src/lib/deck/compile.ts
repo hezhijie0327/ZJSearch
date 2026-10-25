@@ -70,7 +70,7 @@ export interface DeckCompileOptions {
 // Two instances: the math-enabled instance produces HTML; as soon as math
 // is on, marp-core appends the whole KaTeX CSS (@font-face pointing at the
 // jsDelivr CDN) to the rendered css, while the page already loads
-// katex.min.css with the results-page styles (AiSummary's static import) --
+// katex.min.css with the results-page styles (AIOverview's static import) --
 // the deck css neither needs nor should carry it twice.  CSS is
 // content-independent, so an empty render on the math:false twin instance
 // yields the pure theme css.  Instances are lazily cached per (math × html)

@@ -72,7 +72,7 @@ function ProgressBar({ active }: { active: boolean }) {
 function KnowledgeButton({ globals }: { globals: GlobalData }) {
   const t = useT();
   const { openOverlay } = useOverlay();
-  if (!globals.ai_search && !globals.ai) {
+  if (!globals.ai_search && !globals.ai_overview) {
     return null;
   }
   return (

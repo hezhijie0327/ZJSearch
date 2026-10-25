@@ -8,9 +8,9 @@ Business logic lives in the task modules, never here.
 NAMING (the URL is the product contract; the module file mirrors it):
 
 - ``/zjsearch/ask/*`` -- the AI research conversation domain: the run
-  stream, the run host's ``run/*`` actions, the thread/overview pages,
+  stream, the run host's ``run/*`` actions, the thread page,
   and the decision model proxy.  Every URL's LAST segment is the
-  module's feature name (``overview_route`` owns ``/ai/overview``).
+  module's feature name (the overview tier rides /ask/search).
 - ``/zjsearch/knowledge/*`` -- the KNOWLEDGE BASE's backend services
   (embed / rerank / tags normalization), consumed by the
   ``/zjsearch/knowledge`` page and the browser-local store (the page is
@@ -34,7 +34,6 @@ def install(app: flask.Flask) -> None:
         decision_route,
         embed_route,
         knowledge_page,
-        overview_route,
         recall_route,
         rerank_route,
         run_host_route,
@@ -48,7 +47,6 @@ def install(app: flask.Flask) -> None:
     debug_page.install(app)
     knowledge_page.install(app)
     search_route.install(app)
-    overview_route.install(app)
     decision_route.install(app)
     run_host_route.install(app)
     recall_route.install(app)

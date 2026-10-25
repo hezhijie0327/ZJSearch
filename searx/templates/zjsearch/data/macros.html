@@ -56,8 +56,8 @@ pipeline features without any Python changes. -#}
   "search_syntax_url": {{ url_for('info', pagename='search-syntax')|tojson }},
   "rtl": {{ 'true' if rtl else 'false' }}
   {%- set zjs_ai = zjs_ai_capabilities() %}
-  {%- if zjs_ai.ai %}
-  ,"ai": {"tk": {{ zjs_ai.ai.tk|tojson }}, "model": {{ zjs_ai.ai.model|tojson }} }
+  {%- if zjs_ai.ai_overview %}
+  ,"ai_overview": {"tk": {{ zjs_ai.ai_overview.tk|tojson }}, "model": {{ zjs_ai.ai_overview.model|tojson }} }
   {%- endif %}
   {%- if zjs_ai.ai_search %}
   ,"ai_search": {"tk": {{ zjs_ai.ai_search.tk|tojson }}, "model": {{ zjs_ai.ai_search.model|tojson }} }

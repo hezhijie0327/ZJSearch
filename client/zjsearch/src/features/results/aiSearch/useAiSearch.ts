@@ -39,6 +39,7 @@ import {
   startRun,
 } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
+import { newThreadId } from "@/lib/kb/shared.ts";
 import { type RunKeepalive, startRunKeepalive } from "@/lib/keepalive.ts";
 import { pg } from "@/lib/pg.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -126,9 +127,6 @@ export interface AiSearchState extends Core {
     searchLanguage?: string,
     attachments?: AiSearchAttachment[],
     template?: ReportTemplate,
-    /** the overview follow-up's seed: the ask + answer this run builds
-        on (rides the POST's history field) */
-    history?: Array<{ q: string; a: string }>,
   ): void;
   followup(
     q: string,
@@ -187,13 +185,6 @@ export interface AiSearchState extends Core {
       the material gathered */
   wrap(): void;
   reset(): void;
-}
-
-/** A fresh conversation identity (the thread url's uuid). */
-function newThreadId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-4${Math.random().toString(16).slice(2, 11)}`;
 }
 
 const STREAM_IDLE_MS = 170_000;
@@ -823,7 +814,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     searchLanguage = "",
     attachments?: AiSearchAttachment[],
     template?: ReportTemplate,
-    history?: Array<{ q: string; a: string }>,
   ) => {
     if (!capability) {
       return;
@@ -841,7 +831,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     appendRunEvents(`${threadIdRef.current}:1`, [
       { e: "client.start", q, runNo: 1, mode, startedAt: Date.now(), attachments: meta },
     ]);
-    beginRun(q, lang, history ?? [], 0, mode, searchLanguage, 1, undefined, attachments, template);
+    beginRun(q, lang, [], 0, mode, searchLanguage, 1, undefined, attachments, template);
     // the LIVE run shows the staged bytes immediately (the evt log only
     // carries metadata; the table owns the bytes for the replay path)
     const staged = (attachments ?? []).filter((item) => item.data);

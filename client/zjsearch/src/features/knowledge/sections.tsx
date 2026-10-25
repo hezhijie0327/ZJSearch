@@ -61,7 +61,7 @@ import { printDocument } from "@/lib/print.ts";
     icon -- one map, so they cannot drift apart again (the Layers-era
     empties once disagreed with every tab they lived under). */
 export const KNOWLEDGE_KIND_ICONS = {
-  answer: Sparkles,
+  overview: Sparkles,
   run: MessageCircleQuestion,
   source: Globe,
   document: FileText,
@@ -376,7 +376,7 @@ function RowActions({
 const KIND_LABEL_KEYS: Record<
   string,
   | "knowledge_kind_run"
-  | "knowledge_kind_answer"
+  | "knowledge_kind_overview"
   | "knowledge_kind_source"
   | "knowledge_kind_document"
   | "knowledge_kind_memory"
@@ -385,7 +385,7 @@ const KIND_LABEL_KEYS: Record<
   | "knowledge_kind_clarify"
 > = {
   run: "knowledge_kind_run",
-  answer: "knowledge_kind_answer",
+  overview: "knowledge_kind_overview",
   source: "knowledge_kind_source",
   document: "knowledge_kind_document",
   memory: "knowledge_kind_memory",

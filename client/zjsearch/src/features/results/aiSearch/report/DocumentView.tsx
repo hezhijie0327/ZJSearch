@@ -3,7 +3,7 @@
 import { AlertTriangle, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Tape } from "@/components/Tape.tsx";
-import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
+import { MarkdownAnswer } from "@/features/results/AIOverview.tsx";
 import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";

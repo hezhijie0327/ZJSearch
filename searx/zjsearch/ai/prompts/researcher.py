@@ -61,6 +61,7 @@ _DEPTH_RESEARCH: dict[str, str] = {
     tags each -- they name the run's topics in the knowledge graph).
     Ask the user only to avoid a genuinely wrong high-stakes guess (see
     the ask tool); otherwise never.""",
+
     "balanced": """\
     Depth: DEEP SEARCH -- a handful of rounds covering the main facets:
     what it is, how it works or why it matters, and whatever context the
@@ -371,7 +372,6 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         lines.append(_user_steering())
 
     # ---- the USER message's per-run <run_context> ----
-    run_context = f"{_memory_block(None if memories_live else user_memories)}\n"
     if clarifications:
         run_context += (
             shared.block(
@@ -388,6 +388,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             )
             + "\n"
         )
+    run_context = f"{_memory_block(None if memories_live else user_memories)}\n"
     follow_up = _follow_up(sources_base)
     if follow_up:
         run_context += f"{follow_up}\n"

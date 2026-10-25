@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { useMemo } from "react";
-import { MarkdownAnswer } from "@/features/results/AiSummary.tsx";
+import { MarkdownAnswer } from "@/features/results/AIOverview.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { type CitationMap, citedOrder, citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 

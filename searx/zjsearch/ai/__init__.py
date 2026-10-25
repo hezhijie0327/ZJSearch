@@ -55,10 +55,9 @@ def _capabilities() -> dict[str, dict[str, str] | None]:
         embed_route,
         rerank_route,
     )
-    from searx.zjsearch.ai.runs import overview  # pylint: disable=import-outside-toplevel
 
     caps: dict[str, object] = {
-        "ai": overview.capability(),
+        "ai_overview": runs.overview_capability(),
         "ai_search": runs.capability(),
         "embedding": embed_route.capability(),
         "decision": decision_route.capability(),

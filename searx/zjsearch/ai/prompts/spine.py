@@ -310,6 +310,14 @@ _SHAPE_BUDGETS: dict[str, str] = {
     sections when the facets truly differ, otherwise flowing paragraphs;
     a small list for an enumeration, a table when the question itself is
     a comparison.  Skip every structure the content does not need.""",
+    "overview": """\
+    Budget: COMPACT -- the Overview tier: the results page's AI Overview
+    card.  About 150-250 words: a bold-lead opening that names and
+    defines the subject, then only the few facts that matter.  Two or
+    three short sections when the facets truly differ, otherwise flowing
+    paragraphs; a small list for an enumeration, a table when the
+    question itself is a comparison.  Skip every structure the content
+    does not need.""",
     "balanced": """\
     Budget: MODERATE -- the Deep Search tier.  A handful of research
     rounds covered the main facets; give the answer 2-4 short "##"
@@ -332,9 +340,8 @@ Deep Research."""
 
 def shape_ladder(mode: str) -> str:
     """The writer-side ``<shape>`` block: the shared format grammar plus
-    the tier's budget.  The AI Overview consumes the ``speed`` rung
-    verbatim (both are one write turn over gathered material), so the
-    two surfaces cannot drift.  Unknown modes fall to ``balanced``."""
+    the tier's budget.  The Overview tier rides its own COMPACT rung below; unknown modes fall to
+    ``balanced``."""
     budget = textwrap.dedent(_SHAPE_BUDGETS.get(mode, _SHAPE_BUDGETS["balanced"])).strip()
     return block(
         "shape",

@@ -28,6 +28,7 @@ import {
   Printer,
   RefreshCw,
   Repeat2,
+  Sparkles,
   Swords,
   Telescope,
   Trash2,
@@ -40,8 +41,8 @@ import { createPortal } from "react-dom";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Tape } from "@/components/Tape.tsx";
+import { MarkdownAnswer, ThinkScroll } from "@/features/results/AIOverview.tsx";
 import { AiRunFooter } from "@/features/results/AiRunFooter.tsx";
-import { MarkdownAnswer, ThinkScroll } from "@/features/results/AiSummary.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { AiSearchSources, AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { Lightbox as AttachmentLightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
@@ -1520,7 +1521,7 @@ function AiSearchRunSectionImpl({
   const t = useT();
   const copyToast = useCopyToast();
   const [researchForced, setResearchForced] = useState<boolean | null>(null);
-  // the writer's reasoning toggle (the AiAnswerCard pattern): the think
+  // the writer's reasoning toggle (the OverviewCard pattern): the think
   // block stays ABOVE the answer for the run's whole life -- expanded
   // while the think streams, folded once the answer takes over, still
   // re-openable after the settle (never folded back into the research
@@ -1625,7 +1626,7 @@ function AiSearchRunSectionImpl({
   }, [locate, run.runNo]);
   const streaming = run.status === "streaming" && live;
   // a re-run reuses this section: drop the manual fold so the new think
-  // follows the auto behaviour again (the AiAnswerCard reset pattern)
+  // follows the auto behaviour again (the OverviewCard reset pattern)
   useEffect(() => {
     if (streaming) {
       setWriteThinkForced(null);
@@ -1699,8 +1700,17 @@ function AiSearchRunSectionImpl({
   // the run's research-mode chip: the composer's depth choice, always
   // visible on the run (the phase strip shows WHERE, this shows HOW deep)
   // the mode chip's icon + label: the depth dropdown's own vocabulary
-  const ModeGlyph = run.mode === "speed" ? Zap : run.mode === "balanced" ? Gauge : Telescope;
-  const modeLabel = t(run.mode === "speed" ? "mode_speed" : run.mode === "balanced" ? "mode_balanced" : "mode_deep");
+  const ModeGlyph =
+    run.mode === "speed" ? Zap : run.mode === "balanced" ? Gauge : run.mode === "overview" ? Sparkles : Telescope;
+  const modeLabel = t(
+    run.mode === "speed"
+      ? "mode_speed"
+      : run.mode === "balanced"
+        ? "mode_balanced"
+        : run.mode === "overview"
+          ? "mode_overview"
+          : "mode_deep",
+  );
   return (
     <section
       aria-busy={streaming}
@@ -1889,7 +1899,7 @@ function AiSearchRunSectionImpl({
               </div>
             </Collapse>
           </section>
-          {/* the writer's reasoning: the AiAnswerCard toggle language --
+          {/* the writer's reasoning: the OverviewCard toggle language --
               a header row that stays above the answer/document for the
               run's whole life (expanded live while the think streams,
               folded once the answer takes over, re-openable after the

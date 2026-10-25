@@ -10,7 +10,7 @@ import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/Sea
 import { HeaderActions, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
-import { AiAnswerCard, AiAnswerTrigger, useAiAnswer } from "@/features/results/AiSummary.tsx";
+import { OverviewCard, OverviewTrigger, useOverview } from "@/features/results/AIOverview.tsx";
 import {
   type AiSourceMeta,
   aiSourceMeta,
@@ -147,7 +147,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // the AI reply language as a RESOLVED catalog tag (zh-CN | en): the raw
   // locale falls back like the UI does, server-side stays a data table
   const aiLang = themeLocaleTag(uiLocale || globals.locale || "en");
-  const aiAnswer = useAiAnswer(globals.ai, aiLang);
+  const overview = useOverview(globals.ai_overview, aiLang);
   // AI Search mode: the [classic|AI] switch writes `ai=1` into the URL; the
   // panel leads the results column and auto-runs once the results settle
   const aiSearchCap = globals.ai_search;
@@ -163,7 +163,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     // the research depth re-reads the URL too: back/forward between
     // searches with different `mode` params must restore the picker
     setResearchMode(parseDepthMode(urlParams?.mode));
-    aiAnswer.reset();
+    overview.reset();
     aiSearch.reset();
     aiSearchRan.current = false;
     aiOverviewRan.current = false;
@@ -388,30 +388,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     if (handoff) {
       window.sessionStorage.removeItem("zjs-attach-handoff");
     }
-    // the overview card's follow-up: the ask rides the AI search with the
-    // overview answer as the conversation's opening history -- the same
-    // sessionStorage hand-off pattern the staged attachments use
-    const followupHandoff = window.sessionStorage.getItem("zjs-overview-followup");
-    let handoffHistory: Array<{ q: string; a: string }> | undefined;
-    if (followupHandoff) {
-      try {
-        handoffHistory = [JSON.parse(followupHandoff) as { q: string; a: string }];
-      } catch {
-        handoffHistory = undefined;
-      }
-      window.sessionStorage.removeItem("zjs-overview-followup");
-    }
     // the template PICK is the run rail's output-structure control -- the start
     // request carries no template (the run-time pick rides run/control)
-    aiSearch.start(
-      data.q,
-      aiLang,
-      researchMode,
-      filterValues.search_language,
-      handoffAttachments,
-      undefined,
-      handoffHistory,
-    );
+    aiSearch.start(data.q, aiLang, researchMode, filterValues.search_language, handoffAttachments);
   });
   // AI Overview auto-open (audit/QA deep link): `&ai_overview=1` opens the
   // answer card WITHOUT a click once the results settled -- the Lighthouse
@@ -424,14 +403,15 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
       !showSkeletons &&
       !error &&
       !aiOverviewRan.current &&
-      Boolean(globals.ai) &&
+      Boolean(globals.ai_overview) &&
       new URLSearchParams(window.location.search).get("ai_overview") === "1" &&
       allResults.length > 0;
     if (!auto) {
       return;
     }
     aiOverviewRan.current = true;
-    aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes, aiRecall), aiImages);
+    const overviewBuild = buildAiContext(allResults, data.infoboxes, aiRecall);
+    overview.toggle(data.q, overviewBuild.context, aiImages, overviewBuild.sources);
   });
   // a hand-crafted ?ai=1 (or the feature switched off mid-session) without
   // the capability: the server ran no classic search either — fall back to
@@ -759,10 +739,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // (new question, regenerate) drops the set; the new search invalidation
   // is the derived aiCited above (href identity)
   useEffect(() => {
-    if (aiAnswer.phase === "streaming") {
+    if (overview.phase === "streaming") {
       setAiMarks(null);
     }
-  }, [aiAnswer.phase]);
+  }, [overview.phase]);
 
   // as soon as the answer settles, mark EVERY result it actually cites —
   // the cited source numbers are parsed from the settled answer text with
@@ -771,10 +751,10 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // would resurrect the previous answer's citations onto a new search's
   // results).
   useEffect(() => {
-    if (aiAnswer.phase !== "done") {
+    if (overview.phase !== "done") {
       return;
     }
-    const { answer } = splitAnswerStream(aiAnswer.text);
+    const { answer } = splitAnswerStream(overview.text);
     // [n] beyond the numbered results (the infobox trails the context as a
     // bare chip) must not mark a phantom row: clamp to the meta length
     const limit = aiMeta.length;
@@ -787,7 +767,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     // (the answer kind) together with the sources it actually cites -- they
     // join the sources corpus ref-counted per query
     if (answer.trim()) {
-      const { meta: runMeta } = extractRunMeta(aiAnswer.text);
+      const { meta: runMeta } = extractRunMeta(overview.text);
       saveOverview({
         markdown: answer,
         model: runMeta?.model ?? null,
@@ -811,7 +791,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         },
       });
     }
-  }, [aiAnswer.phase, aiAnswer.text, aiMeta, data.q]);
+  }, [overview.phase, overview.text, aiMeta, data.q]);
 
   // (re-)apply the frames from the set — idempotent, so it doubles as the
   // re-marker for cards whose DOM was recreated while folded
@@ -1120,13 +1100,14 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                   <div className="mt-2">
                     <DebugPanels
                       actions={
-                        globals.ai && allResults.length > 0 ? (
-                          <AiAnswerTrigger
+                        globals.ai_overview && allResults.length > 0 ? (
+                          <OverviewTrigger
                             onToggle={() => {
-                              aiAnswer.toggle(data.q, buildAiContext(allResults, data.infoboxes, aiRecall), aiImages);
+                              const overviewBuild = buildAiContext(allResults, data.infoboxes, aiRecall);
+                              overview.toggle(data.q, overviewBuild.context, aiImages, overviewBuild.sources);
                             }}
-                            open={aiAnswer.open}
-                            phase={aiAnswer.phase}
+                            open={overview.open}
+                            phase={overview.phase}
                           />
                         ) : null
                       }
@@ -1166,9 +1147,9 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
             null : (
               <>
                 <Corrections data={data} onSearch={submitQuery} />
-                <div className={`mt-3 space-y-3 ${aiAnswer.open ? "pt-3" : ""}`}>
-                  {aiAnswer.open ? (
-                    <AiAnswerCard onCite={jumpToAiSource} q={data.q} sourceMeta={aiMeta} state={aiAnswer} />
+                <div className={`mt-3 space-y-3 ${overview.open ? "pt-3" : ""}`}>
+                  {overview.open ? (
+                    <OverviewCard onCite={jumpToAiSource} q={data.q} sourceMeta={aiMeta} state={overview} />
                   ) : null}
                   {calc ? <CalculatorAnswer calc={calc} /> : null}
                   <Answers answers={data.answers} query={data.q} />

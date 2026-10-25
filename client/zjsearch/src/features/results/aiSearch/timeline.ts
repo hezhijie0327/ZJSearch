@@ -27,7 +27,7 @@ import {
  * no-op persistence -- a stored run and a live run hit one renderer.
  */
 
-export type AiSearchMode = "speed" | "balanced" | "deep" | "report" | "deck";
+export type AiSearchMode = "speed" | "balanced" | "overview" | "deep" | "report" | "deck";
 /** "report" is a UI-level depth: it POSTs `mode: "deep"` + `report: true`
     (the server's output-shape flag) -- the wire itself only knows the
     three research depths plus the report flag. */

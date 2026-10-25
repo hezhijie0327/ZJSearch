@@ -48,13 +48,13 @@ interface SimNode {
 const KIND_LABEL: Record<
   string,
   | "knowledge_kind_run"
-  | "knowledge_kind_answer"
+  | "knowledge_kind_overview"
   | "knowledge_kind_source"
   | "knowledge_kind_document"
   | "knowledge_kind_memory"
 > = {
   run: "knowledge_kind_run",
-  answer: "knowledge_kind_answer",
+  overview: "knowledge_kind_overview",
   source: "knowledge_kind_source",
   document: "knowledge_kind_document",
   memory: "knowledge_kind_memory",

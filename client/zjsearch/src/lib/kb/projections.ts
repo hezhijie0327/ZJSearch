@@ -177,7 +177,7 @@ export function saveOverview(input: {
   void enqueue(async () => {
     await pgQuery(
       `INSERT INTO knowledge (id, kind, title, body, status, meta, tags, search_text, created, updated, occurred_at)
-       VALUES ($1, 'answer', $2, $3, 'done', $4::jsonb, $5::jsonb, $6, $7, $8, $8)
+       VALUES ($1, 'overview', $2, $3, 'done', $4::jsonb, $5::jsonb, $6, $7, $8, $8)
        ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, meta = EXCLUDED.meta,
          tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
       [
@@ -246,6 +246,7 @@ export function saveOverview(input: {
         ],
       );
     }
+    scheduleTagNormalize();
     void embedPending();
   }).catch(() => {});
 }

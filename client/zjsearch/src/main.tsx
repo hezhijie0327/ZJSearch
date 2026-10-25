@@ -74,7 +74,7 @@ async function bootstrap(): Promise<void> {
   configureDecision(decisionCap ? { token: decisionCap.tk } : null);
   // the knowledge store's AI routes (tag normalization) + the embed-model
   // name recorded on every embedded row
-  const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai;
+  const aiCap = initialData?.globals.ai_search ?? initialData?.globals.ai_overview;
   configureKnowledge({ aiToken: aiCap?.tk, embedModel: embeddingCap?.model });
   configureBrowserInput(aiCap?.tk, Number(aiCap?.vw), Number(aiCap?.vh));
   // boot payloads of the streamed search page: handled before the app takes

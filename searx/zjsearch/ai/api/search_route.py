@@ -63,7 +63,7 @@ from searx.zjsearch.ai.runs.search.gates import (
     sanitize_questions,
     standalone_question,
 )
-from searx.zjsearch.ai.runs.profile import budget, enabled, SEARCH_MODES
+from searx.zjsearch.ai.runs.profile import budget, enabled, overview_enabled, SEARCH_MODES
 from searx.zjsearch.ai.prompts.researcher import initial_messages
 from searx.zjsearch.ai.runs.search.writer import writer_messages
 from searx.zjsearch.ai.tools import (
@@ -256,6 +256,35 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     thread = str(payload.get("thread") or "").strip()[:64]
     if thread:
         logger.info("zjsearch_ask_search: thread %s", thread)
+    # THE OVERVIEW TIER: the classic results page's AI Overview -- the
+    # page's own results ride in as the seeded source registry AND as the
+    # researcher's first-turn <sources> context; the tool surface drops
+    # search_web (runs/search/surface.py's overview branch).  The gate is
+    # the overview feature's own flag, not ai_search's.
+    overview = str(payload.get("mode") or "").strip().lower() == "overview"
+    overview_ctx = ""
+    overview_sources: list[dict[str, t.Any]] = []
+    if overview:
+        if not overview_enabled():
+            flask.abort(404)
+        overview_ctx = str(payload.get("context") or "").strip()
+        if not overview_ctx:
+            flask.abort(422)
+        raw_seeds = payload.get("sources")
+        if isinstance(raw_seeds, list):
+            for item in raw_seeds[:20]:
+                if isinstance(item, dict) and item.get("url"):
+                    try:
+                        seed_n = int(item.get("n"))
+                    except (TypeError, ValueError):
+                        seed_n = 0
+                    overview_sources.append(
+                        {
+                            "url": str(item["url"])[:500],
+                            "title": str(item.get("title") or "")[:200],
+                            "n": seed_n,
+                        }
+                    )
     # follow-up thread: prior Q&A turns + the global [n] numbering base
     raw_history = payload.get("history")
     history: list[dict[str, str]] = []
@@ -345,7 +374,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                     }
                 )
     mode = str(payload.get("mode") or "balanced").strip().lower()
-    if mode not in SEARCH_MODES:
+    if mode != "overview" and mode not in SEARCH_MODES:
         mode = "balanced"
     lang = http.answer_lang(payload)
 
@@ -365,6 +394,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # research phase is the POINT of the call
         clarify_state = "answered"
         clarifications = ""
+    if mode == "overview" and clarify_state == "ask":
+        # the overview card auto-answers on the results page -- nobody is
+        # watching a clarify card there; the tier skips the gate entirely
+        clarify_state = "skipped"
     # the REPORT shape: an outline-driven, per-section document -- EVERY
     # mode serves it now (the write-boundary flip lane resolved the old
     # balanced/deep gate; a speed run's flipped document is honestly thin
@@ -391,7 +424,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # research only for greetings, chat and writing tasks -- a CONTINUE
     # always researches (the transcript IS the research, no gate spend)
     account = ModelAccount()
-    research_needed = resume is not None or bool(_URL_RE.search(q)) or research_gate(cfg, q, account=account)
+    research_needed = resume is not None or (
+        mode != "overview"
+        and (bool(_URL_RE.search(q)) or research_gate(cfg, q, account=account))
+    )
     # the clarify PRE-GATE (fail-open): two decision nouls decide whether
     # the query even reaches the (expensive) clarify completion -- AMBIGUOUS
     # (the answer's key depends on unstated intent) or HIGH-STAKES (a
@@ -499,13 +535,20 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             else []
         )
         writer_files = attached_files or (recalled_files or None)
+        # THE OVERVIEW TIER's feed: the page context's [n] lines are the
+        # whole corpus -- the writer cites them positionally, exactly like
+        # a researched run's feed, and the shape ladder's overview rung
+        # sizes the answer
+        overview_feed = (
+            [line for line in overview_ctx.split("\n") if line.strip()] if mode == "overview" else []
+        )
         events = engine.run(
             cfg,
             writer_messages(
                 q,
                 lang,
                 history,
-                [],
+                overview_feed,
                 mode,
                 None,
                 False,
@@ -675,104 +718,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     state.route_outline = outline
     state.clarified_direction = clarifications if clarify_state == "answered" else ""
     state.prior_topics = prior_topics
-    if resume is not None:
-        # the dead attempt's [n] registry rejoins the run: a repeat of a
-        # known url reuses ITS number (no duplicate source), the page-dedup
-        # and the writers' citation identity carry over -- the transcript
-        # references [n]s only these seeds can resolve
-        for item in resume["sources"]:
-            norm = reader.normalize_url(item["url"])
-            if not norm or state.reg.known(norm) is not None:
-                continue
-            state.reg.note_url(norm, item["n"])
-            state.reg.note_meta(norm, item["title"], "")
-        # the archived SUBAGENT registry re-hydrates: the handles keep
-        # their keys/wire-id slots, the children keep their conversations
-        # and ledgers -- message_subtask still reaches across the process
-        # border
-        if resume.get("subagents"):
-            restore_subagents(
-                state,
-                resume["subagents"],
-                lambda parent, key: Searches.child(
-                    parent,
-                    max_rounds=SUB_ROUNDS,
-                    session_id=f"sub-{id(parent):x}-{key}",
-                ),
-            )
-    # the loop-side gates (the entity gate's extraction) append to the SAME
-    # list the settle's gates bucket folds
-    state.attached_files = [
-        {"name": str(f.get("name") or "attachment"), "text": str(f.get("text") or "")} for f in (attached_files or [])
-    ]
-    if attached_files:
-        # THE REPORT PATH'S FRAMEWORK PIPE: the synthesizer's sections never
-        # see the researcher's prompt blocks, so every attached file ALSO
-        # lands in the RUN CORPUS as uncited chunks -- the per-section pack
-        # then retrieves exactly the rule lines that section needs (a
-        # RULE-CCM-02 row matches the pipeline/Spec-in section's query).  The
-        # single-write writer already carried the binding note; without this
-        # the report body could never apply the framework it was built on.
-        for file in state.attached_files:
-            state.corpus.add(
-                str(file["text"])[:60_000],
-                ref_n=0,
-                title=str(file["name"])[:120],
-                kind="attachment",
-            )
-    if resume is not None and resume.get("write_direct"):
-        # THE WRITER-REGEN REHYDRATION: the run's corpus and feed lived in
-        # the dead process's executor -- the replayed conversation's tool
-        # results are the only copy of the research material.  Chunk every
-        # substantive result back into the corpus (the section packs
-        # retrieve them again; the inline [n]s resolve against the reseeded
-        # registry) and give the single-write writer a bounded feed.
-        # Without this a write-direct resume (an interrupted WRITER phase
-        # continued, or a settled run's regenerate) writes from nothing.
-        fed = 0
-        for message in resume["messages"]:
-            if message.get("role") != "tool":
-                continue
-            text = str(message.get("content") or "")
-            if len(text) < 200:
-                continue
-            state.corpus.add(
-                text[:20_000],
-                ref_n=0,
-                title=str(message.get("name") or "tool result")[:120],
-                kind="resume",
-            )
-            if fed < 40:
-                state.feed.append(f"[recovered material -- {message.get('name') or 'tool'}]\n{text[:6_000]}")
-                fed += 1
-    if outline:
-        # the outline's deliverable-entity screen: entities no section
-        # researches become the researcher's <deliverable_entities> block
-        # and plan_review's plan_complete question
-        state.deliverable_entities = report_outline.uncovered_entities(outline)
-        outline_entry = {
-            "purpose": "outline",
-            "question": "The report skeleton: sections and the deliverable entities they cover",
-            "target": str(outline["title"])[:120],
-            "sections": len(outline["sections"]),
-            "entities": len(outline.get("entities") or []),
-            "uncovered": len(state.deliverable_entities),
-            "ms": 0,
-        }
-    else:
-        outline_entry = None
-    # the PRE-FLIGHT verdicts surface BEFORE the loop's first event (the
-    # Decisions card opens with them): the clarify pre-screen, the depth
-    # probe and the outline gate -- each already judged while the client
-    # watched the boot skeleton
-    preflight = [entry for entry in (pre_entry, depth_probe_entry, outline_entry) if entry]
-    if depth_probe_entry:
-        state.judgments.append(depth_probe_entry)
-    if outline_entry:
-        state.judgments.append(outline_entry)
-    if pre_entry:
-        state.judgments.append(pre_entry)
-
     past_ref: list[dict[str, t.Any]] = []
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]] | None:
@@ -1034,6 +979,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             mcp_servers=(mcp.server_instructions() or None) if mcp.mcp_specs() else None,
             tool_notes=tool_notes or None,
             tz=user_tz,
+            overview_context=(overview_ctx if mode == "overview" else None),
         )
 
     events = engine.run(

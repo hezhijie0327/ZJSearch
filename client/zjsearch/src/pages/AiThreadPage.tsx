@@ -100,7 +100,9 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   // would silently downgrade a report thread's next run)
   const lastRunMode = aiSearch.runs[aiSearch.runs.length - 1]?.mode;
   useEffect(() => {
-    if (lastRunMode) {
+    // the overview tier is not a follow-up depth: its thread continues on
+    // the balanced default (the dropdown's own vocabulary)
+    if (lastRunMode && lastRunMode !== "overview") {
       setResearchMode(lastRunMode);
     }
   }, [lastRunMode]);
@@ -121,6 +123,32 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
     // no dependency array on purpose: the guard ref fires it once
   });
 
+  // the overview card's follow-up: the classic page handed off the thread
+  // + question -- once the replay settles (the overview is run 1), fire
+  // the native follow-up (run 2) with the store's own history
+  const followupHandoffFired = useRef(false);
+  useEffect(() => {
+    if (resuming || aiSearch.phase !== "done" || followupHandoffFired.current) {
+      return;
+    }
+    const raw = window.sessionStorage.getItem("zjs-overview-thread");
+    if (!raw) {
+      return;
+    }
+    let handoff: { q: string; thread: string } | null = null;
+    try {
+      handoff = JSON.parse(raw) as { q: string; thread: string };
+    } catch {
+      handoff = null;
+    }
+    if (!handoff || handoff.thread !== data.thread) {
+      window.sessionStorage.removeItem("zjs-overview-thread");
+      return;
+    }
+    followupHandoffFired.current = true;
+    window.sessionStorage.removeItem("zjs-overview-thread");
+    void aiSearch.followup(handoff.q, aiLang, researchMode);
+  });
   // a follow-up appends its run section: bring the new question into view
   const runsCount = aiSearch.runs.length;
   const seenRuns = useRef(0);
