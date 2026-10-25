@@ -34,6 +34,7 @@ def install(app: flask.Flask) -> None:
         browser_read_route,
         decision_route,
         embed_route,
+        kb_favicon_route,
         knowledge_page,
         recall_route,
         rerank_route,
@@ -58,4 +59,5 @@ def install(app: flask.Flask) -> None:
     tags_route.install(app)
     embed_route.install(app)
     rerank_route.install(app)
+    kb_favicon_route.install(app)
     browser_input_route.install(app)

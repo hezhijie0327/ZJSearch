@@ -478,6 +478,13 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           if (!["search_web", "calculate"].includes(tool) && !isRead) {
             continue;
           }
+          // THE RUN'S READS LAND IN THE SAME ROW: a browse read's full
+          // text upgrades the url's source row exactly like a manual
+          // crawl -- the knowledge base keeps ONE row per page (short
+          // reads are junk; the row keeps its uncrawled state)
+          if (isRead && call.url && String(call.text ?? "").length >= 200) {
+            archiveDocument(String(call.url), String(call.q || call.url || ""), String(call.text));
+          }
           const callId = String(call.id ?? "");
           if (!callId) {
             continue;
@@ -512,8 +519,14 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
   });
 }
 
-/** Archive ONE read page's full text as a document row
-    (fire-and-forget; the reading pane already showed the text). */
+/** Archive ONE page's full text INTO ITS SOURCE ROW -- the row is the
+    same thing before and after a crawl: the search result keeps its
+    identity and its ORIGINAL snippet as the listing face (the trigger
+    recomputes head from the body, so the crawl restores the snippet in
+    a second write), meta.crawled marks the state, and the inspector
+    reads the full body.  A legacy doc: twin from the two-row era folds
+    away; a url with no source row yet is born as one (the run's browse
+    reads land here for pages the engines never listed). */
 export function archiveDocument(url: string, title: string, markdown: string): void {
   if (!url || !markdown) {
     return;
@@ -527,26 +540,41 @@ export function archiveDocument(url: string, title: string, markdown: string): v
     } catch {
       /* non-url strings keep the empty host */
     }
-    await pgQuery(
-      `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, status, tags, search_text, created, updated, occurred_at)
-       VALUES ($1, 'document', $2, $3, $4, $5, $6, $7::jsonb, 'done', $8::jsonb, $9, $10, $10, $10)
-       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body,
-         meta = EXCLUDED.meta, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
-      [
-        `doc:${hash}`,
-        hash,
-        url,
-        host,
-        title.slice(0, 300),
-        markdown.slice(0, 60000),
-        JSON.stringify({ chars: markdown.length, fetchedAt: now }),
-        // born UNTAGGED (the tags come from the findings' flow-back when
-        // a fact cites the page)
-        JSON.stringify(segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000)),
-        now,
-        now,
-      ],
+    const body = markdown.slice(0, 60000);
+    const search = segmentKeywords(title, markdown.slice(0, 8000)).slice(0, 8000);
+    const crawledMeta = JSON.stringify({ chars: markdown.length, fetchedAt: now });
+    const current = await pgQuery<{ head: string }>(
+      "SELECT head FROM knowledge WHERE url_hash = $1 AND kind = 'source'",
+      [hash],
     );
+    const snippet = String((current ?? [])[0]?.head ?? "");
+    const updated = await pgQuery(
+      `UPDATE knowledge SET body = $2, meta = jsonb_set(knowledge.meta, '{crawled}', $3::jsonb, true),
+         search_text = $4, updated = $5
+       WHERE url_hash = $1 AND kind = 'source' RETURNING id`,
+      [hash, body, crawledMeta, search, now],
+    );
+    if ((updated ?? []).length === 0) {
+      await pgQuery(
+        `INSERT INTO knowledge (id, kind, url_hash, url, host, title, body, meta, status, tags, search_text, created, updated, occurred_at)
+         VALUES ($1, 'source', $2, $3, $4, $5, $6, $7::jsonb, 'done', '[]'::jsonb, $8, $9, $9, $9)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          `src:${hash}`,
+          hash,
+          url,
+          host,
+          title.slice(0, 300),
+          body,
+          JSON.stringify({ crawled: { chars: markdown.length, fetchedAt: now } }),
+          search,
+          now,
+        ],
+      );
+    } else if (snippet) {
+      await pgQuery("UPDATE knowledge SET head = $2 WHERE url_hash = $1 AND kind = 'source'", [hash, snippet]);
+    }
+    await pgQuery("DELETE FROM knowledge WHERE id = $1 AND kind = 'document'", [`doc:${hash}`]);
     void embedPending();
     scheduleTagNormalize();
   });

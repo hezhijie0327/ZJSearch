@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { LibraryBig, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, LibraryBig, Star } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
@@ -21,7 +21,7 @@ import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
-import { loadDocument, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
+import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
   archiveDocument,
@@ -52,6 +52,10 @@ import {
 import { flashToast } from "@/lib/toast.ts";
 import type { KnowledgePageData } from "@/lib/types.ts";
 import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
+
+/** The library listings paginate -- 40 rows in one card read as an
+    endless strip; a compact pager keeps the panel scannable. */
+const READING_PAGE_SIZE = 10;
 
 /**
  * The knowledge base (`/zjsearch/knowledge`): the browser-local research
@@ -185,6 +189,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
   // ── the kind directory (a filter chip's own listing, non-search) ────
   const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
+  const [readingPage, setReadingPage] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the filters RESET the page -- the listed values are the triggers, not the effect's reads
+  useEffect(() => {
+    setReadingPage(0);
+  }, [debounced, pinnedOnly]);
+  const readingPages = Math.max(1, Math.ceil((kindItems?.length ?? 0) / READING_PAGE_SIZE));
+  const readingPageSafe = Math.min(readingPage, readingPages - 1);
   const kindListing = !searching && kind === "reading";
   // biome-ignore lint/correctness/useExhaustiveDependencies: listingBump only re-fetches the one-shot listing
   useEffect(() => {
@@ -222,6 +233,20 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       loadDocument(inspected.url ?? "")
         .then((page) => {
           if (!cancelled) setInspectedBody(page?.markdown ?? "");
+        })
+        .catch(() => {
+          if (!cancelled) setInspectedBody("");
+        });
+      setInspectedExtras(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (inspected?.kind === "source" && inspected.meta?.crawled) {
+      let cancelled = false;
+      loadItemBody(inspected.id)
+        .then((text) => {
+          if (!cancelled) setInspectedBody(text);
         })
         .catch(() => {
           if (!cancelled) setInspectedBody("");
@@ -553,16 +578,46 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 kindItems === null ? (
                   <BootRowsCard rows={5} />
                 ) : (
-                  <KindItemRows
-                    emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
-                    emptyLine={t("knowledge_reading_empty_line")}
-                    items={kindItems}
-                    onCrawl={crawlItem}
-                    onOpenInspector={setView}
-                    onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
-                    onPin={pinItem}
-                    onRemove={removeItem}
-                  />
+                  <>
+                    <KindItemRows
+                      emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
+                      emptyLine={t("knowledge_reading_empty_line")}
+                      items={kindItems.slice(
+                        readingPageSafe * READING_PAGE_SIZE,
+                        readingPageSafe * READING_PAGE_SIZE + READING_PAGE_SIZE,
+                      )}
+                      onCrawl={crawlItem}
+                      onOpenInspector={setView}
+                      onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
+                      onPin={pinItem}
+                      onRemove={removeItem}
+                    />
+                    {readingPages > 1 ? (
+                      <div className="mt-4 flex items-center justify-center gap-4 text-[13px] text-ink-3">
+                        <button
+                          aria-label={t("knowledge_page_prev")}
+                          className="grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+                          disabled={readingPageSafe === 0}
+                          onClick={() => setReadingPage((p) => Math.max(0, p - 1))}
+                          type="button"
+                        >
+                          <ChevronLeft aria-hidden="true" className="size-4" />
+                        </button>
+                        <span className="font-mono text-xs tabular-nums">
+                          {readingPageSafe + 1} / {readingPages}
+                        </span>
+                        <button
+                          aria-label={t("knowledge_page_next")}
+                          className="grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+                          disabled={readingPageSafe >= readingPages - 1}
+                          onClick={() => setReadingPage((p) => Math.min(readingPages - 1, p + 1))}
+                          type="button"
+                        >
+                          <ChevronRight aria-hidden="true" className="size-4" />
+                        </button>
+                      </div>
+                    ) : null}
+                  </>
                 )
               ) : (
                 <ThreadRows

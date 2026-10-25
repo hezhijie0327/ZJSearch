@@ -41,6 +41,7 @@ import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
+import { useKnowledgeFavicon } from "@/features/knowledge/favicons.ts";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
@@ -314,7 +315,53 @@ export function ThreadRows({
   );
 }
 
-/** The row's flat actions -- the source's crawl (when the caller wires
+/** The listing's excerpt line: the crawl text is markdown, the listing
+    line is plain -- image/link syntax stripped to their text, markup
+    noise and urls dropped, whitespace collapsed. */
+function listingExcerpt(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[#>*`|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** The row's host: the stored column first -- older settle rows left
+    it empty, the url derives it. */
+function rowHost(item: KnowledgeItem): string {
+  if (item.host) {
+    return item.host;
+  }
+  try {
+    return item.url ? new URL(item.url).hostname : "";
+  } catch {
+    return "";
+  }
+}
+
+/** The source row's favicon cell: the row's stored url first, then the
+    classic channel (the resolver-backed server route) -- the Globe
+    glyph stays the fallback. */
+function RowFavicon({ item }: { item: KnowledgeItem }) {
+  const stored = item.meta?.favicon as string | undefined;
+  const fetched = useKnowledgeFavicon(rowHost(item) || null);
+  const src = stored || fetched || "";
+  return src ? (
+    <img
+      alt=""
+      className="mt-0.5 size-8 shrink-0 rounded-lg border border-line bg-surface object-contain p-0.5"
+      src={src}
+    />
+  ) : (
+    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
+      <Globe aria-hidden="true" className="size-4" />
+    </span>
+  );
+}
+
+/** The row's flat actions --/** The row's flat actions -- the source's crawl (when the caller wires
     it), star (pin), rename, trash (confirm-backed delete; the parent owns
     the confirm dialog).  Hover-revealed in list rows, always visible in
     the inspector (reveal={false}).  Clicks stop propagation: the whole
@@ -718,7 +765,9 @@ export function InspectorView({
   onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
-  const isDocument = item.kind === "document";
+  // a crawled source reads like a document: the inspector loads the
+  // full body and renders it through the same markdown pane
+  const isDocument = item.kind === "document" || (item.kind === "source" && Boolean(item.meta?.crawled));
   const sources: Array<{ n: number; url: string; title: string; host: string }> =
     item.kind === "run"
       ? (extras?.sources ?? [])
@@ -1177,24 +1226,13 @@ export function KindItemRows({
       {label ? <SectionLabel label={label} /> : null}
       {items.map((item) => {
         const isSource = item.kind === "source";
-        const favicon = isSource ? (item.meta?.favicon as string | undefined) : undefined;
         return (
           <div
             className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
             key={item.id}
           >
             {isSource ? (
-              favicon ? (
-                <img
-                  alt=""
-                  className="mt-0.5 size-8 shrink-0 rounded-lg border border-line bg-surface object-contain p-0.5"
-                  src={favicon}
-                />
-              ) : (
-                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
-                  <Globe aria-hidden="true" className="size-4" />
-                </span>
-              )
+              <RowFavicon item={item} />
             ) : (
               <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
                 <FileText aria-hidden="true" className="size-4" />
@@ -1214,13 +1252,21 @@ export function KindItemRows({
               type="button"
             >
               <span className="line-clamp-1 text-sm font-medium leading-snug text-ink">{item.title || item.url}</span>
-              {isSource && item.body ? (
-                <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">{item.body}</span>
+              {item.body ? (
+                <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">
+                  {listingExcerpt(item.body)}
+                </span>
               ) : null}
               <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
-                {item.host ? <span className="truncate">{item.host}</span> : null}
+                {rowHost(item) ? <span className="truncate">{rowHost(item)}</span> : null}
                 <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
                 {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
+                {isSource && item.meta?.crawled ? (
+                  <span className="inline-flex items-center gap-1 text-accent">
+                    <FileDown aria-hidden="true" className="size-3" />
+                    {t("knowledge_source_crawled")}
+                  </span>
+                ) : null}
               </span>
             </button>
             <RowActions
