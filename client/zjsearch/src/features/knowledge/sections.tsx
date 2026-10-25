@@ -14,11 +14,11 @@ import {
   Brain,
   Check,
   ChevronLeft,
-  CloudDownload,
   Copy,
   Database,
   DatabaseZap,
   ExternalLink,
+  FileDown,
   FileText,
   Gauge,
   Globe,
@@ -314,17 +314,24 @@ export function ThreadRows({
   );
 }
 
-/** The row's two flat actions -- star (pin) + trash (confirm-backed
-    delete; the parent owns the confirm dialog).  Hover-revealed in list
-    rows, always visible in the inspector (reveal={false}).  Clicks stop
-    propagation: the whole row around them is a click target. */
+/** The row's flat actions -- the source's crawl (when the caller wires
+    it), star (pin), rename, trash (confirm-backed delete; the parent owns
+    the confirm dialog).  Hover-revealed in list rows, always visible in
+    the inspector (reveal={false}).  Clicks stop propagation: the whole
+    row around them is a click target. */
 function RowActions({
+  onCrawl,
+  crawling,
   onPin,
   onRemove,
   onRename,
   pinned,
   reveal = true,
 }: {
+  /** the source row's manual full-text crawl (the browser read lane) */
+  onCrawl?: () => void;
+  /** true while that crawl is in flight */
+  crawling?: boolean;
   onPin?: (on: boolean) => void;
   onRemove: () => void;
   onRename?: () => void;
@@ -332,10 +339,30 @@ function RowActions({
   reveal?: boolean;
 }) {
   const t = useT();
+
   return (
     <div
       className={`flex shrink-0 items-center gap-0.5 ${reveal ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100" : ""}`}
     >
+      {onCrawl ? (
+        <button
+          aria-label={t("knowledge_crawl")}
+          className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+          disabled={crawling}
+          onClick={(event) => {
+            event.stopPropagation();
+            onCrawl();
+          }}
+          title={t("knowledge_crawl")}
+          type="button"
+        >
+          {crawling ? (
+            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+          ) : (
+            <FileDown aria-hidden="true" className="size-3.5" />
+          )}
+        </button>
+      ) : null}
       {onRename ? (
         <button
           aria-label={t("knowledge_rename")}
@@ -1196,25 +1223,13 @@ export function KindItemRows({
                 {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
               </span>
             </button>
-            <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-              {isSource ? (
-                <button
-                  aria-label={t("knowledge_crawl")}
-                  className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
-                  disabled={Boolean(crawlBusy[item.id])}
-                  onClick={() => crawl(item)}
-                  title={t("knowledge_crawl")}
-                  type="button"
-                >
-                  {crawlBusy[item.id] ? (
-                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-                  ) : (
-                    <CloudDownload aria-hidden="true" className="size-3.5" />
-                  )}
-                </button>
-              ) : null}
-            </div>
-            <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
+            <RowActions
+              crawling={Boolean(crawlBusy[item.id])}
+              onCrawl={isSource ? () => crawl(item) : undefined}
+              onPin={(on) => onPin(item, on)}
+              onRemove={() => onRemove(item)}
+              pinned={item.pinned}
+            />
           </div>
         );
       })}
