@@ -340,6 +340,7 @@ export const EN = {
   knowledge_usage_rerank: "Rerank Model",
   knowledge_usage_decision: "Decision Model",
   knowledge_memory_add: "Add memory",
+  knowledge_memory_placeholder: "Capture a memory…",
   knowledge_memory_save: "Save",
   knowledge_memory_forget: "Forget",
   knowledge_memory_forgot: "Forgotten",

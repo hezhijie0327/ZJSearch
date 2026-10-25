@@ -339,6 +339,7 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_usage_rerank: "重排模型",
   knowledge_usage_decision: "决策模型",
   knowledge_memory_add: "添加记忆",
+  knowledge_memory_placeholder: "记一条记忆…",
   knowledge_memory_save: "保存",
   knowledge_memory_forget: "忘记",
   knowledge_memory_forgot: "已忘记",

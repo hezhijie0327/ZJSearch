@@ -72,7 +72,7 @@ export const KNOWLEDGE_KIND_ICONS = {
 } as const;
 
 import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
-import { CHIP_GHOST, CHIP_OUTLINE, CHIP_OUTLINE_IDLE } from "@/lib/styles.ts";
+import { CHIP_OUTLINE, CHIP_OUTLINE_IDLE } from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** The knowledge META chip: a 12px bordered chip for row meta and hero
@@ -490,109 +490,63 @@ export function MemorySection({
   onSave: (id: string, content: string) => void;
 }) {
   const t = useT();
-  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
   if (loading) {
     return <BootRowsCard rows={3} />;
   }
+  const submit = () => {
+    const text = draft.trim();
+    if (!text) {
+      return;
+    }
+    onAdd(text);
+    setDraft("");
+  };
   return (
-    <div className="space-y-4 animate-fade-in">
-      {adding ? (
-        <MemoryComposer
-          onCancel={() => setAdding(false)}
-          onSubmit={(text) => {
-            onAdd(text);
-            setAdding(false);
-          }}
-          placeholder={t("knowledge_memory_add")}
-          submitLabel={t("knowledge_memory_save")}
-        />
-      ) : null}
-      <Card>
-        <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
-          <p className="text-xs font-medium text-ink-3">
-            {t("knowledge_kind_memory")} · {memories.length}
-          </p>
-          <button
-            className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-ink-3 transition-colors hover:bg-surface hover:text-ink"
-            onClick={() => setAdding(true)}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="size-3.5" />
-            {t("knowledge_memory_add")}
-          </button>
-        </div>
-        {memories.length === 0 ? (
-          <PaperEmpty
-            className="py-6"
-            icon={MemoryStick}
-            line={t("knowledge_memory_empty_line")}
-            title={t("knowledge_kind_empty")}
-          />
-        ) : (
-          <div className="space-y-0.5">
-            {memories.map((memory) => (
-              <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-/** The memory composer, shared by add + edit: a bordered card with a
-    borderless textarea and the theme's pill buttons (the confirm
-    dialog's button language -- icon-only toggles read as chrome, not
-    actions). */
-function MemoryComposer({
-  initial = "",
-  onCancel,
-  onSubmit,
-  placeholder,
-  submitLabel,
-}: {
-  initial?: string;
-  onCancel: () => void;
-  onSubmit: (text: string) => void;
-  placeholder?: string;
-  submitLabel: string;
-}) {
-  const t = useT();
-  const [draft, setDraft] = useState(initial);
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    ref.current?.focus();
-  }, []);
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <textarea
-        className="min-h-20 w-full resize-y bg-transparent text-[13px] leading-relaxed text-ink outline-none placeholder:text-ink-3"
-        dir="auto"
-        maxLength={300}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder={placeholder}
-        ref={ref}
-        value={draft}
-      />
-      <div className="mt-2 flex items-center justify-end gap-2">
-        <button className={CHIP_GHOST} onClick={onCancel} type="button">
-          {t("ai_delete_cancel")}
-        </button>
-        <button
-          className="rounded-full bg-accent-strong px-4 py-1.5 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover disabled:opacity-40"
-          disabled={!draft.trim()}
-          onClick={() => {
-            const text = draft.trim();
-            if (text) {
-              onSubmit(text);
+    <Card>
+      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+        <Plus aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
+        <input
+          className="h-6 min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
+          dir="auto"
+          maxLength={300}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) {
+              return;
+            }
+            if (event.key === "Enter") {
+              submit();
             }
           }}
-          type="button"
-        >
-          {submitLabel}
-        </button>
+          placeholder={t("knowledge_memory_placeholder")}
+          value={draft}
+        />
+        {draft.trim() ? (
+          <button
+            className="shrink-0 rounded-full bg-accent-strong px-3 py-1 text-xs font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+            onClick={submit}
+            type="button"
+          >
+            {t("knowledge_memory_save")}
+          </button>
+        ) : null}
       </div>
-    </div>
+      {memories.length === 0 ? (
+        <PaperEmpty
+          className="py-6"
+          icon={MemoryStick}
+          line={t("knowledge_memory_empty_line")}
+          title={t("knowledge_kind_empty")}
+        />
+      ) : (
+        <div className="space-y-0.5">
+          {memories.map((memory) => (
+            <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
