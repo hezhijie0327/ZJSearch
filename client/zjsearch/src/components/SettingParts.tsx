@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { useT } from "@/lib/i18n.ts";
 
 /** The panel furniture shared by the slide-in panels (preferences,
     knowledge, stats): sectioned cards, section bands and the icon-tile
@@ -63,7 +66,42 @@ export function Card({ children }: { children: ReactNode }) {
   );
 }
 
-/** Section header inside a Card — Card's divide-y draws the separators, so a
+/** The compact slice pager for the panels' client-side lists (the
+    knowledge library's per-kind listings): a chevron circle pair around
+    an n / m readout -- renders nothing while one page holds everything. */
+export function CompactPager({ onPage, page, pages }: { onPage: (page: number) => void; page: number; pages: number }) {
+  const t = useT();
+  if (pages <= 1) {
+    return null;
+  }
+  return (
+    <div className="flex items-center justify-center gap-4 py-4 text-[13px] text-ink-3">
+      <button
+        aria-label={t("pager_prev")}
+        className="grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+        disabled={page === 0}
+        onClick={() => onPage(page - 1)}
+        type="button"
+      >
+        <ChevronLeft aria-hidden="true" className="size-4" />
+      </button>
+      <span className="font-mono text-xs tabular-nums">
+        {page + 1} / {pages}
+      </span>
+      <button
+        aria-label={t("pager_next")}
+        className="grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+        disabled={page >= pages - 1}
+        onClick={() => onPage(page + 1)}
+        type="button"
+      >
+        <ChevronRight aria-hidden="true" className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+/** Section header inside a Card/** Section header inside a Card — Card's divide-y draws the separators, so a
     Fragment of header + rows works as one group. */
 export function SectionLabel({ label }: { label: string }) {
   return <p className="bg-surface-2/60 px-5 py-2.5 text-xs font-medium text-ink-3 sm:px-6">{label}</p>;

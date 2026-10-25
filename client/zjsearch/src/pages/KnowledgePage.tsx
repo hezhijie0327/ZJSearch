@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronLeft, ChevronRight, LibraryBig, Star } from "lucide-react";
+import { LibraryBig, Star } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { PanelSearch } from "@/components/PanelSearch.tsx";
+import { CompactPager } from "@/components/SettingParts.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import {
   AdminView,
@@ -592,31 +593,9 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                       onPin={pinItem}
                       onRemove={removeItem}
                     />
-                    {readingPages > 1 ? (
-                      <div className="mt-4 flex items-center justify-center gap-4 text-[13px] text-ink-3">
-                        <button
-                          aria-label={t("knowledge_page_prev")}
-                          className="grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
-                          disabled={readingPageSafe === 0}
-                          onClick={() => setReadingPage((p) => Math.max(0, p - 1))}
-                          type="button"
-                        >
-                          <ChevronLeft aria-hidden="true" className="size-4" />
-                        </button>
-                        <span className="font-mono text-xs tabular-nums">
-                          {readingPageSafe + 1} / {readingPages}
-                        </span>
-                        <button
-                          aria-label={t("knowledge_page_next")}
-                          className="grid size-8 place-items-center rounded-full transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
-                          disabled={readingPageSafe >= readingPages - 1}
-                          onClick={() => setReadingPage((p) => Math.min(readingPages - 1, p + 1))}
-                          type="button"
-                        >
-                          <ChevronRight aria-hidden="true" className="size-4" />
-                        </button>
-                      </div>
-                    ) : null}
+                    <div className="mt-4">
+                      <CompactPager onPage={(p) => setReadingPage(p)} page={readingPageSafe} pages={readingPages} />
+                    </div>
                   </>
                 )
               ) : (
