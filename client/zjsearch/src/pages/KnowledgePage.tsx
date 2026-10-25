@@ -35,7 +35,7 @@ import {
   toggleThreadPin,
   updateMemory,
 } from "@/lib/kb/projections.ts";
-import { listKind, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
+import { listKind, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -259,6 +259,24 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     return undefined;
   }, [inspected]);
 
+  // the directory's run-mode tags: refreshed out-of-band (the live thread
+  // subscription must stay a plain select) and merged into the rows
+  const [modesById, setModesById] = useState<Record<string, string[]>>({});
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the tags refresh on the same bumps as the directory listing
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the tags refresh on the same bumps as the directory listing
+  useEffect(() => {
+    let cancelled = false;
+    listThreadModes()
+      .then((value) => {
+        if (!cancelled) setModesById(value);
+      })
+      .catch(() => {
+        if (!cancelled) setModesById({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [threadsLen, listingBump]);
   // ── dialogs ──────────────────────────────────────────────────────────
   const [confirming, setConfirming] = useState<"reset" | { label: string; run: () => void } | null>(null);
   const pinItem = (item: KnowledgeItem, on: boolean) => {
@@ -289,6 +307,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     // the load; the takeover page's drawer was exactly where the jump
     // silently died).
     closeOverlay();
+    // the same thread's own pill (the common case on an AI thread page):
+    // the takeover page IS the research view -- closing the drawer reveals
+    // it; a re-navigate to the identical URL would be skipped by the
+    // router and leave the drawer hanging open
+    if (location.pathname === threadUrl(id)) {
+      return;
+    }
     navigate(threadUrl(id));
   };
 
@@ -541,7 +566,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   onRename={(thread, title) => {
                     void renameThread(thread.id, title);
                   }}
-                  threads={visibleThreads}
+                  threads={visibleThreads.map((thread) => ({ ...thread, modes: modesById[thread.id] ?? [] }))}
                 />
               )}
             </div>

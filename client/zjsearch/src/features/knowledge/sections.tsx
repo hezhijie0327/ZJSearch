@@ -293,7 +293,7 @@ export function ThreadRows({
           ) : null}
           <div className="relative flex flex-wrap items-center gap-2 text-xs text-ink-3">
             <span className="shrink-0 font-mono">{formatDate(new Date(thread.updated).toISOString())}</span>
-            {thread.modes.includes("overview") ? (
+            {thread.modes?.includes("overview") ? (
               <span className="inline-flex min-h-6 items-center gap-1 rounded-full border border-accent-strong/40 bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
                 <Sparkles aria-hidden="true" className="size-3" />
                 {t("mode_overview")}

@@ -199,7 +199,7 @@ export interface ThreadSummary {
   reports: number;
   /** the DISTINCT run modes across the thread's runs (overview / speed /
       balanced / deep) -- the directory's mode tags read it */
-  modes: string[];
+  modes?: string[];
   updated: number;
   pinned: boolean;
   /** the latest run's answer head -- the row shows the result, the
@@ -240,6 +240,25 @@ export function sweepStaleRuns(): void {
 export function modesOf(value: unknown): string[] {
   const parsed = typeof value === "string" ? safeParse(value) : value;
   return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+}
+
+/** Every thread's DISTINCT run modes (the directory's mode tags), one
+    shot -- the LIVE thread subscription must stay a plain thread_head
+    select (pglite's liveQuery re-execution chokes on the modes
+    subquery), so the tags refresh out-of-band and merge in the page. */
+export async function listThreadModes(): Promise<Record<string, string[]>> {
+  await pg();
+  const rows = await pgQuery<{ thread_id: string; modes: unknown }>(
+    "SELECT thread_id, json_agg(DISTINCT mode) AS modes FROM (SELECT thread_id, meta->>'mode' AS mode FROM knowledge WHERE kind = 'run' AND meta->>'mode' IS NOT NULL) GROUP BY thread_id",
+  );
+  const out: Record<string, string[]> = {};
+  for (const row of rows ?? []) {
+    const modes = typeof row.modes === "string" ? safeParse(row.modes) : row.modes;
+    if (Array.isArray(modes)) {
+      out[String(row.thread_id)] = modes.map(String).filter(Boolean);
+    }
+  }
+  return out;
 }
 
 export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary[]> {
