@@ -1304,12 +1304,16 @@ export function KindItemRows({
                   {listingExcerpt(item.body)}
                 </span>
               ) : null}
-              <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
-                {rowHost(item) ? <span className="truncate">{rowHost(item)}</span> : null}
+              {rowHost(item) || item.cited > 0 ? (
+                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
+                  {rowHost(item) ? <span className="truncate">{rowHost(item)}</span> : null}
+                  {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
+                </span>
+              ) : null}
+              <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                 <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
-                {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
                 {isSource && item.meta?.crawled ? (
-                  <span className="inline-flex items-center gap-1 text-accent">
+                  <span className="inline-flex items-center gap-1">
                     <FileDown aria-hidden="true" className="size-3" />
                     {t("knowledge_source_crawled")}
                   </span>

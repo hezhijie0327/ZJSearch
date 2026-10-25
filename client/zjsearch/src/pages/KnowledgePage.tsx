@@ -435,8 +435,10 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     // the research directory leads: the overview lives INSIDE its threads
     { id: "run", label: t("knowledge_kind_run"), icon: <KNOWLEDGE_KIND_ICONS.run className="size-3.5" /> },
     { id: "reading", label: t("knowledge_tab_reading"), icon: <KNOWLEDGE_KIND_ICONS.reading className="size-3.5" /> },
-    { id: "memory", label: t("knowledge_kind_memory"), icon: <KNOWLEDGE_KIND_ICONS.memory className="size-3.5" /> },
+    // the graph learns the SOURCES' tags -- it sits beside the reading
+    // tab it is derived from, before memory
     { id: "graph", label: t("knowledge_graph"), icon: <KNOWLEDGE_KIND_ICONS.graph className="size-3.5" /> },
+    { id: "memory", label: t("knowledge_kind_memory"), icon: <KNOWLEDGE_KIND_ICONS.memory className="size-3.5" /> },
     {
       id: "templates",
       label: t("knowledge_tab_templates"),
