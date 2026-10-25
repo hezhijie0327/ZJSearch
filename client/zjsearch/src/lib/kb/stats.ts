@@ -106,7 +106,7 @@ export async function knowledgeStats(): Promise<KnowledgeStats> {
     sources: pick("source"),
     documents: pick("document"),
     memories: pick("memory"),
-    answers: pick("answer") + pick("overview"),
+    answers: pick("answer"),
     events: Number((events ?? [])[0]?.n ?? 0),
     approxBytes: (ledger ?? []).reduce((sum, row) => sum + (Number(row.bytes) || 0), 0),
     embedModel: (embed ?? [])[0]?.embed_model ?? null,

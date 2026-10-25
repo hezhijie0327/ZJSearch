@@ -11,11 +11,11 @@
     The graph is a query, not a table. */
 
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
-import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem } from "@/lib/kb/shared.ts";
+import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem, safeParse } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
-const SEARCHABLE_KINDS = ["answer", "overview", "source", "document", "memory", "call", "task", "clarify", "run"];
+const SEARCHABLE_KINDS = ["source", "document", "memory", "call", "task", "clarify", "run"];
 
 // -------------------------------------------------------------- hybrid read
 
@@ -197,6 +197,9 @@ export interface ThreadSummary {
   /** the thread's REPORT-mode runs (run.meta.report settles it) -- the
       directory's Reports badge + filter read it */
   reports: number;
+  /** the DISTINCT run modes across the thread's runs (overview / speed /
+      balanced / deep) -- the directory's mode tags read it */
+  modes: string[];
   updated: number;
   pinned: boolean;
   /** the latest run's answer head -- the row shows the result, the
@@ -232,12 +235,21 @@ export function sweepStaleRuns(): void {
 
 /** The thread directory: the thread_head projection (maintained at
     settle -- the old GROUP BY aggregate re-fired on every evt flush). */
+/** The thread_head modes aggregate (a json array column, possibly null)
+    as a clean string list. */
+export function modesOf(value: unknown): string[] {
+  const parsed = typeof value === "string" ? safeParse(value) : value;
+  return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+}
+
 export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary[]> {
   await pg();
   sweepStaleRuns();
   const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT thread_id AS id, title, preview, runs, sources, reports, updated, pinned
-     FROM thread_head ORDER BY pinned DESC, updated DESC LIMIT $1 OFFSET $2`,
+    `SELECT h.thread_id AS id, h.title, h.preview, h.runs, h.sources, h.reports, h.updated, h.pinned,
+       (SELECT json_agg(DISTINCT m.mode) FROM (SELECT kr.meta->>'mode' AS mode FROM knowledge kr
+        WHERE kr.thread_id = h.thread_id AND kr.kind = 'run' AND kr.meta->>'mode' IS NOT NULL) m) AS modes
+     FROM thread_head h ORDER BY h.pinned DESC, h.updated DESC LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
   return (rows ?? []).map((row) => ({
@@ -246,6 +258,7 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
     runs: Number(row.runs) || 0,
     sources: Number(row.sources) || 0,
     reports: Number(row.reports) || 0,
+    modes: modesOf(row.modes),
     updated: Number(row.updated) || 0,
     pinned: Number(row.pinned) === 1,
     preview: String(row.preview ?? ""),
@@ -256,19 +269,9 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
     (answers / sources / documents as their own directories). */
 export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[]> {
   await pg();
-  // the overview rows' write value became "overview"; rows written before
-  // the rename carry "answer" -- the listing reads both
-  const clause = kind === "overview" ? "kind IN ('overview', 'answer')" : "kind = $1";
-  // the dual-kind branch has no $1 left in the SQL -- PGlite cannot infer a
-  // parameter the statement no longer mentions ("could not determine data
-  // type of parameter $1"), so the limit inlines there (clamped; the
-  // callers are internal)
-  const capped = Math.max(1, Math.min(200, limit));
   const rows = await pgQuery<Record<string, unknown>>(
-    kind === "overview"
-      ? `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE ${clause} ORDER BY pinned DESC, updated DESC LIMIT ${capped}`
-      : `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE ${clause} ORDER BY pinned DESC, updated DESC LIMIT $2`,
-    kind === "overview" ? [] : [kind, limit],
+    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY pinned DESC, updated DESC LIMIT $2`,
+    [kind, limit],
   );
   return (rows ?? []).map(rowToItem);
 }
@@ -279,7 +282,7 @@ export async function itemsByTag(tag: string, limit = 20): Promise<KnowledgeItem
   await pg();
   const rows = await pgQuery<Record<string, unknown>>(
     `SELECT ${ITEM_COLUMNS} FROM knowledge
-     WHERE kind IN ('run', 'answer', 'overview', 'source', 'document', 'memory') AND tags ? $1
+     WHERE kind IN ('run', 'source', 'document', 'memory') AND tags ? $1
      ORDER BY updated DESC LIMIT $2`,
     [tag, limit],
   );
@@ -392,7 +395,7 @@ export async function recallCorpus(
   limit = 6,
   opts: { fullBody?: boolean } = {},
 ): Promise<KnowledgeItem[]> {
-  const ranked = await fuseRecall(query, ["source", "answer", "overview"], limit, {
+  const ranked = await fuseRecall(query, ["source"], limit, {
     fullBody: opts.fullBody ?? true,
     citedBonus: true,
   });

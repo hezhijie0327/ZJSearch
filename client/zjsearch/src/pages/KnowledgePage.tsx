@@ -20,7 +20,7 @@ import {
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
-import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
+import { loadDocument, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
   deleteItem,
@@ -64,7 +64,7 @@ import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
  * event-sourced knowledge table uniquely enables.
  */
 
-type KindFilter = "run" | "overview" | "source" | "document" | "memory";
+type KindFilter = "run" | "source" | "document" | "memory";
 type TimeFilter = "any" | "week" | "month";
 
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -127,7 +127,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // ── view tab: the overview archive (the classic page's AI overview) leads,
   // then the research threads, sources, documents, memories; the graph is
   // a VIEW (global, memory rows carry no tags) and admin closes the bar ──
-  const [kind, setKind] = useState<KindFilter | "graph" | "templates" | "admin">("overview");
+  const [kind, setKind] = useState<KindFilter | "graph" | "templates" | "admin">("run");
   // the one-shot listings (feed / kind directories) are not live: a bump
   // re-fetches them after a pin or a delete lands
   const [listingBump, setListingBump] = useState(0);
@@ -183,7 +183,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
   // ── the kind directory (a filter chip's own listing, non-search) ────
   const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
-  const kindListing = !searching && (kind === "overview" || kind === "source" || kind === "document");
+  const kindListing = !searching && (kind === "source" || kind === "document");
   // biome-ignore lint/correctness/useExhaustiveDependencies: listingBump only re-fetches the one-shot listing
   useEffect(() => {
     if (!kindListing || threadsLen < -1) {
@@ -254,23 +254,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
         cancelled = true;
       };
     }
-    if (inspected?.kind === "answer" || inspected?.kind === "overview") {
-      // the overview archive's full text: the listing rows carry the
-      // 600-char head excerpt only
-      let cancelled = false;
-      loadItemBody(inspected.id)
-        .then((text) => {
-          if (!cancelled) setInspectedBody(text);
-        })
-        .catch(() => {
-          if (!cancelled) setInspectedBody("");
-        });
-      setInspectedExtras(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-    setInspectedBody(null);
+
     setInspectedExtras(null);
     return undefined;
   }, [inspected]);
@@ -378,13 +362,9 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // row only the four list kinds (memories are a timeline -- they neither
   // pin nor take a time filter, the timeline groups by day itself)
   const contentTab = kind !== "graph" && kind !== "admin";
-  const listTab = kind === "run" || kind === "overview" || kind === "source" || kind === "document";
+  const listTab = kind === "run" || kind === "source" || kind === "document";
   const viewTabs: Array<{ id: KindFilter | "graph" | "templates" | "admin"; label: string; icon: ReactNode }> = [
-    {
-      id: "overview",
-      label: t("knowledge_kind_overview"),
-      icon: <KNOWLEDGE_KIND_ICONS.overview className="size-3.5" />,
-    },
+    // the research directory leads: the overview lives INSIDE its threads
     { id: "run", label: t("knowledge_kind_run"), icon: <KNOWLEDGE_KIND_ICONS.run className="size-3.5" /> },
     { id: "source", label: t("knowledge_kind_source"), icon: <KNOWLEDGE_KIND_ICONS.source className="size-3.5" /> },
     {
@@ -538,15 +518,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                 ) : (
                   <KindItemRows
                     emptyIcon={KNOWLEDGE_KIND_ICONS[kind]}
-                    emptyLine={
-                      kind === "source"
-                        ? t("knowledge_source_empty_line")
-                        : kind === "document"
-                          ? t("knowledge_doc_empty_line")
-                          : kind === "overview"
-                            ? t("knowledge_answer_empty_line")
-                            : undefined
-                    }
+                    emptyLine={kind === "source" ? t("knowledge_source_empty_line") : t("knowledge_doc_empty_line")}
                     items={kindItems}
                     onOpenInspector={setView}
                     onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}

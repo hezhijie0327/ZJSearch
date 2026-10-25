@@ -61,7 +61,6 @@ import { printDocument } from "@/lib/print.ts";
     icon -- one map, so they cannot drift apart again (the Layers-era
     empties once disagreed with every tab they lived under). */
 export const KNOWLEDGE_KIND_ICONS = {
-  overview: Sparkles,
   run: MessageCircleQuestion,
   source: Globe,
   document: FileText,
@@ -162,6 +161,9 @@ function RenameForm({
 /** The thread directory as Vane-style rows: title + meta chips + a hover
     menu (pin / delete).  Clicking a row navigates to the AI thread page
     -- the detail view lives THERE, not here. */
+/** The directory's run-mode tags: the thread's distinct run modes as
+    compact chips (the overview tier's thread reads the overview label, a
+    balanced one the balanced label...). */
 export function ThreadRows({
   onHome,
   onOpen,
@@ -291,6 +293,12 @@ export function ThreadRows({
           ) : null}
           <div className="relative flex flex-wrap items-center gap-2 text-xs text-ink-3">
             <span className="shrink-0 font-mono">{formatDate(new Date(thread.updated).toISOString())}</span>
+            {thread.modes.includes("overview") ? (
+              <span className="inline-flex min-h-6 items-center gap-1 rounded-full border border-accent-strong/40 bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
+                <Sparkles aria-hidden="true" className="size-3" />
+                {t("mode_overview")}
+              </span>
+            ) : null}
             {thread.reports > 0 ? (
               <span className="inline-flex min-h-6 items-center rounded-full border border-accent-strong/40 bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
                 {t("knowledge_badge_report", { n: String(thread.reports) })}
@@ -376,7 +384,6 @@ function RowActions({
 const KIND_LABEL_KEYS: Record<
   string,
   | "knowledge_kind_run"
-  | "knowledge_kind_overview"
   | "knowledge_kind_source"
   | "knowledge_kind_document"
   | "knowledge_kind_memory"
@@ -385,7 +392,6 @@ const KIND_LABEL_KEYS: Record<
   | "knowledge_kind_clarify"
 > = {
   run: "knowledge_kind_run",
-  overview: "knowledge_kind_overview",
   source: "knowledge_kind_source",
   document: "knowledge_kind_document",
   memory: "knowledge_kind_memory",
@@ -435,7 +441,7 @@ export function SearchResults({
                 <button
                   className="min-w-0 flex-1 text-start"
                   onClick={() => {
-                    if (item.kind === "source" || item.kind === "document" || item.kind === "answer") {
+                    if (item.kind === "source" || item.kind === "document") {
                       onOpen(item);
                       return;
                     }
@@ -842,7 +848,7 @@ export function InspectorView({
     title: source.title || source.url,
     url: source.url,
   }));
-  const answerText = item.kind === "answer" ? (body ?? item.body) : (body ?? "");
+  const answerText = body ?? "";
   const exportLabels = { sources: t("knowledge_inspector_sources") };
   // one document shape for BOTH markdown paths (the download + copy-as-
   // Markdown clipboard -- the ZJBlog copy-as-markdown contract); a DECK
@@ -912,7 +918,7 @@ export function InspectorView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <BackRow onClick={onBack} />
         <div className="flex items-center gap-1">
-          {item.kind === "answer" || item.kind === "run" ? (
+          {item.kind === "run" ? (
             <>
               <button
                 aria-label={t("copy_md")}
@@ -993,9 +999,7 @@ export function InspectorView({
             {item.title || item.url}
           </h2>
           <div className="text-[13px] leading-relaxed text-ink-2">
-            {item.kind === "answer" ? (
-              <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={body ?? item.body} />
-            ) : item.kind === "run" && reportDoc && reportDoc.deck ? (
+            {item.kind === "run" && reportDoc && reportDoc.deck ? (
               // THE SAME slide view the research page used -- the stored
               // slide-markdown chapters re-render through the family compile
               // (citation chips open the source in a new tab here)
@@ -1200,7 +1204,7 @@ export function KindItemRows({
     <Card>
       {label ? <SectionLabel label={label} /> : null}
       {items.map((item) => {
-        const opens = item.kind === "source" || item.kind === "document" || item.kind === "answer";
+        const opens = item.kind === "source" || item.kind === "document";
         return (
           <div
             className="group flex items-start gap-3 px-5 py-5 transition-colors hover:bg-surface-2/40 sm:px-6"

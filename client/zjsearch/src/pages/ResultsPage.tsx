@@ -11,14 +11,7 @@ import { HeaderActions, Shell } from "@/components/Shell.tsx";
 import { tryEvaluateExpression } from "@/features/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { OverviewCard, OverviewTrigger, useOverview } from "@/features/results/AIOverview.tsx";
-import {
-  type AiSourceMeta,
-  aiSourceMeta,
-  buildAiContext,
-  collectAiImages,
-  extractRunMeta,
-  splitAnswerStream,
-} from "@/features/results/aiOverview.ts";
+import { type AiSourceMeta, aiSourceMeta, buildAiContext, collectAiImages } from "@/features/results/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
@@ -41,11 +34,9 @@ import { Pagination } from "@/features/results/Pagination.tsx";
 import { ResultsView } from "@/features/results/ResultsView.tsx";
 import { Sidebar } from "@/features/results/Sidebar.tsx";
 import { SuggestionsBox } from "@/features/results/SuggestionsBox.tsx";
-import { citedSourceNumbers } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { readCookie } from "@/lib/cookies.ts";
 import { type Translate, themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
-import { saveOverview } from "@/lib/kb/projections.ts";
 import { recallPages } from "@/lib/kb/recall.ts";
 import { threadUrl } from "@/lib/kb/shared.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
@@ -744,57 +735,8 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
     }
   }, [overview.phase]);
 
-  // as soon as the answer settles, mark EVERY result it actually cites —
-  // the cited source numbers are parsed from the settled answer text with
-  // the same grammar (and code-block skips) the renderer uses.  The marks
-  // carry the href CURRENT at settle time (via ref — re-running on href
-  // would resurrect the previous answer's citations onto a new search's
-  // results).
-  useEffect(() => {
-    if (overview.phase !== "done") {
-      return;
-    }
-    const { answer } = splitAnswerStream(overview.text);
-    // [n] beyond the numbered results (the infobox trails the context as a
-    // bare chip) must not mark a phantom row: clamp to the meta length
-    const limit = aiMeta.length;
-    const cited = new Set(citedSourceNumbers(answer).filter((n) => n <= limit));
-    setAiMarks({
-      href: hrefRef.current,
-      indices: new Set([...cited].map((n) => n - 1)),
-    });
-    // the overview archives itself into the browser-local knowledge base
-    // (the answer kind) together with the sources it actually cites -- they
-    // join the sources corpus ref-counted per query
-    if (answer.trim()) {
-      const { meta: runMeta } = extractRunMeta(overview.text);
-      saveOverview({
-        markdown: answer,
-        model: runMeta?.model ?? null,
-        query: data.q,
-        sources: aiMeta.map((meta, index) => ({
-          content: meta.content,
-          domain: meta.domain,
-          favicon: meta.favicon,
-          n: index + 1,
-          title: meta.t,
-          url: meta.u,
-        })),
-        usage: {
-          cache_write: runMeta?.usage?.cache_write ?? null,
-          cached: runMeta?.usage?.cached ?? null,
-          finish: runMeta?.finish ?? null,
-          input: runMeta?.usage?.input ?? null,
-          model: runMeta?.model ?? null,
-          output: runMeta?.usage?.output ?? null,
-          thoughts: runMeta?.usage?.thoughts ?? null,
-        },
-      });
-    }
-  }, [overview.phase, overview.text, aiMeta, data.q]);
-
-  // (re-)apply the frames from the set — idempotent, so it doubles as the
-  // re-marker for cards whose DOM was recreated while folded
+  // as soon as the answer settles, mark every result the overview actually cites —
+  // idempotent, so it doubles as the re-marker for cards whose DOM was recreated while folded
   useEffect(() => {
     const list = listRef.current;
     if (!list) {

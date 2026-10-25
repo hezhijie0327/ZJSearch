@@ -53,17 +53,7 @@ export function threadUrl(id: string): string {
   return `/zjsearch/ask/thread/${id}`;
 }
 
-export type KnowledgeKind =
-  | "run"
-  | "answer"
-  | "overview"
-  | "source"
-  | "source_ref"
-  | "document"
-  | "memory"
-  | "call"
-  | "task"
-  | "clarify";
+export type KnowledgeKind = "run" | "source" | "source_ref" | "document" | "memory" | "call" | "task" | "clarify";
 
 /** A fresh conversation identity (the thread url's uuid). */
 export function newThreadId(): string {

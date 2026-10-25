@@ -39,7 +39,10 @@ export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> 
     sections: Record<string, string> | null;
   }>(
     `SELECT rs.answer, rs.usage, rs.model, rs.sections FROM run_summary rs
-     WHERE rs.run_id = (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run' ORDER BY n DESC LIMIT 1)`,
+     WHERE rs.answer <> ''
+       AND rs.run_id IN (SELECT run_id FROM knowledge WHERE thread_id = $1 AND kind = 'run')
+     ORDER BY (SELECT n FROM knowledge WHERE run_id = rs.run_id AND kind = 'run' LIMIT 1) DESC
+     LIMIT 1`,
     [threadId],
   );
   const reportRow = await pgQuery<{
