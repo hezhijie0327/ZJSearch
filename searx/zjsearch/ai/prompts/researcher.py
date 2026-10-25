@@ -339,6 +339,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     mcp_servers: dict[str, str] | None = None,
     tool_notes: list[tuple[str, str]] | None = None,
     tz: str | None = None,
+    overview_context: str | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
@@ -389,6 +390,20 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             + "\n"
         )
     run_context = f"{_memory_block(None if memories_live else user_memories)}\n"
+    if overview_context:
+        # THE OVERVIEW TIER's first turn: the classic results page's own
+        # sources ride in as the seeded registry -- the answer cites them
+        # positionally; no search tool exists on this tier to re-find them
+        run_context += (
+            shared.block(
+                "sources",
+                "The results page ALREADY shows the user these sources -- the"
+                " answer must build on them and cite them by their [n] marks"
+                " (the browse read may open one in full when the answer needs"
+                " more than the snippet):\n" + overview_context,
+            )
+            + "\n"
+        )
     follow_up = _follow_up(sources_base)
     if follow_up:
         run_context += f"{follow_up}\n"

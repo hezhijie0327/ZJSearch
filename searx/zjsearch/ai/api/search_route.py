@@ -718,6 +718,29 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     state.route_outline = outline
     state.clarified_direction = clarifications if clarify_state == "answered" else ""
     state.prior_topics = prior_topics
+    if outline:
+        # the outline's deliverable-entity screen: entities no section
+        # researches become the researcher's <deliverable_entities> block
+        # and plan_review's plan_complete question
+        state.deliverable_entities = report_outline.uncovered_entities(outline)
+        outline_entry = {
+            "purpose": "outline",
+            "question": "The report skeleton: sections and the deliverable entities they cover",
+            "target": str(outline["title"])[:120],
+            "sections": len(outline["sections"]),
+            "entities": len(outline.get("entities") or []),
+            "uncovered": len(state.deliverable_entities),
+            "ms": 0,
+        }
+    else:
+        outline_entry = None
+    # the PRE-FLIGHT verdicts surface BEFORE the loop's first event (the
+    # Decisions card opens with them): the clarify pre-screen, the depth
+    # probe and the outline gate -- each already judged while the client
+    # watched the boot skeleton
+    preflight = [entry for entry in (pre_entry, depth_probe_entry, outline_entry) if entry]
+    if depth_probe_entry:
+        state.judgments.append(depth_probe_entry)
     past_ref: list[dict[str, t.Any]] = []
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]] | None:

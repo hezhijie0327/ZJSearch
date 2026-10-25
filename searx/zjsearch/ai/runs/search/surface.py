@@ -75,6 +75,27 @@ def build_tool_surface(
     servers' specs (the discovery index's content) are process state
     consulted through :py:func:`search_tools.tools_surface`."""
     delegating = mode == "deep" and depth_rung >= 2
+    research_tier = mode in ("balanced", "deep")
+    if mode == "overview":
+        # THE OVERVIEW BRANCH: the classic page's AI Overview -- the page's
+        # own results ride in as the seeded source registry and the run
+        # goes straight to the write turn, so the research machinery is
+        # dead weight here: calculate for the arithmetic and the browse
+        # read for a source the answer must see in full.  NO search_web,
+        # no ledger, no ask/deliverable/plan tools.
+        specs: list[dict[str, t.Any]] = [calculate_spec()]
+        if browser_on:
+            specs.append(browse_tool.browse_spec())
+        specs += search_tools.tools_surface()
+        return ToolSurface(
+            specs=specs,
+            toolset=frozenset(str(spec["name"]) for spec in specs),
+            tool_notes=[
+                (str(spec["name"]), TOOL_INSTRUCTIONS[str(spec["name"])])
+                for spec in specs
+                if str(spec["name"]) in TOOL_INSTRUCTIONS
+            ],
+        )
     specs: list[dict[str, t.Any]] = [
         # with_info: the desc's list_engines pointer is accurate when the
         # inventory exists (inline) -- Search has neither
