@@ -57,6 +57,7 @@ import type { MemoryRow, OverviewUsage } from "@/lib/kb/projections.ts";
 import type { ThreadSummary } from "@/lib/kb/recall.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";
+import { newTabLinkProps } from "@/lib/link.ts";
 import { printDocument } from "@/lib/print.ts";
 
 /** The ONE glyph identity per knowledge surface: the segment tab, the kind
@@ -354,6 +355,20 @@ function paneText(md: string): string {
     .trim();
 }
 
+/** The url line's text: host + path + query, protocol and any trailing
+    slash dropped -- the same shape the classic results' pretty url wears. */
+function displayUrl(url: string | null): string {
+  if (!url) {
+    return "";
+  }
+  try {
+    const parsed = new URL(url);
+    return parsed.host + parsed.pathname.replace(/\/$/, "") + parsed.search;
+  } catch {
+    return url;
+  }
+}
+
 /** The source row's favicon cell: the row's stored url first, then the
     classic channel (the resolver-backed server route) -- the Globe
     glyph stays the fallback. */
@@ -362,15 +377,9 @@ function RowFavicon({ item }: { item: KnowledgeItem }) {
   const fetched = useKnowledgeFavicon(rowHost(item) || null);
   const src = stored || fetched || "";
   return src ? (
-    <img
-      alt=""
-      className="mt-0.5 size-8 shrink-0 rounded-lg border border-line bg-surface object-contain p-0.5"
-      src={src}
-    />
+    <img alt="" className="size-4 shrink-0 rounded-sm object-contain" src={src} />
   ) : (
-    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
-      <Globe aria-hidden="true" className="size-4" />
-    </span>
+    <Globe aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
   );
 }
 
@@ -1278,48 +1287,55 @@ export function KindItemRows({
             className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
             key={item.id}
           >
-            {isSource ? (
-              <RowFavicon item={item} />
-            ) : (
-              <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-line bg-surface text-ink-3">
-                <FileText aria-hidden="true" className="size-4" />
-              </span>
-            )}
-            <button
-              className="min-w-0 flex-1 text-start"
-              onClick={() => {
-                if (isSource || item.kind === "document") {
-                  onOpenInspector(item);
-                  return;
-                }
-                if (item.threadId) {
-                  onOpenThread(item);
-                }
-              }}
-              type="button"
-            >
-              <span className="line-clamp-1 text-sm font-medium leading-snug text-ink">{item.title || item.url}</span>
-              {item.body ? (
-                <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">
-                  {listingExcerpt(item.body)}
+            <div className="min-w-0 flex-1">
+              {isSource ? (
+                <a
+                  className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3 transition-colors hover:text-ink-2"
+                  href={item.url ?? "#"}
+                  {...newTabLinkProps(true)}
+                >
+                  <RowFavicon item={item} />
+                  <span className="truncate" dir="ltr">
+                    {displayUrl(item.url)}
+                  </span>
+                </a>
+              ) : (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
+                  <FileText aria-hidden="true" className="size-4 shrink-0" />
+                  <span className="truncate">{t("knowledge_kind_document")}</span>
                 </span>
-              ) : null}
-              {rowHost(item) || item.cited > 0 ? (
-                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-ink-3">
-                  {rowHost(item) ? <span className="truncate">{rowHost(item)}</span> : null}
-                  {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
-                </span>
-              ) : null}
-              <span className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-3">
-                <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
-                {isSource && item.meta?.crawled ? (
-                  <span className="inline-flex items-center gap-1">
-                    <FileDown aria-hidden="true" className="size-3" />
-                    {t("knowledge_source_crawled")}
+              )}
+              <button
+                className="mt-1 block w-full min-w-0 text-start"
+                onClick={() => {
+                  if (isSource || item.kind === "document") {
+                    onOpenInspector(item);
+                    return;
+                  }
+                  if (item.threadId) {
+                    onOpenThread(item);
+                  }
+                }}
+                type="button"
+              >
+                <span className="line-clamp-1 text-sm font-medium leading-snug text-ink">{item.title || item.url}</span>
+                {item.body ? (
+                  <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">
+                    {listingExcerpt(item.body)}
                   </span>
                 ) : null}
-              </span>
-            </button>
+                <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+                  <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
+                  {item.cited > 0 ? <span>{t("knowledge_source_cited", { n: String(item.cited) })}</span> : null}
+                  {isSource && item.meta?.crawled ? (
+                    <span className="inline-flex items-center gap-1">
+                      <FileDown aria-hidden="true" className="size-3" />
+                      {t("knowledge_source_crawled")}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </div>
             <RowActions
               crawling={Boolean(crawlBusy[item.id])}
               onCrawl={isSource ? () => crawl(item) : undefined}
