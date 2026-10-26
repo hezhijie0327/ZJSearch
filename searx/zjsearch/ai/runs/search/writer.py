@@ -89,6 +89,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     relevance: list[int] | None = None,
     findings: list[dict[str, t.Any]] | None = None,
     gaps: list[dict[str, t.Any]] | None = None,
+    procedures: list[str] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
     tz: str | None = None,
@@ -163,6 +164,18 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     lines.append(_FOLLOWUPS_BLOCK)
     if galleries_on:
         lines.append(_answer_images_block(images_proxied))
+    if procedures:
+        # the PROCEDURAL lane (the tripartite memory's learned skills):
+        # the user's standing preferences about HOW the answer should be
+        # done -- confirmed rows only (the client's gate guarantees it)
+        lines.append(
+            shared.block(
+                "procedure",
+                "The user's standing preferences for how your answers should"
+                " be done (learned across sessions -- honor them):\n"
+                + "\n".join(f"- {procedure}" for procedure in procedures),
+            )
+        )
     if halt:
         lines.append(shared.block("research_note", halt))
     elif budget_truncated:

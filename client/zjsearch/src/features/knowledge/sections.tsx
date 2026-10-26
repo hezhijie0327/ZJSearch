@@ -581,12 +581,16 @@ export function MemorySection({
   onAdd,
   onForget,
   onSave,
+  onConfirm,
+  onDismiss,
 }: {
   memories: MemoryRow[];
   loading?: boolean;
   onAdd: (content: string) => void;
   onForget: (id: string) => void;
   onSave: (id: string, content: string) => void;
+  onConfirm: (id: string) => void;
+  onDismiss: (id: string) => void;
 }) {
   const t = useT();
   const [draft, setDraft] = useState("");
@@ -641,7 +645,14 @@ export function MemorySection({
       ) : (
         <div className="space-y-0.5">
           {memories.map((memory) => (
-            <MemoryCard key={memory.id} memory={memory} onForget={onForget} onSave={onSave} />
+            <MemoryCard
+              key={memory.id}
+              memory={memory}
+              onConfirm={onConfirm}
+              onDismiss={onDismiss}
+              onForget={onForget}
+              onSave={onSave}
+            />
           ))}
         </div>
       )}
@@ -653,10 +664,14 @@ function MemoryCard({
   memory,
   onForget,
   onSave,
+  onConfirm,
+  onDismiss,
 }: {
   memory: MemoryRow;
   onForget: (id: string) => void;
   onSave: (id: string, content: string) => void;
+  onConfirm: (id: string) => void;
+  onDismiss: (id: string) => void;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
@@ -722,9 +737,37 @@ function MemoryCard({
         <p className="text-sm leading-relaxed text-ink" dir="auto">
           {memory.content}
         </p>
-        <p className="mt-0.5 text-xs text-ink-3">{formatDate(new Date(memory.updated).toISOString())}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
+          <span className={META_CHIP}>
+            {t(memory.kind === "procedure" ? "knowledge_mem_procedure" : "knowledge_mem_fact")}
+          </span>
+          {memory.state === "provisional" ? <span className={META_CHIP}>{t("knowledge_mem_pending")}</span> : null}
+          <span>{formatDate(new Date(memory.updated).toISOString())}</span>
+        </p>
       </div>
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        {memory.state === "provisional" ? (
+          <>
+            <button
+              aria-label={t("knowledge_mem_confirm")}
+              className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent"
+              onClick={() => onConfirm(memory.id)}
+              title={t("knowledge_mem_confirm")}
+              type="button"
+            >
+              <Check aria-hidden="true" className="size-3.5" />
+            </button>
+            <button
+              aria-label={t("knowledge_mem_dismiss")}
+              className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              onClick={() => onDismiss(memory.id)}
+              title={t("knowledge_mem_dismiss")}
+              type="button"
+            >
+              <X aria-hidden="true" className="size-3.5" />
+            </button>
+          </>
+        ) : null}
         <button
           aria-label={t("knowledge_memory_edit")}
           className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"

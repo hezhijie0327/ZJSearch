@@ -345,7 +345,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         [] as Awaited<ReturnType<typeof loadMemories>>,
         5000,
       );
-      entries = memories.map((memory) => ({ id: memory.id, content: memory.content }));
+      entries = memories
+        .filter((memory) => memory.state === "active")
+        .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content }));
     } else {
       const [pages, sources] = await withBudget(
         Promise.all([
@@ -784,7 +786,11 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
             ].filter(Boolean),
           ),
         ].slice(0, 8),
-        user_memories: userMemories.map((memory) => memory.content),
+        // only ACTIVE memories ride the send: a mined procedure waits for
+        // the panel's confirm (the provisional rows never reach a prompt)
+        user_memories: userMemories
+          .filter((memory) => memory.state === "active")
+          .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content })),
         // the EPISODIC lane: recent cross-thread research (title + answer
         // head) -- a returning question continues instead of restarts
         history_episodes: episodes.map((episode) => ({

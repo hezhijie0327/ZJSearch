@@ -24,7 +24,14 @@ import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
-import { forgetMemory, type MemoryRow, saveMemory, updateMemory } from "@/lib/kb/memory.ts";
+import {
+  confirmProcedure,
+  dismissProcedure,
+  forgetMemory,
+  type MemoryRow,
+  saveMemory,
+  updateMemory,
+} from "@/lib/kb/memory.ts";
 import {
   archiveDocument,
   deleteItem,
@@ -540,8 +547,16 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   loading={memories === null}
                   memories={memoryList}
                   onAdd={(content) => {
-                    saveMemory(content);
+                    saveMemory(content, { kind: "fact", origin: "user" });
                     flashToast(t("saved"), { tone: "ok" });
+                  }}
+                  onConfirm={(id) => {
+                    confirmProcedure(id);
+                    flashToast(t("saved"), { tone: "ok" });
+                  }}
+                  onDismiss={(id) => {
+                    dismissProcedure(id);
+                    flashToast(t("knowledge_memory_forgot"), { tone: "accent" });
                   }}
                   onForget={(id) => {
                     forgetMemory(id);

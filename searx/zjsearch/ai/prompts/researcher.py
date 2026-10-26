@@ -255,17 +255,25 @@ def _follow_up(sources_base: int) -> str:
 def _memory_block(user_memories: list[dict[str, str]] | None) -> str:
     """The memory SNAPSHOT (data, not doctrine -- the tool's own
     INSTRUCTIONS carry the when-to-consult/save rules): the user's stored
-    facts as injected by the client, or the live variant's notice that
-    the store must be searched."""
-    facts = "\n".join(f"- {item['content']}" for item in user_memories or [])
-    return shared.block(
-        "memory",
-        f"""\
-        Durable facts about the user (stored across sessions) -- use them
-        to personalize the research (a home city grounds weather/local
-        questions, stated preferences shape source choices):
-        {facts or "(none stored yet -- the memory tool's search is the read path)"}""",
+    facts and confirmed procedures as injected by the client, or the live
+    variant's notice that the store must be searched."""
+    rows = user_memories or []
+    facts = [m for m in rows if m.get("kind") != "procedure"]
+    procedures = [m for m in rows if m.get("kind") == "procedure"]
+    fact_lines = "\n".join(f"- {m['content']}" for m in facts)
+    body = (
+        "Durable facts about the user (stored across sessions) -- use them"
+        " to personalize the research (a home city grounds weather/local"
+        " questions, stated preferences shape source choices):\n"
     )
+    body += fact_lines or "(none stored yet -- the memory tool's search is the read path)"
+    if procedures:
+        body += (
+            "\n\nStanding PROCEDURES -- how the user wants research done"
+            " (learned across sessions; honor them):\n"
+            + "\n".join(f"- {m['content']}" for m in procedures)
+        )
+    return shared.block("memory", body)
 
 
 def _episodes_block(episodes: list[dict[str, str]] | None) -> str:

@@ -884,6 +884,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             relevance=await _relevance_order(research_q, state.feed, account=state.account),
             findings=state.facts,
             gaps=state.gaps,
+            procedures=[
+                str(m.get("content") or "")
+                for m in user_memories or []
+                if m.get("kind") == "procedure" and str(m.get("content") or "").strip()
+            ],
             tz=user_tz,
         )
 
