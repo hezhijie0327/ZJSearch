@@ -50,6 +50,7 @@ export interface GlobalData {
   version: string;
   git_url: string;
   issue_url: string;
+  docs_url: string;
   donation_url: string;
   enable_metrics: boolean;
   public_instances_url: string;

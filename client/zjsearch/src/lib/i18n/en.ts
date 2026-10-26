@@ -797,6 +797,7 @@ export const EN = {
   contact: "Contact",
   public_instances: "Public instances",
   source_code: "Source code",
+  docs: "Documentation",
   issue_tracker: "Issue tracker",
   about_instance: "About this instance",
   categories: "Categories",

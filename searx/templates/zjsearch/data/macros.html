@@ -21,6 +21,7 @@ pipeline features without any Python changes. -#}
   "version": {{ searxng_version|tojson }},
   "git_url": {{ searxng_git_url|tojson }},
   "issue_url": {{ (get_setting('brand.issue_url') or '')|tojson }},
+  "docs_url": {{ (get_setting('brand.docs_url') or '')|tojson }},
   "donation_url": {{ (donation_url or '')|tojson }},
   "enable_metrics": {{ enable_metrics|tojson }},
   "public_instances_url": {{ (get_setting('brand.public_instances') or '')|tojson }},

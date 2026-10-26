@@ -2,6 +2,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  BookOpen,
   Bug,
   Code,
   ExternalLink,
@@ -164,6 +165,9 @@ function InstancePage({ globals }: { globals: GlobalData }) {
   }
   if (globals.git_url) {
     links.push({ label: t("source_code"), url: globals.git_url, icon: Code });
+  }
+  if (globals.docs_url) {
+    links.push({ label: t("docs"), url: globals.docs_url, icon: BookOpen });
   }
   if (globals.issue_url) {
     links.push({ label: t("issue_tracker"), url: globals.issue_url, icon: Bug });

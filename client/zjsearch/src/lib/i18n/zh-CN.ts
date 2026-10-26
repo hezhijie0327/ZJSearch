@@ -786,6 +786,7 @@ export const ZH_CN: Record<StringKey, string> = {
   contact: "联系方式",
   public_instances: "公共实例",
   source_code: "源代码",
+  docs: "文档",
   issue_tracker: "问题反馈",
   about_instance: "关于本实例",
   categories: "分类",
