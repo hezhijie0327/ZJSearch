@@ -188,7 +188,7 @@ function PageFallback({
           <span className="zjs-skeleton zjs-boot-k-title" />
         </div>
         <span className="zjs-skeleton zjs-boot-k-sub" />
-        <BootTabCard />
+        <BootTabCard tabs={6} />
         <BootSearchCard />
         <BootRowsCard />
       </>

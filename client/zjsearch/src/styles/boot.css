@@ -494,6 +494,10 @@
   }
   .zjs-boot-k-tabs {
     display: flex;
+    /* the real tablist wraps (KnowledgePage/preferences use flex-wrap) --
+       the bars carry a min-width so the ghost breaks rows at the same
+       narrow widths instead of shrinking onto one line forever */
+    flex-wrap: wrap;
     gap: 0.375rem;
     border: 1px solid var(--line);
     border-radius: 1rem;
@@ -503,6 +507,8 @@
   .zjs-boot-k-tab {
     display: block;
     flex: 1 1 0;
+    /* one real tab's floor: icon + 2-char label + px-4 */
+    min-width: 4.75rem;
     height: 2.25rem;
     border-radius: 0.75rem;
   }

@@ -321,7 +321,7 @@ const PanelSkeleton = ({ shape }: { shape: PanelShape }) => (
       <BootStatsTable />
     ) : shape === "knowledge" ? (
       <>
-        <BootTabCard tabs={8} />
+        <BootTabCard tabs={6} />
         <BootSearchCard />
         <BootRowsCard />
       </>

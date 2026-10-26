@@ -19,7 +19,7 @@ export function BootActions() {
   );
 }
 
-/** the segment-tab card (knowledge's 8-way tablist, preferences' tabs) */
+/** the segment-tab card (knowledge's 6-way tablist, preferences' 5 tabs) */
 export function BootTabCard({ tabs = 5 }: { tabs?: number }) {
   return (
     <div aria-hidden="true" className="zjs-boot-k-tabs">
