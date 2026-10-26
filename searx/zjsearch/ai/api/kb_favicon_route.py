@@ -1,11 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""POST /zjsearch/knowledge/favicon: the KNOWLEDGE base's favicon
-channel -- the same machinery the classic results wear
-(searx.favicons.proxy: the resolver preference, the server cache, the
-data-URL fast path, the signed proxy route).  The knowledge rows live
-in the browser-local store; their hosts never pass the template
-serialization, so the listing asks per host (HMAC page token like
-every theme route)."""
+"""POST /zjsearch/knowledge/favicon: the THEME's favicon channel (the
+url keeps its knowledge birth home) -- the same machinery the classic
+results wear (searx.favicons.proxy: the resolver preference, the
+server cache, the data-URL fast path, the signed proxy route).  The
+consumers' hosts never pass the template serialization -- the
+knowledge store rows, and the citation panels' page-read / browser /
+recalled sources that ride the wire with favicon:"" -- so the client
+asks per host (HMAC page token like every theme route)."""
 
 import flask
 

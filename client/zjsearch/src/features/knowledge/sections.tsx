@@ -41,7 +41,6 @@ import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
-import { useKnowledgeFavicon } from "@/features/knowledge/favicons.ts";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
 import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
@@ -51,6 +50,7 @@ import { buildCitationMap, citedSourceRows } from "@/lib/citations.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { type EmbedUsageTotals, readEmbedUsage } from "@/lib/embed.ts";
 import { buildAnswerMarkdown, buildDeckMarkdown, buildReportMarkdown } from "@/lib/exporters.ts";
+import { useHostFavicon } from "@/lib/favicons.ts";
 import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import type { MemoryRow, OverviewUsage } from "@/lib/kb/projections.ts";
@@ -374,7 +374,7 @@ function displayUrl(url: string | null): string {
     glyph stays the fallback. */
 function RowFavicon({ item }: { item: KnowledgeItem }) {
   const stored = item.meta?.favicon as string | undefined;
-  const fetched = useKnowledgeFavicon(rowHost(item) || null);
+  const fetched = useHostFavicon(rowHost(item) || null);
   const src = stored || fetched || "";
   return src ? (
     <img alt="" className="size-4 shrink-0 rounded-sm object-contain" src={src} />

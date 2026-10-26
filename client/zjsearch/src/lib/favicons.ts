@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-/** The knowledge listing's favicon channel: the store rows' hosts never
-    passed the server's template serialization, so the page asks the one
-    route that reuses the classic results' favicon machinery (the
+/** The client's favicon channel over the knowledge route: hosts that never
+    passed the server's template serialization (knowledge rows, the run's
+    page-read / browser sources, the recalled pages behind a citation) ask
+    the one route that reuses the classic results' favicon machinery (the
     resolver preference, the server cache, the data-URL fast path, the
     signed proxy route).  One module-level cache per session; a host's
     fetch is deduped while in flight; an empty answer (no resolver
@@ -45,8 +46,8 @@ async function loadFavicon(host: string): Promise<string> {
 }
 
 /** A host's favicon url (the classic channel), null until fetched and
-    null when the channel has none -- the row keeps its Globe fallback. */
-export function useKnowledgeFavicon(host: string | null): string | null {
+    null when the channel has none -- the caller keeps its own fallback. */
+export function useHostFavicon(host: string | null): string | null {
   const [url, setUrl] = useState<string | null>(() => (host ? cache.get(host) || null : null));
   useEffect(() => {
     if (!host) {

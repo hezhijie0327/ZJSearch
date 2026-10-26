@@ -25,11 +25,13 @@ import { citeToLinks } from "@/lib/citations.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { cn } from "@/lib/cn.ts";
 import { buildAnswerMarkdown } from "@/lib/exporters.ts";
+import { useHostFavicon } from "@/lib/favicons.ts";
 import { fetchStream } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { appendRunEvents } from "@/lib/kb/events.ts";
 import { settleRun, startRun } from "@/lib/kb/projections.ts";
 import { newThreadId, threadUrl } from "@/lib/kb/shared.ts";
+import { hostnameOf } from "@/lib/link.ts";
 import { holdBackTail, MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { CHIP_ACCENT, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
@@ -442,6 +444,27 @@ function useFloatPanel() {
   return { panel, openPanel, keepPanel, closeSoon, close: () => setPanel(null) };
 }
 
+/** The hover panel's favicon cell: the source's wire favicon first, then
+    the classic channel (lib/favicons' host route) for the hosts the wire
+    left blank -- page reads, browser mints and recalled pages all carry
+    favicon:"" on their sources events.  No icon anywhere: the caller's
+    fallback keeps the row rhythm. */
+function PanelFavicon({
+  favicon,
+  url,
+  className,
+  fallback,
+}: {
+  favicon?: string;
+  url: string;
+  className: string;
+  fallback: ReactNode;
+}) {
+  const fetched = useHostFavicon(favicon ? null : hostnameOf(url));
+  const src = favicon || fetched || "";
+  return src ? <img alt="" className={className} src={src} /> : fallback;
+}
+
 /** Compact [n] citation chip: hovering opens a floating preview panel with
     the source favicon, site and title (portalled to <body> so the clamp
     wrapper's overflow-hidden cannot clip it); clicking jumps to the
@@ -490,9 +513,12 @@ function CitationChip({ n, source, onCite }: { n: number; source: AiSourceMeta; 
               tabIndex={0}
             >
               <div className="flex items-center gap-1.5 text-xs text-ink-3">
-                {source.favicon ? (
-                  <img alt="" className="size-4 rounded-full object-contain" src={source.favicon} />
-                ) : null}
+                <PanelFavicon
+                  className="size-4 rounded-full object-contain"
+                  fallback={null}
+                  favicon={source.favicon}
+                  url={source.u}
+                />
                 <span className="truncate">{source.domain}</span>
                 <a
                   aria-label={t("open_source")}
@@ -588,11 +614,14 @@ function CitationGroupChip({
                     }}
                     type="button"
                   >
-                    {source?.favicon ? (
-                      <img alt="" className="mt-0.5 size-4 shrink-0 rounded-full object-contain" src={source.favicon} />
-                    ) : (
-                      <span aria-hidden="true" className="mt-0.5 size-4 shrink-0 rounded-full bg-surface-2" />
-                    )}
+                    <PanelFavicon
+                      className="mt-0.5 size-4 shrink-0 rounded-full object-contain"
+                      fallback={
+                        <span aria-hidden="true" className="mt-0.5 size-4 shrink-0 rounded-full bg-surface-2" />
+                      }
+                      favicon={source?.favicon}
+                      url={source?.u ?? ""}
+                    />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-xs text-ink-3">
                         {source?.domain}
