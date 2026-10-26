@@ -254,24 +254,45 @@ def _follow_up(sources_base: int) -> str:
 
 def _memory_block(user_memories: list[dict[str, str]] | None) -> str:
     """The memory SNAPSHOT (data, not doctrine -- the tool's own
-    INSTRUCTIONS carry the when-to-consult/save rules): the user's stored
-    facts and confirmed procedures as injected by the client, or the live
-    variant's notice that the store must be searched."""
+    INSTRUCTIONS carry the when-to-consult/save rules): the user's
+    stored facts, confirmed procedures, search lessons and open gaps as
+    injected by the client, or the live variant's notice that the store
+    must be searched."""
     rows = user_memories or []
-    facts = [m for m in rows if m.get("kind") != "procedure"]
-    procedures = [m for m in rows if m.get("kind") == "procedure"]
-    fact_lines = "\n".join(f"- {m['content']}" for m in facts)
+    by_kind: dict[str, list[dict[str, str]]] = {}
+    for row in rows:
+        by_kind.setdefault(str(row.get("kind") or "fact"), []).append(row)
+    facts = by_kind.get("fact", [])
+    procedures = by_kind.get("procedure", [])
+    lessons = by_kind.get("lesson", [])
+    gaps = by_kind.get("gap", [])
+
+    def lines(items: list[dict[str, str]]) -> str:
+        return "\n".join(f"- {m['content']}" for m in items)
+
     body = (
-        "Durable facts about the user (stored across sessions) -- use them"
-        " to personalize the research (a home city grounds weather/local"
-        " questions, stated preferences shape source choices):\n"
+        "Durable facts (stored across sessions) -- use them to personalize"
+        " the research (a home city grounds weather/local questions,"
+        " stated preferences shape source choices; entity facts are the"
+        " user's tracked people/companies):\n"
     )
-    body += fact_lines or "(none stored yet -- the memory tool's search is the read path)"
+    body += lines(facts) or "(none stored yet -- the memory tool's search is the read path)"
     if procedures:
         body += (
             "\n\nStanding PROCEDURES -- how the user wants research done"
-            " (learned across sessions; honor them):\n"
-            + "\n".join(f"- {m['content']}" for m in procedures)
+            " (learned across sessions; honor them):\n" + lines(procedures)
+        )
+    if lessons:
+        body += (
+            "\n\nSEARCH LESSONS -- what worked before on these topics; try"
+            " these angles before brute-forcing:\n" + lines(lessons)
+        )
+    if gaps:
+        body += (
+            "\n\nOPEN QUESTIONS (the backlog -- earlier runs could not"
+            " answer these): if THIS run resolves one, answer it and"
+            " FORGET the memory; if it can advance one, advance it:\n"
+            + lines(gaps)
         )
     return shared.block("memory", body)
 

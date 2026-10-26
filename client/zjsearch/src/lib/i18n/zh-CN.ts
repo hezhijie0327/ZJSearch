@@ -348,6 +348,8 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_memory_placeholder: "记一条记忆…",
   knowledge_mem_fact: "事实",
   knowledge_mem_procedure: "技能",
+  knowledge_mem_lesson: "检索教训",
+  knowledge_mem_gap: "未决问题",
   knowledge_mem_pending: "待确认",
   knowledge_mem_confirm: "采用",
   knowledge_mem_dismiss: "忽略",

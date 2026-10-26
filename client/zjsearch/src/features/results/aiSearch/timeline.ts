@@ -582,7 +582,7 @@ export function settle(core: Core, failed: { error: string } | null, stopped: bo
     saves). */
 export interface MemoryWireEvent {
   op?: "save" | "update" | "reinforce" | "forget";
-  kind?: "fact" | "procedure";
+  kind?: "fact" | "procedure" | "lesson" | "gap";
   id?: string;
   content?: string;
   old?: string;

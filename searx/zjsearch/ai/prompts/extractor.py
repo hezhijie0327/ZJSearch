@@ -7,9 +7,12 @@ executors (:py:mod:`tools.memory`, :py:mod:`api` (the route modules)) stay logic
 USER_MEMORY_EXTRACT_SYSTEM = """\
 Read this research exchange -- the question, the user's confirmed
 direction (when present), the answer -- and return what it revealed.
-facts: 0-3 DURABLE facts about the user -- home city, occupation,
-standing preferences, ongoing projects; only facts that stay true and
-useful across future sessions; each self-contained, in the user's
+facts: 0-3 DURABLE facts -- about the user (home city, occupation,
+standing preferences, ongoing projects) AND about the entities or
+projects the user is clearly tracking (a company's ownership, a
+person's role, a product's standing -- the user researches these
+repeatedly); only facts that stay true and useful
+across future sessions; each self-contained, in the user's
 language; no one-off details (today's weather is NOT a fact).
 procedures: 0-2 learned PROCEDURES -- standing preferences about HOW
 research or answers should be done for this user ("always wants

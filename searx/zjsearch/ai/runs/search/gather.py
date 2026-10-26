@@ -213,6 +213,13 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 }
             items = serialize_results(raw, query)
             feed_block, entries = build_search_feed(self.reg, query, category, items, dup_gate=dup_gate)
+            # the SOURCE NOTES lane: the host-bound facts (source
+            # credibility / usage judgments) for the hosts this search
+            # actually touched -- once per run per note, the conversation
+            # keeps them from here
+            notes_line = self._source_notes_feed(items)
+            if notes_line:
+                feed_block = notes_line + "\n" + feed_block
             # the query-quality feedback loop ("failure becomes information"
             # at the query layer): a no-signal or duplicate-dominated search
             # tells the model to REPHRASE instead of repeating the angle --

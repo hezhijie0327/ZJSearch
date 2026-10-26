@@ -34,11 +34,12 @@ import {
 import {
   forgetMemory,
   loadMemories,
-  loadSiteRecipes,
+  loadSiteNotes,
   reinforceMemory,
   saveMemory,
   updateMemory,
 } from "@/lib/kb/memory.ts";
+import { consolidatePrimer } from "@/lib/kb/primers.ts";
 import { archiveAttachments, archiveDocument, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { listEpisodes, recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { newThreadId } from "@/lib/kb/shared.ts";
@@ -115,14 +116,20 @@ const IDLE: Core = {
 function executeMemoryOp(event: MemoryWireEvent): void {
   const content = String(event.content ?? "");
   switch (event.op ?? "save") {
-    case "save":
+    case "save": {
+      const kind = (["fact", "procedure", "lesson", "gap"] as const).includes(
+        event.kind as "fact" | "procedure" | "lesson" | "gap",
+      )
+        ? (event.kind as "fact" | "procedure" | "lesson" | "gap")
+        : "fact";
       saveMemory(content, {
-        kind: event.kind === "procedure" ? "procedure" : "fact",
+        kind,
         origin: "model",
         state: event.state === "provisional" ? "provisional" : "active",
         host: event.host ?? null,
       });
       return;
+    }
     case "update":
       if (event.id) {
         updateMemory(event.id, content);
@@ -332,6 +339,20 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       void clearRunCtx(`${core.threadId}:${last.runNo}`).catch(() => {});
     }
     void settleRun(core.threadId, last);
+    // THE BACKLOG INGESTION: an OPEN gap outlives its thread -- every
+    // settled open gap joins the global backlog (a kind='gap' memory
+    // row; the exact-duplicate guard keeps re-settles from piling
+    // copies, the researcher forgets one once its question is answered)
+    for (const gap of last.gaps ?? []) {
+      if (gap.status !== "open") {
+        continue;
+      }
+      const text = String(gap.q ?? "").trim();
+      if (text) {
+        saveMemory(text, { kind: "gap", origin: "model" });
+      }
+    }
+    consolidatePrimer(last);
   }, [core.phase, core.threadId, core.runs]);
 
   /** The LIVE RECALL answerer: the run asked through the recall wire
@@ -738,14 +759,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
             .then((pages) => pages.filter((page) => !page.url)),
           loadMemories(q).catch(() => []),
           listEpisodes(q).catch(() => []),
-          loadSiteRecipes().catch(() => []),
+          loadSiteNotes().catch(() => []),
         ]),
         [
           [] as Awaited<ReturnType<typeof recallCorpus>>,
           [] as Awaited<ReturnType<typeof recallPages>>,
           [] as Awaited<ReturnType<typeof loadMemories>>,
           [] as Awaited<ReturnType<typeof listEpisodes>>,
-          [] as Awaited<ReturnType<typeof loadSiteRecipes>>,
+          [] as Awaited<ReturnType<typeof loadSiteNotes>>,
         ],
       );
       if (signal.aborted) {
@@ -803,7 +824,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         user_memories: userMemories
           .filter((memory) => memory.state === "active" && !memory.host)
           .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content })),
-        site_recipes: siteRecipes
+        site_notes: siteRecipes
           .filter((recipe) => recipe.state === "active" && recipe.host)
           .map((recipe) => ({ id: recipe.id, host: recipe.host ?? "", content: recipe.content })),
         // the EPISODIC lane: recent cross-thread research (title + answer

@@ -44,15 +44,23 @@ shape the research.  Maintain it like a memory, not a log: save
 lasting facts and procedures, never one-off conversation details;
 UPDATE (action=update) when a stored fact CHANGED -- a moved city, a
 changed preference -- instead of saving a second version; FORGET
-(action=forget) when the user asks to drop something.  SITE RECIPES:
-when you just completed a non-trivial operation on a website in the
-browser session -- a sign-in flow, a captcha, a multi-step path to
-walled content -- save the recipe (kind=procedure, host=<the site's
-host>, content=<the minimal step list>); it rides your next browse to
-that site, so write what a future you could follow.  Every memory is
-written in the user's language -- match the language they are speaking
-to you in, never your own default.  The answer must still answer the
-question; memory maintenance is a silent side action."""
+(action=forget) when the user asks to drop something.  SITE SKILLS AND SOURCE NOTES: when you just completed a non-trivial
+operation on a website in the browser session -- a sign-in flow, a
+captcha, a multi-step path to walled content -- save the recipe
+(kind=procedure, host=<the site's host>, content=<the minimal step
+list>); it rides your next browse to that site.  A durable judgment
+about a SOURCE (it lags the official data, it spins its numbers, it is
+the fastest lawful route to X) is a source note: kind=fact with that
+source's host -- it resurfaces whenever your searches or reads touch
+the site.  LESSONS (kind=lesson): when a search only worked after you
+rephrased it -- a wording, a site: operator, another category or
+language -- save what worked; try saved lessons before brute-forcing.
+GAPS (kind=gap): when the run ends with a question you could NOT
+answer, save it as a gap -- the backlog; when a run RESOLVES a stored
+gap, answer it and FORGET the memory.  Every memory is written in the
+user's language -- match the language they are speaking to you in,
+never your own default.  The answer must still answer the question;
+memory maintenance is a silent side action."""
 
 MAX_MEMORIES = 50
 """The pre-send cap -- facts beyond this are the oldest's problem (the
@@ -89,11 +97,15 @@ def memory_spec() -> dict[str, t.Any]:
                 },
                 "kind": {
                     "type": "string",
-                    "enum": ["fact", "procedure"],
+                    "enum": ["fact", "procedure", "lesson", "gap"],
                     "description": (
-                        "save: fact = a durable fact about the user; procedure"
-                        " = a learned way to research or write for them"
-                        " (a standing preference about method or output)."
+                        "save: fact = a durable fact (about the user, a"
+                        " tracked entity/project, or with host = about one"
+                        " website as a source); procedure = a learned way"
+                        " (user preference, or with host = a site recipe);"
+                        " lesson = a search lesson (the angle that only"
+                        " worked after rephrasing); gap = an open question"
+                        " this run could not answer (the backlog)."
                     ),
                 },
                 "content": {
@@ -138,7 +150,7 @@ def parse_memories(raw: t.Any) -> list[dict[str, str]]:
                     {
                         "id": str(item.get("id") or "")[:40],
                         "content": str(item["content"])[:MAX_CONTENT],
-                        "kind": "procedure" if item.get("kind") == "procedure" else "fact",
+                        "kind": item.get("kind") if item.get("kind") in ("fact", "procedure", "lesson", "gap") else "fact",
                         "host": str(item.get("host") or "")[:120],
                     }
                 )
@@ -468,7 +480,9 @@ def run_call(
         if not content:
             return "error: save needs a non-empty content", None
         host = str(args.get("host") or "").strip()[:120] or None
-        kind = "procedure" if (args.get("kind") == "procedure" or host) else "fact"
+        kind = str(args.get("kind") or "")
+        if kind not in ("fact", "procedure", "lesson", "gap"):
+            kind = "procedure" if host else "fact"
         local_known = list(known or [])
         local_ids = list(known_ids) if known_ids is not None else [None] * len(local_known)
         feed, event = _save_funnel(content, kind, local_known, local_ids, cfg, account)

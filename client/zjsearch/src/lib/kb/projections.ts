@@ -626,10 +626,10 @@ export function archiveAttachments(
 let embedRunning = false;
 
 /** Embed the rows whose search_text is non-empty but whose embedding is
-    still missing (projections land unembedded when the capability is
+    still missing (primers.ts re-runs it after its own writes) (projections land unembedded when the capability is
     off; they join the semantic search the next time this pass runs with
     the capability on).  One /zjsearch/knowledge/embed call per 16 texts. */
-async function embedPending(): Promise<void> {
+export async function embedPending(): Promise<void> {
   if (embedRunning || !embeddingsConfigured()) {
     return;
   }

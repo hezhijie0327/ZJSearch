@@ -19,7 +19,7 @@ import { embedModelName, enqueue } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
-export type MemoryKind = "fact" | "procedure";
+export type MemoryKind = "fact" | "procedure" | "lesson" | "gap";
 export type MemoryOrigin = "user" | "model" | "teach";
 export type MemoryState = "active" | "provisional";
 
@@ -242,11 +242,12 @@ function softDecayOrder(rows: MemoryRow[]): MemoryRow[] {
 
 // ------------------------------------------------------------ hybrid read
 
-/** The SITE recipes (the host-bound layer): active rows with a host, in
-    the soft-decay order -- the run's pre-send carries them separately
-    from the global snapshot (the browse lane answers to them by host,
-    not query relevance). */
-export async function loadSiteRecipes(limit = 8): Promise<MemoryRow[]> {
+/** The SITE notes (the host-bound layer: site recipes AND source
+    notes -- both kinds bind to one website): active rows with a host,
+    in the soft-decay order -- the run's pre-send carries them
+    separately from the global snapshot (the browse/search lanes answer
+    to them by host, not query relevance). */
+export async function loadSiteNotes(limit = 8): Promise<MemoryRow[]> {
   await pg();
   const rows = await pgQuery<Record<string, unknown>>(
     `SELECT ${MEMORY_COLUMNS} FROM memory

@@ -68,7 +68,7 @@ bug and :py:func:`encode` refuses it):
 ``related``             follow-up question suggestions.
 ``memory``              a memory mutation the CLIENT executes against
                         its store: ``{op: save|update|reinforce|forget,
-                        kind: fact|procedure, id?, content, old?,
+                        kind: fact|procedure|lesson|gap, id?, content, old?,
                         state?, host?}`` -- saves land active (mined
                         procedures ``provisional``), a reinforce grows
                         the stored row's weight, an update replaces a

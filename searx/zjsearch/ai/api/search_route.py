@@ -332,12 +332,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # slot (handlers); both actions and the save near-dup gate read it
     user_memories = None if live_recall else parse_memories(payload.get("user_memories"))
     recall_entries = parse_recall_history(payload.get("recall_history"))
-    # the SITE RECIPES (the memory's host-bound layer -- the browser's
-    # login paths and site flows): they ride EVERY send (they are small,
-    # capped) because the browse lane answers to them by host, not by
+    # the SITE NOTES (the memory's host-bound layer -- site recipes and
+    # source notes): they ride EVERY send (they are small, capped)
+    # because the browse/search lanes answer to them by host, not by
     # query relevance
-    raw_recipes = payload.get("site_recipes")
-    site_recipes = (
+    raw_recipes = payload.get("site_notes")
+    site_notes = (
         [
             {
                 "id": str(entry.get("id") or "")[:40],
@@ -739,7 +739,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         search_language=raw_search_language,
         max_rounds=max_rounds,
         user_memories=user_memories,
-        site_recipes=site_recipes,
+        site_notes=site_notes,
         recall_entries=recall_entries,
         live_recall=live_recall,
         lang=lang,

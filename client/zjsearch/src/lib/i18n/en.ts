@@ -349,6 +349,8 @@ export const EN = {
   knowledge_memory_placeholder: "Capture a memory…",
   knowledge_mem_fact: "Fact",
   knowledge_mem_procedure: "Procedure",
+  knowledge_mem_lesson: "Search lesson",
+  knowledge_mem_gap: "Open question",
   knowledge_mem_pending: "Needs your confirm",
   knowledge_mem_confirm: "Adopt",
   knowledge_mem_dismiss: "Dismiss",

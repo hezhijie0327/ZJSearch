@@ -277,21 +277,57 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             extra["chars"] = len(body)
         return feed, extra, gathered
 
-    def _site_recipe(self, url: str) -> dict[str, t.Any] | None:
-        """The saved SITE RECIPE this url answers to (host match with the
-        www prefix folded; a suffix relation covers subdomains) -- the
-        procedural memory's site-bound layer, pre-sent by the client."""
+    def _site_note(self, url: str, kind: str) -> dict[str, t.Any] | None:
+        """The saved SITE note (host-bound memory row) this url answers
+        to -- host match with the www prefix folded, a suffix relation
+        covers subdomains; ``kind`` picks the lane (procedure = site
+        recipe for the browse lane, fact = source note)."""
         try:
             host = urlsplit(url).netloc.lower().removeprefix("www.")
         except (ValueError, AttributeError):
             return None
         if not host:
             return None
-        for row in self.site_recipes:
+        for row in self.site_notes:
             row_host = str(row.get("host") or "").lower().removeprefix("www.")
-            if row_host and (row_host == host or host.endswith("." + row_host) or row_host.endswith("." + host)):
+            if (
+                row_host
+                and row.get("kind") == kind
+                and (row_host == host or host.endswith("." + row_host) or row_host.endswith("." + host))
+            ):
                 return row
         return None
+
+    def _source_notes_feed(self, items: list[dict[str, t.Any]]) -> str:
+        """The matched SOURCE NOTES for one search's result set -- one
+        line per note, once per run per note (the search lane's half of
+        the host-bound replay; the browse lane's recipe note is the
+        other half)."""
+        seen: dict[str, str] = {}
+        for item in items:
+            url = str(item.get("url") or "")
+            try:
+                host = urlsplit(url).netloc.lower().removeprefix("www.")
+            except (ValueError, AttributeError):
+                continue
+            if not host:
+                continue
+            for row in self.site_notes:
+                row_id = str(row.get("id") or "")
+                row_host = str(row.get("host") or "").lower().removeprefix("www.")
+                if (
+                    not row_host
+                    or row_id in self.notes_used
+                    or row.get("kind") != "fact"
+                    or not (row_host == host or host.endswith("." + row_host) or row_host.endswith("." + host))
+                ):
+                    continue
+                seen.setdefault(row_id, f"{row_host}: {str(row.get('content') or '')[:200]}")
+        if not seen:
+            return ""
+        self.notes_used.update(seen)
+        lines = "\n".join(f"- {text}" for text in seen.values())
+        return "YOUR SOURCE NOTES (durable judgments you saved about these sources):\n" + lines + "\n"
 
     def _browser_call(self, call, wire_id, feeds):
         """The interactive browser session: ONE action per call, inline
@@ -336,16 +372,16 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             if self.browser_session_id != "lead":
                 frame = {**frame, "agent": self.browser_session_id}
             yield ("browser", frame)
-        recipe = self._site_recipe(str((result.page or {}).get("url") or ""))
+        recipe = self._site_note(str((result.page or {}).get("url") or ""), "procedure")
         recipe_note = ""
         if recipe:
             recipe_id = str(recipe.get("id") or "")
             recipe_content = str(recipe.get("content") or "")
-            if recipe_id and recipe_id not in self.recipes_used:
+            if recipe_id and recipe_id not in self.notes_used:
                 # one shot per row per run: the recipe rides the feed (the
                 # conversation keeps it from here) and its USE reinforces
                 # the stored row client-side
-                self.recipes_used.add(recipe_id)
+                self.notes_used.add(recipe_id)
                 yield ("memory", {"op": "reinforce", "kind": "procedure", "id": recipe_id, "content": recipe_content})
                 recipe_note = (
                     f"SAVED SITE RECIPE for {recipe.get('host')}: {recipe_content}"

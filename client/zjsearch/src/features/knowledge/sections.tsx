@@ -739,7 +739,15 @@ function MemoryCard({
         </p>
         <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-3">
           <span className={META_CHIP}>
-            {t(memory.kind === "procedure" ? "knowledge_mem_procedure" : "knowledge_mem_fact")}
+            {t(
+              memory.kind === "procedure"
+                ? "knowledge_mem_procedure"
+                : memory.kind === "lesson"
+                  ? "knowledge_mem_lesson"
+                  : memory.kind === "gap"
+                    ? "knowledge_mem_gap"
+                    : "knowledge_mem_fact",
+            )}
           </span>
           {memory.host ? <span className={META_CHIP}>{memory.host}</span> : null}
           {memory.state === "provisional" ? <span className={META_CHIP}>{t("knowledge_mem_pending")}</span> : null}
