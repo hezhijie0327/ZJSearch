@@ -1088,9 +1088,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         account=state.account,
         judgments=state.judgments,
         known_memories_fn=lambda: [
-            (m.get("id") or None, str(m.get("content") or "")) for m in user_memories
+            (m.get("id") or None, str(m.get("content") or ""), str(m.get("kind") or "fact"))
+            for m in user_memories
         ]
-        + [(None, c) for c in state.saved_memories],
+        + [(None, c, "fact") for c in state.saved_memories],
         outline_title=str(outline["title"]) if outline else None,
         clarifications=clarifications,
     )
@@ -1157,7 +1158,7 @@ class _SettleTail:
         lang: str,
         account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
-        known_memories_fn: t.Callable[[], list[tuple[str | None, str]]] | None = None,
+        known_memories_fn: t.Callable[[], list[tuple[str | None, str, str]]] | None = None,
         outline_title: str | None = None,
         clarifications: str = "",
     ):
@@ -1296,9 +1297,10 @@ class _SettleTail:
                 self.cfg,
                 self.question,
                 answer,
-                known=[content for _rid, content in known_rows],
-                known_ids=[rid for rid, _content in known_rows],
+                known=[content for _rid, content, _kind in known_rows],
+                known_ids=[rid for rid, _content, _kind in known_rows],
                 clarifications=self.clarifications,
+                open_gaps=[(rid, content) for rid, content, kind in known_rows if kind == "gap" and rid],
                 account=self.account,
             )
             # the v2 memory events (op + kind/id/content/state) fly as-is:
@@ -1335,7 +1337,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
         preamble: list[dict[str, t.Any]] | None = None,
-        known_memories_fn: t.Callable[[], list[tuple[str | None, str]]] | None = None,
+        known_memories_fn: t.Callable[[], list[tuple[str | None, str, str]]] | None = None,
         clarifications: str = "",
     ):
         self.events = events

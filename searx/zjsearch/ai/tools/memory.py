@@ -340,6 +340,7 @@ def extract_insights(
     known_ids: list[str | None] | None = None,
     account: t.Any = None,
     clarifications: str = "",
+    open_gaps: list[tuple[str, str]] | None = None,
 ) -> tuple[list[dict[str, t.Any]], list[str]]:
     """The post-run extractor -- the consolidation organ (LobeHub's
     downstream-extractor pattern): one small JSON completion decides
@@ -363,6 +364,14 @@ def extract_insights(
     if clarifications.strip():
         user_text += "\n" + spine.block("clarified", clarifications.strip()[:500])
     user_text += "\n" + spine.block("answer", answer[:3000])
+    gap_rows = [(gid, gtext) for gid, gtext in (open_gaps or []) if gid and gtext]
+    if gap_rows:
+        gap_lines = "\n".join(f"- [{gid}] {gtext}" for gid, gtext in gap_rows)
+        user_text += "\n" + spine.block(
+            "open_gaps",
+            "The user's OPEN QUESTIONS (the backlog -- judge whether this"
+            " exchange answered any):\n" + gap_lines,
+        )
     value, _usage = jsongate.json_completion(
         cfg,
         [
@@ -390,6 +399,14 @@ def extract_insights(
                         " user, or an empty array."
                     ),
                 },
+                "forget_gaps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "The ids of the OPEN QUESTIONS this exchange"
+                        " genuinely answered, or an empty array."
+                    ),
+                },
                 "superseded": {
                     "type": "array",
                     "items": {
@@ -409,7 +426,7 @@ def extract_insights(
                     "description": "2-8 concept tags naming the exchange's topics, or an empty array.",
                 },
             },
-            "required": ["facts", "procedures", "superseded", "tags"],
+            "required": ["facts", "procedures", "superseded", "forget_gaps", "tags"],
         },
         account=account,
     )
@@ -417,6 +434,12 @@ def extract_insights(
     clean_facts = _clean_list(value.get("facts"), 3)
     clean_procedures = _clean_list(value.get("procedures"), 2)
     clean_tags = [str(tag).strip()[:40] for tag in value.get("tags") or [] if str(tag).strip()] if isinstance(value.get("tags"), list) else []
+    forget_raw = value.get("forget_gaps")
+    clean_forget = (
+        [str(token).strip()[:80] for token in forget_raw if str(token).strip()][:4]
+        if isinstance(forget_raw, list)
+        else []
+    )
     known = list(known) if known is not None else []
     known_ids = list(known_ids) if known_ids is not None else []
     events: list[dict[str, t.Any]] = []
@@ -448,6 +471,19 @@ def extract_insights(
                 )
                 continue
         events.append({"op": "save", "kind": "fact", "content": new})
+    # the backlog's eraser: a genuinely answered open question leaves it
+    # (the small model names the id -- the resolver tolerates a content
+    # match too, and dedups against the already-forgotten)
+    forgotten: set[str] = set()
+    for token in clean_forget:
+        token_l = token.lower()
+        for gid, gtext in gap_rows:
+            if gid in forgotten:
+                continue
+            if token_l == gid.lower() or token_l in gtext.lower() or gtext.lower() in token_l:
+                forgotten.add(gid)
+                events.append({"op": "forget", "kind": "gap", "id": gid, "content": gtext})
+                break
     return events, clean_tags[:8]
 
 

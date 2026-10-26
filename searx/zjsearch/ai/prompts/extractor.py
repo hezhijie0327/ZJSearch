@@ -22,12 +22,17 @@ superseded: 0-3 detected CHANGES -- when the exchange shows a
 stored-style fact no longer holds (a moved city, a switched tool),
 "old" names the previous fact and "new" states the current one; only
 genuine changes, not rephrases.
+forget_gaps: the ids of the OPEN QUESTIONS (from the backlog list,
+when one is provided) that this exchange genuinely ANSWERED -- a
+resolved question leaves the backlog; only real answers, not partial
+progress; or an empty array.
 tags: 2-8 CONCEPT tags naming the exchange's topics -- short noun
 phrases in the user's language (e.g. payment gateway fees, cross-border
 settlement), no host names, no product versions, no verbatim query
 echoes.
 Respond with ONLY: {"facts": ["...", ...], "procedures": ["...", ...],
-"superseded": [{"old": "...", "new": "..."}], "tags": ["...", ...]}
+"superseded": [{"old": "...", "new": "..."}], "forget_gaps": ["..."],
+"tags": ["...", ...]}
 (empty arrays when nothing qualifies)."""
 
 TAGS_NORMALIZE_SYSTEM = """\
