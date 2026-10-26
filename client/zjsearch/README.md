@@ -108,12 +108,15 @@ flowchart TB
 ## The AI stack
 
 `searx/zjsearch/ai/` is an eight-package stack behind the same
-additive-first policy — AI search threads (four depth tiers, report and
-deck output shapes), the AI Overview card on classic results, a run host
-that decouples runs from client connections (detach / reattach /
-steering), subagents, a browser-local knowledge base (PGlite — research
-history never leaves the browser), an MCP tool bridge and a built-in
-anti-detect render engine (Camoufox):
+additive-first policy — AI search threads (three depth tiers — speed /
+balanced / deep, the AI Overview being the fixed quick task — with
+report and deck output shapes), the AI Overview card on classic results,
+a run host that decouples runs from client connections (detach /
+reattach / steering), subagents, a browser-local knowledge base
+(PGlite — research history never leaves the browser — that doubles as
+the researcher's memory: facts, procedures, lessons, open gaps, site
+recipes), an MCP tool bridge and a built-in anti-detect render engine
+(Camoufox):
 
 ```mermaid
 flowchart TB
@@ -129,9 +132,15 @@ flowchart TB
 ```
 
 The wire protocol is NDJSON timeline operations (open/think/say/calls/
-call/sources/tasks/findings/answer/ask/decisions/phase/settle …) —
+call/close/sources/plan/findings/answer/ask/decisions/phase/browser/
+settle — a late post-settle set carries related/memory/tags/usage) —
 `useAiSearch` is a dumb renderer over those ops, and stored threads
-replay through the exact same fold.
+replay through the exact same fold. The **AI debug stage**
+(`/zjsearch/debug/thread`) replays a fixture catalog through that real
+fold — every tool row kind × status, the report/deck documents, the
+clarify gate, steering, browser ops and the pasted-brief long-text case
+— so a new surface ships with a fixture and is QA-able without a live
+run.
 
 > **Deep documentation:** [`AGENTS.md`](../../AGENTS.md) is the
 > operational manual (architecture, contracts, conventions, debugging
@@ -190,8 +199,10 @@ client/zjsearch/
     │                      # http, dialogFocus, clipboard, styles (shared class
     │                      # fragments), pg (browser-local PGlite store),
     │                      # deck (Marpit pipeline), kb/, exporters, print
-    ├── components/        # shared UI: Shell, SearchBox, SearchControls,
-    │                      # Dropdown, Collapse, Meter, Tape, PaperEmpty, …
+    ├── components/        # shared UI: Shell, SearchBox (+ the AutoGrowTextarea
+    │                      # ask panes), SearchControls, Dropdown, Collapse,
+    │                      # ClampReveal, CapChip, BootGhosts, Meter, Tape,
+    │                      # PaperEmpty, SettingParts, …
     ├── features/          # one dir per cohesive domain:
     │   ├── results/       #   layout detection, cards/grids, answers,
     │   │                  #   aiSearch/ (the AI run surfaces), aiOverview
@@ -247,6 +258,16 @@ Weights: `font-extrabold` brand only, `font-semibold` headings,
 - JS-toggled collapse goes through `components/Collapse.tsx`; modal
   dialogs mount through `useDialogFocus`; one-shot confirmations go
   through `flashToast()` — never render feedback in flow.
+- Long content clamps through `components/ClampReveal.tsx` (measured
+  preview + gradient scrim + expand pill); the AI run title uses it to
+  hold pasted research briefs at three lines — the boot ghost's
+  `line-clamp-3` and the static skeleton's `-webkit-line-clamp` mirror
+  the same height, so the three-way handover never shifts.
+- The ask panes (hero card + both follow-up composers) are
+  `components/AutoGrowTextarea.tsx`: one line tall at rest, grows with
+  a pasted brief to ~8 lines then scrolls internally; Enter submits,
+  Shift+Enter is a newline (the preempt-steer lane while a run
+  streams), and IME composition always owns Enter.
 - Shared Tailwind fragments live in `lib/styles.ts` (`CHIP`, `ICON_BTN`,
   `META_ROW`, …) and panel furniture in
   `components/SettingParts.tsx` — import, don't re-type.

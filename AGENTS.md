@@ -465,7 +465,9 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   enabled-by-default paid engines ride ordinary category fan-out and
   are NOT gated (only the bang is an explicit paid choice).  The
   debug stage ships the whole loop as the 计费引擎确认 scenario
-  (hold → ask → awaiting → clarifyTail paid_ok re-run).
+  (hold → ask → awaiting → clarifyTail paid_ok re-run), and the
+  长文提问 scenario replays a full pasted research brief through the
+  real fold — the QA surface for the clamped run title.
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
   silently): events are TIMELINE OPERATIONS — `{"e":"open","id","kind":
@@ -593,14 +595,17 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   the include; the streamed search resolves it from `ai_mode`) selects one
   geometry family per page surface, each mirroring its LOADED page:
   `classic` (the results shape above), `ai` (the AI takeover — run title
-  in real query text, process row, the THREE-segment phase strip, the
+  in real query text, CLAMPED to three lines exactly like the loaded run
+  section, process row, the THREE-segment phase strip, the
   OPEN research box holding only the planning note, and the sources rail
   as ONE column of four 188px cells at every width — AiSearchSources-
   Skeleton's exact footprint, starting level with the research column at
   lg like the real run section's flex row), `thread` (TopNav bar header +
   the same run ghost with a holding-bar title, in the thread's own
-  48/68/72rem measure), `knowledge` (TopNav + page heading + segment tabs
-  + search box + directory rows), `doc` (info / debug overview reading
+  48/68/72rem measure), `knowledge` (TopNav + page heading + the SIX kind
+  tabs — skeleton bars carry a 4.75rem min-width in a wrapping row so the
+  ghost breaks lines where the real tablist wraps — plus search box +
+  directory rows), `doc` (info / debug overview reading
   column), `prefs`, `stats` (engine table), `hero` (the centered greeting
   + ask card) and `note` (the 404's nav-less centered notice).  The AI run
   starts from the BOOT payload (the
@@ -829,6 +834,22 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   sits on the input UNCONDITIONALLY — the site's global accent ::selection
   would otherwise paint the fallback path (a suggestion that does not extend
   the typed prefix) with a tan block.
+- THE ASK PANES ARE `components/AutoGrowTextarea.tsx` (the hero card's
+  bare SearchBox variant + both follow-up composers): one line tall at
+  rest, auto-grow with the content, capped ~8 lines (`maxHeight` 192px)
+  then internal scroll — a pasted multi-KB research brief stays readable
+  instead of hiding in a one-line input.  Enter submits, Shift+Enter is
+  a NEWLINE while idle and the PREEMPT-steer lane while a run streams
+  (plain Enter = boundary steer), and `isComposing` always short-circuits
+  Enter.  The autocomplete ghost mirror only dresses the one-line state
+  (no newline, ≤120 chars) — a grown pane shows the suggestion text
+  directly.  The run TITLE answers the same long-prompt problem on the
+  display side: `AiSearchRunSection` clamps it through ClampReveal at
+  `RUN_TITLE_PREVIEW_PX` (113px = three lines of text-3xl/leading-tight)
+  behind the expand chip, mirrored by the boot ghost's `line-clamp-3`
+  and the skeleton's `.zjs-boot-ai-title` `-webkit-line-clamp: 3` so the
+  three-way swap never shifts; `pageTitle` (router.tsx) caps the tab
+  title at the first line / 80 chars.
 - Bangs: category bangs (`!movies`), engine bangs (`!imdb`, one per engine
   `shortcut`) and external DDG bangs (`!!w`, redirect off-site — the SPA
   fetch fails cross-origin and falls back to a full page load, which is the
