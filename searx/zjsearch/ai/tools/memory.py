@@ -44,8 +44,13 @@ shape the research.  Maintain it like a memory, not a log: save
 lasting facts and procedures, never one-off conversation details;
 UPDATE (action=update) when a stored fact CHANGED -- a moved city, a
 changed preference -- instead of saving a second version; FORGET
-(action=forget) when the user asks to drop something.  The answer
-must still answer the question; memory maintenance is a silent side
+(action=forget) when the user asks to drop something.  SITE RECIPES:
+when you just completed a non-trivial operation on a website in the
+browser session -- a sign-in flow, a captcha, a multi-step path to
+walled content -- save the recipe (kind=procedure, host=<the site's
+host>, content=<the minimal step list>); it rides your next browse to
+that site, so write what a future you could follow.  The answer must
+still answer the question; memory maintenance is a silent side
 action."""
 
 MAX_MEMORIES = 50
@@ -105,6 +110,16 @@ def memory_spec() -> dict[str, t.Any]:
                         " from a search, or a distinctive few of its words."
                     ),
                 },
+                "host": {
+                    "type": "string",
+                    "description": (
+                        "save: for SITE RECIPES only -- a learned operational"
+                        " flow for one website (a login path, a captcha dance,"
+                        " the route to walled content); pass that site's host"
+                        " (e.g. xiaohongshu.com).  Omit for facts about the"
+                        " user."
+                    ),
+                },
             },
             "required": ["action"],
         },
@@ -123,6 +138,7 @@ def parse_memories(raw: t.Any) -> list[dict[str, str]]:
                         "id": str(item.get("id") or "")[:40],
                         "content": str(item["content"])[:MAX_CONTENT],
                         "kind": "procedure" if item.get("kind") == "procedure" else "fact",
+                        "host": str(item.get("host") or "")[:120],
                     }
                 )
     return out
@@ -150,7 +166,8 @@ def search_memories(query: str, memories: list[dict[str, str]]) -> str:
 
 def _memory_line(memory: dict[str, str]) -> str:
     tag = " [procedure]" if memory.get("kind") == "procedure" else ""
-    return f"-{tag} {memory['content']}"
+    site = f" [site {memory['host']}]" if memory.get("host") else ""
+    return f"-{tag}{site} {memory['content']}"
 
 
 def _snapshot_text(memories: list[dict[str, str]]) -> str:
@@ -449,10 +466,14 @@ def run_call(
         content = str(args.get("content") or "").strip()[:MAX_CONTENT]
         if not content:
             return "error: save needs a non-empty content", None
-        kind = "procedure" if args.get("kind") == "procedure" else "fact"
+        host = str(args.get("host") or "").strip()[:120] or None
+        kind = "procedure" if (args.get("kind") == "procedure" or host) else "fact"
         local_known = list(known or [])
         local_ids = list(known_ids) if known_ids is not None else [None] * len(local_known)
-        return _save_funnel(content, kind, local_known, local_ids, cfg, account)
+        feed, event = _save_funnel(content, kind, local_known, local_ids, cfg, account)
+        if event and event.get("op") == "save" and host:
+            event["host"] = host
+        return feed, event
 
     if action in ("update", "forget"):
         target = _resolve_target(str(args.get("target") or ""), memories)

@@ -427,6 +427,9 @@ async function createSchema(db: Pg): Promise<void> {
     created     double precision NOT NULL,
     updated     double precision NOT NULL
   )`);
+  // v2: the SITE recipes are procedures bound to one website's host --
+  // the browse lane answers to them by host match, not query relevance
+  await db.query("ALTER TABLE memory ADD COLUMN IF NOT EXISTS host text");
   await db.query(
     "CREATE INDEX IF NOT EXISTS memory_bm25 ON memory USING bm25 (search_text) WITH (text_config = 'english')",
   );

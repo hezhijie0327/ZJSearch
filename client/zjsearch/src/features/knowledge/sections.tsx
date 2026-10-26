@@ -741,6 +741,7 @@ function MemoryCard({
           <span className={META_CHIP}>
             {t(memory.kind === "procedure" ? "knowledge_mem_procedure" : "knowledge_mem_fact")}
           </span>
+          {memory.host ? <span className={META_CHIP}>{memory.host}</span> : null}
           {memory.state === "provisional" ? <span className={META_CHIP}>{t("knowledge_mem_pending")}</span> : null}
           <span>{formatDate(new Date(memory.updated).toISOString())}</span>
         </p>

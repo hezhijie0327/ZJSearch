@@ -53,6 +53,12 @@ QR-CODE LOGINS especially: when the wall shows a QR code, screenshot
 THE QR ELEMENT (its ref) BEFORE wait_user -- the close-up lands in the
 human's timeline row big enough to scan from the couch; a full-page
 shot leaves it thumbnail-sized.
+SITE SKILLS: when you just cracked a site's way of doing things -- a
+sign-in flow, a captcha, the route to walled content, OR its on-site
+search pattern (the search URL shape, the filters and tags that
+actually work) -- save the recipe via the memory tool (action=save,
+kind=procedure, host=<the site>, content=<the minimal recipe>); a
+saved recipe is replayed to you the next time you land on that site.
 Child-frame refs are
 prefixed with their frame index (f1e5) -- embedded widgets live there; a
 screenshot of the frame's box plus coordinate clicks is how you work

@@ -29,6 +29,9 @@ export interface MemoryRow {
   content: string;
   origin: MemoryOrigin;
   state: MemoryState;
+  /** site-bound row (a SITE recipe: the login path, the on-site search
+      pattern) -- null for the global facts/preferences */
+  host: string | null;
   strength: number;
   lastSeen: number;
   pinned: boolean;
@@ -47,6 +50,7 @@ export function rowToMemory(row: Record<string, unknown>): MemoryRow {
     content: String(row.body ?? ""),
     origin: row.origin === "user" || row.origin === "teach" ? row.origin : "model",
     state: row.state === "provisional" ? "provisional" : "active",
+    host: row.host ? String(row.host) : null,
     strength: Number(row.strength) || 1,
     lastSeen: Number(row.last_seen) || 0,
     pinned: Number(row.pinned) === 1,
@@ -55,7 +59,7 @@ export function rowToMemory(row: Record<string, unknown>): MemoryRow {
   };
 }
 
-const MEMORY_COLUMNS = "id, kind, body, origin, state, strength, last_seen, pinned, created, updated";
+const MEMORY_COLUMNS = "id, kind, body, origin, state, host, strength, last_seen, pinned, created, updated";
 
 /** The search-results shape (the panel's cross-kind search rides the
     shared KnowledgeItem rendering): memory rows are title-less. */
@@ -90,7 +94,7 @@ function newMemoryId(): string {
 
 export function saveMemory(
   content: string,
-  init: { kind?: MemoryKind; origin?: MemoryOrigin; state?: MemoryState } = {},
+  init: { kind?: MemoryKind; origin?: MemoryOrigin; state?: MemoryState; host?: string | null } = {},
 ): void {
   const text = content.trim().slice(0, MEMORY_BODY_CAP);
   if (!text) {
@@ -99,8 +103,8 @@ export function saveMemory(
   void enqueue(async () => {
     const now = Date.now();
     await pgQuery(
-      `INSERT INTO memory (id, kind, body, origin, state, strength, last_seen, search_text, created, updated)
-       SELECT $1, $2, $3, $4, $5, 1, $6, $7, $6, $6
+      `INSERT INTO memory (id, kind, body, origin, state, host, strength, last_seen, search_text, created, updated)
+       SELECT $1, $2, $3, $4, $5, $6, 1, $7, $8, $7, $7
        WHERE NOT EXISTS (SELECT 1 FROM memory WHERE body = $3)`,
       [
         `mem:${newMemoryId()}`,
@@ -108,6 +112,7 @@ export function saveMemory(
         text,
         init.origin ?? "model",
         init.state ?? "active",
+        init.host ?? null,
         now,
         segmentKeywords(text).slice(0, 300),
       ],
@@ -236,6 +241,21 @@ function softDecayOrder(rows: MemoryRow[]): MemoryRow[] {
 }
 
 // ------------------------------------------------------------ hybrid read
+
+/** The SITE recipes (the host-bound layer): active rows with a host, in
+    the soft-decay order -- the run's pre-send carries them separately
+    from the global snapshot (the browse lane answers to them by host,
+    not query relevance). */
+export async function loadSiteRecipes(limit = 8): Promise<MemoryRow[]> {
+  await pg();
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT ${MEMORY_COLUMNS} FROM memory
+     WHERE host IS NOT NULL AND state = 'active'
+     ORDER BY pinned DESC, last_seen DESC, strength DESC LIMIT $1`,
+    [limit],
+  );
+  return (rows ?? []).map(rowToMemory);
+}
 
 /** The memory table's own two-leg hybrid (bm25 + pgvector, RRF) for the
     panel's cross-kind search -- the same over-fetch + fusion shape as

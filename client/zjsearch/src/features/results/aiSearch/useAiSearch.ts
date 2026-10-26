@@ -31,7 +31,14 @@ import {
   seedSeqCounter,
   seedSeqCounterFromStore,
 } from "@/lib/kb/events.ts";
-import { forgetMemory, loadMemories, reinforceMemory, saveMemory, updateMemory } from "@/lib/kb/memory.ts";
+import {
+  forgetMemory,
+  loadMemories,
+  loadSiteRecipes,
+  reinforceMemory,
+  saveMemory,
+  updateMemory,
+} from "@/lib/kb/memory.ts";
 import { archiveAttachments, archiveDocument, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { listEpisodes, recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { newThreadId } from "@/lib/kb/shared.ts";
@@ -113,6 +120,7 @@ function executeMemoryOp(event: MemoryWireEvent): void {
         kind: event.kind === "procedure" ? "procedure" : "fact",
         origin: "model",
         state: event.state === "provisional" ? "provisional" : "active",
+        host: event.host ?? null,
       });
       return;
     case "update":
@@ -347,7 +355,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       );
       entries = memories
         .filter((memory) => memory.state === "active")
-        .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content }));
+        .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content, host: memory.host ?? "" }));
     } else {
       const [pages, sources] = await withBudget(
         Promise.all([
@@ -722,7 +730,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       // degrades to a metadata-less POST (the server tolerates every
       // field missing) instead of holding the submit hostage; the boot
       // keeps running for the run's own recording.
-      const [corpus, docFiles, userMemories, episodes] = await withBudget(
+      const [corpus, docFiles, userMemories, episodes, siteRecipes] = await withBudget(
         Promise.all([
           recallCorpus(q, 6, { fullBody: false }).catch(() => []),
           recallPages(q, 4)
@@ -730,12 +738,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
             .then((pages) => pages.filter((page) => !page.url)),
           loadMemories(q).catch(() => []),
           listEpisodes(q).catch(() => []),
+          loadSiteRecipes().catch(() => []),
         ]),
         [
           [] as Awaited<ReturnType<typeof recallCorpus>>,
           [] as Awaited<ReturnType<typeof recallPages>>,
           [] as Awaited<ReturnType<typeof loadMemories>>,
           [] as Awaited<ReturnType<typeof listEpisodes>>,
+          [] as Awaited<ReturnType<typeof loadSiteRecipes>>,
         ],
       );
       if (signal.aborted) {
@@ -788,9 +798,14 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         ].slice(0, 8),
         // only ACTIVE memories ride the send: a mined procedure waits for
         // the panel's confirm (the provisional rows never reach a prompt)
+        // the SITE recipes are the host-bound layer -- their own field,
+        // because the browse lane answers to them by host, not relevance
         user_memories: userMemories
-          .filter((memory) => memory.state === "active")
+          .filter((memory) => memory.state === "active" && !memory.host)
           .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content })),
+        site_recipes: siteRecipes
+          .filter((recipe) => recipe.state === "active" && recipe.host)
+          .map((recipe) => ({ id: recipe.id, host: recipe.host ?? "", content: recipe.content })),
         // the EPISODIC lane: recent cross-thread research (title + answer
         // head) -- a returning question continues instead of restarts
         history_episodes: episodes.map((episode) => ({

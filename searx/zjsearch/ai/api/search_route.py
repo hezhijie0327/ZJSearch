@@ -332,6 +332,24 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # slot (handlers); both actions and the save near-dup gate read it
     user_memories = None if live_recall else parse_memories(payload.get("user_memories"))
     recall_entries = parse_recall_history(payload.get("recall_history"))
+    # the SITE RECIPES (the memory's host-bound layer -- the browser's
+    # login paths and site flows): they ride EVERY send (they are small,
+    # capped) because the browse lane answers to them by host, not by
+    # query relevance
+    raw_recipes = payload.get("site_recipes")
+    site_recipes = (
+        [
+            {
+                "id": str(entry.get("id") or "")[:40],
+                "host": str(entry.get("host") or "")[:120],
+                "content": str(entry.get("content") or "")[:300],
+            }
+            for entry in raw_recipes[:8]
+            if isinstance(entry, dict) and str(entry.get("host") or "").strip() and str(entry.get("content") or "").strip()
+        ]
+        if isinstance(raw_recipes, list)
+        else []
+    )
     # the EPISODIC lane: recent cross-thread research (client-assembled
     # from its thread directory -- recency window + rerank there), so a
     # returning question continues instead of restarts
@@ -721,6 +739,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         search_language=raw_search_language,
         max_rounds=max_rounds,
         user_memories=user_memories,
+        site_recipes=site_recipes,
         recall_entries=recall_entries,
         live_recall=live_recall,
         lang=lang,

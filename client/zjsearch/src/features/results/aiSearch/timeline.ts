@@ -587,6 +587,8 @@ export interface MemoryWireEvent {
   content?: string;
   old?: string;
   state?: "active" | "provisional";
+  /** SITE recipe binding (save): the host the recipe answers to */
+  host?: string;
 }
 
 /** The fold's side-effect ports: the LIVE run archives reader pages and

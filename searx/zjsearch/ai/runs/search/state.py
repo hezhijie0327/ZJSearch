@@ -330,6 +330,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         user_plugins: list[str],
         sources_base: int = 0,
         user_memories: list[dict[str, str]] | None = None,
+        site_recipes: list[dict[str, str]] | None = None,
         recall_entries: list[dict[str, str]] | None = None,
         live_recall: bool = False,
         search_language: str = "",
@@ -359,6 +360,11 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # (the recall wire event, kind=memory) instead of riding the
         # pre-send -- this flag makes that pull happen exactly once
         self.memories_pulled = False
+        # the SITE RECIPES (the memory's host-bound layer, pre-sent): the
+        # browse lane surfaces a matched recipe on the first action that
+        # lands on its site, and its USE reinforces the row client-side
+        self.site_recipes = site_recipes or []
+        self.recipes_used: set[str] = set()
         # the paid-engine approval (the user's ask_user yes, relayed by
         # the model's paid_ok: true): sticky for the run -- a !bang on an
         # API-billed engine is held until it flips

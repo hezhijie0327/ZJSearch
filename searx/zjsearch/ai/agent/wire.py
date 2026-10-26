@@ -69,10 +69,12 @@ bug and :py:func:`encode` refuses it):
 ``memory``              a memory mutation the CLIENT executes against
                         its store: ``{op: save|update|reinforce|forget,
                         kind: fact|procedure, id?, content, old?,
-                        state?}`` -- saves land active (mined
+                        state?, host?}`` -- saves land active (mined
                         procedures ``provisional``), a reinforce grows
                         the stored row's weight, an update replaces a
-                        changed fact's wording, a forget removes it.
+                        changed fact's wording, a forget removes it; a
+                        save carrying ``host`` is a SITE recipe (the
+                        browse lane replays it on that site).
 ``ctx``                 STORAGE-ONLY resume checkpoint: ``{round,
                         messages}`` -- the researcher's EXACT message
                         list at the round boundary, replayed verbatim

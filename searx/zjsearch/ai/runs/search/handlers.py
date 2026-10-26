@@ -277,6 +277,22 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             extra["chars"] = len(body)
         return feed, extra, gathered
 
+    def _site_recipe(self, url: str) -> dict[str, t.Any] | None:
+        """The saved SITE RECIPE this url answers to (host match with the
+        www prefix folded; a suffix relation covers subdomains) -- the
+        procedural memory's site-bound layer, pre-sent by the client."""
+        try:
+            host = urlsplit(url).netloc.lower().removeprefix("www.")
+        except (ValueError, AttributeError):
+            return None
+        if not host:
+            return None
+        for row in self.site_recipes:
+            row_host = str(row.get("host") or "").lower().removeprefix("www.")
+            if row_host and (row_host == host or host.endswith("." + row_host) or row_host.endswith("." + host)):
+                return row
+        return None
+
     def _browser_call(self, call, wire_id, feeds):
         """The interactive browser session: ONE action per call, inline
         (the session is a serialized lane -- no parallel pool).  The
@@ -320,6 +336,21 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             if self.browser_session_id != "lead":
                 frame = {**frame, "agent": self.browser_session_id}
             yield ("browser", frame)
+        recipe = self._site_recipe(str((result.page or {}).get("url") or ""))
+        recipe_note = ""
+        if recipe:
+            recipe_id = str(recipe.get("id") or "")
+            recipe_content = str(recipe.get("content") or "")
+            if recipe_id and recipe_id not in self.recipes_used:
+                # one shot per row per run: the recipe rides the feed (the
+                # conversation keeps it from here) and its USE reinforces
+                # the stored row client-side
+                self.recipes_used.add(recipe_id)
+                yield ("memory", {"op": "reinforce", "kind": "procedure", "id": recipe_id, "content": recipe_content})
+                recipe_note = (
+                    f"SAVED SITE RECIPE for {recipe.get('host')}: {recipe_content}"
+                    " -- it worked before; follow it when it fits.\n\n"
+                )
         if result.image:
             if self.model_shots >= _MAX_MODEL_SHOTS:
                 yield settle(
@@ -370,7 +401,7 @@ action from what is visible."""
             yield settle("error", feed)
             return False
         status = "error" if feed.startswith("error") else "ok"
-        yield settle(status, feed, extra)
+        yield settle(status, recipe_note + feed if recipe_note and status == "ok" else feed, extra)
         return gathered
 
     def execute(  # pylint: disable=too-many-branches, too-many-statements, too-many-locals
