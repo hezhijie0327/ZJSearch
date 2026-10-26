@@ -247,27 +247,92 @@ def _judge_relation(cfg: dict[str, t.Any], existing: str, candidate: str, accoun
         return "distinct"
 
 
+def _save_funnel(
+    content: str,
+    kind: str,
+    known: list[str],
+    known_ids: list[str | None],
+    cfg: dict[str, t.Any] | None,
+    account: t.Any = None,
+    state: str | None = None,
+) -> tuple[str, dict[str, t.Any] | None]:
+    """One candidate memory -> ``(feed, v2 event | None)``: the near-dup
+    gate plus the gray-band judgment, shared by the tool's save and the
+    extractor.  ``known``/``known_ids`` MUTATE to track the resolved
+    outcome (a save joins the set with a None id -- the client mints
+    ids; an update replaces the wording in place), so batch members
+    dedup against each other through the same lists.  ``state`` rides
+    the save event (``provisional`` for mined procedures)."""
+    hit = _nearest(content, known, account=account)
+    if hit is not None:
+        index, cosine = hit
+        existing = known[index]
+        target_id = known_ids[index] if index < len(known_ids) else None
+        if cosine >= _dup_gate()[2]:
+            if target_id:
+                return (
+                    f'noted again: "{content}" reads as the stored memory "{existing}" -- its'
+                    " weight grows instead.",
+                    {"op": "reinforce", "kind": kind, "id": target_id, "content": existing},
+                )
+            return (f'duplicate: "{content}" was already noted -- do NOT re-save it.', None)
+        verdict = _judge_relation(cfg or {}, existing, content, account=account) if cfg else "distinct"
+        if verdict == "same":
+            if target_id:
+                return (
+                    f'noted again: "{content}" rephrases the stored memory "{existing}" -- its'
+                    " weight grows instead.",
+                    {"op": "reinforce", "kind": kind, "id": target_id, "content": existing},
+                )
+            return (f'duplicate: "{content}" was already noted -- do NOT re-save it.', None)
+        if verdict == "update" and target_id:
+            known[index] = content
+            return (
+                f'updated: "{existing}" is superseded by "{content}" (the fact changed -- one'
+                " version stays).",
+                {"op": "update", "kind": kind, "id": target_id, "content": content, "old": existing},
+            )
+        # distinct -- or an update whose target has no id (this run's own
+        # save): both fall through to a plain save
+    known.append(content)
+    known_ids.append(None)
+    event: dict[str, t.Any] = {"op": "save", "kind": kind, "content": content}
+    if state:
+        event["state"] = state
+    return (f'saved: "{content}" (it persists across sessions)', event)
+
+
 def extract_insights(
     cfg: dict[str, t.Any],
     question: str,
     answer: str,
     known: list[str] | None = None,
+    known_ids: list[str | None] | None = None,
     account: t.Any = None,
-) -> tuple[list[str], list[str]]:
-    """The post-run extractor (LobeHub's downstream-extractor pattern):
-    one small JSON completion decides whether the exchange revealed
-    durable facts worth remembering AND which concept tags name its
-    topics (the tag graph's semantic layer) -- INDEPENDENT of the
-    researcher's tool discipline (small models skip the save call; this
-    cannot be skipped).  ``known`` (the stored facts + this run's accepted
-    saves) is the near-dup gate's comparison set: a fact that rephrases
-    what is already stored never reaches the client.  Degrades to ([], [])
-    on any failure."""
+    clarifications: str = "",
+) -> tuple[list[dict[str, t.Any]], list[str]]:
+    """The post-run extractor -- the consolidation organ (LobeHub's
+    downstream-extractor pattern): one small JSON completion decides
+    what the exchange revealed, INDEPENDENT of the researcher's tool
+    discipline (small models skip the save call; this cannot be
+    skipped).  Reads the question, the CONFIRMED DIRECTION (the clarify
+    answers -- the user's preferences surface there, never in the
+    report) and the answer's head.
+
+    Returns ``(events, tags)``: every extracted memory as a v2 wire
+    event the client executes against its store -- facts save/reinforce/
+    update through the same funnel the tool rides, procedures land
+    ``provisional`` (the panel's confirm gate), a detected supersession
+    updates the old row.  Degrades to ``([], [])`` on any failure."""
     if not question or not answer.strip():
         return [], []
     from searx.zjsearch.ai.llm import jsongate  # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.prompts import extractor, spine  # pylint: disable=import-outside-toplevel
 
+    user_text = spine.block("question", question[:500])
+    if clarifications.strip():
+        user_text += "\n" + spine.block("clarified", clarifications.strip()[:500])
+    user_text += "\n" + spine.block("answer", answer[:3000])
     value, _usage = jsongate.json_completion(
         cfg,
         [
@@ -275,7 +340,7 @@ def extract_insights(
                 "role": "system",
                 "content": extractor.USER_MEMORY_EXTRACT_SYSTEM,
             },
-            {"role": "user", "content": spine.block("question", question[:500]) + "\n" + spine.block("answer", answer[:3000])},
+            {"role": "user", "content": user_text},
         ],
         "user_memory_extract",
         {
@@ -284,7 +349,29 @@ def extract_insights(
                 "facts": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "0-3 durable facts, each self-contained, or an empty array.",
+                    "description": "0-3 durable facts about the user, each self-contained, or an empty array.",
+                },
+                "procedures": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "0-2 learned PROCEDURES -- standing preferences about"
+                        " how research or answers should be done for this"
+                        " user, or an empty array."
+                    ),
+                },
+                "superseded": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"old": {"type": "string"}, "new": {"type": "string"}},
+                        "required": ["old", "new"],
+                    },
+                    "description": (
+                        "0-3 detected CHANGES: the exchange shows a stored-style"
+                        " fact no longer holds -- old names the previous fact,"
+                        " new states the current one, or an empty array."
+                    ),
                 },
                 "tags": {
                     "type": "array",
@@ -292,49 +379,53 @@ def extract_insights(
                     "description": "2-8 concept tags naming the exchange's topics, or an empty array.",
                 },
             },
-            "required": ["facts", "tags"],
+            "required": ["facts", "procedures", "superseded", "tags"],
         },
         account=account,
     )
     value = value or {}
-    facts = value.get("facts")
-    tags = value.get("tags")
-    clean_facts = (
-        [str(fact).strip()[:MAX_CONTENT] for fact in facts if str(fact).strip()][:3] if isinstance(facts, list) else []
+    clean_facts = _clean_list(value.get("facts"), 3)
+    clean_procedures = _clean_list(value.get("procedures"), 2)
+    clean_tags = [str(tag).strip()[:40] for tag in value.get("tags") or [] if str(tag).strip()] if isinstance(value.get("tags"), list) else []
+    known = list(known) if known is not None else []
+    known_ids = list(known_ids) if known_ids is not None else []
+    events: list[dict[str, t.Any]] = []
+    for fact in clean_facts:
+        _feed, event = _save_funnel(fact, "fact", known, known_ids, cfg, account)
+        if event:
+            events.append(event)
+    for procedure in clean_procedures:
+        _feed, event = _save_funnel(procedure, "procedure", known, known_ids, cfg, account, state="provisional")
+        if event:
+            events.append(event)
+    superseded = value.get("superseded")
+    for pair in (superseded if isinstance(superseded, list) else [])[:3]:
+        if not isinstance(pair, dict):
+            continue
+        new = str(pair.get("new") or "").strip()[:MAX_CONTENT]
+        old = str(pair.get("old") or "").strip()[:MAX_CONTENT]
+        if not new:
+            continue
+        hit = _nearest(old, known, account=account) if old and known else None
+        if hit is not None:
+            index, cosine = hit
+            existing = known[index]
+            target_id = known_ids[index] if index < len(known_ids) else None
+            if cosine >= _dup_gate()[1] and target_id:
+                known[index] = new
+                events.append(
+                    {"op": "update", "kind": "fact", "id": target_id, "content": new, "old": existing}
+                )
+                continue
+        events.append({"op": "save", "kind": "fact", "content": new})
+    return events, clean_tags[:8]
+
+
+def _clean_list(raw: t.Any, cap: int) -> list[str]:
+    """A schema string-array trimmed to self-contained, capped strings."""
+    return (
+        [str(item).strip()[:MAX_CONTENT] for item in raw if str(item).strip()][:cap] if isinstance(raw, list) else []
     )
-    clean_tags = [str(tag).strip()[:40] for tag in tags if str(tag).strip()] if isinstance(tags, list) else []
-    if clean_facts and known is not None:
-        clean_facts = _filter_near_dups(clean_facts, list(known), account=account)
-    return clean_facts, clean_tags[:8]
-
-
-def _filter_near_dups(facts: list[str], known: list[str], account: t.Any = None) -> list[str]:
-    """The extractor's facts minus the near-duplicates -- against the
-    stored facts AND each other (the extractor's small model loves
-    rephrasing one fact three ways).  ONE batch embed; anything it cannot
-    evaluate passes (fail-open)."""
-    active, threshold, _same = _dup_gate()
-    if not active or (len(facts) < 2 and not known):
-        return facts
-    try:
-        batch = embed_service.run_batch(list(facts) + list(known), timeout=8.0, account=account)
-        if not batch or len(batch[0]) != len(facts) + len(known):
-            return facts
-        vectors = batch[0]
-        known_vectors = vectors[len(facts) :]
-        kept: list[str] = []
-        kept_vectors: list[list[float]] = []
-        for index, fact in enumerate(facts):
-            vector = vectors[index]
-            clash = any(embed_service.cosine(vector, other) >= threshold for other in known_vectors)
-            clash = clash or any(embed_service.cosine(vector, other) >= threshold for other in kept_vectors)
-            if not clash:
-                kept.append(fact)
-                kept_vectors.append(vector)
-        return kept
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.debug("zjsearch_memory: dup filter failed: %s", exc)
-        return facts
 
 
 def run_call(
@@ -359,42 +450,9 @@ def run_call(
         if not content:
             return "error: save needs a non-empty content", None
         kind = "procedure" if args.get("kind") == "procedure" else "fact"
-        hit = _nearest(content, known or [], account=account)
-        if hit is not None:
-            index, cosine = hit
-            existing = known[index]
-            same_floor = _dup_gate()[2]
-            target_id = (known_ids or [None] * len(known))[index] if index < len(known_ids or []) else None
-            if cosine >= same_floor:
-                if target_id:
-                    return (
-                        f'noted again: "{content}" reads as the stored memory "{existing}" -- its'
-                        " weight grows instead.",
-                        {"op": "reinforce", "kind": kind, "id": target_id, "content": existing},
-                    )
-                return (
-                    f'duplicate: "{content}" was already saved this run -- do NOT re-save it.',
-                    None,
-                )
-            verdict = _judge_relation(cfg or {}, existing, content, account=account) if cfg else "distinct"
-            if verdict == "same":
-                if target_id:
-                    return (
-                        f'noted again: "{content}" rephrases the stored memory "{existing}" -- its'
-                        " weight grows instead.",
-                        {"op": "reinforce", "kind": kind, "id": target_id, "content": existing},
-                    )
-                return (f'duplicate: "{content}" was already saved this run -- do NOT re-save it.', None)
-            if verdict == "update" and target_id:
-                return (
-                    f'updated: "{existing}" is superseded by "{content}" (the fact changed -- one'
-                    " version stays).",
-                    {"op": "update", "kind": kind, "id": target_id, "content": content, "old": existing},
-                )
-        return (
-            f'saved: "{content}" (it persists across sessions)',
-            {"op": "save", "kind": kind, "content": content},
-        )
+        local_known = list(known or [])
+        local_ids = list(known_ids) if known_ids is not None else [None] * len(local_known)
+        return _save_funnel(content, kind, local_known, local_ids, cfg, account)
 
     if action in ("update", "forget"):
         target = _resolve_target(str(args.get("target") or ""), memories)

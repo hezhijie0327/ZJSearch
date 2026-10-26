@@ -66,7 +66,13 @@ bug and :py:func:`encode` refuses it):
                         client renders them in the rail's browser card
                         and strips ``img`` before persisting.
 ``related``             follow-up question suggestions.
-``memory``              a durable fact the model saved about the user.
+``memory``              a memory mutation the CLIENT executes against
+                        its store: ``{op: save|update|reinforce|forget,
+                        kind: fact|procedure, id?, content, old?,
+                        state?}`` -- saves land active (mined
+                        procedures ``provisional``), a reinforce grows
+                        the stored row's weight, an update replaces a
+                        changed fact's wording, a forget removes it.
 ``ctx``                 STORAGE-ONLY resume checkpoint: ``{round,
                         messages}`` -- the researcher's EXACT message
                         list at the round boundary, replayed verbatim

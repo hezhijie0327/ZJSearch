@@ -5,16 +5,26 @@ knowledge base and concept-tag normalization.  Text lives here; the
 executors (:py:mod:`tools.memory`, :py:mod:`api` (the route modules)) stay logic."""
 
 USER_MEMORY_EXTRACT_SYSTEM = """\
-Read this question/answer exchange and return two things.
-facts: DURABLE facts about the user -- home city, occupation, standing
-preferences, ongoing projects; only facts that stay true and useful
-across future sessions; each self-contained, in the user's language; no
-one-off details (today's weather is NOT a fact); 0-3 of them.
+Read this research exchange -- the question, the user's confirmed
+direction (when present), the answer -- and return what it revealed.
+facts: 0-3 DURABLE facts about the user -- home city, occupation,
+standing preferences, ongoing projects; only facts that stay true and
+useful across future sessions; each self-contained, in the user's
+language; no one-off details (today's weather is NOT a fact).
+procedures: 0-2 learned PROCEDURES -- standing preferences about HOW
+research or answers should be done for this user ("always wants
+comparison tables", "prefers official primary sources"); only
+directive-shaped, reusable preferences, each self-contained.
+superseded: 0-3 detected CHANGES -- when the exchange shows a
+stored-style fact no longer holds (a moved city, a switched tool),
+"old" names the previous fact and "new" states the current one; only
+genuine changes, not rephrases.
 tags: 2-8 CONCEPT tags naming the exchange's topics -- short noun
 phrases in the user's language (e.g. payment gateway fees, cross-border
 settlement), no host names, no product versions, no verbatim query
 echoes.
-Respond with ONLY: {"facts": ["...", ...], "tags": ["...", ...]}
+Respond with ONLY: {"facts": ["...", ...], "procedures": ["...", ...],
+"superseded": [{"old": "...", "new": "..."}], "tags": ["...", ...]}
 (empty arrays when nothing qualifies)."""
 
 TAGS_NORMALIZE_SYSTEM = """\

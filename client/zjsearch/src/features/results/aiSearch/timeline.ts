@@ -577,13 +577,25 @@ export function settle(core: Core, failed: { error: string } | null, stopped: bo
   };
 }
 
+/** A v2 wire ``memory`` event's payload (op + target fields -- the fold
+    executes it against the store; legacy events without ``op`` read as
+    saves). */
+export interface MemoryWireEvent {
+  op?: "save" | "update" | "reinforce" | "forget";
+  kind?: "fact" | "procedure";
+  id?: string;
+  content?: string;
+  old?: string;
+  state?: "active" | "provisional";
+}
+
 /** The fold's side-effect ports: the LIVE run archives reader pages and
-    persists memories as their events arrive and stamps the wall clock;
-    a REPLAY no-ops the persistence (it happened live) and stamps the
-    event's own arrival time (the duration displays stay truthful). */
+    executes memory mutations as their events arrive and stamps the wall
+    clock; a REPLAY no-ops the persistence (it happened live) and stamps
+    the event's own arrival time (the duration displays stay truthful). */
 export interface FoldFx {
   archive(url: string, title: string, text: string): void;
-  saveMemory(content: string): void;
+  memoryOp(event: MemoryWireEvent): void;
   now(): number;
 }
 
@@ -1346,10 +1358,11 @@ export function applyEvent(
       return core;
     }
     case "memory":
-      // the model saved a durable fact about the user: persist into the
-      // local store (no timeline rendering -- a silent background save)
+      // a memory mutation (op=save/update/reinforce/forget -- legacy
+      // events without op read as saves): the client's store executes
+      // it (no timeline rendering -- a silent background maintenance)
       if (typeof event.content === "string" && event.content) {
-        fx.saveMemory(event.content);
+        fx.memoryOp(event as MemoryWireEvent);
       }
       return core;
     case "tags": {

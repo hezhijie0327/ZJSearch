@@ -566,6 +566,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             lang,
             account=account,
             preamble=[attachment_event] if attachment_event else None,
+            clarifications=clarifications,
         )
         response = _respond(stream)
         if response.status_code == 502 and image_parts and not degraded:
@@ -1044,8 +1045,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         lang,
         account=state.account,
         judgments=state.judgments,
-        known_memories_fn=lambda: [str(m.get("content") or "") for m in user_memories] + state.saved_memories,
+        known_memories_fn=lambda: [
+            (m.get("id") or None, str(m.get("content") or "")) for m in user_memories
+        ]
+        + [(None, c) for c in state.saved_memories],
         outline_title=str(outline["title"]) if outline else None,
+        clarifications=clarifications,
     )
     # the pre-flight verdicts + the attachment receipt precede the loop's
     # first event (the Decisions card opens with them) -- a FLAT event list:
@@ -1110,8 +1115,9 @@ class _SettleTail:
         lang: str,
         account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
-        known_memories_fn: t.Callable[[], list[str]] | None = None,
+        known_memories_fn: t.Callable[[], list[tuple[str | None, str]]] | None = None,
         outline_title: str | None = None,
+        clarifications: str = "",
     ):
         self.cfg = cfg
         self.question = question
@@ -1128,9 +1134,14 @@ class _SettleTail:
         # settle carries it verbatim so the knowledge base's run meta is
         # the one explainable record of every decision
         self.judgments = judgments if judgments is not None else []
-        # the near-dup gate's comparison set for the memory extraction,
-        # resolved LAZILY (the run's own saves land while the loop streams)
+        # the memory extraction's comparison set (id+content pairs -- the
+        # ids let a supersession name its target row), resolved LAZILY
+        # (the run's own saves land while the loop streams)
         self.known_memories_fn = known_memories_fn
+        # the confirmed direction (the clarify answers): the extractor's
+        # second input -- the user's preferences surface THERE, never in
+        # the report
+        self.clarifications = clarifications
 
     def merged_settle(self, event: dict[str, t.Any]) -> dict[str, t.Any]:
         """The settle with the model-spend buckets folded into its usage:
@@ -1238,10 +1249,20 @@ class _SettleTail:
             if found:
                 yield {"e": "related", "items": found}
         try:
-            known = self.known_memories_fn() if self.known_memories_fn else None
-            facts, tags = extract_insights(self.cfg, self.question, answer, known=known, account=self.account)
-            for fact in facts:
-                yield {"e": "memory", "content": fact}
+            known_rows = self.known_memories_fn() if self.known_memories_fn else []
+            events, tags = extract_insights(
+                self.cfg,
+                self.question,
+                answer,
+                known=[content for _rid, content in known_rows],
+                known_ids=[rid for rid, _content in known_rows],
+                clarifications=self.clarifications,
+                account=self.account,
+            )
+            # the v2 memory events (op + kind/id/content/state) fly as-is:
+            # the client's fold executes each op against its store
+            for event in events:
+                yield {"e": "memory", **event}
             if tags:
                 # the tag graph's semantic layer: the client parks these on
                 # the run, its settle writes them into the projections
@@ -1272,7 +1293,8 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
         account: t.Any = None,
         judgments: list[dict[str, t.Any]] | None = None,
         preamble: list[dict[str, t.Any]] | None = None,
-        known_memories_fn: t.Callable[[], list[str]] | None = None,
+        known_memories_fn: t.Callable[[], list[tuple[str | None, str]]] | None = None,
+        clarifications: str = "",
     ):
         self.events = events
         self.tail = _SettleTail(
@@ -1282,6 +1304,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
             account=account,
             judgments=judgments,
             known_memories_fn=known_memories_fn,
+            clarifications=clarifications,
         )
         # events that precede the loop's own stream (the depth probe runs
         # BEFORE the executor exists) -- flushed first when iterating

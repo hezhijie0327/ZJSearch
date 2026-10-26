@@ -26,7 +26,7 @@ import { useT } from "@/lib/i18n.ts";
  * a fixture here; if the simulator can't show it, the UI can't render it.
  */
 
-const NO_FX = { archive: () => {}, saveMemory: () => {}, now: () => Date.now() };
+const NO_FX = { archive: () => {}, memoryOp: () => {}, now: () => Date.now() };
 const TICK_MS = 220;
 
 function fold(scenario: DebugScenario, events: Array<Record<string, unknown>>, upto: number): Core {

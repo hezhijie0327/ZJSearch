@@ -14,6 +14,7 @@ import {
   type FoldFx,
   interruptPending,
   LATE_KINDS,
+  type MemoryWireEvent,
   settle,
 } from "@/features/results/aiSearch/timeline.ts";
 import { fetchEventStream, fetchJson, HttpError } from "@/lib/http.ts";
@@ -30,7 +31,7 @@ import {
   seedSeqCounter,
   seedSeqCounterFromStore,
 } from "@/lib/kb/events.ts";
-import { loadMemories, saveMemory } from "@/lib/kb/memory.ts";
+import { forgetMemory, loadMemories, reinforceMemory, saveMemory, updateMemory } from "@/lib/kb/memory.ts";
 import { archiveAttachments, archiveDocument, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { newThreadId } from "@/lib/kb/shared.ts";
@@ -102,14 +103,44 @@ const IDLE: Core = {
   threadId: "",
 };
 
+/** The live fold's memory port: the v2 op dispatched onto the store's
+    CRUD (a legacy event without op reads as a save). */
+function executeMemoryOp(event: MemoryWireEvent): void {
+  const content = String(event.content ?? "");
+  switch (event.op ?? "save") {
+    case "save":
+      saveMemory(content, {
+        kind: event.kind === "procedure" ? "procedure" : "fact",
+        origin: "model",
+        state: event.state === "provisional" ? "provisional" : "active",
+      });
+      return;
+    case "update":
+      if (event.id) {
+        updateMemory(event.id, content);
+      }
+      return;
+    case "reinforce":
+      if (event.id) {
+        reinforceMemory(event.id);
+      }
+      return;
+    case "forget":
+      if (event.id) {
+        forgetMemory(event.id);
+      }
+      return;
+  }
+}
+
 /** The live fold's side effects: reader pages archive as their call
-    settles, memories persist as their events arrive. */
-const LIVE_FX: FoldFx = { archive: archiveDocument, saveMemory, now: () => Date.now() };
+    settles, memory mutations execute as their events arrive. */
+const LIVE_FX: FoldFx = { archive: archiveDocument, memoryOp: executeMemoryOp, now: () => Date.now() };
 /** The replay fold: persistence already happened live, so both ports are
     no-ops (a replay must never double-archive or double-save). */
 const REPLAY_FX: FoldFx = {
   archive: () => undefined,
-  saveMemory: () => undefined,
+  memoryOp: () => undefined,
   now: () => Date.now(),
 };
 
