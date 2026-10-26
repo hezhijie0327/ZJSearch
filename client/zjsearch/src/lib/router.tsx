@@ -42,7 +42,11 @@ function pageTitle(data: AnyPageData): string {
   const t = translateFor(data.globals.locale);
   const name = data.globals.instance_name;
   if (data.globals.page === "results" && "q" in data && data.q) {
-    return `${data.q} - ${name}`;
+    // a pasted research brief runs pages long — the tab/bookmark/print
+    // title takes the first line, capped
+    const firstLine = (data.q.split("\n", 1)[0] || data.q).trim();
+    const q = firstLine.length > 80 ? `${firstLine.slice(0, 80).trimEnd()}…` : firstLine;
+    return `${q} - ${name}`;
   }
   if (data.globals.page === "index") {
     return name;

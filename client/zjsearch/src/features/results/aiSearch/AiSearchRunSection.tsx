@@ -39,6 +39,7 @@ import {
 import { memo, type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
+import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Tape } from "@/components/Tape.tsx";
 import { MarkdownAnswer, ThinkScroll } from "@/features/results/AIOverview.tsx";
@@ -99,6 +100,13 @@ import {
   PAPER_STRIP,
 } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
+
+/** Collapsed run-title preview: three lines of text-3xl/leading-tight
+    (30px × 1.25 ≈ 37.5px).  Matches the boot ghost's `line-clamp-3` and the
+    static skeleton's `.zjs-boot-ai-title` clamp so the handover never
+    shifts; deep-research briefs pasted as prompts read as a preview +
+    expand chip instead of wall-to-wall 30px text. */
+const RUN_TITLE_PREVIEW_PX = 113;
 
 /**
  * One threaded Q&A section of the AI Search page: the question as a
@@ -1723,11 +1731,21 @@ function AiSearchRunSectionImpl({
             tier (ResultsPage h1 + the boot ghost mirror it at 3xl) -- with
             the run's RESEARCH MODE beside it (the composer's depth choice:
             speed/balanced/deep; a report/deck birth reads as its deep
-            tier) so the current mode is always visible on the run */}
+            tier) so the current mode is always visible on the run.
+            ClampReveal caps it at three lines: a pasted multi-KB brief
+            must not wall the whole page behind its own title. */}
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <h2 className="break-words font-medium leading-tight text-ink text-3xl" dir="auto">
-            {run.q}
-          </h2>
+          <div className="min-w-0 flex-1">
+            <ClampReveal
+              buttonClassName="-ms-1 mt-1 inline-flex min-h-6 items-center gap-1 px-2 text-xs text-ink-3 transition-colors hover:text-ink"
+              previewPx={RUN_TITLE_PREVIEW_PX}
+              scrimClassName="from-bg"
+            >
+              <h2 className="break-words font-medium leading-tight text-ink text-3xl" dir="auto">
+                {run.q}
+              </h2>
+            </ClampReveal>
+          </div>
           {run.mode ? (
             <span
               className="flex shrink-0 items-center gap-1 rounded-full border border-line px-2 py-0.5 text-xs text-ink-3"

@@ -27,6 +27,7 @@ export function ClampReveal({
   className = "",
   children,
   previewPx,
+  scrimClassName = "from-surface",
 }: {
   /** false while the content is still growing (streaming): never clamp */
   active?: boolean;
@@ -37,6 +38,10 @@ export function ClampReveal({
   children: ReactNode;
   /** collapsed preview height in px */
   previewPx: number;
+  /** the gradient's `from-*` color class — must match the ground BEHIND the
+      capped content (surface cards keep the default; page-ground content
+      passes `from-bg`) */
+  scrimClassName?: string;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState(false);
@@ -108,7 +113,7 @@ export function ClampReveal({
         </div>
         {needsClamp ? (
           <div
-            className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface to-transparent transition-opacity duration-300 ${
+            className={`pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t ${scrimClassName} to-transparent transition-opacity duration-300 ${
               expanded ? "opacity-0" : "opacity-100"
             }`}
           />

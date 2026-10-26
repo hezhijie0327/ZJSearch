@@ -322,6 +322,14 @@
   .zjs-boot-ai-title {
     margin-top: 0.25rem;
     overflow-wrap: break-word;
+    /* three lines, then stop: mirrors the run section's collapsed
+        ClampReveal (RUN_TITLE_PREVIEW_PX) and the boot ghost's
+        line-clamp-3, so a pasted multi-KB brief boots at the same height
+        it hands over to */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
     font-size: 1.875rem;
     font-weight: 500;
     line-height: 1.25;

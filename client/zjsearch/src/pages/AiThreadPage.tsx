@@ -2,6 +2,7 @@
 
 import { MessageCircleQuestion, Zap } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea.tsx";
 import { BootRunBody } from "@/components/BootGhosts.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
@@ -187,6 +188,21 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
   // page): while the run streams, the input steers it
   const steering = aiSearch.phase === "streaming";
   const steer = useAiSteer(aiSearch);
+  // one submit body for the composer's form and its Enter key — `preempt`
+  // only means something while steering (the in-flight turn is cut and the
+  // run continues on the steered course)
+  const sendFollowup = (preempt = false) => {
+    if (steering) {
+      const value = followupQuery.trim();
+      if (!value) {
+        return;
+      }
+      setFollowupQuery("");
+      steer.send(value, preempt);
+      return;
+    }
+    submitFollowup();
+  };
   const hasThread = aiSearch.runs.length > 0;
   // the not-found empty state only shows AFTER the resume attempt resolved
   const showMissing = !resuming && !hasThread;
@@ -311,37 +327,29 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                   }`}
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (steering) {
-                      const value = followupQuery.trim();
-                      if (!value) {
-                        return;
-                      }
-                      setFollowupQuery("");
-                      steer.send(value);
-                      return;
-                    }
-                    submitFollowup();
+                    sendFollowup();
                   }}
                 >
-                  <input
+                  {/* the ask pane grows with a pasted brief: Enter submits
+                      (boundary steer while streaming), Shift+Enter stays a
+                      newline while idle and rides the preempt lane while
+                      steering; IME composition owns Enter */}
+                  <AutoGrowTextarea
                     aria-label={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
-                    autoComplete="off"
                     className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
-                    dir="auto"
                     name="q"
                     onChange={(event) => {
                       setFollowupQuery(event.target.value);
                     }}
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" && event.shiftKey && steering) {
-                        event.preventDefault();
-                        const value = followupQuery.trim();
-                        if (!value) {
-                          return;
-                        }
-                        setFollowupQuery("");
-                        steer.send(value, true);
+                      if (event.nativeEvent.isComposing || event.key !== "Enter") {
+                        return;
                       }
+                      if (event.shiftKey && !steering) {
+                        return;
+                      }
+                      event.preventDefault();
+                      sendFollowup(event.shiftKey);
                     }}
                     placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                     value={followupQuery}
@@ -368,12 +376,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                           className="grid size-9 place-items-center rounded-full text-accent transition-colors hover:bg-accent-soft disabled:pointer-events-none disabled:opacity-40"
                           disabled={!followupQuery.trim()}
                           onClick={() => {
-                            const value = followupQuery.trim();
-                            if (!value) {
-                              return;
-                            }
-                            setFollowupQuery("");
-                            steer.send(value, true);
+                            sendFollowup(true);
                           }}
                           title={t("ai_steer_send")}
                           type="button"

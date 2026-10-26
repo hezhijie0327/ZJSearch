@@ -2,6 +2,7 @@
 
 import { ChevronDown, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea.tsx";
 import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
@@ -63,7 +64,11 @@ const EMPTY_META: AiSourceMeta[] = [];
 function AiBootGhost({ q, t }: { q: string; t: Translate }) {
   return (
     <div aria-busy="true" className="animate-fade-up space-y-5">
-      <h1 className="break-words text-3xl font-medium leading-tight text-ink" dir="auto">
+      {/* line-clamp-3 mirrors the run section's collapsed ClampReveal
+          (RUN_TITLE_PREVIEW_PX) and the skeleton's .zjs-boot-ai-title clamp
+          -- a pasted brief boots at the same three-line height it hands
+          over to */}
+      <h1 className="line-clamp-3 break-words text-3xl font-medium leading-tight text-ink" dir="auto">
         {q}
       </h1>
       <section aria-label={t("ai_search_process")}>
@@ -185,6 +190,22 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   const [researchMode, setResearchMode] = useState<AiSearchMode>(() =>
     parseDepthMode(new URLSearchParams(window.location.search).get("mode")),
   );
+  // one submit body for the composer's form, its Enter key and the ⚡ —
+  // `preempt` only means something while steering (the in-flight turn is
+  // cut and the run continues on the steered course)
+  const sendFollowup = (preempt = false) => {
+    const value = followupQuery.trim();
+    if (!value) {
+      return;
+    }
+    setFollowupQuery("");
+    if (steering) {
+      steer.send(value, preempt);
+      return;
+    }
+    aiSearch.followup(value, aiLang, researchMode, filterValues.search_language, followupAttachments);
+    setFollowupAttachments([]);
+  };
   const [appended, setAppended] = useState<ResultItem[]>([]);
   const [appendState, setAppendState] = useState<"idle" | "loading" | "error" | "done">("idle");
   const appendedHref = useRef(href);
@@ -929,50 +950,30 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                         }`}
                         onSubmit={(event) => {
                           event.preventDefault();
-                          const value = followupQuery.trim();
-                          if (!value) {
-                            return;
-                          }
-                          if (steering) {
-                            // the run host's guide lane: the message rides
-                            // the CONTROL endpoint, the chip tracks its fate
-                            setFollowupQuery("");
-                            steer.send(value);
-                            return;
-                          }
-                          setFollowupQuery("");
-                          aiSearch.followup(
-                            value,
-                            aiLang,
-                            researchMode,
-                            filterValues.search_language,
-                            followupAttachments,
-                          );
-                          setFollowupAttachments([]);
+                          sendFollowup();
                         }}
                       >
-                        <input
+                        {/* the ask pane grows with a pasted brief: Enter
+                            submits (boundary steer while streaming),
+                            Shift+Enter stays a newline while idle and rides
+                            the preempt lane while steering; IME composition
+                            owns Enter */}
+                        <AutoGrowTextarea
                           aria-label={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
-                          autoComplete="off"
                           className="w-full bg-transparent text-base text-ink outline-none placeholder:text-ink-3"
-                          dir="auto"
                           name="q"
                           onChange={(event) => {
                             setFollowupQuery(event.target.value);
                           }}
                           onKeyDown={(event) => {
-                            // Shift+Enter = interrupt now and steer (the preempt lane:
-                            // the in-flight turn cancels, the run continues
-                            // on the steered course)
-                            if (event.key === "Enter" && event.shiftKey && steering) {
-                              event.preventDefault();
-                              const value = followupQuery.trim();
-                              if (!value) {
-                                return;
-                              }
-                              setFollowupQuery("");
-                              steer.send(value, true);
+                            if (event.nativeEvent.isComposing || event.key !== "Enter") {
+                              return;
                             }
+                            if (event.shiftKey && !steering) {
+                              return;
+                            }
+                            event.preventDefault();
+                            sendFollowup(event.shiftKey);
                           }}
                           placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                           value={followupQuery}
@@ -1001,12 +1002,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                                 className="grid size-9 place-items-center rounded-full text-accent transition-colors hover:bg-accent-soft disabled:pointer-events-none disabled:opacity-40"
                                 disabled={!followupQuery.trim()}
                                 onClick={() => {
-                                  const value = followupQuery.trim();
-                                  if (!value) {
-                                    return;
-                                  }
-                                  setFollowupQuery("");
-                                  steer.send(value, true);
+                                  sendFollowup(true);
                                 }}
                                 title={t("ai_steer_send")}
                                 type="button"

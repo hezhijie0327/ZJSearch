@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { LoaderCircle, Search, SendHorizontal, X } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+// SubmitEvent is React's own (the DOM global of the same name is shadowed):
+// FormEvent is the deprecated React-19 placeholder
+import { type KeyboardEvent, type SubmitEvent, useEffect, useId, useRef, useState } from "react";
+import { AutoGrowTextarea } from "@/components/AutoGrowTextarea.tsx";
 import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";
@@ -109,7 +112,13 @@ export function SearchBox({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
-  const inputRef = useRef<HTMLInputElement>(null);
+  // the bare ask pane renders a textarea, the compact header keeps the
+  // single-line input — one ref type for blur/selection on either, wired
+  // through a callback ref (a union RefObject fits neither element)
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const setInputRef = (el: HTMLInputElement | HTMLTextAreaElement | null) => {
+    inputRef.current = el;
+  };
   const boxRef = useRef<HTMLDivElement>(null);
 
   const setQuery = (value: string) => {
@@ -177,7 +186,7 @@ export function SearchBox({
     }
   };
 
-  const onSubmit = (event: FormEvent) => {
+  const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     submit(query);
   };
@@ -218,7 +227,7 @@ export function SearchBox({
     selectCompletion(suggestion.text);
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     // IME composition (e.g. pinyin candidates) owns Enter and the arrows —
     // handling them here would submit mid-composition or break candidate
     // navigation
@@ -226,6 +235,12 @@ export function SearchBox({
       return;
     }
     if (event.key === "Enter") {
+      // the bare ask pane is a textarea: Shift+Enter is a newline, only
+      // plain Enter submits (the single-line input keeps today's contract:
+      // every Enter submits)
+      if (event.shiftKey && variant === "bare") {
+        return;
+      }
       // some embedded browsers never run the implicit form submission, so
       // Enter is always handled explicitly here
       event.preventDefault();
@@ -264,12 +279,18 @@ export function SearchBox({
   };
 
   const showDropdown = open && suggestions.length > 0;
+  // the ghost mirror tracks ONE visual line (absolute overlay, vertically
+  // centered) — a grown ask pane has no single line for it to dress, so
+  // the mirror (and the transparent-text swap it needs) only applies to
+  // the one-line state; suggestion selection itself keeps working, the
+  // pane just shows the suggestion text directly
+  const singleLinePane = variant === "bare" ? !query.includes("\n") && query.length <= 120 : true;
   /** the navigated suggestion split for the ghost layer: the typed prefix
       solid, the completion muted.  Case-INSENSITIVE prefix check — "Tes"
       still ghosts against "testicular torsion"; the ghost's solid span
       carries the suggestion's own casing so the mirror matches the input
       value exactly.  Non-extending suggestions just show plain ink text. */
-  const activeSuggestion = open && active >= 0 ? suggestions[active] : undefined;
+  const activeSuggestion = open && active >= 0 && singleLinePane ? suggestions[active] : undefined;
   const ghost = activeSuggestion?.text.toLowerCase().startsWith(typed.toLowerCase())
     ? { typed: activeSuggestion.text.slice(0, typed.length), completion: activeSuggestion.text.slice(typed.length) }
     : null;
@@ -288,9 +309,10 @@ export function SearchBox({
       <form
         className={
           variant === "bare"
-            ? // fixed height: the clear button appearing on first keystroke
+            ? // grows with the ask pane (AutoGrowTextarea), one input-line
+              // tall at rest: the clear button appearing on first keystroke
               // must not grow the row (the ask-card would jump)
-              "flex h-9 w-full items-center gap-1"
+              "flex min-h-9 w-full items-center gap-1"
             : "flex h-12 w-full items-center gap-1 rounded-full border border-line bg-surface ps-5 pe-2 shadow-card transition-shadow focus-within:border-ink-3/40"
         }
         onSubmit={onSubmit}
@@ -312,40 +334,71 @@ export function SearchBox({
               <span className="text-ink-3">{ghost.completion}</span>
             </div>
           ) : null}
-          <input
-            aria-activedescendant={active >= 0 && suggestions[active] ? `${listboxId}-${active}` : undefined}
-            aria-autocomplete="list"
-            aria-controls={showDropdown ? listboxId : undefined}
-            aria-expanded={showDropdown}
-            aria-label={t("search")}
-            autoCapitalize="none"
-            autoComplete="off"
-            className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${
-              ghost || activeSuggestion
-                ? // the ghost mirror (or a non-extending suggestion) owns the
-                  // visual: the global accent ::selection must not paint over it
-                  "selection:bg-transparent"
-                : // plain typed text: Ctrl+A shows the site-wide accent selection
-                  "selection:bg-accent/30"
-            } ${ghost ? "text-transparent caret-ink" : ""}`}
-            dir="auto"
-            name="q"
-            onChange={(event) => {
-              const value = event.target.value;
-              setQuery(value);
-              setTyped(value);
-              setActive(-1); // fresh typing clears the suggestion selection
-              setOpen(true);
-            }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={onKeyDown}
-            placeholder={placeholder ?? t("search_placeholder")}
-            ref={inputRef}
-            role="combobox"
-            spellCheck={false}
-            type="text"
-            value={query}
-          />
+          {variant === "bare" ? (
+            /* the ask pane: grows with a pasted brief (capped ~8 lines,
+               then internal scroll) — Shift+Enter inserts the newline,
+               plain Enter submits (onKeyDown above) */
+            <AutoGrowTextarea
+              aria-activedescendant={active >= 0 && suggestions[active] ? `${listboxId}-${active}` : undefined}
+              aria-autocomplete="list"
+              aria-controls={showDropdown ? listboxId : undefined}
+              aria-expanded={showDropdown}
+              aria-label={t("search")}
+              autoCapitalize="none"
+              className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${
+                ghost || activeSuggestion ? "selection:bg-transparent" : "selection:bg-accent/30"
+              } ${ghost ? "text-transparent caret-ink" : ""}`}
+              dir="auto"
+              name="q"
+              onChange={(event) => {
+                const value = event.target.value;
+                setQuery(value);
+                setTyped(value);
+                setActive(-1); // fresh typing clears the suggestion selection
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder ?? t("search_placeholder")}
+              ref={setInputRef}
+              value={query}
+            />
+          ) : (
+            <input
+              aria-activedescendant={active >= 0 && suggestions[active] ? `${listboxId}-${active}` : undefined}
+              aria-autocomplete="list"
+              aria-controls={showDropdown ? listboxId : undefined}
+              aria-expanded={showDropdown}
+              aria-label={t("search")}
+              autoCapitalize="none"
+              autoComplete="off"
+              className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${
+                ghost || activeSuggestion
+                  ? // the ghost mirror (or a non-extending suggestion) owns the
+                    // visual: the global accent ::selection must not paint over it
+                    "selection:bg-transparent"
+                  : // plain typed text: Ctrl+A shows the site-wide accent selection
+                    "selection:bg-accent/30"
+              } ${ghost ? "text-transparent caret-ink" : ""}`}
+              dir="auto"
+              name="q"
+              onChange={(event) => {
+                const value = event.target.value;
+                setQuery(value);
+                setTyped(value);
+                setActive(-1); // fresh typing clears the suggestion selection
+                setOpen(true);
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={onKeyDown}
+              placeholder={placeholder ?? t("search_placeholder")}
+              ref={setInputRef}
+              role="combobox"
+              spellCheck={false}
+              type="text"
+              value={query}
+            />
+          )}
         </div>
         {query ? (
           <button

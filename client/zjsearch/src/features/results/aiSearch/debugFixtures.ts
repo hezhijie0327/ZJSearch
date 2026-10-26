@@ -1059,6 +1059,135 @@ const FAILED_STAGE: DebugScenario = {
   ],
 };
 
+/** The pasted research brief (the deep-research norm -- whole multi-line
+    directives go into the ask pane), shared by the 长文提问 scenario. */
+const LONGTEXT_BRIEF = [
+  "Theme: Smart manufacturing in the coatings industry — landscape, AI use cases, vendors, and a proposed production data & AI architecture blueprint, centered on Surventis (formerly BASF Coatings) and its Asia network.",
+  "",
+  "Audience & purpose: One professional English report (15–20 pages) plus a 1-page Chinese executive summary, for readers in manufacturing IT/OT, digital strategy and data platform teams. Structure the deliverable as: Executive Summary (EN, 1 page) → 摘要 (CN, 1 page) → Part A → Part B → Part C → No-regret first moves.",
+  "",
+  "Seed facts (starting points — verify and expand, do not treat as ground truth):",
+  "- Surventis is the former BASF Coatings business, carved out to Carlyle (majority, with QIA); transaction completed 2026-06-30. Revenue ~EUR 3.9B; global leader in automotive coatings (OEM coatings, refinish incl. R-M brand, industrial coatings) and surface treatment.",
+  "- On 2026-08, Surventis and NST signed a formal agreement to develop automated painting applications.",
+  "- Central question: how should a coatings manufacturer build a scalable production data & AI backbone across its Asia sites?",
+  "",
+  "Workstreams:",
+  "",
+  "Part A — Landscape",
+  "1. Surventis company & Asia footprint: post-spin-off strategy and priorities; manufacturing sites and R&D centers across Asia (China, Japan, South Korea, India, ASEAN) with product lines per site (OEM / refinish / industrial); announced capacity or digital investments.",
+  "2. Digitalization signals: publicly visible hiring (data & AI, industry 4.0 roles — analyze actual JD text for tech stack hints: SAP/ERP, MES, historians, cloud platforms); press releases, partnerships (e.g., NST automated painting), supplier ecosystem; evidence of existing IT/OT landscape.",
+  "3. Peer benchmark: smart-manufacturing and AI moves by PPG, AkzoNobel, Axalta, Nippon Paint — AI color matching/tinting, predictive maintenance, digital factories, data platform announcements. Produce a comparison table.",
+  "",
+  "Part B — Use cases",
+  "4. AI / agentic-AI use-case catalog for coatings manufacturing operations (at least 12): batch deviation root-cause-analysis copilot; color matching / tinting assistant; recipe & formulation optimization; weathering and quality prediction; predictive maintenance of production assets; per-batch energy optimization; EHS / SDS compliance Q&A agent; shift-handover summarization; MRO & BOM data governance; supplier price intelligence; paint & coating defect vision inspection; spray-line parameter optimization.",
+  "",
+  "Part C — Architecture & partners",
+  "5. Architecture blueprint (clearly labeled as proposal): ISA-95 layers L0–L4 — L1/L2 data acquisition via OPC UA / MQTT (Sparkplug B) and a Unified Namespace; L3 historian/MES integration and a plant data lake; L4 lakehouse analytics enabling predictive analytics and decision support; data governance; a phased roadmap (0–6 months pilot, 6–18 months scale-out across Asia sites).",
+  "6. Vendor & partnership landscape: automation/DCS vendors' AI capabilities (Siemens Industrial Copilot, Emerson / AspenTech, AVEVA, Rockwell / PTC, Yokogawa); industrial data infrastructure (Ignition, MQTT brokers & Sparkplug B, OPC UA aggregation, PI System / AVEVA Historian); analytics platforms in manufacturing (Databricks, Snowflake, Microsoft Fabric).",
+  "",
+  "Deliverable requirements:",
+  "- Part A must include the peer benchmark comparison table.",
+  "- Part B must include a value x feasibility priority matrix ranking all use cases, and name the 3 best pilot candidates for an Asia coatings site.",
+  "- Part C must include a vendor comparison table and end with a shortlist: the 3 partnerships to evaluate first, with rationale.",
+  '- Every factual claim must carry a citation; clearly separate verified facts from inference/proposal; where information is not public, say "not publicly disclosed" — never fabricate.',
+  '- Close the report with "No-regret first moves": the 5 actions an Asia coatings network should take first on this roadmap.',
+].join("\n");
+
+/** The PASTED-BRIEF shape: the run question is a huge multi-line prompt.
+    QA surface for the long-text handling: the run title must clamp to
+    three lines behind the ClampReveal expand chip (never wall the page
+    behind its own prompt), the mode chip stays beside the preview, and
+    the settled run reads like any other. */
+const LONGTEXT_STAGE: DebugScenario = {
+  id: "longtext",
+  name: "长文提问",
+  label: "pasted multi-line brief (clamped run title)",
+  q: LONGTEXT_BRIEF,
+  mode: "report",
+  events: [
+    { e: "client.start", runNo: 1, q: LONGTEXT_BRIEF, mode: "report" },
+    { ...base },
+    { e: "phase", name: "plan" },
+    {
+      e: "say",
+      id: 1,
+      t: "已收到完整的研究简报:以 Surventis 为核心,横跨格局、用例与架构三个工作流;先并行核实剥离交易与 NST 合作两个种子事实。",
+    },
+    {
+      e: "think",
+      id: 1,
+      t: "简报本身划定了交付结构,检索面按 Part A/B/C 展开:公司与亚洲布局、同行标杆、涂料行业 AI 案例;架构部分标注为提案,未公开数据如实标注。",
+    },
+    calls([
+      {
+        id: 1,
+        tool: "search_web",
+        q: "Surventis BASF Coatings Carlyle carve-out completed",
+        status: "ok",
+        n: 5,
+        ms: 2240,
+        args: { query: "Surventis BASF Coatings Carlyle carve-out completed" },
+      },
+      {
+        id: 2,
+        tool: "search_web",
+        q: "coatings industry AI color matching predictive maintenance case study",
+        status: "ok",
+        n: 4,
+        ms: 1980,
+        args: { query: "coatings industry AI color matching predictive maintenance case study" },
+      },
+    ]),
+    { e: "sources", items: [SOURCES[0], SOURCES[3]] },
+    { e: "call", id: 1, call: 1, status: "ok", n: 5, ms: 2240, feed: "plan: 5 deep + 5 shallow lines [1]" },
+    { e: "call", id: 1, call: 2, status: "ok", n: 4, ms: 1980, feed: "plan: 3 case studies of AI in coatings [4]" },
+    { e: "close", id: 1 },
+    { e: "open", id: 2, kind: "write", round: 0 },
+    { e: "phase", name: "write" },
+    {
+      e: "think",
+      id: 2,
+      t: "简报要求分部交付并区分已核实事实与提案;先给执行摘要,再按 Part A/B/C 落小节,引用只放已核实的数字。",
+    },
+    {
+      e: "answer",
+      t: [
+        "## 执行摘要(节选)",
+        "",
+        "**Surventis**(原巴斯夫涂料业务)已于 2026-06-30 完成交割,由 Carlyle 控股[1];2026-08 与 NST 签署自动喷涂合作[1]。面向其亚洲网络的生产数据与 AI 骨架,建议按 ISA-95 分层推进:先统一 L1/L2 数据采集(OPC UA / MQTT),再建 L3 厂级数据湖,最后上 L4 湖仓分析。",
+        "",
+        "## Part A — 格局(节选)",
+        "",
+        "| 同行 | 智能制造动作 |",
+        "| --- | --- |",
+        "| PPG | AI 调色/配色助手 |",
+        "| Axalta | 预测性维护试点 |",
+        "",
+        "完整报告(含 Part B 用例目录、Part C 架构蓝图与供应商矩阵)见下文——此处从略,聚焦长标题下的排版验证。",
+      ].join("\n"),
+    },
+    { e: "close", id: 2 },
+    {
+      e: "settle",
+      status: "done",
+      finish: "stop",
+      usage: {
+        input: 31204,
+        output: 962,
+        thoughts: 1840,
+        cached: 12288,
+        cache_write: 2048,
+        research: { input: 28100, output: 410 },
+        write: { input: 29500, output: 552 },
+        gates: { input: 940, output: 60, calls: 3 },
+        rerank: { calls: 3, tokens: 2410 },
+        decision: { calls: 2, tokens: 700 },
+      },
+      model: "deepseek-flash",
+    },
+  ],
+};
+
 const DONE_STAGE: DebugScenario = {
   id: "done",
   name: "单轮作答",
@@ -2891,7 +3020,6 @@ export const DEBUG_SCENARIOS: DebugScenario[] = [
   FULL_STAGE,
   BROWSER_OPS_STAGE,
   BROWSER_STAGE,
-  FULL_STAGE,
   REWRITE_STAGE,
   PAID_STAGE,
   DECK_STAGE,
@@ -2900,6 +3028,7 @@ export const DEBUG_SCENARIOS: DebugScenario[] = [
   PANORAMA_STAGE,
   STEER_STAGE,
   SUB_STAGE,
+  LONGTEXT_STAGE,
   DONE_STAGE,
   STOPPED_STAGE,
   AWAITING_STAGE,

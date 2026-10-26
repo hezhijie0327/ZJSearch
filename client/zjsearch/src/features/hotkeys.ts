@@ -25,7 +25,11 @@ export interface HotkeyTarget {
 
 /** Focus the page's search box (hotkey `i` / `/` on every page that has one). */
 export function focusSearchInput(): void {
-  (document.querySelector('input[name="q"]') as HTMLInputElement | null)?.focus();
+  // the hero ask pane is a textarea (grows with pasted briefs); the
+  // header/result boxes stay single-line inputs
+  (
+    document.querySelector('input[name="q"], textarea[name="q"]') as HTMLInputElement | HTMLTextAreaElement | null
+  )?.focus();
 }
 
 const TEXT_ENTRY = new Set(["INPUT", "TEXTAREA", "SELECT"]);
