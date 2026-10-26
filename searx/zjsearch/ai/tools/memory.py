@@ -49,9 +49,10 @@ when you just completed a non-trivial operation on a website in the
 browser session -- a sign-in flow, a captcha, a multi-step path to
 walled content -- save the recipe (kind=procedure, host=<the site's
 host>, content=<the minimal step list>); it rides your next browse to
-that site, so write what a future you could follow.  The answer must
-still answer the question; memory maintenance is a silent side
-action."""
+that site, so write what a future you could follow.  Every memory is
+written in the user's language -- match the language they are speaking
+to you in, never your own default.  The answer must still answer the
+question; memory maintenance is a silent side action."""
 
 MAX_MEMORIES = 50
 """The pre-send cap -- facts beyond this are the oldest's problem (the
