@@ -341,7 +341,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     let entries: Array<Record<string, string>>;
     if (kind === "memory") {
       const memories = await withBudget(
-        loadMemories().catch(() => []),
+        loadMemories(query).catch(() => []),
         [] as Awaited<ReturnType<typeof loadMemories>>,
         5000,
       );
@@ -728,7 +728,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           recallPages(q, 4)
             .catch(() => [])
             .then((pages) => pages.filter((page) => !page.url)),
-          loadMemories().catch(() => []),
+          loadMemories(q).catch(() => []),
           listEpisodes(q).catch(() => []),
         ]),
         [

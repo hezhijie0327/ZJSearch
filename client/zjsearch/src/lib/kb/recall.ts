@@ -536,7 +536,7 @@ export function backfillSeedTags(): void {
     for (;;) {
       const rows = await pgQuery<{ id: string; kind: string; host: string; title: string; body: string }>(
         `SELECT id, kind, host, title, body FROM knowledge
-         WHERE kind IN ('source', 'document', 'memory')
+         WHERE kind IN ('source', 'document')
            AND (tags = '[]'::jsonb
                 OR (kind = 'document' AND jsonb_array_length(tags) = 1 AND tags->>0 = host AND host <> ''))
          LIMIT 200`,
@@ -545,7 +545,7 @@ export function backfillSeedTags(): void {
         return;
       }
       for (const row of rows) {
-        const text = row.kind === "memory" ? row.body : row.title;
+        const text = row.title;
         const tokens = segmentKeywords(text)
           .split(" ")
           .filter((token) => token.length >= 2)
@@ -567,7 +567,7 @@ export async function graphSnapshot(limit = 40): Promise<TagGraph> {
   await pg();
   const nodeRows = await pgQuery<{ tag: string; uses: number }>(
     `SELECT t AS tag, count(*) AS uses FROM knowledge, jsonb_array_elements_text(CASE WHEN jsonb_typeof(tags) = 'array' THEN tags ELSE '[]'::jsonb END) AS t
-     WHERE kind IN ('source', 'answer', 'document', 'memory', 'run') AND position('.' IN t) = 0
+     WHERE kind IN ('source', 'answer', 'document', 'run') AND position('.' IN t) = 0
      GROUP BY t ORDER BY uses DESC LIMIT $1 * 3`,
     [limit],
   );
@@ -582,7 +582,7 @@ export async function graphSnapshot(limit = 40): Promise<TagGraph> {
   const edgeRows = await pgQuery<{ a: string; b: string; w: number }>(
     `SELECT a.t AS a, b.t AS b, count(*) AS w
      FROM knowledge k, jsonb_array_elements_text(CASE WHEN jsonb_typeof(k.tags) = 'array' THEN k.tags ELSE '[]'::jsonb END) AS a(t), jsonb_array_elements_text(CASE WHEN jsonb_typeof(k.tags) = 'array' THEN k.tags ELSE '[]'::jsonb END) AS b(t)
-     WHERE k.kind IN ('source', 'answer', 'document', 'memory', 'run')
+     WHERE k.kind IN ('source', 'answer', 'document', 'run')
        AND position('.' IN a.t) = 0 AND position('.' IN b.t) = 0
        AND a.t < b.t AND a.t = ANY($1::text[]) AND b.t = ANY($1::text[])
      GROUP BY a.t, b.t ORDER BY w DESC LIMIT 160`,

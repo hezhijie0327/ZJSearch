@@ -87,7 +87,7 @@ export async function knowledgeStats(): Promise<KnowledgeStats> {
     return cache.value;
   }
   await pg();
-  const [ledger, threads, events, runLegs, answerLegs, embed] = await Promise.all([
+  const [ledger, threads, events, runLegs, answerLegs, embed, memoryCount] = await Promise.all([
     pgQuery<{ kind: string; n: string; bytes: string }>("SELECT kind, n, bytes FROM stats"),
     pgQuery<{ n: string }>("SELECT count(*) AS n FROM thread_head"),
     pgQuery<{ n: string }>("SELECT COALESCE(sum(events), 0) AS n FROM run_summary"),
@@ -97,6 +97,9 @@ export async function knowledgeStats(): Promise<KnowledgeStats> {
        WHERE kind = 'answer' AND meta->'usage' IS NOT NULL`,
     ),
     pgQuery<{ embed_model: string | null }>("SELECT embed_model FROM knowledge WHERE embed_model IS NOT NULL LIMIT 1"),
+    // the memories live in their OWN table (the tripartite refactor) --
+    // the stats ledger only knows the knowledge kinds
+    pgQuery<{ n: string }>("SELECT count(*) AS n FROM memory"),
   ]);
   const byKind = new Map<string, number>((ledger ?? []).map((row) => [row.kind, Number(row.n) || 0]));
   const pick = (kind: string) => byKind.get(kind) ?? 0;
@@ -105,7 +108,7 @@ export async function knowledgeStats(): Promise<KnowledgeStats> {
     runs: pick("run"),
     sources: pick("source"),
     documents: pick("document"),
-    memories: pick("memory"),
+    memories: Number((memoryCount ?? [])[0]?.n ?? 0),
     answers: pick("answer"),
     events: Number((events ?? [])[0]?.n ?? 0),
     approxBytes: (ledger ?? []).reduce((sum, row) => sum + (Number(row.bytes) || 0), 0),

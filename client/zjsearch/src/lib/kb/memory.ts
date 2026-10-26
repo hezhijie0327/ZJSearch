@@ -17,6 +17,7 @@ import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import { embedModelName, enqueue } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
+import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
 export type MemoryKind = "fact" | "procedure";
 export type MemoryOrigin = "user" | "model" | "teach";
@@ -167,15 +168,71 @@ export function toggleMemoryPin(id: string): void {
   });
 }
 
-/** The prompt-injection snapshot AND the panel's listing: pinned first,
-    then the freshest reinforcements, then the strongest (the soft-decay
-    order -- unseen facts sink without ever being deleted). */
-export async function loadMemories(): Promise<MemoryRow[]> {
+/** The prompt-injection snapshot AND the panel's listing.  Without a
+    query: every row in the soft-decay order (pinned > last_seen >
+    strength).  With one (the run's pre-send): a store past the cap is
+    SELECTED, not truncated -- pinned rows always ride, the vector leg
+    pulls the query-relevant head, recency backfills, and the rerank
+    stage (when configured, within the caller's budget) orders the
+    final cut; every failure degrades to the soft-decay order. */
+export async function loadMemories(query?: string, limit = 50): Promise<MemoryRow[]> {
   await pg();
-  const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT ${MEMORY_COLUMNS} FROM memory ORDER BY pinned DESC, last_seen DESC, strength DESC, updated DESC`,
+  const rows = await pgQuery<Record<string, unknown>>(`SELECT ${MEMORY_COLUMNS} FROM memory`);
+  const all = (rows ?? []).map(rowToMemory);
+  if (all.length <= limit || !query?.trim()) {
+    return softDecayOrder(all);
+  }
+  const chosen = new Map<string, MemoryRow>(all.filter((row) => row.pinned).map((row) => [row.id, row]));
+  try {
+    const vector = embeddingsConfigured() ? (await embedTexts([query.trim()]))?.[0] : undefined;
+    if (vector) {
+      const near = await pgQuery<Record<string, unknown>>(
+        `SELECT ${MEMORY_COLUMNS} FROM memory
+         WHERE embedding IS NOT NULL
+         ORDER BY embedding <=> $1::vector LIMIT $2`,
+        [toVectorLiteral(vector), limit],
+      );
+      for (const row of near ?? []) {
+        const memory = rowToMemory(row);
+        chosen.set(memory.id, memory);
+      }
+    }
+  } catch {
+    /* the vector leg is a lens, not a dependency */
+  }
+  for (const row of softDecayOrder(all)) {
+    if (chosen.size >= limit * 2) {
+      break;
+    }
+    chosen.set(row.id, row);
+  }
+  let cut = [...chosen.values()].slice(0, limit);
+  if (rerankConfigured() && chosen.size > limit) {
+    try {
+      const docs = [...chosen.values()];
+      const order = await rerankDocs(
+        query,
+        docs.map((row) => row.content),
+      );
+      if (order && order.length === docs.length) {
+        cut = order
+          .map((index) => docs[index])
+          .filter((row) => row !== undefined)
+          .slice(0, limit);
+      }
+    } catch {
+      /* fail-open: the soft-decay cut stands */
+    }
+  }
+  return cut;
+}
+
+/** The listing order: pinned first, then the freshest reinforcements,
+    then the strongest. */
+function softDecayOrder(rows: MemoryRow[]): MemoryRow[] {
+  return [...rows].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || b.lastSeen - a.lastSeen || b.strength - a.strength,
   );
-  return (rows ?? []).map(rowToMemory);
 }
 
 // ------------------------------------------------------------ hybrid read
