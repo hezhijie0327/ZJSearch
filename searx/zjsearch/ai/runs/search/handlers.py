@@ -1043,7 +1043,10 @@ section, do not re-type the numbers."""
             if tool_name == MEMORY_TOOL:
                 # the near-dup gate's comparison set: the memory snapshot
                 # (pre-sent, or LIVE-pulled below) PLUS the saves this run
-                # already accepted.
+                # already accepted -- ids ride beside the snapshot rows (a
+                # reinforce/update/forget must name its target), None
+                # beside this run's own saves (the client mints ids at
+                # insert; the server never knows them).
                 # LIVE MEMORIES: the snapshot is not pre-sent -- the first
                 # memory call (search OR save) pulls the store's
                 # memory list through the recall slot (kind=memory), and
@@ -1059,22 +1062,45 @@ section, do not re-type the numbers."""
                     if rows:
                         self.user_memories = memory_cap.parse_memories(rows)
                 known_memories = [str(m.get("content") or "") for m in self.user_memories] + self.saved_memories
+                known_ids = [m.get("id") or None for m in self.user_memories] + [None] * len(self.saved_memories)
                 feed, event = memory_cap.run_call(
-                    call, self.user_memories, known=known_memories, account=self.account
+                    call,
+                    self.user_memories,
+                    known=known_memories,
+                    known_ids=known_ids,
+                    account=self.account,
+                    cfg=self.cfg,
                 )
                 feeds[wire_id - 1] = feed
                 ms = int((time.monotonic() - started) * 1000)
                 if event:
-                    # a save: the row event settles the timeline AND the
-                    # late memory event persists the fact client-side
+                    # a mutation: the row event settles the timeline AND
+                    # the late memory event carries the v2 op the client
+                    # executes against its store
                     save_event = event
-                    self.saved_memories.append(str(save_event.get("content") or ""))
+                    op = str(save_event.get("op") or "save")
+                    target_id = save_event.get("id")
+                    if op == "save":
+                        self.saved_memories.append(str(save_event.get("content") or ""))
+                    elif op == "update":
+                        # the superseded wording leaves the run's dedup
+                        # set: the snapshot row dies, the new wording joins
+                        if target_id:
+                            self.user_memories = [m for m in self.user_memories if m.get("id") != target_id]
+                        self.saved_memories.append(str(save_event.get("content") or ""))
+                    elif op == "forget":
+                        if target_id:
+                            self.user_memories = [m for m in self.user_memories if m.get("id") != target_id]
+                        else:
+                            self.saved_memories = [
+                                c for c in self.saved_memories if c != str(save_event.get("content") or "")
+                            ]
                     yield (
                         "call",
                         {
                             "call": wire_id,
                             "status": "ok",
-                            "action": "save",
+                            "action": op,
                             "label": save_event["content"],
                             "ms": ms,
                             "feed": feed[:800],

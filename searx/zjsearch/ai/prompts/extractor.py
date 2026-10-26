@@ -28,3 +28,16 @@ host names, product versions, single generic words (compare, guide,
 Keep the item order.
 Respond with ONLY a JSON object:
 {"items": [{"tags": ["...", ...]}, ...]}"""
+
+MEMORY_JUDGE_SYSTEM = """\
+Two stored memories about the user are compared -- an EXISTING one and
+a CANDIDATE the model wants to save.  Embeddings found them similar;
+decide the relation.
+verdict:
+- "same": the candidate rephrases the existing memory -- no new
+  information (wording differences only).
+- "update": the candidate is the same KIND of fact but its CONTENT
+  changed -- a moved city, a changed preference, a new role; the new
+  wording should replace the old.
+- "distinct": a different memory worth keeping on its own.
+Respond with ONLY: {"verdict": "same" | "update" | "distinct"}"""
