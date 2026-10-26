@@ -11,11 +11,14 @@
     The graph is a query, not a table. */
 
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
+import { hybridMemoryHits, listMemoryItems } from "@/lib/kb/memory.ts";
 import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem, safeParse } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
-const SEARCHABLE_KINDS = ["source", "document", "memory", "call", "task", "clarify", "run"];
+// memory lives in its OWN table (lib/kb/memory.ts) -- fuseRecall adds its
+// hybrid leg when the caller's kind set names it
+const SEARCHABLE_KINDS = ["source", "document", "call", "task", "clarify", "run"];
 
 // -------------------------------------------------------------- hybrid read
 
@@ -110,7 +113,7 @@ async function tagVocabulary(): Promise<string[]> {
   // call rows, source_refs) before EVERY AI search POST
   const rows = await pgQuery<{ tag: string }>(
     `SELECT DISTINCT t AS tag FROM knowledge, jsonb_array_elements_text(CASE WHEN jsonb_typeof(tags) = 'array' THEN tags ELSE '[]'::jsonb END) AS t
-     WHERE kind IN ('source', 'answer', 'document', 'memory', 'run') AND tags <> '[]'::jsonb
+     WHERE kind IN ('source', 'answer', 'document', 'run') AND tags <> '[]'::jsonb
      ORDER BY tag`,
   );
   const tags = (rows ?? []).map((row) => row.tag);
@@ -291,26 +294,30 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
   }));
 }
 
-/** One kind's rows, newest first -- the filter chips' non-search listing
-    (answers / sources / documents as their own directories). */
-export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[]> {
-  await pg();
-  const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY pinned DESC, updated DESC LIMIT $2`,
-    [kind, limit],
-  );
-  return (rows ?? []).map(rowToItem);
-}
-
 /** The items carrying one tag (the graph's locate-to-content panel) --
     the GIN index answers the membership. */
 export async function itemsByTag(tag: string, limit = 20): Promise<KnowledgeItem[]> {
   await pg();
   const rows = await pgQuery<Record<string, unknown>>(
     `SELECT ${ITEM_COLUMNS} FROM knowledge
-     WHERE kind IN ('run', 'source', 'document', 'memory') AND tags ? $1
+     WHERE kind IN ('run', 'source', 'document') AND tags ? $1
      ORDER BY updated DESC LIMIT $2`,
     [tag, limit],
+  );
+  return (rows ?? []).map(rowToItem);
+}
+
+/** One kind's rows, newest first -- the filter chips' non-search listing
+    (answers / sources / documents as their own directories).  The memory
+    kind reads its own table. */
+export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[]> {
+  if (kind === "memory") {
+    return listMemoryItems(limit);
+  }
+  await pg();
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY pinned DESC, updated DESC LIMIT $2`,
+    [kind, limit],
   );
   return (rows ?? []).map(rowToItem);
 }
@@ -379,9 +386,11 @@ async function fuseRecall(
   opts: { fullBody?: boolean; rerank?: boolean; citedBonus?: boolean } = {},
 ): Promise<Array<{ item: KnowledgeItem; score: number }>> {
   const fullBody = opts.fullBody ?? false;
-  const [hybrid, graph] = await Promise.all([
+  const wantMemory = kinds.includes("memory");
+  const [hybrid, graph, memory] = await Promise.all([
     hybridRecall(query, kinds, limit, fullBody),
     graphRecall(query, kinds, limit, fullBody),
+    wantMemory ? hybridMemoryHits(query, limit) : Promise.resolve([] as KnowledgeItem[]),
   ]);
   const expanded = await expandByHitTags(kinds, hybrid, limit, fullBody);
   const scores = new Map<string, { item: KnowledgeItem; score: number }>();
@@ -400,6 +409,7 @@ async function fuseRecall(
     1.0,
   );
   bump(graph, 0.6);
+  bump(memory, 1.0);
   bump(expanded, 0.4);
   let ranked = [...scores.values()].sort((a, b) => b.score - a.score);
   if (opts.rerank !== false) {

@@ -24,19 +24,16 @@ import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
+import { forgetMemory, type MemoryRow, saveMemory, updateMemory } from "@/lib/kb/memory.ts";
 import {
   archiveDocument,
   deleteItem,
   deleteSource,
   deleteThread,
-  forgetMemory,
-  type MemoryRow,
   renameThread,
   resetAll,
-  saveMemory,
   toggleItemPin,
   toggleThreadPin,
-  updateMemory,
 } from "@/lib/kb/projections.ts";
 import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { aiTokenValue, type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";

@@ -53,7 +53,8 @@ import { buildAnswerMarkdown, buildDeckMarkdown, buildReportMarkdown } from "@/l
 import { useHostFavicon } from "@/lib/favicons.ts";
 import { formatDate, formatFilesize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import type { MemoryRow, OverviewUsage } from "@/lib/kb/projections.ts";
+import type { MemoryRow } from "@/lib/kb/memory.ts";
+import type { OverviewUsage } from "@/lib/kb/projections.ts";
 import type { ThreadSummary } from "@/lib/kb/recall.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";

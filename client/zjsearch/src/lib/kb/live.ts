@@ -7,7 +7,7 @@
     these two ride the subscription because they are the always-open
     views. */
 
-import type { MemoryRow } from "@/lib/kb/projections.ts";
+import { type MemoryRow, rowToMemory } from "@/lib/kb/memory.ts";
 import { sweepStaleRuns, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { type Pg, pg } from "@/lib/pg.ts";
 
@@ -54,14 +54,14 @@ export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): 
   );
 }
 
-/** The memories as a live listing. */
+/** The memories as a live listing (the dedicated memory table -- the
+    full row shape: the panel's badges and the confirm gate read
+    kind/state/strength right off the subscription). */
 export function subscribeMemories(onUpdate: (memories: MemoryRow[]) => void): Promise<StoreSubscription> {
-  return liveQuery<{ id: string; body: string; updated: number }>(
-    "SELECT id, body, updated FROM knowledge WHERE kind = 'memory' ORDER BY created",
+  return liveQuery<Record<string, unknown>>(
+    `SELECT id, kind, body, origin, state, strength, last_seen, pinned, created, updated
+     FROM memory ORDER BY pinned DESC, last_seen DESC, strength DESC`,
     [],
-    (rows) =>
-      onUpdate(
-        (rows ?? []).map((row) => ({ id: row.id, content: String(row.body ?? ""), updated: Number(row.updated) || 0 })),
-      ),
+    (rows) => onUpdate((rows ?? []).map(rowToMemory)),
   );
 }

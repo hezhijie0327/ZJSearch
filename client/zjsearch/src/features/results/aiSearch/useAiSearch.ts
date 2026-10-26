@@ -30,14 +30,8 @@ import {
   seedSeqCounter,
   seedSeqCounterFromStore,
 } from "@/lib/kb/events.ts";
-import {
-  archiveAttachments,
-  archiveDocument,
-  loadMemories,
-  saveMemory,
-  settleRun,
-  startRun,
-} from "@/lib/kb/projections.ts";
+import { loadMemories, saveMemory } from "@/lib/kb/memory.ts";
+import { archiveAttachments, archiveDocument, settleRun, startRun } from "@/lib/kb/projections.ts";
 import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { newThreadId } from "@/lib/kb/shared.ts";
 import { type RunKeepalive, startRunKeepalive } from "@/lib/keepalive.ts";

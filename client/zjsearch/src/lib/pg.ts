@@ -406,6 +406,43 @@ async function createSchema(db: Pg): Promise<void> {
   )`);
   await db.query("CREATE INDEX IF NOT EXISTS attachment_run ON attachment (run_id)");
   await db.query("CREATE INDEX IF NOT EXISTS attachment_thread ON attachment (thread_id)");
+  // THE MEMORY TABLE (the tripartite refactor): durable user facts
+  // (kind='fact') and learned procedures (kind='procedure') leave the
+  // knowledge table -- they never were knowledge-row material (no url, no
+  // thread, no tags graph) and their own shape (strength/last_seen/state)
+  // kept bending the shared columns.  The near-dup gate's client copy
+  // rides the SAME embedding column the recall uses.
+  await db.query(`CREATE TABLE IF NOT EXISTS memory (
+    id          text PRIMARY KEY,
+    kind        text NOT NULL DEFAULT 'fact',
+    body        text NOT NULL,
+    origin      text NOT NULL DEFAULT 'model',
+    state       text NOT NULL DEFAULT 'active',
+    strength    integer NOT NULL DEFAULT 1,
+    last_seen   double precision NOT NULL,
+    pinned      integer NOT NULL DEFAULT 0,
+    search_text text NOT NULL DEFAULT '',
+    embedding   vector(${dims}),
+    embed_model text,
+    created     double precision NOT NULL,
+    updated     double precision NOT NULL
+  )`);
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS memory_bm25 ON memory USING bm25 (search_text) WITH (text_config = 'english')",
+  );
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS memory_hnsw ON memory USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
+  );
+  await db.query("CREATE INDEX IF NOT EXISTS memory_listing ON memory (pinned DESC, last_seen DESC, strength DESC)");
+  await db.query("CREATE INDEX IF NOT EXISTS memory_pending ON memory (state) WHERE state <> 'active'");
+  // the one-time courtesy import: the old kind='memory' knowledge rows
+  // become active facts, then leave the knowledge table (the stats ledger
+  // follows through its own trigger).  Naturally idempotent -- the second
+  // boot finds no rows either way.
+  await db.query(`INSERT INTO memory (id, kind, body, origin, state, strength, last_seen, pinned, search_text, embedding, embed_model, created, updated)
+    SELECT id, 'fact', body, 'model', 'active', 1, updated, pinned, search_text, embedding, embed_model, created, updated
+    FROM knowledge WHERE kind = 'memory' ON CONFLICT (id) DO NOTHING`);
+  await db.query("DELETE FROM knowledge WHERE kind = 'memory'");
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_bm25 ON knowledge USING bm25 (search_text) WITH (text_config = 'english')",
   );
