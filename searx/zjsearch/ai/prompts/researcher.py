@@ -41,6 +41,7 @@ from searx.zjsearch.ai.prompts import spine as shared
 from searx.zjsearch.ai.tools import (
     BROWSE_TOOL,
     DELEGATE_RESEARCH_TOOL,
+    RECALL_HISTORY_TOOL,
     RECORD_FINDINGS_TOOL,
     SEARCH_WEB_TOOL,
     SET_DELIVERABLE_TOOL,
@@ -267,6 +268,28 @@ def _memory_block(user_memories: list[dict[str, str]] | None) -> str:
     )
 
 
+def _episodes_block(episodes: list[dict[str, str]] | None) -> str:
+    """The EPISODIC lane (data, not doctrine): the user's recent
+    cross-thread research -- a returning question continues instead of
+    restarts.  Same-thread continuity rides <thread_context> instead."""
+    rows = [e for e in (episodes or []) if str(e.get("title") or "").strip()]
+    if not rows:
+        return ""
+    lines = "\n".join(
+        f"- {e['title']}" + (f" -- {str(e.get('preview') or '').strip()}" if str(e.get("preview") or "").strip() else "")
+        for e in rows
+    )
+    return shared.block(
+        "episodes",
+        f"""\
+        The user's RECENT research (other threads, roughly the last two
+        weeks) -- if THIS question continues one of these, build on it
+        instead of starting over ({RECALL_HISTORY_TOOL} retrieves their
+        sources; do not re-derive what the user already has):
+        {lines}""",
+    )
+
+
 def _user_steering() -> str:
     """The live-steering contract (registered when the run is attachable)."""
     return shared.block(
@@ -331,6 +354,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     steerable: bool = False,
     user_memories: list[dict[str, str]] | None = None,
     thread_ledger: dict[str, t.Any] | None = None,
+    episodes: list[dict[str, str]] | None = None,
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
     deliverable_entities: list[str] | None = None,
@@ -373,6 +397,11 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         lines.append(_user_steering())
 
     # ---- the USER message's per-run <run_context> ----
+    # init FIRST, then append-only: the clarified blocks used to `+=` on
+    # an unassigned name (an UnboundLocalError on every clarify run) and
+    # the memory block's plain assignment below them silently DISCARDED
+    # what they had built
+    run_context = ""
     if clarifications:
         run_context += (
             shared.block(
@@ -389,7 +418,10 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             )
             + "\n"
         )
-    run_context = f"{_memory_block(None if memories_live else user_memories)}\n"
+    run_context += f"{_memory_block(None if memories_live else user_memories)}\n"
+    episodes_block = _episodes_block(episodes)
+    if episodes_block:
+        run_context += f"{episodes_block}\n"
     if overview_context:
         # THE OVERVIEW TIER's first turn: the classic results page's own
         # sources ride in as the seeded registry -- the answer cites them

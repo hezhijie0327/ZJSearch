@@ -33,7 +33,7 @@ import {
 } from "@/lib/kb/events.ts";
 import { forgetMemory, loadMemories, reinforceMemory, saveMemory, updateMemory } from "@/lib/kb/memory.ts";
 import { archiveAttachments, archiveDocument, settleRun, startRun } from "@/lib/kb/projections.ts";
-import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
+import { listEpisodes, recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { newThreadId } from "@/lib/kb/shared.ts";
 import { type RunKeepalive, startRunKeepalive } from "@/lib/keepalive.ts";
 import { pg } from "@/lib/pg.ts";
@@ -712,24 +712,28 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       // live_recall below), so what still ships is the cheap identity
       // layer: the corpus titles (history_sources/history_topics), the
       // user's uploaded FILE heads (the no-research writer path's only
-      // reader -- url-less document rows), and the memory snapshot.
+      // reader -- url-less document rows), the memory snapshot, and the
+      // EPISODIC lane (recent cross-thread research -- the returning
+      // question's continuity).
       // SUBMIT-POSTS-IMMEDIATELY: the reads race the budget -- a cold
       // store's boot
       // degrades to a metadata-less POST (the server tolerates every
       // field missing) instead of holding the submit hostage; the boot
       // keeps running for the run's own recording.
-      const [corpus, docFiles, userMemories] = await withBudget(
+      const [corpus, docFiles, userMemories, episodes] = await withBudget(
         Promise.all([
           recallCorpus(q, 6, { fullBody: false }).catch(() => []),
           recallPages(q, 4)
             .catch(() => [])
             .then((pages) => pages.filter((page) => !page.url)),
           loadMemories().catch(() => []),
+          listEpisodes(q).catch(() => []),
         ]),
         [
           [] as Awaited<ReturnType<typeof recallCorpus>>,
           [] as Awaited<ReturnType<typeof recallPages>>,
           [] as Awaited<ReturnType<typeof loadMemories>>,
+          [] as Awaited<ReturnType<typeof listEpisodes>>,
         ],
       );
       if (signal.aborted) {
@@ -781,6 +785,13 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           ),
         ].slice(0, 8),
         user_memories: userMemories.map((memory) => memory.content),
+        // the EPISODIC lane: recent cross-thread research (title + answer
+        // head) -- a returning question continues instead of restarts
+        history_episodes: episodes.map((episode) => ({
+          id: episode.id,
+          title: episode.title.slice(0, 80),
+          preview: episode.preview.slice(0, 120),
+        })),
         // the thread ledger: the earlier runs' established facts + open
         // gaps (the sub-topic contract -- build on, never re-research)
         thread_ledger: threadLedger,

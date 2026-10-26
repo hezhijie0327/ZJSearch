@@ -438,6 +438,59 @@ export async function recallCorpus(
   return ranked.slice(0, limit).map((entry) => entry.item);
 }
 
+/** The EPISODIC lane (the tripartite refactor's third layer): recent
+    research episodes from the thread directory -- what the user studied
+    lately, so a returning question can continue instead of restart.
+    Candidates come from thread_head's recency window; the rerank stage
+    (when configured, within the caller's budget) re-orders them by
+    query relevance; the fallback is pure recency.  Same-thread
+    continuity rides the thread ledger/history instead -- episodes are
+    the CROSS-thread view. */
+export interface EpisodeSummary {
+  id: string;
+  title: string;
+  updated: number;
+  preview: string;
+}
+
+const EPISODE_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+export async function listEpisodes(query: string, limit = 6): Promise<EpisodeSummary[]> {
+  await pg();
+  const cutoff = Date.now() - EPISODE_WINDOW_MS;
+  const rows = await pgQuery<Record<string, unknown>>(
+    `SELECT thread_id AS id, title, preview, updated FROM thread_head
+     WHERE updated > $1 ORDER BY updated DESC LIMIT 24`,
+    [cutoff],
+  );
+  const candidates: EpisodeSummary[] = (rows ?? []).map((row) => ({
+    id: String(row.id),
+    title: String(row.title ?? ""),
+    updated: Number(row.updated) || 0,
+    preview: String(row.preview ?? ""),
+  }));
+  if (candidates.length === 0) {
+    return [];
+  }
+  if (candidates.length >= 4 && rerankConfigured()) {
+    try {
+      const order = await rerankDocs(
+        query,
+        candidates.map((episode) => `${episode.title} — ${episode.preview.slice(0, 200)}`),
+      );
+      if (order && order.length === candidates.length) {
+        return order
+          .map((index) => candidates[index])
+          .filter((episode) => episode !== undefined)
+          .slice(0, limit);
+      }
+    } catch {
+      /* fail-open: the recency order stands */
+    }
+  }
+  return candidates.slice(0, limit);
+}
+
 /** The recall_history index: archived full texts ranked by the query
     (the tool's feed then points at a live re-read).
     ``opts.rerank: false`` skips the rerank tier -- the classic page's

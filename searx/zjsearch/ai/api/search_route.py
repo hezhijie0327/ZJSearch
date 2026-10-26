@@ -332,6 +332,23 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # slot (handlers); both actions and the save near-dup gate read it
     user_memories = None if live_recall else parse_memories(payload.get("user_memories"))
     recall_entries = parse_recall_history(payload.get("recall_history"))
+    # the EPISODIC lane: recent cross-thread research (client-assembled
+    # from its thread directory -- recency window + rerank there), so a
+    # returning question continues instead of restarts
+    raw_episodes = payload.get("history_episodes")
+    episodes = (
+        [
+            {
+                "id": str(entry.get("id") or "")[:64],
+                "title": str(entry.get("title") or "")[:80],
+                "preview": str(entry.get("preview") or "")[:120],
+            }
+            for entry in raw_episodes[:6]
+            if isinstance(entry, dict) and str(entry.get("title") or "").strip()
+        ]
+        if isinstance(raw_episodes, list)
+        else []
+    )
     image_parts, attached_files = ([], []) if degraded else uploads.parse_uploads(payload.get("attachments"))
     # the conversion receipt: the client shipped BYTES, only the server's
     # converter can read PDFs/Office documents -- the extracted markdown
@@ -996,6 +1013,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             depth_rung=depth_rung,
             user_memories=user_memories,
             memories_live=live_recall,
+            episodes=episodes or None,
             image_parts=image_parts or None,
             attached_files=attached_files or None,
             deliverable_entities=state.deliverable_entities,
