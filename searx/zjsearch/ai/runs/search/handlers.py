@@ -1102,6 +1102,14 @@ section, do not re-type the numbers."""
                             "status": "ok",
                             "action": op,
                             "label": save_event["content"],
+                            # update/forget carry the touched row's OLD
+                            # wording as the preview -- the tool row
+                            # renders old -> new (or what left)
+                            **(
+                                {"preview": str(save_event.get("old") or save_event.get("content") or "")}
+                                if op in ("update", "forget")
+                                else {}
+                            ),
                             "ms": ms,
                             "feed": feed[:800],
                             "raw": feed[:50_000],

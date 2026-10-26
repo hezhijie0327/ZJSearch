@@ -100,7 +100,7 @@ export interface AiSearchCall {
     | "message_subtask"
     | "set_deliverable";
   /** mcp rows: the server-scoped tool label (without the namespace);
-      memory rows: "save" | "search" */
+      memory rows: "save" | "search" | "update" | "forget" | "reinforce" */
   name?: string;
   label?: string;
   /** search_web: the keyword query; browse rows leave it empty */
