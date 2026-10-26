@@ -124,24 +124,18 @@ export function plgAssets(PATH: { brand: string; dist: string; root: string }): 
       }
       // the CSS chunks' url(...) references (KaTeX woff2/woff/ttf) resolve
       // against the root-level CSS files -> /static/assets/...
-      // THE UNHASHED TWINS never publish: vite/emscripten also emit
-      // assets/pglite.wasm, pglite.data, initdb.wasm and the three plain
-      // tar.gz, but the worker's baked URLs are the hashed static-root
+      // THE UNHASHED TWINS SHIP: vite/emscripten also emit assets/pglite.wasm,
+      // pglite.data, initdb.wasm and the three plain tar.gz, and the
+      // MAIN-THREAD fallback engine (worker-less webviews: module workers
+      // unsupported or blocked) resolves exactly these unhashed names
+      // relative to /static/assets/ -- the live verification caught every
+      // one 404ing into the FS-bundle size check (live diagnosis
+      // 2026-10-26).  The worker's baked URLs are the hashed static-root
       // names only (grep-verified -- `assets/` appears nowhere in
-      // pg.worker-*.js).  Pruned from the copy AND deleted from the dist:
-      // ~16MB of second copies no image needs to carry.
-      const unhashedBundle = /^(pglite\.(wasm|data)|initdb\.wasm|(vector|pg_trgm|pg_textsearch)\.tar\.gz)$/;
-      await fs.rm(path.join(rootStatic, "assets"), { force: true, recursive: true });
-      await fs.cp(path.join(PATH.dist, "assets"), path.join(rootStatic, "assets"), {
-        recursive: true,
-        filter: (src) => !unhashedBundle.test(path.basename(src)),
-      });
-      const distAssets = path.join(PATH.dist, "assets");
-      for (const file of await fs.readdir(distAssets)) {
-        if (unhashedBundle.test(file)) {
-          await fs.rm(path.join(distAssets, file), { force: true });
-        }
-      }
+      // pg.worker-*.js), so the worker lane ignores these copies.  They
+      // change only with the pglite version and keep their literal names,
+      // so they stay on WhiteNoise's DEFAULT caching (no immutable).
+      await fs.cp(path.join(PATH.dist, "assets"), path.join(rootStatic, "assets"), { recursive: true });
       const rootChunk = path.join(rootStatic, "chunk");
       await fs.rm(rootChunk, { force: true, recursive: true });
       await fs.cp(path.join(PATH.dist, "chunk"), rootChunk, { recursive: true });
