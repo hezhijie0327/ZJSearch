@@ -1159,7 +1159,7 @@ export function InspectorView({
             ) : isCrawledSource ? (
               <>
                 {snippetLine ? (
-                  <div className="rounded-lg bg-surface-2/40 px-3 py-2.5 text-[13px] leading-relaxed text-ink-2">
+                  <div className="mb-4 rounded-lg bg-surface-2/40 px-3 py-2.5 text-[13px] leading-relaxed text-ink-2">
                     {snippetLine}
                   </div>
                 ) : null}
