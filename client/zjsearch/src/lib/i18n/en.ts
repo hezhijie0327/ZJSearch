@@ -341,6 +341,11 @@ export const EN = {
   knowledge_usage_decision: "Decision Model",
   knowledge_memory_add: "Add memory",
   knowledge_crawl: "Crawl full text",
+  knowledge_crawl_update: "Update full text",
+  knowledge_crawl_clear: "Remove full text",
+  knowledge_crawl_clear_confirm:
+    'Remove the archived full text of "{label}"? The source row stays, and you can crawl it again anytime.',
+  knowledge_crawl_cleared: "Full text removed",
   knowledge_crawl_failed: "Crawl failed — the page could not be read.",
   knowledge_source_crawled: "Full text saved",
   knowledge_full_text: "Full text",
