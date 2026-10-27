@@ -87,10 +87,26 @@ export default {
     // reader anywhere -- the PWA manifest is the per-theme TEMPLATE rendered
     // at /manifest.json, never this static artifact
     emptyOutDir: true,
+    // The chunk graph is deliberately coarse: manualChunks pins zjs-results
+    // as ONE stable chunk for the streamed shell's pre-warm, and the
+    // knowledge/store vendor chunk is large by design -- megabyte chunks
+    // here are the accepted shape, not an accident to be warned about.
+    chunkSizeWarningLimit: 2000,
     // source maps are a debugging aid only — keep the ~1.5 MB of .map files
     // out of the deployed static folder unless they are explicitly requested
     sourcemap: process.env.ZJSEARCH_SOURCEMAP === "1",
     rollupOptions: {
+      // Upstream node_modules noise, warning-only, every build:
+      //   EVAL -- pglite's emscripten dist ships two direct `eval` calls;
+      //   MODULE_LEVEL_DIRECTIVE -- lucide-react's RSC "use client" markers.
+      // Keep both out of the build output; anything app-authored still shows.
+      onwarn: (warning, warn) => {
+        const id = typeof warning.id === "string" ? warning.id : "";
+        if (id.includes("node_modules") && (warning.code === "EVAL" || warning.code === "MODULE_LEVEL_DIRECTIVE")) {
+          return;
+        }
+        warn(warning);
+      },
       input: {
         app: `${PATH.src}/main.tsx`,
       },

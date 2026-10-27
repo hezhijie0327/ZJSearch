@@ -20,7 +20,7 @@ import { fetchJson } from "@/lib/http.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
 import { aiTokenValue, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
 import { invalidateStatsCache } from "@/lib/kb/stats.ts";
-import { pgQuery, pgTransaction, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
+import { pgQuery, pgTransaction, resetDatabase, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
 
 /** The structural shape the store reads off a settled run.  The feature
     owns the typed shape (AiSearchRun satisfies it); the store never
@@ -837,7 +837,6 @@ export function deleteSource(url: string): void {
     behind. */
 export function resetAll(): void {
   void enqueue(async () => {
-    const { resetDatabase } = await import("@/lib/pg.ts");
     await resetDatabase();
   });
 }
