@@ -20,7 +20,6 @@ import {
 } from "@/features/knowledge/sections.tsx";
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
-import { fetchJson } from "@/lib/http.ts";
 import { useT } from "@/lib/i18n.ts";
 import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
@@ -33,8 +32,6 @@ import {
   updateMemory,
 } from "@/lib/kb/memory.ts";
 import {
-  archiveDocument,
-  clearSourceCrawl,
   deleteItem,
   deleteSource,
   deleteThread,
@@ -44,7 +41,7 @@ import {
   toggleThreadPin,
 } from "@/lib/kb/projections.ts";
 import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
-import { aiTokenValue, type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
+import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
 import {
@@ -227,16 +224,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   const [view, setView] = useState<"library" | KnowledgeItem>("library");
   const inspected = view === "library" ? null : view;
   const [inspectedBody, setInspectedBody] = useState<string | null>(null);
-  // bumped after an in-place full-text lifecycle action (crawl / clear) so
-  // the open inspector reloads its body off the store
-  const [bodyBump, setBodyBump] = useState(0);
   const [inspectedExtras, setInspectedExtras] = useState<{
     sources: ThreadAnswer["sources"];
     usage: ThreadAnswer["usage"];
     report?: ThreadAnswer["report"];
     sections?: ThreadAnswer["sections"];
   } | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: bodyBump is the reload trigger after an in-place crawl/clear, not a read
   useEffect(() => {
     if (inspected?.kind === "document") {
       let cancelled = false;
@@ -294,7 +287,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
     setInspectedExtras(null);
     return undefined;
-  }, [inspected, bodyBump]);
+  }, [inspected]);
 
   // the directory's run-mode tags: refreshed out-of-band (the live thread
   // subscription must stay a plain select) and merged into the rows
@@ -314,61 +307,10 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     };
   }, [threadsLen, listingBump]);
   // ── dialogs ──────────────────────────────────────────────────────────
-  const [confirming, setConfirming] = useState<
-    | "reset"
-    | {
-        label: string;
-        /** alternate confirm copy -- "crawl-clear" speaks of the archive,
-            not the row (ai_delete_body stays row-deletion's voice) */
-        message?: "crawl-clear";
-        /** the success toast -- defaults to the row-deleted one */
-        done?: string;
-        run: () => void;
-      }
-    | null
-  >(null);
+  const [confirming, setConfirming] = useState<"reset" | { label: string; run: () => void } | null>(null);
   const pinItem = (item: KnowledgeItem, on: boolean) => {
     toggleItemPin(item.id, on);
     setListingBump((b) => b + 1);
-  };
-  const crawlItem = async (item: KnowledgeItem): Promise<boolean> => {
-    if (!item.url) {
-      return false;
-    }
-    try {
-      const result = await fetchJson<{ title: string; markdown: string }>("/zjsearch/browser/read", {
-        method: "POST",
-        headers: { "Content-type": "application/json" },
-        body: JSON.stringify({ tk: aiTokenValue(), url: item.url }),
-      });
-      archiveDocument(item.url, result.title || item.title, result.markdown);
-      setListingBump((b) => b + 1);
-      return true;
-    } catch {
-      flashToast(t("knowledge_crawl_failed"), { tone: "danger" });
-      return false;
-    }
-  };
-  // the INSPECTOR's full-text lifecycle: same crawl op, but the open view
-  // reloads its body afterwards; clear routes through the confirm dialog
-  // and returns to the library (the row survives, the archive does not)
-  const crawlInspected = async (item: KnowledgeItem) => {
-    const ok = await crawlItem(item);
-    if (ok) {
-      flashToast(t("knowledge_source_crawled"), { tone: "accent" });
-    }
-    setBodyBump((b) => b + 1);
-  };
-  const clearInspectedCrawl = (item: KnowledgeItem) => {
-    setConfirming({
-      label: item.title || item.url || t("knowledge_title"),
-      done: t("knowledge_crawl_cleared"),
-      message: "crawl-clear",
-      run: () => {
-        clearSourceCrawl(item.url ?? "");
-        setView("library");
-      },
-    });
   };
   const removeItem = (item: KnowledgeItem, after?: () => void) => {
     setConfirming({
@@ -512,8 +454,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             extras={inspectedExtras}
             item={inspected}
             onBack={() => setView("library")}
-            onClearCrawl={clearInspectedCrawl}
-            onCrawl={crawlInspected}
             onOpenThread={navigateThread}
             onPin={pinItem}
             onRemove={(item) => removeItem(item, () => setView("library"))}
@@ -643,7 +583,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                         readingPageSafe * READING_PAGE_SIZE,
                         readingPageSafe * READING_PAGE_SIZE + READING_PAGE_SIZE,
                       )}
-                      onCrawl={crawlItem}
                       onOpenInspector={setView}
                       onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
                       onPin={pinItem}
@@ -686,9 +625,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
           confirming
             ? typeof confirming === "string"
               ? t("knowledge_admin_reset_confirm")
-              : confirming.message === "crawl-clear"
-                ? t("knowledge_crawl_clear_confirm", { label: confirming.label })
-                : t("ai_delete_body", { label: confirming.label })
+              : t("ai_delete_body", { label: confirming.label })
             : ""
         }
         onConfirm={() => {
@@ -699,7 +636,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             refreshStats();
           } else if (confirming) {
             confirming.run();
-            flashToast(confirming.done ?? t("knowledge_deleted"), { tone: "accent" });
+            flashToast(t("knowledge_deleted"), { tone: "accent" });
             refreshStats();
             setListingBump((b) => b + 1);
           }

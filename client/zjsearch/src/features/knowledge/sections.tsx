@@ -23,14 +23,12 @@ import {
   Gauge,
   Globe,
   LayoutTemplate,
-  LoaderCircle,
   MemoryStick,
   MessageCircleQuestion,
   Network,
   Pencil,
   Plus,
   Printer,
-  RefreshCw,
   Search,
   Sparkles,
   Star,
@@ -391,18 +389,12 @@ function RowFavicon({ item }: { item: KnowledgeItem }) {
     the inspector (reveal={false}).  Clicks stop propagation: the whole
     row around them is a click target. */
 function RowActions({
-  onCrawl,
-  crawling,
   onPin,
   onRemove,
   onRename,
   pinned,
   reveal = true,
 }: {
-  /** the source row's manual full-text crawl (the browser read lane) */
-  onCrawl?: () => void;
-  /** true while that crawl is in flight */
-  crawling?: boolean;
   onPin?: (on: boolean) => void;
   onRemove: () => void;
   onRename?: () => void;
@@ -415,25 +407,6 @@ function RowActions({
     <div
       className={`flex shrink-0 items-center gap-0.5 ${reveal ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100" : ""}`}
     >
-      {onCrawl ? (
-        <button
-          aria-label={t("knowledge_crawl")}
-          className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
-          disabled={crawling}
-          onClick={(event) => {
-            event.stopPropagation();
-            onCrawl();
-          }}
-          title={t("knowledge_crawl")}
-          type="button"
-        >
-          {crawling ? (
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-          ) : (
-            <FileDown aria-hidden="true" className="size-3.5" />
-          )}
-        </button>
-      ) : null}
       {onRename ? (
         <button
           aria-label={t("knowledge_rename")}
@@ -815,8 +788,6 @@ export function InspectorView({
   extras,
   item,
   onBack,
-  onClearCrawl,
-  onCrawl,
   onOpenThread,
   onPin,
   onRemove,
@@ -838,10 +809,6 @@ export function InspectorView({
   } | null;
   item: KnowledgeItem;
   onBack: () => void;
-  /** the crawled source's full-text lifecycle: re-crawl (update) and
-      clear -- the parent owns the confirm dialog and the body refetch */
-  onClearCrawl?: (item: KnowledgeItem) => void;
-  onCrawl?: (item: KnowledgeItem) => Promise<unknown>;
   onOpenThread: (id: string) => void;
   onPin: (item: KnowledgeItem, on: boolean) => void;
   onRemove: (item: KnowledgeItem) => void;
@@ -1004,17 +971,6 @@ export function InspectorView({
     });
   };
   const bodyCardRef = useRef<HTMLDivElement>(null);
-  // the full-text section's own lifecycle buttons: one in-flight marker
-  // covers the crawl/update call, clear rides the parent's confirm dialog
-  const [crawlBusy, setCrawlBusy] = useState(false);
-  const doCrawl = () => {
-    if (!onCrawl || crawlBusy) {
-      return;
-    }
-    setCrawlBusy(true);
-    void Promise.resolve(onCrawl(item)).finally(() => setCrawlBusy(false));
-  };
-  const doClear = () => onClearCrawl?.(item);
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1175,68 +1131,34 @@ export function InspectorView({
                 <p className="text-[13px] text-ink-3">…</p>
               )
             ) : isCrawledSource ? (
-              // TWO sections on one rhythm: the engine's summary snippet,
-              // then the archived full text. The full-text section owns its
-              // lifecycle in the header row -- crawl when nothing is
-              // archived, update + clear when it is (clear routes through
-              // the parent's confirm dialog; the row itself survives).
-              <div className="space-y-4">
+              <>
                 {snippetLine ? (
-                  <div className="rounded-lg bg-surface-2/40 px-3 py-2.5 text-[13px] leading-relaxed text-ink-2">
+                  <div className="mb-4 rounded-lg bg-surface-2/40 px-3 py-2.5 text-[13px] leading-relaxed text-ink-2">
                     {snippetLine}
                   </div>
                 ) : null}
-                <section>
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium uppercase tracking-wide text-ink-3">{t("knowledge_full_text")}</p>
-                    <div className="flex items-center gap-0.5">
-                      <button
-                        aria-label={t(item.meta?.crawled ? "knowledge_crawl_update" : "knowledge_crawl")}
-                        className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:opacity-40"
-                        disabled={crawlBusy}
-                        onClick={doCrawl}
-                        title={t(item.meta?.crawled ? "knowledge_crawl_update" : "knowledge_crawl")}
-                        type="button"
-                      >
-                        {crawlBusy ? (
-                          <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-                        ) : item.meta?.crawled ? (
-                          <RefreshCw aria-hidden="true" className="size-3.5" />
-                        ) : (
-                          <FileDown aria-hidden="true" className="size-3.5" />
-                        )}
-                      </button>
-                      {item.meta?.crawled ? (
-                        <button
-                          aria-label={t("knowledge_crawl_clear")}
-                          className="grid size-7 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                          onClick={doClear}
-                          title={t("knowledge_crawl_clear")}
-                          type="button"
-                        >
-                          <Trash2 aria-hidden="true" className="size-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
+                {body === null ? (
+                  <div aria-busy="true" className="space-y-3">
+                    <span className="zjs-skeleton block h-4 w-full" />
+                    <span className="zjs-skeleton block h-4 w-[93%]" />
+                    <span className="zjs-skeleton block h-4 w-[70%]" />
                   </div>
-                  {body === null ? (
-                    <div aria-busy="true" className="space-y-3">
-                      <span className="zjs-skeleton block h-4 w-full" />
-                      <span className="zjs-skeleton block h-4 w-[93%]" />
-                      <span className="zjs-skeleton block h-4 w-[70%]" />
-                    </div>
-                  ) : body === "" ? (
-                    <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
-                  ) : (
+                ) : body === "" ? (
+                  <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
+                ) : (
+                  <>
+                    <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-3">
+                      {t("knowledge_full_text")}
+                    </p>
                     <div
                       className={`relative ${READ_PANE} max-h-[32rem] overflow-y-auto overscroll-contain`}
                       dir="auto"
                     >
                       {paneText(body)}
                     </div>
-                  )}
-                </section>
-              </div>
+                  </>
+                )}
+              </>
             ) : !isDocument ? (
               item.body ? (
                 <>
@@ -1338,7 +1260,6 @@ export function KindItemRows({
   label,
   emptyIcon,
   emptyLine,
-  onCrawl,
   onOpenInspector,
   onOpenThread,
   onPin,
@@ -1355,24 +1276,8 @@ export function KindItemRows({
   label?: string;
   /** the empty state's guidance line (the caller knows the kind) */
   emptyLine?: string;
-  /** manual full-text crawl for a source row (the browser read lane) */
-  onCrawl?: (item: KnowledgeItem) => Promise<unknown>;
 }) {
   const t = useT();
-  const [crawlBusy, setCrawlBusy] = useState<Record<string, boolean>>({});
-  const crawl = (item: KnowledgeItem) => {
-    if (!onCrawl || crawlBusy[item.id]) {
-      return;
-    }
-    setCrawlBusy((prev) => ({ ...prev, [item.id]: true }));
-    void Promise.resolve(onCrawl(item)).finally(() => {
-      setCrawlBusy((prev) => {
-        const next = { ...prev };
-        delete next[item.id];
-        return next;
-      });
-    });
-  };
   if (items.length === 0) {
     return (
       <PaperEmpty
@@ -1441,13 +1346,7 @@ export function KindItemRows({
                 </span>
               </button>
             </div>
-            <RowActions
-              crawling={Boolean(crawlBusy[item.id])}
-              onCrawl={isSource ? () => crawl(item) : undefined}
-              onPin={(on) => onPin(item, on)}
-              onRemove={() => onRemove(item)}
-              pinned={item.pinned}
-            />
+            <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
           </div>
         );
       })}

@@ -580,31 +580,6 @@ export function archiveDocument(url: string, title: string, markdown: string): v
   });
 }
 
-/** Forget a source's archived full text: the row keeps its identity
-    (title, snippet head, pin, thread links) and returns to the
-    not-crawled state -- 更新 re-crawls it from the live page at any
-    time, so the loss is bounded to one server fetch. */
-export function clearSourceCrawl(url: string): void {
-  if (!url) {
-    return;
-  }
-  void enqueue(async () => {
-    const now = Date.now();
-    const hash = urlHash(url);
-    const rows = await pgQuery<{ title: string }>(
-      "SELECT title FROM knowledge WHERE url_hash = $1 AND kind = 'source'",
-      [hash],
-    );
-    const search = segmentKeywords(String((rows ?? [])[0]?.title ?? ""));
-    await pgQuery(
-      `UPDATE knowledge SET body = '', meta = knowledge.meta - 'crawled', search_text = $2, updated = $3
-       WHERE url_hash = $1 AND kind = 'source'`,
-      [hash, search, now],
-    );
-    invalidateStatsCache();
-  });
-}
-
 /** Archive the run's UPLOADED files as document rows (the server's
     conversion receipt -- only it can read PDFs/Office documents; the
     client ships bytes).  A file without a url lives under a
