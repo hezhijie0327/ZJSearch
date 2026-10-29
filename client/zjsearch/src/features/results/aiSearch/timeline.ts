@@ -673,6 +673,9 @@ export function applyEvent(
         clarify: String(event.text ?? ""),
         ask: null,
         browser: null,
+        // the session map dies with the live card -- a stale entry's last
+        // frame must never resurface as the mirror's fallback
+        browserSessions: {},
         wrappingUp: false,
         startedAt: Number(event.startedAt) || run.startedAt,
         endedAt: null,
@@ -689,10 +692,12 @@ export function applyEvent(
         // the retry keeps its confirmed direction: the clarify step
         // re-opens the rebuilt timeline.  The LEDGER resets with the
         // attempt: the server built a fresh Searches (empty findings, a
-        // fresh task list) -- showing the dead attempt's findings card
-        // and task states would present state the writer never received
+        // fresh task list) -- showing the dead attempt's findings card,
+        // task states or decision verdicts would present state the
+        // writer never received
         findings: [],
         plan: [],
+        decisions: [],
         steps: (clarifyText
           ? [{ kind: "clarify" as const, pairs: parseClarifyPairs(clarifyText) }]
           : []) as AiSearchStep[],
@@ -729,6 +734,9 @@ export function applyEvent(
         error: null,
         ask: null,
         browser: null,
+        // the session map dies with the live card -- a stale entry's last
+        // frame must never resurface as the mirror's fallback
+        browserSessions: {},
         wrappingUp: false,
         endedAt: null,
       };
@@ -751,6 +759,9 @@ export function applyEvent(
         error: null,
         ask: null,
         browser: null,
+        // the session map dies with the live card -- a stale entry's last
+        // frame must never resurface as the mirror's fallback
+        browserSessions: {},
         wrappingUp: false,
         endedAt: null,
         stages: [],
@@ -890,10 +901,10 @@ export function applyEvent(
       // folds back to its PLAIN depth -- the model's settled
       // set_deliverable row folded run.mode FORWARD, the reader's
       // withdrawal folds it BACK (the event is journaled, replays re-derive
-      // the same reversal; the rail's structure card then drops at settle
-      // like any never-shaped run's).  A report/deck birth is a FORMAT on
-      // the deep tier -- withdrawing it lands on the tier's plain depth,
-      // so the settled record wears the direct face like the run now is.
+      // the same reversal; the settled record keeps the OUTPUT STRUCTURE
+      // card as its format record -- the direct face, never a hole).  A
+      // report/deck birth is a FORMAT on the deep tier -- withdrawing it
+      // lands on the tier's plain depth.
       if (String((event as { shape?: unknown }).shape ?? "") === "direct") {
         next.mode = run.mode0 === "report" || run.mode0 === "deck" ? "deep" : run.mode0;
       }
@@ -1197,11 +1208,18 @@ export function applyEvent(
       }
       const merged = [...run.sources];
       for (const source of fresh) {
-        const existing = merged.find((candidate) => candidate.n === source.n);
+        const at = merged.findIndex((candidate) => candidate.n === source.n);
+        const existing = at >= 0 ? merged[at] : undefined;
         if (existing) {
-          existing.crawled = existing.crawled || source.crawled;
-          existing.browser = existing.browser || source.browser;
-          existing.img = existing.img ?? source.img;
+          // REPLACEMENT, not mutation: the array copy alone shares the
+          // previous snapshot's row objects -- writing their fields would
+          // rewrite history a replay holds elsewhere
+          merged[at] = {
+            ...existing,
+            crawled: existing.crawled || source.crawled,
+            browser: existing.browser || source.browser,
+            img: existing.img ?? source.img,
+          };
         } else {
           merged.push(source);
         }
@@ -1402,6 +1420,7 @@ export function applyEvent(
               gates: usage.gates ?? null,
               rerank: usage.rerank,
               decision: usage.decision,
+              embedding: usage.embedding,
             }
           : (run.usage ?? null),
         halt,

@@ -42,6 +42,7 @@ import { fitVisibleSlides, observeLateContent } from "@/features/results/aiSearc
 import { applyLocalCiteNumbers, buildCitationMap, citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { cn } from "@/lib/cn.ts";
 import { useT } from "@/lib/i18n.ts";
+import { holdBackTail } from "@/lib/markdownParts.ts";
 import { type PrintSource, printDocument } from "@/lib/print.ts";
 import { CHIP, ICON_BTN, META_ROW } from "@/lib/styles.ts";
 
@@ -344,7 +345,10 @@ export function DeckView({ outline, sections, meta, onCite, settled, fileTag }: 
           if (!source) {
             continue;
           }
-          const html = compileKeyed(section.id, citeToLinks(source, citationMap));
+          // the same holdback the report sections ride: a streaming
+          // section never renders its trailing open structure (the last
+          // unpaired fence / $$ / half link)
+          const html = compileKeyed(section.id, citeToLinks(holdBackTail(source, settled), citationMap));
           if (html !== null) {
             parts.push({ key: section.id, html });
           }
@@ -595,7 +599,7 @@ export function DeckView({ outline, sections, meta, onCite, settled, fileTag }: 
     return (
       <MarkdownAnswer
         galleries={[]}
-        markdown={citeToLinks(gluedSource, citationMap)}
+        markdown={citeToLinks(holdBackTail(gluedSource, settled), citationMap)}
         meta={citedMeta}
         onCite={onCiteLocal}
         settled={settled}

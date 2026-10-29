@@ -639,8 +639,9 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       // the run HOST keeps the run alive across a dropped connection:
       // reattach from the server's buffer (after the last SEEN seq)
       // before giving up -- the same run continues, never a restart.
-      // The window covers the host's whole detach grace, so a blip
-      // longer than the old 5-attempt ladder still recovers in place.
+      // The window is the CLIENT's recovery budget (runs outlives the
+      // connection since linger; a blip longer than the old 5-attempt
+      // ladder still recovers in place).
       const firstGone = firstError instanceof HttpError && firstError.status === 404;
       if (!settledRef.current && runKeyRef.current && !firstGone && !outer?.signal.aborted) {
         const deadline = Date.now() + reattachWindowMs;
@@ -826,7 +827,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
           .map((memory) => ({ id: memory.id, kind: memory.kind, content: memory.content })),
         site_notes: siteRecipes
           .filter((recipe) => recipe.state === "active" && recipe.host)
-          .map((recipe) => ({ id: recipe.id, host: recipe.host ?? "", content: recipe.content })),
+          .map((recipe) => ({ id: recipe.id, kind: recipe.kind, host: recipe.host ?? "", content: recipe.content })),
         // the EPISODIC lane: recent cross-thread research (title + answer
         // head) -- a returning question continues instead of restarts
         history_episodes: episodes.map((episode) => ({
@@ -1110,15 +1111,15 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     void (async () => {
       const runId = `${threadIdRef.current}:${last.runNo}`;
       // THE ATTACH PROBE comes first: the failed box can mean the client
-      // gave up while the server run lived on (the old ladder's ~31s sat
-      // far under the host's 90s detach grace -- the run kept writing,
-      // sometimes to a real finish the client never saw).  A successful
-      // probe RE-SUBSCRIBES to that handle: the buffer replays from the
-      // last seen seq and the live tail follows -- a mid-write death
-      // completes the very report it was writing, no restart.  A 404
-      // (server restart, swept TTL) or a dead network falls through to
-      // the ctx-replay restart below; a stopped run skips the probe (its
-      // handle was told to stop -- the reverse-stop path replays).
+      // gave up while the server run lived on (research runs LINGER --
+      // the run kept writing, sometimes to a real finish the client
+      // never saw).  A successful probe RE-SUBSCRIBES to that handle:
+      // the buffer replays from the last seen seq and the live tail
+      // follows -- a mid-write death completes the very report it was
+      // writing, no restart.  A 404 (server restart, swept TTL) or a
+      // dead network falls through to the ctx-replay restart below; a
+      // stopped run skips the probe (its handle was told to stop -- the
+      // reverse-stop path replays).
       const staleKey = runKeyRef.current;
       if (staleKey && capability && last.status === "error" && !last.stopped) {
         appendRunEvents(runId, [{ e: "client.reattach", runNo: last.runNo, startedAt: Date.now() }]);
@@ -1463,16 +1464,29 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     core = { ...core, runs: runsWithAttach };
     // the evt-log numbering floor rides the replay: a follow-up run
     // started in THIS tab after a reload appends after the stored rows,
-    // never from 1 (the resume path's seq-collision fix, replay side)
+    // never from 1 (the resume path's seq-collision fix, replay side).
+    // The WIRE seq watermark seeds here too -- the continue path's attach
+    // probe reads it as after_seq; a tab that never streamed the run
+    // (reload, second tab) would otherwise probe from 0 and re-fold the
+    // host's whole buffer (doubled deltas, duplicated evt rows).
     for (const run of core.runs) {
       const runId = `${threadId}:${run.runNo}`;
       let max = 0;
+      let wireSeq = 0;
       for (const entry of events) {
-        if (entry.runId === runId && entry.n > max) {
+        if (entry.runId !== runId) {
+          continue;
+        }
+        if (entry.n > max) {
           max = entry.n;
+        }
+        const seq = (entry.event as { seq?: unknown } | null)?.seq;
+        if (typeof seq === "number" && seq > wireSeq) {
+          wireSeq = seq;
         }
       }
       seedSeqCounter(runId, max);
+      seqWatermarkRef.current.set(runId, wireSeq);
     }
     // normalize: an interrupted run is a done run with interrupted call
     // rows; an awaiting clarify never survives a reload; a mirror that
