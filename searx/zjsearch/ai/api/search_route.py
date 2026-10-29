@@ -337,19 +337,25 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # because the browse/search lanes answer to them by host, not by
     # query relevance
     raw_recipes = payload.get("site_notes")
-    site_notes = (
-        [
-            {
-                "id": str(entry.get("id") or "")[:40],
-                "host": str(entry.get("host") or "")[:120],
-                "content": str(entry.get("content") or "")[:300],
-            }
-            for entry in raw_recipes[:8]
-            if isinstance(entry, dict) and str(entry.get("host") or "").strip() and str(entry.get("content") or "").strip()
-        ]
-        if isinstance(raw_recipes, list)
-        else []
-    )
+    site_notes: list[dict[str, str]] = []
+    if isinstance(raw_recipes, list):
+        for entry in raw_recipes[:8]:
+            host = str(entry.get("host") or "").strip() if isinstance(entry, dict) else ""
+            content = str(entry.get("content") or "").strip() if isinstance(entry, dict) else ""
+            if not (host and content):
+                continue
+            # kind picks the replay lane (procedure = the browse lane's
+            # site recipe, fact = the search lane's source note) -- the
+            # field was dropped once and both lanes went dead
+            kind = str(entry.get("kind") or "")
+            site_notes.append(
+                {
+                    "id": str(entry.get("id") or "")[:40],
+                    "kind": kind if kind in ("fact", "procedure") else "fact",
+                    "host": host[:120],
+                    "content": content[:300],
+                }
+            )
     # the EPISODIC lane: recent cross-thread research (client-assembled
     # from its thread directory -- recency window + rerank there), so a
     # returning question continues instead of restarts
@@ -588,7 +594,11 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 None,
                 False,
                 sources_base,
-                direct=True,
+                # the overview tier rides the CITED contract (its [n] feed
+                # is the whole corpus, the shape ladder's overview rung
+                # sizes the answer); only the greeting/chat write stays
+                # direct -- direct=True drops the context and bans [n]
+                direct=mode != "overview",
                 image_parts=image_parts or None,
                 attached_files=writer_files,
                 tz=user_tz,
@@ -961,8 +971,15 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # is exactly what nothing else preserves (the client's evt log stops
     # at its disconnect, the host buffer dies with the process / the
     # terminal TTL).  The host's callback carries (seq, line); the run
-    # key closes over here.
-    handle.journal = lambda seq, line, _j=run_journal.journal(), _k=handle.key: _j.append(_k, seq, line)
+    # key closes over here.  The singleton lookup defers INTO the call --
+    # the old lambda's default argument evaluated run_journal.journal()
+    # at REGISTRATION, outside publish's fail-open try (a raising open
+    # would have 500'd the run before it started); publish() owns the
+    # append's failure handling (warn once, unhook).
+    def _journal_line(seq: int, line: str, _k: str = handle.key) -> None:
+        run_journal.journal().append(_k, seq, line)
+
+    handle.journal = _journal_line
     if thread:
         # the reload matcher: the thread uuid becomes a server-side index
         # for the run -- a reloaded page whose LOCAL store came up empty
@@ -1089,7 +1106,12 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         judgments=state.judgments,
         known_memories_fn=lambda: [
             (m.get("id") or None, str(m.get("content") or ""), str(m.get("kind") or "fact"))
-            for m in user_memories
+            # live_recall runs carry NO payload snapshot (None -- the store
+            # is queried through the recall slot instead); the extractor's
+            # dedup lens degrades to pass-through rather than crashing the
+            # whole consolidation pass (the TypeError every live run
+            # logged: the extract's events AND the tags died with it)
+            for m in (user_memories or [])
         ]
         + [(None, c, "fact") for c in state.saved_memories],
         outline_title=str(outline["title"]) if outline else None,
@@ -1542,6 +1564,12 @@ def _hosted_response(handle: run_host.RunHandle) -> flask.Response:
     def rest() -> t.Iterator[str]:
         try:
             yield from primed
+            # the batch tail the content check stopped in front of: pulled
+            # out of the subscription already, so the loop below can never
+            # re-receive it -- dropping it here lost every event published
+            # back-to-back with the trigger line (the plan snapshot rode
+            # the same 0.5s batch as the open)
+            yield from pending
             while True:
                 lines = handle.pull(sub)
                 if lines:

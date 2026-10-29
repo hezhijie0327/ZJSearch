@@ -705,7 +705,7 @@ and the referee advises when a subtask's evidence runs thin."""
             if tool_name == INSPECT_IMAGE_TOOL:
                 # the researcher's eyes: fetch one result image and inject
                 # it as the next round's user message
-                url = str(parse_inspect_image_call(call))
+                url, source_n = parse_inspect_image_call(call)
                 started_vi = time.monotonic()
                 if not url:
                     feed_text = "error: inspect_image needs the img= URL copied verbatim from a source line."
@@ -760,7 +760,7 @@ and the referee advises when a subtask's evidence runs thin."""
                         continue
                     image_ref = fetched
                     how = "inline"
-                label = f"source [{int(call.get('n') or 0)}]" if call.get("n") else url[:120]
+                label = f"source [{source_n}]" if source_n else url[:120]
                 self.image_injections.append(
                     {
                         "role": "user",

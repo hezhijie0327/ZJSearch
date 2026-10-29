@@ -126,11 +126,13 @@ def memory_spec() -> dict[str, t.Any]:
                 "host": {
                     "type": "string",
                     "description": (
-                        "save: for SITE RECIPES only -- a learned operational"
-                        " flow for one website (a login path, a captcha dance,"
-                        " the route to walled content); pass that site's host"
-                        " (e.g. xiaohongshu.com).  Omit for facts about the"
-                        " user."
+                        "save: the host-bound kinds -- a site RECIPE"
+                        " (procedure: a learned operational flow for one"
+                        " website -- a login path, a captcha dance, the"
+                        " route to walled content) or a source NOTE (fact:"
+                        " a durable judgment about one website as a"
+                        " source); pass that site's host (e.g."
+                        " xiaohongshu.com).  Omit for user-level facts."
                     ),
                 },
             },

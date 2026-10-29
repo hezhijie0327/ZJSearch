@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS run_journal (
 ON CONFLICT (run_key) DO UPDATE SET q = excluded.q, mode = excluded.mode"""
     SQL_LATEST_FOR_THREAD = """SELECT run_key, q, mode FROM run_index WHERE thread_id = ? ORDER BY created DESC, rowid DESC LIMIT 1"""
     SQL_APPEND = "INSERT OR IGNORE INTO run_journal (key, seq, line) VALUES (?, ?, ?)"
+    SQL_CAP = "SELECT 1 FROM run_journal WHERE key = ? AND seq >= ? LIMIT 1"
     SQL_TAIL = "SELECT line FROM run_journal WHERE key = ? AND seq > ? ORDER BY seq"
     SQL_DROP = "DELETE FROM run_journal WHERE key = ?"
     SQL_SWEEP_AGE = "DELETE FROM run_journal WHERE created < ?"
@@ -110,7 +111,13 @@ DELETE FROM run_journal WHERE key IN (
         return (str(row[0]), str(row[1]), str(row[2])) if row else None
 
     def append(self, key: str, seq: int, line: str) -> None:
+        # the documented row cap, actually enforced: one PK-indexed probe
+        # (a run past its cap short-circuits every further append -- the
+        # docstring's "beyond the cap the appends no-op" was aspirational
+        # for a while)
         with self._lock, self.DB as conn:
+            if conn.execute(self.SQL_CAP, (key, MAX_LINES_PER_RUN)).fetchone():
+                return
             conn.execute(self.SQL_APPEND, (key, seq, line))
 
     def tail(self, key: str, after_seq: int) -> list[str]:

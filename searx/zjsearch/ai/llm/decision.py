@@ -143,9 +143,12 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
         "enabled": True,
         # the round LADDERS the probe's score (0-4) scales to -- the
         # model-controlled depth made literal: an exhaustive question
-        # earns a huge runway, a quick lookup a small one
-        "ladder_deep": [12, 24, 48, 96, 120],
-        "ladder_balanced": [4, 8, 16, 24, 32],
+        # earns a huge runway, a quick lookup a small one.  The top rungs
+        # MATCH profile.py's runaway caps (balanced 60 / deep 120); the
+        # route carries the same numbers as its code-side fallback -- keep
+        # the two lists identical or the fallback's drift silently wins
+        "ladder_deep": [15, 35, 60, 90, 120],
+        "ladder_balanced": [12, 24, 36, 48, 60],
     },
     "evidence_check": {"enabled": True, "head": 8, "pass_min": 0.45},
     # the pre-write CLAIM check (rides the evidence_check pass,

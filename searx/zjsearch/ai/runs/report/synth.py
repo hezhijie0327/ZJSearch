@@ -132,7 +132,10 @@ def make_synthesizer(
     # the sibling `stream` closure below yields it (a synthesizer-local
     # was a NameError on the first real report's first section)
     gap_text = "Section generation failed upstream"
-    section_system = deck_prompts.DECK_SECTION_SYSTEM if deck else report_prompts.SECTION_SYSTEM
+    # the section stack is dated at CALL time with the RUN's tz -- the old
+    # module-level constants baked today_line(None) at import (stale at
+    # midnight) and the synth prepended a SECOND fresh block
+    section_system = deck_prompts.deck_section_system(tz) if deck else report_prompts.report_section_system(tz)
     claim_re = _DECK_CLAIM_RE if deck else _CLAIM_RE
 
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]]:
@@ -317,7 +320,9 @@ def make_synthesizer(
             except Exception:  # pylint: disable=broad-except
                 avoid_vectors = []
         material = state.corpus.pack(query, k=14, budget=PACK_BUDGET_DEFAULT, avoid=avoid_vectors)
-        system = "\n".join([today, section_system, lang_directive])
+        # the section stack carries its own <today> (dated with the run's
+        # tz at mint time) -- prepending `today` here doubled the block
+        system = "\n".join([section_system, lang_directive])
         # the findings ledger rides EVERY section (the same distillation
         # the single-write writer gets, bounded): facts retire from the
         # corpus as it evicts, the ledger is the run's authoritative

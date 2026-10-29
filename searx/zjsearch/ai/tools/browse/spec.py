@@ -176,10 +176,21 @@ drove.""",
                     "type": "integer",
                     "description": "tab: the tab index from the strip (switch / close).",
                 },
+                "x1": {"type": "integer", "description": "drag: start viewport X."},
+                "y1": {"type": "integer", "description": "drag: start viewport Y."},
+                "x2": {"type": "integer", "description": "drag: end viewport X."},
+                "y2": {"type": "integer", "description": "drag: end viewport Y."},
+                # ONE property, two shapes (the dict's last duplicate used
+                # to win silently and the model never saw the multi array)
                 "steps": {
-                    "type": "array",
-                    "description": "multi: up to 5 action objects, executed in order (first failure stops the batch).",
-                    "items": {"type": "object"},
+                    "oneOf": [
+                        {
+                            "type": "array",
+                            "items": {"type": "object"},
+                            "description": "multi: up to 5 action objects, executed in order (first failure stops the batch).",
+                        },
+                        {"type": "integer", "description": "drag: interpolation steps (5-40, default 15)."},
+                    ],
                 },
                 "x": {"type": "integer", "description": "click: viewport X when clicking by COORDINATES instead of ref.  screenshot: region left edge (with y/w/h)."},
                 "y": {"type": "integer", "description": "click: viewport Y when clicking by COORDINATES instead of ref.  screenshot: region top edge (with x/w/h)."},
@@ -189,7 +200,6 @@ drove.""",
                 "y1": {"type": "integer", "description": "drag: start viewport Y."},
                 "x2": {"type": "integer", "description": "drag: end viewport X."},
                 "y2": {"type": "integer", "description": "drag: end viewport Y."},
-                "steps": {"type": "integer", "description": "drag: interpolation steps (5-40, default 15)."},
                 "values": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -212,7 +222,7 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     if action not in _ACTIONS:
         return {"action": ""}
     out: dict[str, t.Any] = {"action": action}
-    if action in ("open", "read"):
+    if action in ("open", "read") or (action == "tab" and str(args.get("op") or "") == "new"):
         out["url"] = str(args.get("url") or "").strip()[:2000]
     if action in ("click", "type", "screenshot", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
@@ -250,6 +260,24 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
         out["key"] = str(args.get("key") or "").strip()[:24]
     if action == "scroll":
         out["direction"] = "up" if str(args.get("direction") or "") == "up" else "down"
+        # the TARGETED scroll: the first page region matching this text
+        out["text"] = str(args.get("text") or "").strip()[:200]
+    if action == "read":
+        # a CAPTURED download's read-back instead of the live page
+        out["download"] = str(args.get("download") or "").strip()[:200]
+    if action == "history":
+        op = str(args.get("op") or "").strip().lower()
+        out["op"] = op if op in ("back", "forward", "reload") else ""
+    if action == "tab":
+        op = str(args.get("op") or "list").strip().lower()
+        out["op"] = op if op in ("new", "switch", "close", "list") else "list"
+        try:
+            out["index"] = max(0, int(args.get("index")))
+        except (TypeError, ValueError):
+            pass
+    if action == "multi":
+        raw = args.get("steps")
+        out["steps"] = [step for step in raw if isinstance(step, dict)][:5] if isinstance(raw, list) else []
     if action == "wait_user":
         try:
             out["seconds"] = max(10, min(int(args.get("seconds")), 600))

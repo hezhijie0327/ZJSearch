@@ -47,9 +47,16 @@ def inspect_image_spec() -> dict[str, t.Any]:
     }
 
 
-def parse_inspect_image_call(call: dict[str, t.Any]) -> str:
-    """The tool call's image URL -- sanitized (length + scheme gate; the
-    SSRF check happens at fetch time)."""
+def parse_inspect_image_call(call: dict[str, t.Any]) -> tuple[str, int]:
+    """The tool call's ``(image URL, source n)`` -- sanitized (length +
+    scheme gate; the SSRF check happens at fetch time); ``n`` is 0 when
+    absent (the injection label falls back to the URL)."""
     args = raw_args(call)
     url = str(args.get("url") or "").strip()[:2000]
-    return url if url.startswith(("http://", "https://", "data:image/")) else ""
+    if not url.startswith(("http://", "https://", "data:image/")):
+        return "", 0
+    try:
+        n = int(args.get("n") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return url, max(0, n)
