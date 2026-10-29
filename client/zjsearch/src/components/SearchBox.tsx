@@ -342,7 +342,6 @@ export function SearchBox({
               aria-activedescendant={active >= 0 && suggestions[active] ? `${listboxId}-${active}` : undefined}
               aria-autocomplete="list"
               aria-controls={showDropdown ? listboxId : undefined}
-              aria-expanded={showDropdown}
               aria-label={t("search")}
               autoCapitalize="none"
               className={`relative w-full bg-transparent text-base outline-none placeholder:text-ink-3 ${

@@ -1114,6 +1114,39 @@ const EMPTY_GALLERY: AiSearchGallery[] = [];
 
 /** The capped reasoning scroll area: while the stream runs it keeps the
     newest line in view (no-op once settled or folded). */
+/** The streaming ANSWER's bounded pane: the growth lives INSIDE the
+    scroll box (tail-follow like the think pane; scrolling back unpins,
+    the bottom re-pins) -- an uncapped streaming card sits ABOVE the
+    result list and pushed it down on every delta (the audit's CLS
+    finding).  The cap matches the settled preview (OVERVIEW_PREVIEW_PX),
+    so the settle hands over to ClampReveal without a jump. */
+function AnswerStreamPane({ active, children }: { active: boolean; children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const pinnedRef = useRef(true);
+  // re-follow after every render (no dependency array on purpose — the
+  // pane is controlled, its content grows every streamed delta)
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (active && el && pinnedRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  });
+  return (
+    <div
+      className="max-h-56 overflow-y-auto overscroll-contain"
+      onScroll={() => {
+        const el = scrollRef.current;
+        if (el) {
+          pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+        }
+      }}
+      ref={scrollRef}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function ThinkScroll({ active, text }: { active: boolean; text: string }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // tail-follow must not fight the reader: while streaming the tail is
@@ -1312,28 +1345,40 @@ export function OverviewCard({
           // proportionally, and the overview sits IN the 14px snippet
           // column instead of towering over it
           <div className="mt-2 text-sm font-serif leading-[1.8] text-ink">
-            {/* streaming renders uncapped (active=false); once settled the
-              shared clamp-and-reveal takes over the preview cap */}
-            <ClampReveal
-              active={state.phase === "done"}
-              buttonClassName="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-line py-2 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink"
-              previewPx={OVERVIEW_PREVIEW_PX}
-            >
-              <MarkdownAnswer
-                figureLightbox
-                markdown={markdown}
-                meta={sourceMeta}
-                onCite={onCite}
-                settled={state.phase === "done"}
-              />
-              {/* the run's meta line folds INTO show-more (the transport
-                outcome is detail, not headline) */}
-              {!streaming && !failed && meta ? (
-                <div className="mt-2">
-                  <AiRunFooter finish={meta.finish ?? null} model={meta.model ?? null} usage={meta.usage ?? null} />
-                </div>
-              ) : null}
-            </ClampReveal>
+            {streaming ? (
+              // STREAMING: the growth lives INSIDE a bounded scroll pane
+              // (tail-follow like the think pane; the cap matches the
+              // settled preview) -- uncapped streaming pushed the results
+              // below the card down on EVERY delta (the audit's CLS
+              // finding: the card sits above the result list)
+              <AnswerStreamPane active={streaming}>
+                <MarkdownAnswer figureLightbox markdown={markdown} meta={sourceMeta} onCite={onCite} settled={false} />
+              </AnswerStreamPane>
+            ) : (
+              // settled: the shared clamp-and-reveal takes over the
+              // preview cap (the pane above ends at the same height, so
+              // the hand-over does not jump)
+              <ClampReveal
+                active={state.phase === "done"}
+                buttonClassName="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-line py-2 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink"
+                previewPx={OVERVIEW_PREVIEW_PX}
+              >
+                <MarkdownAnswer
+                  figureLightbox
+                  markdown={markdown}
+                  meta={sourceMeta}
+                  onCite={onCite}
+                  settled={state.phase === "done"}
+                />
+                {/* the run's meta line folds INTO show-more (the transport
+                  outcome is detail, not headline) */}
+                {!failed && meta ? (
+                  <div className="mt-2">
+                    <AiRunFooter finish={meta.finish ?? null} model={meta.model ?? null} usage={meta.usage ?? null} />
+                  </div>
+                ) : null}
+              </ClampReveal>
+            )}
           </div>
         ) : streaming && !hasThink ? (
           <p className="mt-2 text-xs text-ink-3">{t("ai_overview_running")}</p>
