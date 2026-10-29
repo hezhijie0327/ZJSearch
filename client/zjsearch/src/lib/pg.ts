@@ -93,7 +93,7 @@ export function pg(): Promise<Pg> {
     contents are destroyed. */
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
-  for (const table of ["knowledge", "run_event", "thread_head", "run_summary", "stats", "attachment"]) {
+  for (const table of ["knowledge", "run_event", "thread_head", "run_summary", "stats", "attachment", "memory"]) {
     await db.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
   }
   await createSchema(db);
