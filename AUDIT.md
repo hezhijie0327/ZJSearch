@@ -89,9 +89,14 @@ pins; bump only when the index is actually ahead, then reinstall, restart,
 and re-run the live AI test (their only consumers are the SDK factories in
 `searx/zjsearch/ai/llm/sdk/`).  The theme's other own pins (bm25s =
 the reranker plugin, mcp = the tool-server bridge, html-to-markdown =
-the reader) follow the same rule, each with its area's regression: the
+the reader, `markitdown[pdf,docx,pptx,xlsx]` = the ONE document
+converter behind `core/convert` — attachments, native PDF reads and the
+reader's HTML pass all ride it, `camoufox[geoip]` = the render engine)
+follow the same rule, each with its area's regression: the
 §4 plugin matrix for bm25s, one real MCP tool call for mcp, one
-web_crawler read for html-to-markdown.
+web_crawler read for html-to-markdown, one FILE-attachment upload
+(a docx — the conversion receipt must land a 资料 row) for markitdown,
+one browser open+read for camoufox.
 
 ```sh
 local/py3/bin/pip index versions openai
@@ -100,6 +105,8 @@ local/py3/bin/pip index versions google-genai
 local/py3/bin/pip index versions bm25s
 local/py3/bin/pip index versions mcp
 local/py3/bin/pip index versions html-to-markdown
+local/py3/bin/pip index versions markitdown
+local/py3/bin/pip index versions camoufox
 ```
 
 - The rest of requirements.txt is upstream-owned: check for awareness,
@@ -149,6 +156,13 @@ for the token list (`zjaudit general`, `zjaudit images`, `zjaudit videos`,
 | MD thread export | the export action on the run actions row | valid markdown: one `## ` per question, sources at the foot, `{{zjs-gallery:i}}` NEVER appears (each becomes its images' markdown figures) |
 | AI failure UX (overview) | point `zjsearch.llm.base_url` at a dead port | 502 body reason readable under the card's failed label |
 | AI failure UX (search) | a settled run with NO answer (writer empty/dead stream) | the failed box with reason + retry + classic fallback — a researched-then-empty run must NEVER settle as silent nothing (stop-button cuts are exempt: `stopped` runs stay quiet) |
+| Knowledge base (六视图) | header LibraryBig icon | SIX tabs: 研究 (thread directory w/ mode tags + Reports badge) / 资料 (source+document merged rows — sources wear favicons, documents the FileText 「全文」 face) / 图谱 (tag graph, equilibrium SLEEPS — `document.getAnimations()` must be empty on a settled graph) / 记忆 (own-table timeline, CRUD + quick capture) / 模板 / 管理; the keyword/semantic/hybrid modes come from the deployment; every delete confirms |
+| Attachment upload — file | hero paperclip: a .docx (or the composer's DataTransfer injection, §7.3) then a question | the run's timeline shows the attachment; AFTER settle the 资料 tab gains a 「全文」 row titled with the filename (the `attachment` wire event → `archiveAttachments`); the row opens the inspector's reading pane; a follow-up in the SAME thread inherits the file (up to 6, removable in the picker) |
+| Attachment upload — image | a .png/.jpg via the paperclip | the image compresses client-side (~1568px edge), rides the FIRST turn as a vision part (the answer references it); it does NOT appear in 资料 and does NOT inherit to follow-ups — it lives only in the thread replay |
+| Deliverable flip | a deep/balanced run whose request suits a report: pick 报告 in the OUTPUT STRUCTURE card mid-run | the picker lights the TOC + DocumentView at the write boundary; 直接回答 pick withdraws a pending flip (mode folds BACK to the birth tier, run settles as a plain answer, no structure card); a settled record keeps the card as its FORMAT RECORD (never a hole) |
+| Paid-engine gate | settings with an api_key engine (bocha…) disabled-by-default; ask the model for that engine by NAME | the search settles as approval (待用户确认 row), the run parks `awaiting` on the ask_user; confirming re-runs with `paid_ok` and the WHOLE run stays approved (sticky); the confirmed direction seeds the clarify step |
+| Pasted brief | paste a multi-KB research brief into a follow-up composer | the pane auto-grows (~8 lines then internal scroll), Shift+Enter = newline while idle / PREEMPT steer while streaming; the run title clamps at THREE lines behind the expand chip; the tab title caps at the first line / 80 chars |
+| AI Overview (retired shape) | `?q=zjaudit+general&ai_overview=1` deep link + the results-page trigger | the card renders as the results column's paper-dressed card (tape + tilt), answers back (the ask pane), regen/copy work; the standalone overview page is GONE — the deep link boots the results page with the card open |
 
 Plugin answers (server-side; test via curl §6, not the browser):
 
@@ -287,8 +301,9 @@ curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ask/search' -H 'Content-Type: ap
   usage, model, halt}`.  `tasks` snapshots and `sources` (the [n]
   registry) ride along as authoritative state — the client never
   reconstructs anything (there are no heuristics left to audit).
-- AFTER `settle` only `related` / `memory` / `usage` may trail (the late
-  set — the follow-up box unlocks on settle, not on them).
+- AFTER `settle` only `title` / `related` / `memory` / `tags` / `usage`
+  may trail (the late set — the follow-up box unlocks on settle, not on
+  them; the client's LATE_KINDS gate is the authority).
 - `ask` is the clarify gate AND the mid-research ask_user (same schema);
   the ask branch emits the tool's call row BEFORE the ask event.
 - A greeting-style run skips research: `open` (kind write) → `answer`
@@ -408,6 +423,78 @@ rules and the shared-token inventory from AGENTS.md, covering:
    fallback (retry once without the filter).  Verify with composition
    asserts over `spine.build_messages` / `runtime.prompts.initial_messages`
    / the tool specs in `tools/web_search.py` + `tools/web_browser/spec.py`.
+11. **Knowledge store & the RAG archive lane** — the ONE-ROW-PER-PAGE
+   doctrine (a page is the same source row before and after a crawl;
+   `doc:` twins fold away); the retrieval head-bias contract:
+   `search_text` = title + the FIRST 8000 chars (segmented) serves BOTH
+   the BM25 leg and the embed leg (`embedPending` slices 4000), the
+   `body` column keeps 60k for consumption — recall is head-biased BY
+   DESIGN, never "the corpus is truncated" (the accepted edge: a row
+   whose load-bearing text sits past 8k is recall-invisible for it).
+   Check: `embedPending`'s partial index still excludes `source_ref`;
+   attachment rows (`doc:att:*`, `meta.origin='attachment'`) join every
+   document surface (资料 directory, hybrid+semantic search, recallPages,
+   embed pass) while IMAGES stay out of the knowledge table; the
+   `attachment` table's bytes sweep on deleteThread/reset; the retired
+   manual crawl stays DEAD (no `/zjsearch/browser/read` route, no
+   `clearSourceCrawl`/`crawlItem` stragglers — 5a7fd95); projections are
+   upsert-idempotent (replay re-settles must not duplicate).
+12. **The tripartite memory** — the `memory` OWN table (fact/procedure
+   kinds; episodic rides thread_head, not rows); the tool's FULL CRUD
+   (search/save/update/forget) sanitizes against the same shape it
+   advertises; the consolidation organ (post-run extractor) writes
+   through the SAME projections as the manual captures; the dedup floor
+   (embedding NN merge) cannot eat a DISTINCT fact; site recipes are
+   host-bound (www folded, suffix covers subdomains) and only the
+   browse lane reads them; every memory lands in the UI locale (the
+   doctrine's language rule) — a zh UI must not store English facts
+   from an en-leaning model.
+13. **Recovery & journal ladder** — every research run registers
+   `linger` (detach grace NEVER wraps a run); the journal shadow
+   (`runs/journal.py`) fails OPEN on every consumer, rebuilds at a
+   `.N`-suffixed generation path (a same-path rebuild answers through
+   orphaned-inode sessions), 72h TTL + newest-512 sweep; the resume
+   chain probes live host → journal → interrupted state; pre-2026-10
+   rows (seq stripped) and awaiting runs stay excluded.  Client: the
+   watchdog ceiling (170s) sits ABOVE every server quiet bound; the
+   reattach ladder covers the whole detach grace; a failed box's 继续
+   attach-probes FIRST (404 falls through to ctx replay); the store
+   boot races 25s and DEGRADES to in-memory (`__zjsKnowledge.degraded()`)
+   instead of wedging — a degraded session must never silently fake a
+   real store.
+14. **Static-root publishing & the build contract** — after EVERY
+   build: the gzip/brotli siblings exist for the root bundles, the
+   chunk graph and the PGLite FS artifacts (`gzipPublished` pass); the
+   dist dedup freed the unlinked copies (nlink guard — on Windows
+   hardlink flows the sources must survive); `pg.worker-*.js` +
+   `pglite-*` + `initdb-*` + the three extension tars sit at the
+   static ROOT (a missing FS bundle throws INSIDE the worker →
+   main-thread fallback → the ~1s freeze jam); `chunk/zjs-results.min.js`
+   keeps its STABLE name (the streamed shell's pre-warm URL); extra
+   root-level CSS chunks resolve as siblings (a missing one = the
+   skeleton-forever boot); the build stays warning-free with the
+   onwarn filter scoped to node_modules authors only (app warnings
+   must still print).
+15. **Route-level control flows** — the deliverable flip's priority
+   chain (reader template pick → reader direct pick → route outline →
+   minted skeleton → defer) and the direct pick's OUTRANK (withdraws
+   template AND flip, `on_steer` clears `route_outline`/
+   `deliverable_entities` state-side, mode folds back to `mode0`);
+   the paid gate (bang on an api_key engine parks `awaiting`, the
+   confirm re-runs with the STICKY `state.paid_ok`, children inherit,
+   a restart re-asks SAFE); `available_categories()` derives from
+   `searx.engines` (a category only default-disabled engines declare
+   must NOT be offered); every new AI route carries the HMAC tk gate
+   (embed/rerank/decision/recall/journal replay/browser input) —
+   a no-tk POST must 403 safe.
+16. **LLM service budgets** — every rerank leg bounded (4-worker
+   dispatch pool, 20s, cached client per (base,key), fail-open,
+   tokens fold into `usage.rerank`); embeddings chunk to MAX_BATCH 16
+   server-side with the 8k per-text cap and the 256-entry LRU
+   (texts ≤1000 chars only); the decision service speaks the ONE
+   named-verdict-map protocol; jsongate's tiers degrade downward
+   never upward.  A hung gateway must stall NOTHING (the §7.5 lesson):
+   one slow endpoint costs its budget, not the round.
 
 ## 7.1 Round record — 2026-10 (post-multimodal-deferred full sweep)
 
@@ -900,3 +987,156 @@ verified with an event timeline in the in-app browser:
   working and the ENVIRONMENT is the limitation; and long multi-step
   browser cells jam the IAB pipeline (§5) -- split verification into
   one-action cells with fresh tab recovery.
+
+## 7.8 Round record — 2026-10 (the first full sweep of the post-7.5 waves: memory tripartite × archive lane × control flows)
+
+Scope: everything landed after §7.5 (the 10-24 → 10-27 waves: the
+tripartite memory, the findings-only tag namespace, the AI Overview
+retirement onto the search route, the knowledge six-tab directory, the
+attachment archive lane, the deliverable flip, the paid gate, the
+recovery ladder's client half) -- audited through SIX parallel
+read-only sweeps against the six NEW audit dimensions this round added
+to §7 (11 knowledge store / 12 tripartite memory / 13 recovery+journal
+/ 14 static-root build contract / 15 route-level control flows / 16 LLM
+service budgets), plus the §4 matrix rows (six-tab directory,
+attachment file+image lanes, deliverable flip, paid gate, pasted
+brief, retired-shape overview) and the §3 markitdown/camoufox pins.
+Gates: build + lint + audit-cjk green; the Lighthouse gate GREEN for the
+first time since §7.1 -- the script gained a page-level KNOWN-RED
+mechanism (a documented standing load failure reports loudly with its
+AUDIT.md pointer instead of failing the run; a page leaves the map by
+being FIXED, never by being quiet) and the ai_overview desktop agentic
+floor recalibrated 90 → 85 (the card-in-column design's settle-time
+extras -- expand pill + run footer + follow-up form -- push the result
+list once more; measured CLS band refreshed to 0.12-0.15 in the script
+comment; the streaming prose's own growth no longer shifts the page,
+AnswerStreamPane).  The audit run itself pulled three more fixes: the
+homepage's bare ask-pane TEXTAREA carried `aria-expanded` (disallowed
+on a plain textbox -- the a11y 100 / agent-accessibility-tree red; the
+attribute is the single-line input's combobox semantics, dropped from
+the multiline pane) and its uncapped streaming ANSWER pushed the
+results below down on every delta (ai_overview agentic 87 < 90 -- the
+card now streams inside a bounded tail-follow pane capped at the
+settled preview, the think pane's own pattern); and the audit log
+exposed a TENTH P1 the sweeps had missed: with `live_recall` the route
+set `user_memories = None` and the settle's `known_memories_fn`
+closure iterated it -- `TypeError: 'NoneType' object is not iterable`
+on EVERY live-recall run, killing the extractor's memory events AND
+the tags (the consolidation organ was dead on the product's normal
+path; the None is tolerated, the dedup lens degrades to pass-through).
+Live plugin matrix + fixture layouts + one wire replay green (`usage`
+now carries the `embedding` bucket; the late set includes `title`).
+
+The nine P1s found by the sweeps (all verified at the code level, all
+fixed):
+
+1. **Site recipes + source notes NEVER fired** -- `kind` was dropped
+   TWICE on the site_notes path (the client sender omitted it, the
+   route parse dropped it), so `_site_note`'s `kind == "procedure"`
+   and `_source_notes_feed`'s `kind != "fact"` filter matched nothing:
+   the whole host-bound memory half of 860619d was unreachable.
+   Regression: save a host recipe, run a question whose results touch
+   that host -- the browse/search feed must show the recipe/note.
+2. **The AI Overview lost its sources** -- the 114e2c4 route migration
+   kept `direct=True` on the no-research branch while ALSO passing
+   `overview_feed`; writer_messages' direct branch replaces the
+   context with "No sources" and bans [n] -- the assembled [n] corpus
+   was discarded and the shape ladder's overview rung stranded.  Now
+   `direct = mode != "overview"` (the greeting/chat write keeps the
+   direct contract).  Regression: `?q=…&ai_overview=1` -- the card
+   renders [n] chips that resolve to the page's own results.
+3. **`parse_browse_call` dropped five advertised session surfaces**
+   (scroll `text=`, read `download=`, history `op=`, tab `op=`/`index`,
+   multi `steps`) -- calls degraded to blind wheel / live-page read /
+   empty-op error / tab-list / "multi needs steps"; AND the schema's
+   duplicate `steps` key meant the model never even saw the multi
+   array (the drag integer definition silently won).  Fixed the parser
+   branches + the `steps` oneOf.  Regression: one live call per
+   surface.
+4. **`inspect_image`'s `n` binding was dead at BOTH layers** -- the
+   parser returned the URL only, and the handler read `call.get("n")`
+   off the raw tool-call dict (n lives inside `arguments`).  The
+   parser now returns `(url, n)`; the injection label carries the [n].
+5. **Uploaded/primer documents were silently undeletable** --
+   removeItem routed `kind === "document"` to `deleteSource(url)`,
+   but attachment rows have `url NULL` (`url_hash = $1` never matches
+   NULL) -- the delete no-oped behind a "deleted" toast.  Documents
+   now delete by ROW ID; sources keep the url cascade.
+6. **Documents were unreadable in the inspector** -- `loadDocument`
+   queried `doc:<urlhash>`, an id space that died with the doc:-twin
+   refactor (rows live in `src:` / `doc:att:`); every document's
+   reading pane rendered 未读全文 forever.  The document branch reads
+   `loadItemBody(id)` like the crawled-source branch; `loadDocument`
+   is deleted.
+7. **The 资料 tab's search always showed "no match"** -- searchByKind
+   filtered `item.kind !== "reading"`, but hits are kind
+   source/document.  The reading filter now accepts both.
+8. **Memory kinds lesson/gap folded to "fact" on read** --
+   rowToMemory kept only the procedure special-case while four kinds
+   are written; lessons/gaps never reached the researcher snapshot's
+   SEARCH LESSONS / OPEN QUESTIONS sections.  All four kinds survive
+   the read.
+9. **The continue probe re-folded the whole host buffer after a
+   reload** -- `resume()` seeded only the evt-log n counter, never the
+   wire-seq watermark, so the failed box's attach probe sent
+   `after_seq: 0` and every delta appended twice.  resume() now seeds
+   the watermark from the stored rows' seq (the recoverAfterReload
+   scan, all runs).
+
+Plus the `_hosted_response` prime tail (recovery sweep): the prime
+loop breaks on the first content event (`open` is one) with the rest
+of that pull batch still in `pending` -- rest() now drains the tail
+before pulling live (the lossless-prime doctrine, §7.4 lesson 1, now
+actually holds on the prime path).
+
+The P2/P3 batch: `resetDatabase` drops the `memory` table (the nuclear
+reset left every memory row); per-run deletion sweeps `attachment`
+(deleteRunData's docstring claimed it already did); subscribeMemories
+selects `host` (site recipes lost their host badge in the live panel);
+backfillSeedTags marks token-less rows instead of re-selecting them
+forever (a 200-row empty-title corpus wedged the write queue); the
+settle fold passes `usage.embedding` (the footer's 嵌入 segment could
+never render); DeckView holds back the streaming tail like every
+other render surface; the deck section stack drops the generic
+markdown surface (it re-taught the dialect's FORBIDDEN list);
+section_system dates at CALL time with the run tz (the import-time
+`<today>` went stale at midnight and duplicated the synth's fresh
+block); FEATURE_DEFAULTS' depth ladders match profile's caps
+(balanced 12-60 / deep 15-120 -- the defaults silently capped balanced
+at 32 and made the route fallback dead); the journal registration
+defers the singleton lookup INTO publish's fail-open try; the journal
+row cap is ENFORCED (one PK probe per append); extractor's procedures
+clause carries the language rule; memory's host param description
+covers source notes; subagent's report block teaches "your LEDGER IS
+your digest" (the lead reads the ledger, not the final prose); the
+client retry resets the dead attempt's decisions; clarify/reattach/
+resume clear browserSessions (a stale live frame could resurface as
+the mirror fallback); the sources fold REPLACES merged rows instead of
+mutating shared snapshot objects; saveAttachments rides the write
+queue; 15 orphan i18n keys deleted from BOTH catalogs; the doubled
+RowActions doc comment and the stale 90s-grace / flip-record comments
+corrected; AUDIT.md §6's late-set list gains `title`; AGENTS.md's
+emscripten-twins passage synced to 53363eb (the unhashed twins ARE
+published -- the worker-less fallback resolves them).
+
+Known-red / accepted (recorded, not fixed): the paid gate's paid_ok is
+self-asserted by the model (documented claim-based -- a model that
+passes paid_ok:true on the first call skips the hold; the fail
+direction is an explicit user-invisible spend, the ask remains the
+prompt-level contract); the direct pick's peek→set window (a
+same-instant model flip can overwrite a just-landed direct pick --
+narrow, needs a control-plane CAS to close); the pre-driver gate chain
+sits outside every quiet bound (a slow gate can starve the client's
+170s watchdog while the run lingers); rerank spend on a timed-out leg
+is under-recorded; paid_engines() over-includes inactive settings
+entries (spurious ask, fail-safe); site-note host match ignores ports;
+inspect_image injections ride outside the screenshot budget;
+bootMain's main-thread lane bypasses the election lock (budget-bounded);
+a degraded session's recovery rows evaporate loudly-to-console only;
+the journal rebuild never re-probes the next generation and stale `.N`
+files accumulate on Windows; run_index is never swept; kb writes in
+events.ts/templates.ts/renameThread still bypass the enqueue contract
+(saveAttachments, the ordering-sensitive one, is converted);
+searchKnowledge filters pinned/since after the limit cut; the call/
+task inspector shows the 600-char head.  The AI thread page's
+Lighthouse red (§7.1) stands.
