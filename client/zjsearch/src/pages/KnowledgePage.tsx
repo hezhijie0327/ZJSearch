@@ -21,7 +21,7 @@ import {
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
-import { loadDocument, loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
+import { loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
   confirmProcedure,
@@ -231,21 +231,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     sections?: ThreadAnswer["sections"];
   } | null>(null);
   useEffect(() => {
-    if (inspected?.kind === "document") {
-      let cancelled = false;
-      loadDocument(inspected.url ?? "")
-        .then((page) => {
-          if (!cancelled) setInspectedBody(page?.markdown ?? "");
-        })
-        .catch(() => {
-          if (!cancelled) setInspectedBody("");
-        });
-      setInspectedExtras(null);
-      return () => {
-        cancelled = true;
-      };
-    }
-    if (inspected?.kind === "source" && inspected.meta?.crawled) {
+    // every open starts from the loading face -- a second item must not
+    // render the previous row's full text under the new title
+    setInspectedBody(null);
+    // documents (uploads + primers) and crawled sources read their full
+    // text by ROW ID -- attachment rows have no url, and the url-hash
+    // lookup died with the doc:-twin era
+    if (inspected?.kind === "document" || (inspected?.kind === "source" && inspected.meta?.crawled)) {
       let cancelled = false;
       loadItemBody(inspected.id)
         .then((text) => {
@@ -316,9 +308,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     setConfirming({
       label: item.title || item.url || t("knowledge_title"),
       run: () => {
-        if (item.kind === "source" || item.kind === "document") {
-          deleteSource(item.url ?? "");
+        if (item.kind === "source" && item.url) {
+          // url identity: the ref rows and the archived full text cascade
+          deleteSource(item.url);
         } else {
+          // everything else dies by ROW ID -- attachment/primer documents
+          // have no url, and a url-hash delete would silently no-op
           deleteItem(item.id);
         }
         after?.();
@@ -393,9 +388,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   }, [threads, pinnedOnly, since, debounced]);
 
   const searchByKind = useMemo(() => {
+    // the reading tab searches BOTH row kinds its listing merges (the
+    // filter chips' own tabs are one kind each; the library tab is the
+    // merge)
+    const wanted: readonly string[] = kind === "reading" ? ["source", "document"] : [kind];
     const groups = new Map<string, KnowledgeItem[]>();
     for (const item of results ?? []) {
-      if (item.kind !== kind) continue;
+      if (!wanted.includes(item.kind)) continue;
       if (pinnedOnly && !item.pinned) continue;
       if (since && item.updated < since) continue;
       const list = groups.get(item.kind) ?? [];

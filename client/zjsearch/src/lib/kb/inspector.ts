@@ -9,7 +9,7 @@
     in the write paths needs them. */
 
 import type { OverviewUsage } from "@/lib/kb/projections.ts";
-import { pg, pgQuery, urlHash } from "@/lib/pg.ts";
+import { pg, pgQuery } from "@/lib/pg.ts";
 
 export interface ThreadAnswer {
   answer: string;
@@ -108,17 +108,4 @@ export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> 
 export async function loadItemBody(id: string): Promise<string> {
   const rows = await pgQuery<{ body: string }>("SELECT body FROM knowledge WHERE id = $1", [id]);
   return String((rows ?? [])[0]?.body ?? "");
-}
-
-/** One archived document's full markdown (the inspector's reading pane). */
-export async function loadDocument(url: string): Promise<{ title: string; markdown: string; chars: number } | null> {
-  const rows = await pgQuery<{ title: string; body: string; n: number }>(
-    "SELECT title, body, n FROM knowledge WHERE id = $1 AND kind = 'document'",
-    [`doc:${urlHash(url)}`],
-  );
-  const row = (rows ?? [])[0];
-  if (!row) {
-    return null;
-  }
-  return { title: String(row.title ?? ""), markdown: String(row.body ?? ""), chars: Number(row.n ?? 0) || 0 };
 }

@@ -383,11 +383,10 @@ function RowFavicon({ item }: { item: KnowledgeItem }) {
   );
 }
 
-/** The row's flat actions --/** The row's flat actions -- the source's crawl (when the caller wires
-    it), star (pin), rename, trash (confirm-backed delete; the parent owns
-    the confirm dialog).  Hover-revealed in list rows, always visible in
-    the inspector (reveal={false}).  Clicks stop propagation: the whole
-    row around them is a click target. */
+/** The row's flat actions -- star (pin), rename, trash (confirm-backed
+    delete; the parent owns the confirm dialog).  Hover-revealed in list
+    rows, always visible in the inspector (reveal={false}).  Clicks stop
+    propagation: the whole row around them is a click target. */
 function RowActions({
   onPin,
   onRemove,

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import type { AiSearchAttachment } from "@/lib/aicontracts.ts";
+import { enqueue } from "@/lib/kb/shared.ts";
 import { pgQuery } from "@/lib/pg.ts";
 
 /**
@@ -24,7 +25,9 @@ const meta = (row: { kind: string; mime: string; name: string; bytes: number; da
 });
 
 /** Persist one run's attachments at run start (idempotent -- a re-start
-    from the same composer action must not duplicate rows). */
+    from the same composer action must not duplicate rows).  Through the
+    write queue like every mutation: the bytes must not race a
+    deleteThread's sweep out of order. */
 export function saveAttachments(
   threadId: string,
   runId: string,
@@ -33,7 +36,7 @@ export function saveAttachments(
   if (!items.length) {
     return;
   }
-  void (async () => {
+  void enqueue(async () => {
     for (const [i, item] of items.entries()) {
       await pgQuery(
         `INSERT INTO attachment (id, run_id, thread_id, kind, mime, name, bytes, data, created)
@@ -52,7 +55,7 @@ export function saveAttachments(
         ],
       );
     }
-  })();
+  });
 }
 
 /** Every attachment of a thread, grouped by run id -- the resume path

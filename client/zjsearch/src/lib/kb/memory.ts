@@ -44,9 +44,10 @@ export const MEMORY_BODY_CAP = 300;
 /** The panel/prompts row shape from a SQL row (the live subscription
     shares it). */
 export function rowToMemory(row: Record<string, unknown>): MemoryRow {
+  const kind = row.kind as MemoryKind;
   return {
     id: String(row.id),
-    kind: row.kind === "procedure" ? "procedure" : "fact",
+    kind: kind === "procedure" || kind === "lesson" || kind === "gap" ? kind : "fact",
     content: String(row.body ?? ""),
     origin: row.origin === "user" || row.origin === "teach" ? row.origin : "model",
     state: row.state === "provisional" ? "provisional" : "active",

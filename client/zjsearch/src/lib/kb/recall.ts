@@ -522,11 +522,14 @@ export interface TagGraph {
 let seededBackfill = false;
 
 /** One sweep per session (at the first graph view): the rows that
-    predate the seed layer -- sources archived with EMPTY tags, memories
-    without tags, crawled documents wearing their (graph-invisible) host
-    tag -- get the mechanical seed from their title/content and join the
-    debounced normalize pass like every newer row.  Fire-and-forget: the
-    first snapshot may miss the tail, the next view shows it. */
+    predate the seed layer -- sources archived with EMPTY tags, crawled
+    documents wearing their (graph-invisible) host tag -- get the
+    mechanical seed from their title/content and join the debounced
+    normalize pass like every newer row.  Fire-and-forget: the first
+    snapshot may miss the tail, the next view shows it.  A row whose
+    title yields no tokens is MARKED (empty tags stand) rather than
+    re-selected -- an unmarked empty seed would re-match forever and
+    wedge the write queue. */
 export function backfillSeedTags(): void {
   if (seededBackfill) {
     return;
@@ -537,6 +540,7 @@ export function backfillSeedTags(): void {
       const rows = await pgQuery<{ id: string; kind: string; host: string; title: string; body: string }>(
         `SELECT id, kind, host, title, body FROM knowledge
          WHERE kind IN ('source', 'document')
+           AND (meta->>'seeded') IS NULL
            AND (tags = '[]'::jsonb
                 OR (kind = 'document' AND jsonb_array_length(tags) = 1 AND tags->>0 = host AND host <> ''))
          LIMIT 200`,
@@ -544,15 +548,26 @@ export function backfillSeedTags(): void {
       if (!rows || rows.length === 0) {
         return;
       }
+      let seededCount = 0;
       for (const row of rows) {
         const text = row.title;
         const tokens = segmentKeywords(text)
           .split(" ")
           .filter((token) => token.length >= 2)
           .slice(0, 12);
+        if (tokens.length === 0) {
+          // nothing to seed from: mark the row so it leaves the candidate
+          // set (an unmarked empty seed would re-match forever and wedge
+          // the write queue); the normalize pass may still tag it
+          await pgQuery(`UPDATE knowledge SET meta = jsonb_set(knowledge.meta, '{seeded}', 'true') WHERE id = $1`, [
+            row.id,
+          ]);
+          continue;
+        }
         await pgQuery(`UPDATE knowledge SET tags = $1::jsonb WHERE id = $2`, [JSON.stringify(tokens), row.id]);
+        seededCount += 1;
       }
-      if (rows.length < 200) {
+      if (rows.length < 200 || seededCount === 0) {
         return;
       }
     }

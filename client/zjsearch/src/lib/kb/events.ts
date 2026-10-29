@@ -242,6 +242,9 @@ export async function deleteRunData(threadId: string, runNo: number): Promise<vo
   await pgQuery("DELETE FROM run_event WHERE run_id = $1", [runId]);
   await pgQuery("DELETE FROM run_summary WHERE run_id = $1", [runId]);
   await pgQuery("DELETE FROM knowledge WHERE run_id = $1 OR id = $1", [runId]);
+  // the run's own uploads: the BYTES die with the run (the doc rows went
+  // with the knowledge delete above)
+  await pgQuery("DELETE FROM attachment WHERE run_id = $1", [runId]);
   await pgQuery(
     `UPDATE thread_head SET
        runs = (SELECT count(*) FROM knowledge kr WHERE kr.thread_id = $1 AND kr.kind = 'run'),

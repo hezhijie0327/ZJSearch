@@ -59,7 +59,7 @@ export function subscribeThreads(onUpdate: (threads: ThreadSummary[]) => void): 
     kind/state/strength right off the subscription). */
 export function subscribeMemories(onUpdate: (memories: MemoryRow[]) => void): Promise<StoreSubscription> {
   return liveQuery<Record<string, unknown>>(
-    `SELECT id, kind, body, origin, state, strength, last_seen, pinned, created, updated
+    `SELECT id, kind, body, origin, state, host, strength, last_seen, pinned, created, updated
      FROM memory ORDER BY pinned DESC, last_seen DESC, strength DESC`,
     [],
     (rows) => onUpdate((rows ?? []).map(rowToMemory)),
