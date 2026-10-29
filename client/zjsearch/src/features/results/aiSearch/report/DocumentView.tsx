@@ -138,9 +138,10 @@ export function DocumentView({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   })();
   return (
-    // the long-form reading scale (DESIGN.md §4, the blog's .prose 17px/1.8
-    // -- the CJK serif long-form voice, headings/tables ride em so they follow the root)
-    <div className="zjs-answer-body text-[17px] font-serif leading-[1.8] text-ink">
+    // the long-form reading scale (DESIGN.md §4, the fluid .prose root --
+    // the CJK serif long-form voice, headings/tables ride em so they
+    // follow the root; the base ramps 16px @320 → 17px desktop cap)
+    <div className="zjs-answer-body zjs-prose text-ink">
       {/* the document header: title + subtitle (the report cover's text
           half -- the classification chip and meta window are the outline's
           own data, not invented chrome).  The title takes the blog's

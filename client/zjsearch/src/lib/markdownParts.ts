@@ -167,7 +167,8 @@ export const MD = {
   img: "my-3 max-w-full rounded-xl border border-line",
   /** inline code: the blog prose recipe — surface chip + the AA-safe accent
       hover tier (--accent fails 4.5:1 on --surface-2, --accent-hover passes);
-      the 0.875em tier follows the 17px root (§4: tables/code share the tier) */
+      the 0.875em tier follows the §4 fluid root (§4: tables/code share the
+      tier) */
   code: "rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.875em] text-accent-hover",
   pre: "mt-3 overflow-x-auto rounded-xl border border-line bg-surface-2 p-3 font-mono text-[0.875em] leading-relaxed text-ink",
   tableWrap: "zjs-md-table my-3 overflow-x-auto",

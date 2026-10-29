@@ -176,15 +176,24 @@
 }
 
 /* ── the report sheet: the print document carries the SCREEN's editorial
-   scale — the clone keeps its §4 long-form classes (17px/1.8 root, the MD
-   six-step heading chain, 0.875em tables/code) and prints as the screen
-   reads it: paper is the view.  The sheet itself only states rhythm and
-   the furniture (wordmark / injected heading / sources tail) sizes itself
-   inline or via its own class — nothing here re-states a body size or a
-   palette value. ── */
+   scale — the clone keeps its §4 long-form classes (the fluid root pinned
+   at its desktop 17px cap, the MD six-step heading chain, 0.875em
+   tables/code) and prints as the screen reads it: paper is the view.  The
+   sheet itself only states rhythm and the furniture (wordmark / injected
+   heading / sources tail) sizes itself inline or via its own class —
+   nothing here re-states a body size or a palette value. ── */
 @page {
   size: a4;
   margin: 16mm 14mm;
+}
+
+/* paper has no viewport: the §4 fluid long-form base pins at its desktop
+   cap — the sheet keeps the 17px/1.8 voice the screen's wide reading
+   surface uses (a print vw is the page box, an accidental size) */
+.zjs-print-sheet .zjs-prose,
+.zjs-print-sheet .zjs-prose-overview,
+.zjs-print-sheet .prose-basic {
+  font-size: 1.0625rem;
 }
 
 .zjs-print-sheet {

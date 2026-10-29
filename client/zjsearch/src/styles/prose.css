@@ -1,16 +1,44 @@
 /* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
 
-/* Markdown-rendered long-form content (info/about pages). */
+/* Markdown-rendered long-form content (info/about pages) + the fluid
+   long-form ROOTS the client render sites consume (DESIGN.md §4, the
+   2026-10 family revision).  The MD element recipe
+   (lib/markdownParts.ts) is em-scaled, so its six-step heading chain,
+   tables, code and footnotes follow the root proportionally -- the
+   hierarchy relationship never moves.  The root classes carry ONLY the
+   shared base + family + leading; the consumer owns color. */
+
+/* the §4 long-form root (thread answers, the report document, the
+   knowledge inspector's stored answers): the blog's .prose formula —
+   16px @320 → capped 17px @≥1067. */
+.zjs-prose {
+  font-family: var(--font-serif);
+  line-height: 1.8;
+  font-size: clamp(1rem, 0.97rem + 0.14vw, 1.0625rem);
+}
+
+/* the overview's proportional twin: the SAME document on the results
+   column's regular body tier — the 17px band scaled by 14/17 (0.8235),
+   so the two roots keep their desktop ratio at EVERY width (the tier
+   relationship is the invariant, not the 14px number). */
+.zjs-prose-overview {
+  font-family: var(--font-serif);
+  line-height: 1.8;
+  font-size: clamp(0.8235rem, 0.7988rem + 0.1153vw, 0.875rem);
+}
 
 @layer components {
   /* server-rendered info/about pages (markdown-generated HTML);
      serif body + headings — the family editorial track for long-form
-     content, on the §4 long-form scale (the blog's .prose 17px/1.8 —
+     content, on the §4 long-form scale (the blog's .prose fluid base —
      serif long-form Chinese text; headings ride em so they follow the root) */
   .prose-basic {
     font-family: var(--font-serif);
     line-height: 1.8;
-    font-size: 1.0625rem;
+    /* the §4 fluid long-form base (2026-10 family revision, the blog's
+       .prose formula): 16px @320 → 17px capped @≥1067 — a flat 17px runs
+       heavy on phones; every em scale in the recipe follows it */
+    font-size: clamp(1rem, 0.97rem + 0.14vw, 1.0625rem);
     color: var(--ink-2);
   }
 

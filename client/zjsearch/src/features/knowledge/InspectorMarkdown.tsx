@@ -34,7 +34,7 @@ export function InspectorMarkdown({
   const citedMeta = useMemo(() => (map ? citedSourceRows(map, meta) : meta), [map, meta]);
   const order = map ? citedOrder(map) : null;
   return (
-    <div className="zjs-answer-body text-[17px] font-serif leading-[1.8] text-ink">
+    <div className="zjs-answer-body zjs-prose text-ink">
       <MarkdownAnswer
         figureLightbox
         galleries={[]}

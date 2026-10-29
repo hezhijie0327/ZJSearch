@@ -1340,11 +1340,13 @@ export function OverviewCard({
           so both paths share the rhythm) */}
         {hasAnswer ? (
           // the long-form reading RECIPE on the results page's regular
-          // body tier: the same shared MD document on a 14px root -- the
+          // body tier: the same shared MD document on the overview's
+          // proportional root (.zjs-prose-overview — the 17px band scaled
+          // by 14/17, so the tier ratio holds at every width) -- the
           // em-based recipe (headings/tables/code) scales the whole thing
-          // proportionally, and the overview sits IN the 14px snippet
+          // proportionally, and the overview sits IN the snippet
           // column instead of towering over it
-          <div className="mt-2 text-sm font-serif leading-[1.8] text-ink">
+          <div className="zjs-prose-overview mt-2 text-ink">
             {streaming ? (
               // STREAMING: the growth lives INSIDE a bounded scroll pane
               // (tail-follow like the think pane; the cap matches the

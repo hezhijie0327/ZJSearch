@@ -1224,16 +1224,27 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
   titles.
 - 16px `text-base`: result titles (list/news/product/video grids all share
   the `Title`/h3 token) and ALL search inputs (hero included).
-- **17px/1.8 `text-[17px] leading-[1.8]`: the LONG-FORM reading scale**
-  (DESIGN.md §4 — 中文衬线长文, the blog's explicit `.prose` prescription):
-  every AI editorial content root — thread answers, the report document,
-  the knowledge inspector's stored answers — while the AI Overview rides
-  the SAME em-based recipe on a 14px root (the results column's regular
-  body tier: the same document, proportionally scaled down).
+- **The FLUID long-form reading scale** (DESIGN.md §4 — 中文衬线长文, the
+  2026-10 family revision of the blog's `.prose` prescription): the root
+  classes `.zjs-prose` / `.prose-basic` carry
+  `clamp(1rem, 0.97rem + 0.14vw, 1.0625rem)` at leading 1.8 — **16px @320
+  viewport → capped 17px @≥1067** (a flat 17px runs heavy on phones;
+  continuous scaling replaces breakpoint jumps).  Every AI editorial
+  content root rides it — thread answers, the report document, the
+  knowledge inspector's stored answers, the info/about pages — while the
+  AI Overview rides `.zjs-prose-overview`, the SAME recipe on the
+  results column's body tier: the 17px band scaled by 14/17
+  (`clamp(0.8235rem, 0.7988rem + 0.1153vw, 0.875rem)`), so the two
+  roots keep their desktop ratio at every width (the tier RELATIONSHIP
+  is the invariant, not the 14px number).
   The MD element recipe rides em of this root: headings follow the blog's
-  six-step chain (34/25.5/21.3/19.1/17/14.9 — h1 2em extrabold, h2 1.5em,
-  h3 1.25em, h4 1.125em, h5 1em w600, h6 0.875em w600), tables/inline
-  code/pre sit at 0.875em.
+  six-step chain (desktop-cap measured 34/25.5/21.3/19.1/17/14.9 — h1 2em
+  extrabold, h2 1.5em, h3 1.25em, h4 1.125em, h5 1em w600, h6 0.875em
+  w600), tables/inline code/pre sit at 0.875em — all proportional to the
+  root, hierarchy never moves.  Absolute px notes do NOT follow (the
+  postmark's internal mono, chart labels).  Paper pins the root at the
+  desktop cap (print.css — a print vw is the page box, an accidental
+  size).
 - 20px `text-xl`: infobox title (serif — the family editorial track applied to
   the one knowledge heading); 24px `text-2xl`: page headings; section
   headings in between are `text-base`/`text-lg` `font-semibold`. The
@@ -1275,8 +1286,8 @@ THINK vs CONTENT (the AI timeline's one visual rule): machine-produced
 material — reasoning streams, web_reader reading panes, MCP payloads,
 raw-args debug — sits on the boxed machine-voice ground (`READ_PANE` /
 `HOVER_CHIP` in `lib/styles.ts`: surface-2/50 rounded, 12px ink-3/ink-2);
-the ANSWER sits on the plain ground in the family EDITORIAL voice (17px/1.8
-serif — the §4 long-form scale, the ZJBlog prose rhythm — `MD` in
+the ANSWER sits on the plain ground in the family EDITORIAL voice (the
+§4 fluid long-form scale, the ZJBlog prose rhythm — `MD` in
 `lib/markdownParts.ts` is the one
 shared element recipe, consumed by `MarkdownAnswer`, the report
 `DocumentView` and the knowledge `InspectorMarkdown`; amber quote bars,

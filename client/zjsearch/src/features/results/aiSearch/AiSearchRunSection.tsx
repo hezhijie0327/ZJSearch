@@ -1971,9 +1971,9 @@ function AiSearchRunSectionImpl({
               (buttons) that live inside it — they are report content */}
           {run.answer ? (
             // the CONTENT tier: the family editorial voice (DESIGN.md §5.1)
-            // -- serif at the long-form scale (§4, the blog's .prose
-            // 17px/1.8), the blog prose rhythm
-            <div className="zjs-answer-body text-[17px] font-serif leading-[1.8] text-ink" ref={answerBodyRef}>
+            // -- serif at the long-form scale (§4, the fluid .prose root:
+            // 16px @320 → 17px desktop cap), the blog prose rhythm
+            <div className="zjs-answer-body zjs-prose text-ink" ref={answerBodyRef}>
               {run.outline && run.deck ? (
                 <DeckView
                   meta={sourceMeta}
