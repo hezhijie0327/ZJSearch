@@ -763,11 +763,13 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   in `pg.worker-*.js`), so the theme dir's own copies die at publish:
   the hashed artifacts are deleted from the dist when UNLINKED
   (`st.nlink === 1` — nlink > 1 means the Windows local-verification
-  hardlinks share the inode and deletion would strand their sources),
-  and the unhashed emscripten twins (`assets/pglite.wasm`/`pglite.data`/
-  `initdb.wasm`, the three plain `tar.gz`) are neither published nor
-  kept (~16.6MB + ~16MB per image).  `dist/chunk/` stays: it is a
-  junction target on that Windows flow.
+  hardlinks share the inode and deletion would strand their sources).
+  The UNHASHED emscripten twins (`assets/pglite.wasm`/`pglite.data`/
+  `initdb.wasm` + the three plain tars) are PUBLISHED to the static
+  root's `assets/` and kept — the main-thread fallback engine resolves
+  them there when the worker lane is unavailable (53363eb brought the
+  packages back; the dist copies stay for the Windows local flow).
+  `dist/chunk/` stays: it is a junction target on that Windows flow.
 - The streamed search page fails SAFE: a late-chunk serialization error
   (a malformed result field reaching a macro) makes `searx.zjsearch.stream`
   emit a recovery `page_error` payload (a leading `</script>` closes a
