@@ -31,10 +31,11 @@ import typing as t
 from zoneinfo import ZoneInfo
 
 # One row per SHIPPED i18n catalog (mirror of the client's CATALOGS
-# registry in src/lib/i18n/i18n.ts): catalog tag -> reply language name.
-# Adding a language = add the catalog client-side + ONE row here -- this
-# table is the only thing language_directive reads, so it scales with
-# the catalog registry instead of growing hand-written branches.
+# registry in client/zjsearch/src/lib/i18n.ts): catalog tag -> reply
+# language name.  Adding a language = add the catalog client-side + ONE
+# row here -- this table is the only thing language_directive reads, so
+# it scales with the catalog registry instead of growing hand-written
+# branches.
 _CATALOG_LANGUAGE_NAMES: dict[str, str] = {
     "zh-cn": "Simplified Chinese",
     "en": "English",
@@ -62,8 +63,11 @@ def tool_notes(notes: list[tuple[str, str]]) -> str:
     sections = "\n\n".join(f"[{name}]\n{text}" for name, text in notes)
     return block(
         "tool_notes",
-        "Each registered tool carries its usage doctrine below -- how to"
-        " work it well (the schemas say when to call it):\n\n" + sections,
+        f"""\
+        Each registered tool carries its usage doctrine below -- how to
+        work it well (the schemas say when to call it):
+
+        {sections}""",
     )
 
 

@@ -65,11 +65,14 @@ def subagent_messages(
         shared.block(
             "report",
             """\
-            Your FINAL message is the digest the lead reads -- it is your
-            entire deliverable.  Follow output_format; lead with the
-            established facts (each with [n]), then the open questions your
-            sources could NOT settle.  Keep it under ~400 words: the lead
-            aggregates many digests.""",
+            Your LEDGER IS your digest -- the lead reads the findings you
+            RECORD, not your final prose.  Record every established fact
+            through the findings tool as you go (each with its [n]) and
+            keep the open questions your sources could NOT settle in the
+            ledger too; a fact that lives only in your final message is
+            lost.  Lead the final message with those same facts, then the
+            open questions, under ~400 words: the lead aggregates many
+            digests.""",
         ),
         shared.block(
             "follow_ups",

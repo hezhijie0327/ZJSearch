@@ -93,4 +93,11 @@ _DECK_SECTION_ROLE = (
     " numbered sources of THIS run."
 )
 
-DECK_SECTION_SYSTEM = report.section_system(_DECK_SECTION_ROLE, "deck", DECK_SLIDE_DIALECT)
+
+def deck_section_system(tz: str | None = None) -> str:
+    """The deck chapter stack, dated at CALL time (see
+    report.report_section_system -- the import-time constant went stale
+    and doubled the synthesizer's fresh <today>).  The generic markdown
+    surface is LEFT OUT: its footnotes/images teaching follows the
+    dialect's FORBIDDEN list and undermines it."""
+    return report.section_system(_DECK_SECTION_ROLE, "deck", DECK_SLIDE_DIALECT, tz, with_surface=False)

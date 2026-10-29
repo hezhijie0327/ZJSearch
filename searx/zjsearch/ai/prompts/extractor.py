@@ -17,7 +17,8 @@ language; no one-off details (today's weather is NOT a fact).
 procedures: 0-2 learned PROCEDURES -- standing preferences about HOW
 research or answers should be done for this user ("always wants
 comparison tables", "prefers official primary sources"); only
-directive-shaped, reusable preferences, each self-contained.
+directive-shaped, reusable preferences, each self-contained, in the
+user's language (the same rule the facts carry).
 superseded: 0-3 detected CHANGES -- when the exchange shows a
 stored-style fact no longer holds (a moved city, a switched tool),
 "old" names the previous fact and "new" states the current one; only

@@ -130,27 +130,34 @@ REPORT_SHAPE = spine.block(
 _SECTION_ROLE = 'You write one section of a research report, grounded in the numbered sources of THIS run.'
 
 
-def section_system(role: str, surface: str, shape: str, tz: str | None = None) -> str:
+def section_system(role: str, surface: str, shape: str, tz: str | None = None, with_surface: bool = True) -> str:
     """The per-section synthesizer's system prompt, composed from the
     SHARED spine fragments -- a hand-copied <citations> here once drifted
     away from the citation grammar (the placement examples and the [*]
     escape went missing); every document surface speaks the same
     contract, stacked in one order.  The deck's chapter system rides the
-    identical stack with its own role, discipline surface and dialect."""
-    return "\n".join(
-        [
-            role,
-            spine.today_line(tz),
-            spine.citation_rules(),
-            spine.citation_discipline(surface),
-            spine.figures_rule(),
-            shape,
-            spine.markdown_surface(),
-        ]
-    )
+    identical stack with its own role, discipline surface and dialect --
+    and ``with_surface=False``, because the generic markdown surface
+    re-teaches exactly what the deck dialect's FORBIDDEN list retires
+    (footnotes, images); the dialect must have the last word."""
+    lines = [
+        role,
+        spine.today_line(tz),
+        spine.citation_rules(),
+        spine.citation_discipline(surface),
+        spine.figures_rule(),
+        shape,
+    ]
+    if with_surface:
+        lines.append(spine.markdown_surface())
+    return "\n".join(lines)
 
 
-SECTION_SYSTEM = section_system(_SECTION_ROLE, "report", REPORT_SHAPE)
+def report_section_system(tz: str | None = None) -> str:
+    """The report section stack, dated at CALL time -- a module-level
+    constant once baked today_line(None) at import: the date went stale
+    at midnight AND duplicated the fresh block the synthesizer prepends."""
+    return section_system(_SECTION_ROLE, "report", REPORT_SHAPE, tz)
 
 SUMMARY_SYSTEM = """\
 You write the EXECUTIVE SUMMARY of a finished research report: 3-5

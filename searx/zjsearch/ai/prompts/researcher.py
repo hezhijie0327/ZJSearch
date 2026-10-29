@@ -270,30 +270,31 @@ def _memory_block(user_memories: list[dict[str, str]] | None) -> str:
     def lines(items: list[dict[str, str]]) -> str:
         return "\n".join(f"- {m['content']}" for m in items)
 
-    body = (
-        "Durable facts (stored across sessions) -- use them to personalize"
-        " the research (a home city grounds weather/local questions,"
-        " stated preferences shape source choices; entity facts are the"
-        " user's tracked people/companies):\n"
-    )
-    body += lines(facts) or "(none stored yet -- the memory tool's search is the read path)"
+    body = f"""\
+    Durable facts (stored across sessions) -- use them to personalize
+    the research (a home city grounds weather/local questions, stated
+    preferences shape source choices; entity facts are the user's
+    tracked people/companies):
+    {lines(facts) or "(none stored yet -- the memory tool's search is the read path)"}"""
     if procedures:
-        body += (
-            "\n\nStanding PROCEDURES -- how the user wants research done"
-            " (learned across sessions; honor them):\n" + lines(procedures)
-        )
+        body += f"""
+
+        Standing PROCEDURES -- how the user wants research done (learned
+        across sessions; honor them):
+        {lines(procedures)}"""
     if lessons:
-        body += (
-            "\n\nSEARCH LESSONS -- what worked before on these topics; try"
-            " these angles before brute-forcing:\n" + lines(lessons)
-        )
+        body += f"""
+
+        SEARCH LESSONS -- what worked before on these topics; try these
+        angles before brute-forcing:
+        {lines(lessons)}"""
     if gaps:
-        body += (
-            "\n\nOPEN QUESTIONS (the backlog -- earlier runs could not"
-            " answer these): if THIS run resolves one, answer it and"
-            " FORGET the memory; if it can advance one, advance it:\n"
-            + lines(gaps)
-        )
+        body += f"""
+
+        OPEN QUESTIONS (the backlog -- earlier runs could not answer
+        these): if THIS run resolves one, answer it and FORGET the
+        memory; if it can advance one, advance it:
+        {lines(gaps)}"""
     return shared.block("memory", body)
 
 
@@ -458,10 +459,12 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         run_context += (
             shared.block(
                 "sources",
-                "The results page ALREADY shows the user these sources -- the"
-                " answer must build on them and cite them by their [n] marks"
-                " (the browse read may open one in full when the answer needs"
-                " more than the snippet):\n" + overview_context,
+                f"""\
+                The results page ALREADY shows the user these sources --
+                the answer must build on them and cite them by their [n]
+                marks (the browse read may open one in full when the
+                answer needs more than the snippet):
+                {overview_context}""",
             )
             + "\n"
         )
@@ -489,8 +492,10 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         if gaps:
             body += "\n" + shared.block(
                 "open_gaps",
-                f"The earlier runs left these questions open -- cover the"
-                f" ones THIS question touches:\n{gap_lines}",
+                f"""\
+                The earlier runs left these questions open -- cover the
+                ones THIS question touches:
+                {gap_lines}""",
             )
         run_context += shared.block("thread_context", body) + "\n"
     if mcp_servers:
