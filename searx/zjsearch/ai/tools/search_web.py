@@ -1,0 +1,273 @@
+# SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+"""AI Search: the ``search_web`` tool -- spec and call parsing.
+
+The researcher's primary instrument: one spec function in the
+dialect-neutral llm shape (Vane's researcher/actions split, Morphic's
+lib/tools -- schema, description and parsing live with the tool) plus
+:py:func:`parse_call`, the sanitizer that turns untrusted call
+arguments into an executed search.  The ``included_sites``/
+``excluded_sites`` arguments carry the user's source preference
+(Morphic's domain filters): they travel as ``site:``/``-site:``
+operators appended to the query, which the engine's
+advanced_search_syntax plugin enforces AUTHORITATIVELY on every result
+regardless of engine support.
+"""
+
+import re
+import typing as t
+from searx.zjsearch.ai.core.text import raw_args
+
+from searx.zjsearch.ai.tools.browse import BROWSE_TOOL
+
+SEARCH_WEB_TOOL = "search_web"
+
+INSTRUCTIONS = """\
+Search like a skilled human: short keyword sets (never full sentences),
+distinct facets as separate calls, alternative phrasings or translations
+when the wording is uncertain -- several parallel calls beat one broad
+query.  Precision operators are applied authoritatively by the engine
+and are welcome when they sharpen the results: site: / -site:,
+filetype:, "exact phrase", before:YYYY-MM-DD / after:YYYY-MM-DD.
+Never repeat a query you already ran (refresh is for deliberate re-reads
+of time-sensitive material only).  Optional filters (time_range, site
+filters) are not supported by every engine: when a filtered search comes
+back EMPTY, retry the same intent once without the filter before
+concluding there is nothing to find.
+Bangs: never use one unless the user explicitly names an engine OR you
+know this deployment keeps a fitting engine disabled (then prefix the
+query with its bang, e.g. !bocha) -- a category search already fans out
+across every enabled engine in that vertical; the list_engines tool
+names the held-back ones.  API-billed (paid) engines cost real money: a
+bang on one is HELD until the user approves the ask_user confirmation --
+re-run with paid_ok only after that yes.
+Instant answers: a query of exactly "$SYMBOL" (e.g. "$AAPL") or ending
+in " stock" / " quote" triggers the stock-quote plugin -- the live
+quote rides the results as a Direct answer; prefer it for ticker
+questions (finance pages are often JS-walled or stale)."""
+"""The search craft: strategy and policy, injected into the system
+prompt's <tool_notes> whenever the tool is registered (the desc keeps
+only the call semantics -- one doctrine, one home)."""
+
+SEARCH_CATEGORIES = ("general", "news", "images", "videos", "it", "science", "files", "music")
+"""The fallback verticals -- used only before the instance's engine map
+exists (bare imports, probes); the live enum is deployment-derived."""
+
+_BANG_PREFIX_RE = re.compile(r"^(?:\s*![a-z0-9_-]+)*(?:\s+|$)", re.IGNORECASE)
+_TIME_RANGES = ("day", "week", "month", "year")
+
+
+def available_categories() -> tuple[str, ...]:
+    """The deployment's REAL search verticals: every category at least one
+    enabled engine serves.  Upstream's ``categories`` map also carries
+    default-disabled engines -- a category only they declare can never
+    answer a ``category`` search (fan-out skips them; only an explicit
+    engine bang reaches them), so both the spec's enum and the call
+    sanitizer read the same USABLE set.  Falls back to the static tuple
+    when the engine map is empty."""
+    from searx.engines import (  # pylint: disable=import-outside-toplevel
+        categories as engine_categories,
+        is_engine_active,
+    )
+
+    if not engine_categories or not any(engine_categories.values()):
+        return SEARCH_CATEGORIES
+    usable = sorted(
+        name
+        for name, members in engine_categories.items()
+        if any(is_engine_active(engine) and not engine.disabled for engine in members)
+    )
+    return tuple(usable) if usable else SEARCH_CATEGORIES
+
+
+def search_web_spec(with_browser: bool = False, with_info: bool = False) -> dict[str, t.Any]:
+    """The ``search_web`` tool in the dialect-neutral llm shape; with the
+    browser / list_engines tools registered by the caller, the description
+    cross-references them (a model that never sees a tool must not be
+    told about it).  The ``category`` enum is the deployment's real
+    verticals (:py:func:`available_categories`).  The
+    ``included_sites``/``excluded_sites`` parameters carry the user's
+    source preference (Morphic's domain filters): they are appended to
+    the query as ``site:``/``-site:`` operators, which the engine's
+    advanced_search_syntax plugin enforces AUTHORITATIVELY on every result
+    regardless of engine support."""
+    return {
+        "name": SEARCH_WEB_TOOL,
+        "description": _description(with_info, with_browser),
+        "annotations": {"readOnlyHint": True, "openWorldHint": True},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "The keyword query to search for."},
+                "category": {
+                    "type": "string",
+                    "enum": list(available_categories()),
+                    "description": 'Optional vertical -- the enum is exactly what this deployment serves (every listed category has enabled engines; each has its own client layout: images render as a masonry, videos as a grid); general when unsure.',
+                },
+                "time_range": {
+                    "type": "string",
+                    "enum": list(_TIME_RANGES),
+                    "description": 'Optional freshness window -- use it when the question is about recent material (news, releases, changelogs); omit otherwise.',
+                },
+                "included_sites": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": """\
+Bare domains to RESTRICT the search to (at most 3), only when the user
+signals a source preference: "search reddit", "search only GitHub" ->
+["github.com"]; "official sources" -> the relevant authoritative
+domains.  Prefer this over stuffing the site name into the keywords --
+the filter is enforced exactly, the keyword is not.  Do not invent
+restrictions for ordinary queries.  If the filtered search comes back
+thin, run one more without it.""",
+                },
+                "excluded_sites": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": 'Bare domains to EXCLUDE (at most 3), only when the user signals an aversion: "not pinterest" -> ["pinterest.com"].',
+                },
+                "refresh": {
+                    "type": "boolean",
+                    "description": """\
+Set true ONLY to deliberately re-run a query this run already executed
+-- the material may have changed (a live score, a just-published
+release, a page the user says updated).  The duplicate-query refusal is
+bypassed; pages already among your sources still keep their [n]
+numbers.  Never use it to paper over a thin result -- vary the query
+instead.""",
+                },
+                "paid_ok": {
+                    "type": "boolean",
+                    "description": """\
+Set true ONLY after the user explicitly approved PAID (API-billed)
+engines for this run -- their answer to your ask_user confirmation is
+the record.  A !bang on an API-billed engine is held until then (the
+refusal feed teaches the ask); never set it without an explicit user
+yes.""",
+                },
+            },
+            "required": ["query"],
+        },
+    }
+
+
+_DESCRIPTION = """\
+Run one web search on the metasearch engine with specific keywords.
+Results arrive as globally numbered [n] sources to cite in the final
+answer -- pre-ranked for relevance, with near-duplicate syndications of
+already-seen stories suppressed: trust the top of the list, and few
+results usually means the topic is exhausted, not that your keywords
+were bad."""
+"""The call semantics; the run appends the registered siblings'
+pointers (see :py:func:`search_web_spec`)."""
+
+
+def _description(with_info: bool, with_browser: bool) -> str:
+    """The desc document plus the cross-references for the siblings THIS
+    run actually registered (a model that never sees a tool must not be
+    told about it)."""
+    out = _DESCRIPTION
+    if with_info:
+        out += (
+            "\nThe list_engines tool lists this deployment's engines -- the"
+            " categories, and the disabled ones with the bang that reaches"
+            " each."
+        )
+    if with_browser:
+        out += (
+            f"\nSnippets are heads: when a result promises the exact missing"
+            f" detail, the {BROWSE_TOOL} tool's read fetches that page in"
+            " full."
+        )
+    return out
+
+
+_PAID_ENGINES: frozenset[str] | None = None
+"""Process-level cache -- the settings' engine list is fixed at load."""
+
+
+def paid_engines() -> frozenset[str]:
+    """The API-BILLED engines of this deployment: every settings entry
+    carrying a non-empty ``api_key`` (the commercial engines' universal
+    marker -- bocha/tavily/brave.api/...).  They cost money per call, so
+    the executor holds a !bang on one of them until the user approves the
+    spend (:py:data:`paid_ok`)."""
+    global _PAID_ENGINES  # pylint: disable=global-statement
+    if _PAID_ENGINES is None:
+        from searx import settings  # pylint: disable=import-outside-toplevel
+
+        _PAID_ENGINES = frozenset(
+            str(entry.get("name") or "")
+            for entry in settings["engines"]
+            if str(entry.get("api_key") or "").strip()
+        ) - {""}
+    return _PAID_ENGINES
+
+
+def paid_bangs(query: str) -> list[str]:
+    """The PAID engines a query's leading bang group targets, in order --
+    ``[]`` when the query bangs none (or only free engines).  Bang tokens
+    resolve through the same shortcut/name map the engine's own parser
+    uses, so ``!tvly`` and ``!tavily`` both name the paid engine."""
+    from searx.engines import engines as engine_map, engine_shortcuts  # pylint: disable=import-outside-toplevel
+
+    paid = paid_engines()
+    hits: list[str] = []
+    for token in query.split():
+        if not token.startswith("!") or len(token) < 2:
+            break
+        name = engine_shortcuts.get(token[1:].lower()) or token[1:].lower()
+        if name in paid and name not in hits:
+            hits.append(name)
+    return hits
+
+
+def _clean_sites(raw: t.Any) -> list[str]:
+    """Bare domains out of the model's ``included_sites``/``excluded_sites``
+    arguments: scheme/path/port stripped, lowercased, deduped, capped --
+    anything that is not host-shaped is dropped (the operators travel in
+    the query and the engine's plugin enforces them; a malformed token
+    would just match nothing)."""
+    out: list[str] = []
+    for value in (raw if isinstance(raw, list) else [])[:6]:
+        host = str(value or "").strip().lower()
+        host = re.sub(r"^[a-z][a-z0-9+.-]*://", "", host)
+        host = host.split("/", 1)[0].split(":", 1)[0]
+        if host and "." in host and len(host) <= 100 and host not in out:
+            out.append(host)
+        if len(out) >= 3:
+            break
+    return out
+
+
+def parse_call(call: dict[str, t.Any]) -> tuple[str, str, str, list[str], list[str], bool]:
+    """(query, category, time_range, included_sites, excluded_sites,
+    paid_ok) of one tool call -- sanitized: a LEADING group of engine
+    bangs (e.g. "!baidu") survives because the model may only use one
+    when the user explicitly names the engine; every other "!" is noise,
+    whitespace collapses, the category and the freshness window are
+    whitelist-checked, the site filters are host-shaped bare domains and
+    ``paid_ok`` is the model's claim that the user approved paid engines
+    this run (the executor's paid gate reads it)."""
+    args = raw_args(call)
+    query = str(args.get("query") or "")
+    bang_match = _BANG_PREFIX_RE.match(query)
+    bang = ""
+    if bang_match and bang_match.group(0).strip():
+        bang = " ".join(token.lower() for token in bang_match.group(0).split())
+        query = query[bang_match.end() :]
+    query = query.replace("!", "")
+    query = " ".join((bang + " " + query).split())[:200]
+    category = str(args.get("category") or "general").strip().lower()
+    if category not in available_categories():
+        category = "general"
+    time_range = str(args.get("time_range") or "").strip().lower()
+    if time_range not in _TIME_RANGES:
+        time_range = ""
+    return (
+        query,
+        category,
+        time_range,
+        _clean_sites(args.get("included_sites")),
+        _clean_sites(args.get("excluded_sites")),
+        bool(args.get("paid_ok")),
+    )

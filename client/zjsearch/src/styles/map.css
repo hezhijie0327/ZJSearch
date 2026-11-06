@@ -1,0 +1,66 @@
+/* SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0 */
+
+/* OpenLayers map chrome — third-party widget DOM that utilities cannot
+   reach; scoped under the .zjs-map root the MapCard renders. */
+
+/* OpenLayers map chrome: zoom control themed to the dark map buttons */
+.zjs-map .ol-zoom {
+  top: 0.625rem;
+  left: 0.625rem;
+  /* kill OpenLayers' own container box — only the themed buttons remain */
+  background-color: transparent;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+}
+.zjs-map .ol-zoom button {
+  width: 1.75rem;
+  height: 1.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink-2);
+  background-color: var(--surface);
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+}
+.zjs-map .ol-zoom button:hover,
+.zjs-map .ol-zoom button:focus,
+.zjs-map .ol-zoom button:active {
+  background-color: var(--surface-2);
+  color: var(--accent);
+}
+.zjs-map .ol-zoom .ol-zoom-in {
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+.zjs-map .ol-zoom .ol-zoom-out {
+  border-radius: 0 0 0.5rem 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.zjs-map .ol-scale-line {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+}
+.zjs-map .ol-scale-line-inner {
+  margin: 1px 0;
+  color: var(--ink-3);
+  border-color: var(--ink-3);
+}
+
+/* attribution rides bare: no chip, just muted text over the tiles */
+.zjs-map .ol-control.ol-attribution,
+.zjs-map .ol-attribution {
+  background: transparent;
+  border-radius: 0;
+}
+.zjs-map .ol-attribution a,
+.zjs-map .ol-attribution button {
+  color: var(--ink-3);
+}
+.zjs-map .ol-attribution a:hover,
+.zjs-map .ol-attribution button:hover {
+  color: var(--ink);
+}

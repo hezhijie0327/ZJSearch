@@ -170,9 +170,7 @@ def setup(_: dict[str, t.Any]) -> bool:
         logger.error("missing api_key: see https://about.marginalia-search.com/article/api")
         return False
 
-    if api_key == "public":
-        logger.error("invalid api_key (%s): see https://about.marginalia-search.com/article/api", api_key)
-    elif filter_name:
+    if filter_name:
         filter_names: list[str] = _get_filter_names()
         if filter_name not in filter_names:
             logger.error(f"invalid value for filter_name: '{filter_name}'")

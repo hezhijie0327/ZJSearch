@@ -22,7 +22,7 @@ Implementations
 import typing as t
 
 from datetime import datetime
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 from lxml import etree
 
@@ -54,6 +54,7 @@ about = {
 
 categories = ["science", "scientific publications"]
 
+api_key = ""
 eutils_api = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
 # engine dependent config
@@ -72,6 +73,8 @@ def request(query: str, params: "OnlineParams") -> None:
         }
     )
     esearch_url = f"{eutils_api}/esearch.fcgi?{args}"
+    if api_key:
+        esearch_url += f"&api_key={quote(api_key)}"
     # DTD: https://eutils.ncbi.nlm.nih.gov/eutils/dtd/20060628/esearch.dtd
     esearch_resp: "SXNG_Response" = get(esearch_url, timeout=3)
     pmids_results = etree.XML(esearch_resp.content)
@@ -86,6 +89,8 @@ def request(query: str, params: "OnlineParams") -> None:
         }
     )
     efetch_url = f"{eutils_api}/efetch.fcgi?{args}"
+    if api_key:
+        efetch_url += f"&api_key={quote(api_key)}"
     params["url"] = efetch_url
 
 
@@ -124,7 +129,10 @@ def response(resp: "SXNG_Response") -> EngineResults:  # pylint: disable=too-man
                 authors.append(author_name)
 
         accepted_date = eval_xpath_getindex(
-            pubmed_data, "./History//PubMedPubDate[@PubStatus='accepted']", 0, default=None
+            pubmed_data,
+            "./History//PubMedPubDate[@PubStatus='accepted']",
+            0,
+            default=None,
         )
         pub_date = None
         if accepted_date is not None:

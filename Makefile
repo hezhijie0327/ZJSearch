@@ -75,6 +75,7 @@ MANAGE += pyenv pyenv.install pyenv.uninstall
 MANAGE += format.python format.shell
 MANAGE += test.yamllint test.pylint test.black test.pybabel test.unit test.coverage test.robot test.rst test.clean test.themes test.pyright test.pyright_modified test.shfmt
 MANAGE += themes.all themes.simple themes.simple.analyze themes.fix themes.lint themes.test
+MANAGE += themes.zjsearch themes.zjsearch.dev themes.zjsearch.lint
 MANAGE += static.build.commit static.build.drop static.build.restore
 MANAGE += nvm.install nvm.clean nvm.status nvm.nodejs
 MANAGE += go.env.dev go.clean

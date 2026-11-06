@@ -1,0 +1,142 @@
+# SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+"""The typesafe SDK factory -- the FIRST decision-model family.
+
+The decision-model registry (``llm/decision.py``) pre-embeds the SDK
+selection: each decision family's ``decide`` lives on its own family
+surface, the embedding service's ``embed()`` pattern (the openai family
+decisions wire is ``sdk/openai.py``'s ``OpenaiSdk.decide``), and the
+registry dispatches between the factories.
+
+The surface is deliberately narrow -- ONE forward pass answers NAMED
+questions about a state (``choice`` classification / ``score`` graded /
+``noul`` boolean, each with its probability distribution) and returns
+JSON-safe answers; there is no streaming, no tools, no text generation.
+The call is a single synchronous HTTP round trip (tens of milliseconds)
+-- it runs on the calling thread by design.
+"""
+
+import typing as t
+
+from ..config import extra_body, extra_headers
+from .clients import sdk_timeout
+
+KIND = "typesafe"
+
+
+def _field(obj: t.Any, key: str, default: t.Any = None) -> t.Any:
+    """One field off a response: the SDK hands back pydantic models and
+    plain dicts interchangeably -- both read through here."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        value = obj.get(key, default)
+        return default if value is None else value
+    value = getattr(obj, key, default)
+    return default if value is None else value
+
+
+def _plain(value: t.Any) -> t.Any:
+    """One typed answer model (ChoiceAnswer / ScoreAnswer / NoulAnswer)
+    downgraded to a JSON-safe dict -- pydantic's own dump when the object
+    speaks it, the dict when it is one, str for the rest."""
+    dump = getattr(value, "model_dump", None)
+    if dump is not None:
+        return dump()
+    return value if isinstance(value, dict) else str(value)
+
+
+class TypesafeSdk:  # pylint: disable=too-few-public-methods
+    """The bound typesafe family surface: one instance per (config, base)
+    binding."""
+
+    def __init__(self, cfg: dict[str, t.Any], base: str, kind: str, family: str, account: t.Any = None):
+        self.cfg = cfg
+        self.base = base
+        self.kind = kind
+        self.family = family
+        # the run's spend ledger (llm.accounts.ModelAccount) -- the
+        # surface records its own usage after every successful answer
+        self.account = account
+
+    def decide(
+        self,
+        state: t.Any,
+        questions: dict[str, dict[str, t.Any]],
+        timeout: float | None = None,
+        images: list[dict[str, str]] | None = None,
+    ) -> dict[str, t.Any] | None:
+        """One decision-model judgment: ``(state, questions) -> {"answers",
+        "usage", "latency_ms"}`` with JSON-safe answers.  Raw question
+        dicts are accepted (the SDK coerces its own typed models); the
+        client is one self-contained connection per call, closed on every
+        path.  ``images`` are the service-resolved assets (``{ref,
+        data_base64, format}``) -- they ride the vendor's top-level
+        ``assets`` map, the state/instructions reference them by their
+        plain-text ``ref`` (the vendor matches the strings verbatim; an
+        unreferenced asset 400s the request, and the service's docs-conform
+        geometry keeps one bad picture from killing the call), and the
+        experimental-images gate header rides per-call.  The caller's lens
+        degrades on ``None`` (raised errors propagate -- the service owns
+        the fail-open)."""
+        from typesafe_sdk import (
+            TypeSafeClient,
+        )  # pylint: disable=import-outside-toplevel
+
+        call_body = extra_body(self.cfg) or None
+        call_headers = extra_headers(self.cfg) or None
+        if images:
+            call_body = {
+                **(call_body or {}),
+                "assets": {
+                    asset["ref"]: {
+                        "type": "image",
+                        "format": asset["format"],
+                        "data_base64": asset["data_base64"],
+                    }
+                    for asset in images
+                },
+            }
+            call_headers = {**(extra_headers(self.cfg) or {}), "TypeSafe-Danger-Zone-Images": "true"}
+        client = TypeSafeClient(
+            api_key=str(self.cfg.get("api_key") or ""),
+            # a base ending in /v1 is always a misconfig (the SDK appends
+            # /v1/systemone itself -- the SystemOne contract's
+            # "{workspace}/compatible-mode" ending); strip it instead of
+            # serving the workspace a doubled /v1/v1 path
+            base_url=(self.base.rstrip("/").removesuffix("/v1") if self.base else None) or None,
+            model=str(self.cfg.get("model")),
+            timeout=timeout or sdk_timeout(),
+            headers=extra_headers(self.cfg) or None,
+        )
+        try:
+            response = client.system_one(
+                state,
+                questions,
+                model=str(self.cfg.get("model")),
+                timeout=timeout or sdk_timeout(),
+                extra_headers=call_headers,
+                extra_body=call_body,
+            )
+        finally:
+            client.close()
+        answers = _field(response, "answers")
+        if not isinstance(answers, dict) or not answers:
+            return None
+        usage = _plain(_field(response, "usage"))
+        if self.account is not None:
+            # the family records its own spend (the account is the run's
+            # ledger): one successful forward pass, input-only
+            self.account.record("decision", tokens=int((usage or {}).get("input_tokens") or 0))
+        return {
+            "answers": {name: _plain(answer) for name, answer in answers.items()},
+            "usage": usage or {},
+            "latency_ms": _field(response, "latency_ms"),
+        }
+
+
+def factory(
+    cfg: dict[str, t.Any], base: str, kind: str = KIND, family: str = "typesafe", account: t.Any = None
+) -> TypesafeSdk:
+    """The typesafe family factory: config + base (+ the run's spend
+    ledger) bound into one callable surface."""
+    return TypesafeSdk(cfg, base, kind, family, account=account)

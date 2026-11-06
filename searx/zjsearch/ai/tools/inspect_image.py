@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
+"""The ``inspect_image`` tool: the researcher's EYES on search results.
+
+Result lines carry an ``img=`` token (an image the snippet's page
+published).  Text search cannot read a chart -- this tool lets the model
+fetch that one image and LOOK at it: the fetch rides the same bridge as
+the overview's attachments and the picture is injected into the
+conversation as a user turn (dialect-neutral: user turns accept image
+parts on every provider).  Registered for every research run -- the
+model calls it only when a chart/diagram actually matters."""
+
+import typing as t
+from searx.zjsearch.ai.core.text import raw_args
+
+INSPECT_IMAGE_TOOL = "inspect_image"
+
+INSTRUCTIONS = """\
+Use it when a source's picture IS the evidence -- a chart, a diagram, a
+data visual, a spec sheet photo that a snippet cannot show -- and read
+it properly: axes, labels, numbers, what the visual actually claims.
+Never spend a call on decorative photos or cover art.  Copy the img=
+URL character for character from the feed line (a hallucinated URL
+fails), and pass n when the image belongs to a numbered source so the
+reader can trace it."""
+
+
+def inspect_image_spec() -> dict[str, t.Any]:
+    """The ``inspect_image`` tool spec."""
+    return {
+        "name": INSPECT_IMAGE_TOOL,
+        "description": 'Look at ONE image from the search results: copy the img= URL from a source line in the feed and the image becomes visible to you in the next turn (pass n to bind it to its [n] source).',
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The img= URL from a feed source line, copied verbatim.",
+                },
+                "n": {
+                    "type": "number",
+                    "description": "Optional: the [n] of the source the image belongs to.",
+                },
+            },
+            "required": ["url"],
+        },
+    }
+
+
+def parse_inspect_image_call(call: dict[str, t.Any]) -> tuple[str, int]:
+    """The tool call's ``(image URL, source n)`` -- sanitized (length +
+    scheme gate; the SSRF check happens at fetch time); ``n`` is 0 when
+    absent (the injection label falls back to the URL)."""
+    args = raw_args(call)
+    url = str(args.get("url") or "").strip()[:2000]
+    if not url.startswith(("http://", "https://", "data:image/")):
+        return "", 0
+    try:
+        n = int(args.get("n") or 0)
+    except (TypeError, ValueError):
+        n = 0
+    return url, max(0, n)
