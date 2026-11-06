@@ -3500,7 +3500,7 @@ Python edits — the repo policy forbids them):
 force-pull alike — follows the same style; only commits that arrive *from*
 upstream keep the upstream `[fix] ...` format, and history is never rewritten.
 
-- Format: `type(scope): subject` — types are `feat` / `fix` / `chore` / `docs` / `refactor` / `perf` / `test` / `build`; subject is imperative, lowercase start, no trailing period, aim ≤ 72 chars; detail goes in the body after a blank line (why, not what); breaking changes take `!` before the colon.
+- Format: `type(scope): subject` — types are `feat` / `fix` / `chore` / `docs` / `revert` / `refactor` / `perf` / `test` / `build`; subject is imperative, lowercase start, no trailing period, aim ≤ 72 chars; detail goes in the body after a blank line (why, not what); breaking changes take `!` before the colon.
 - **Scope is required whenever the change lands in one identifiable area** of the fork; omit it only for repo-wide or cross-cutting changes (e.g. a lockfile-wide security bump stays `chore(deps)`).
 
 | scope | covers |
