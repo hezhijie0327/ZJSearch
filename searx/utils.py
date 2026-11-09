@@ -77,11 +77,12 @@ _NOTSET = _NotSetClass()
 
 
 def searxng_useragent(suffix: str = "") -> str:
-    """Return the SearXNG User Agent.
+    """Return the ZJSearch User Agent (the fork's brand; VERSION_TAG is the
+    fork's own semver from searx/version_frozen.py).
 
     The UA header is build up from a string template like::
 
-       SearXNG/{VERSION_TAG} {suffix}
+       ZJSearch/{VERSION_TAG} {suffix}
 
     If argument is empty, ``suffix`` is taken from (first wins):
 
@@ -94,7 +95,7 @@ def searxng_useragent(suffix: str = "") -> str:
     if not suffix:
         suffix = get_setting("general.contact_url", "") or ""
     suffix = suffix.removeprefix("mailto:").strip()
-    return f"SearXNG/{VERSION_TAG} {suffix}".strip()
+    return f"ZJSearch/{VERSION_TAG} {suffix}".strip()
 
 
 def gen_useragent(os_string: str | None = None) -> str:

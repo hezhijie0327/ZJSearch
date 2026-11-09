@@ -1,0 +1,13 @@
+minimumReleaseAge: 0
+
+# 依赖版本覆盖（与 ZJBlog ff3fa11 同款）：
+# - katex：统一全树到直接依赖的 0.19.1（rehype-katex / remark-math 各自解析出
+#   0.16.47、marp-core 钉 ^0.17.0、mermaid 解析出 0.18.11，均 <0.18.2 =
+#   GHSA-238p-pmpm-9mq7 原型污染受影响区；顺带消除构建期 marp 渲染 0.17 与
+#   客户端注链/katex.min.css 0.19 的版本错位）
+# - glob：@sentry/bundler-plugins（lighthouse 传递）钉 ^13.0.6，抬到修复版
+#   14.0.2+（其自带 minimatch ^11.0.2 连带消除 GHSA-g3hv-75wg-m249 globparts
+#   放大 DoS；只限定这一条钉死范围，不碰其它 glob 消费方）
+overrides:
+  katex: ^0.19.1
+  glob@^13.0.6: ^14.0.2

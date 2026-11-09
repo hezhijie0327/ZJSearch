@@ -1,3 +1,12 @@
+# --- line endings (zjsearch fork): commit and check out every text file
+# with LF, regardless of each clone's core.autocrlf setting. Blobs are
+# already all-LF; `text=auto` lets git keep true binaries untouched.
+* text=auto eol=lf
+
+# Windows-only command files keep CRLF in the working tree.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 *.gif -diff
 *.png -diff
 *.min.css -diff

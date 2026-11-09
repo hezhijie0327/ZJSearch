@@ -76,4 +76,14 @@ class SXNGAnswerer(Answerer):
         if len(parts) != 2 or parts[1] not in self.random_types:
             return []
 
-        return [Answer(answer=self.random_types[parts[1]]())]
+        value = self.random_types[parts[1]]()
+        return [
+            Answer(
+                answer=value,
+                data={
+                    "kind": "value",
+                    "value": value,
+                    "swatch": "true" if parts[1] == "color" else "",
+                },
+            )
+        ]
