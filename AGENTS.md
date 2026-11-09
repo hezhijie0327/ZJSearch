@@ -726,6 +726,14 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
 
 ## Conventions & gotchas
 
+- **Commit messages follow Conventional Commits** — `feat:`, `fix:`,
+  `chore:`, `docs:` (an optional scope is fine: `feat(zjsearch): …`).
+  NEVER copy the upstream SearXNG bracket style (`[feat] …`, `[fix] …`)
+  that dominates this repository's history: upstream's convention is not
+  ours, and agents inferring the style from `git log` will get it wrong.
+  Multi-line messages go through `git commit -F <file>` (backticks in a
+  shell-quoted `-m` fire command substitution).  Batch commits and push
+  ONCE per unit of work — every push to `zjsearch` rebuilds the image.
 - Jinja macros need `with context` imports to see render variables; Jinja macro
   output is Markup (never escaped), and `|tojson` is the only safe way to embed
   dynamic values — hand-built JSON must place `, ` separators **between** items,
