@@ -879,6 +879,13 @@ section, do not re-type the numbers."""
                 state, questions, images = parsed
                 started = time.monotonic()
                 out = decision.evaluate(state, questions, timeout=20.0, images=images, account=self.account)
+                if out is None and not decision.available():
+                    # the decision model's config-level absence rides the
+                    # chat fallback (the same named-verdict shapes) -- a
+                    # TRANSIENT decision failure does NOT (the feed below
+                    # already says the model is unavailable; silently
+                    # re-spending on the main model would surprise)
+                    out = decision.judge_via_chat(state, questions, account=self.account)
                 # ONE timing for the branch: the judgment ledger's latency IS
                 # the row settlement's ``ms`` (never double-timed)
                 ms = int((time.monotonic() - started) * 1000)
@@ -1421,11 +1428,14 @@ section, do not re-type the numbers."""
         )
 
         browser_on = browser_config.ready()
-        judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
         specs = (
             [search_web_spec(browser_on, with_info=True), calculate_spec(), list_engines_spec(), record_findings_spec()]
             + ([browse_tool.browse_spec()] if browser_on else [])
-            + ([evaluate_spec()] if judge_on else [])
+            # the evaluate tool needs no availability gate: the chat
+            # fallback (llm.decision.judge_via_chat) serves it when the
+            # decision model is absent -- a worker's tie-break must not
+            # depend on a deployment's optional model
+            + [evaluate_spec()]
         )
         self._sub_tool_notes = [
             (str(spec["name"]), TOOL_INSTRUCTIONS[str(spec["name"])])
@@ -2224,7 +2234,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
         # discovery -- reads ungated)
         meta = self.reg.url_meta.get(url)
         gate = decision_features("read_gate")
-        if meta and gate.get("enabled") and decision.enabled() and decision.configured():
+        if meta and gate.get("enabled") and decision.available():
             started = time.monotonic()
             try:
                 out = decision.evaluate(

@@ -19,7 +19,7 @@ MAX_QUESTIONS = decision.MAX_QUESTIONS
 
 
 def _decision_view() -> flask.Response:
-    payload = http.token_payload(gate=decision.enabled() and decision.configured())
+    payload = http.token_payload(gate=decision.available())
     state = payload.get("state")
     questions = payload.get("questions")
     images = payload.get("images")
@@ -44,6 +44,6 @@ def capability() -> dict[str, str] | None:
 def install(app: flask.Flask) -> None:
     """Register the decision route; chained from the ``searx.zjsearch.ai``
     package install.  Silent when not configured."""
-    if not decision.enabled() or not decision.configured():
+    if not decision.available():
         return
     app.add_url_rule("/zjsearch/ask/decision", "zjsearch_ask_decision", _decision_view, methods=["POST"])

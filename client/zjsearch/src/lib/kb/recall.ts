@@ -10,9 +10,18 @@
     named still recall); the rerank stage then re-scores the fused head.
     The graph is a query, not a table. */
 
-import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
+import { embeddingsConfigured, embedQuery } from "@/lib/embed.ts";
 import { hybridMemoryHits, listMemoryItems } from "@/lib/kb/memory.ts";
-import { CORPUS_COLUMNS, enqueue, ITEM_COLUMNS, type KnowledgeItem, rowToItem, safeParse } from "@/lib/kb/shared.ts";
+import {
+  bodySegments,
+  CORPUS_COLUMNS,
+  embedModelName,
+  enqueue,
+  ITEM_COLUMNS,
+  type KnowledgeItem,
+  rowToItem,
+  safeParse,
+} from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
@@ -38,7 +47,7 @@ async function hybridRecall(
   await pg();
   const kindList = kinds.map((kind) => `'${kind.replaceAll("'", "")}'`).join(",");
   const keywords = segmentKeywords(trimmed);
-  const semanticReady = embeddingsConfigured();
+  const model = embeddingsConfigured() ? embedModelName() : null;
   const scores = new Map<string, { item: KnowledgeItem; score: number }>();
   const bump = (rows: Record<string, unknown>[], weight: number) => {
     (rows ?? []).forEach((row, rank) => {
@@ -55,41 +64,84 @@ async function hybridRecall(
   // window gives the filter something to keep; the RRF's rank weights
   // make the extra depth harmless.
   const fetchN = Math.max(limit * 8, 64);
-  const [keywordRows, semanticRows] = await Promise.all([
+  const columns = fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS;
+  const prefixed = columns
+    .split(", ")
+    .map((column) => (column.startsWith("k.") ? column : `k.${column}`))
+    .join(", ");
+  const [keywordRows, rowSemantic, segSemantic] = await Promise.all([
     keywords
       ? pgQuery<Record<string, unknown>>(
-          `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, (search_text <@> to_bm25query($1, 'knowledge_bm25')) AS _score
+          `SELECT ${columns}, (search_text <@> to_bm25query($1, 'knowledge_bm25')) AS _score
            FROM knowledge
            WHERE kind IN (${kindList}) AND (search_text <@> to_bm25query($1, 'knowledge_bm25')) <> 0
            ORDER BY _score DESC LIMIT $2`,
           [keywords, fetchN],
         )
       : Promise.resolve([] as Record<string, unknown>[]),
-    semanticReady
+    model
       ? (async () => {
-          const vector = (await embedTexts([trimmed]))?.[0];
+          // THE SPACE GUARD: only vectors of the CURRENT capability
+          // model compete -- a stored vector from another model sits in
+          // another space and its cosine reads as garbage (the boot
+          // reconcile pass resets them; the filter is the belt to its
+          // braces, covering the rows that land while a swap is in
+          // flight)
+          const vector = await embedQuery(trimmed);
           if (!vector) {
             return [] as Record<string, unknown>[];
           }
           return pgQuery<Record<string, unknown>>(
-            `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, 1 - (embedding <=> $1::vector) AS _score
+            `SELECT ${columns}, 1 - (embedding <=> $1::vector) AS _score
              FROM knowledge
-             WHERE kind IN (${kindList}) AND embedding IS NOT NULL
+             WHERE kind IN (${kindList}) AND embedding IS NOT NULL AND embed_model = $3
              ORDER BY embedding <=> $1::vector LIMIT $2`,
-            [toVectorLiteral(vector), fetchN],
+            [toVectorLiteral(vector), fetchN, model],
           );
+        })()
+      : Promise.resolve([] as Record<string, unknown>[]),
+    model && (kinds.includes("source") || kinds.includes("document"))
+      ? (async () => {
+          // THE SEGMENT LEG: the long full-text rows (crawled sources,
+          // attachments) embed as ~1200-char segments -- this query is
+          // how their tails become findable.  A row hit through several
+          // segments dedupes to its best segment before the RRF.  The
+          // kind filter still applies inside the JOIN -- the leg runs
+          // whenever the caller's kinds name either segmented kind
+          // (source or document), which source always implies.
+          const vector = await embedQuery(trimmed);
+          if (!vector) {
+            return [] as Record<string, unknown>[];
+          }
+          const rows = await pgQuery<Record<string, unknown>>(
+            `SELECT ${prefixed}, 1 - (v.embedding <=> $1::vector) AS _score
+             FROM knowledge_vec v JOIN knowledge k ON k.id = v.row_id
+             WHERE k.kind IN (${kindList}) AND v.embed_model = $3
+             ORDER BY v.embedding <=> $1::vector LIMIT $2`,
+            [toVectorLiteral(vector), fetchN, model],
+          );
+          const best = new Map<string, Record<string, unknown>>();
+          for (const row of rows ?? []) {
+            const id = String(row.id);
+            const prev = best.get(id);
+            if (!prev || Number(row._score) > Number(prev._score)) {
+              best.set(id, row);
+            }
+          }
+          return [...best.values()];
         })()
       : Promise.resolve([] as Record<string, unknown>[]),
   ]);
   bump(keywordRows, 1.0);
-  bump(semanticRows, 1.0);
+  bump(rowSemantic, 1.0);
+  bump(segSemantic, 1.0);
   if (scores.size === 0 && trimmed.length >= 2) {
     // the rescue rides the GiST trigram index as a KNN ordering
     // (title %> query + ORDER BY title <-> query) -- the old
     // word_similarity() function call could never use the index and
     // seq-scanned every searchable row computing similarities
     const rescued = await pgQuery<Record<string, unknown>>(
-      `SELECT ${fullBody ? CORPUS_COLUMNS : ITEM_COLUMNS}, similarity(title, $1) AS _score
+      `SELECT ${columns}, similarity(title, $1) AS _score
        FROM knowledge
        WHERE kind IN (${kindList}) AND title %> $1
        ORDER BY title <-> $1 LIMIT $2`,
@@ -339,34 +391,82 @@ export async function searchKnowledge(
     .filter((item) => (opts.since ? item.updated >= opts.since : true));
 }
 
+// THE SEGMENT RERANK: a long row (the full-text lanes' whole bodies)
+// reranks as its ~1200-char segments -- the cross-encoder judges the
+// passage that actually matches, not the 400-char head that may not
+// carry the signal (the server's writer-feed trim, mirrored).  The
+// budget: 4 segments a row, 64 docs one call -- rows past the doc cap
+// fall back to their single head document, exactly the old shape.
+const RERANK_SEGMENT_BODY_MIN = 900;
+const RERANK_SEGMENTS_PER_ROW = 4;
+const RERANK_DOC_BUDGET = 64;
+
 /** The model funnel's middle tier, browser-side: ONE cross-encoder pass
     over the fused head re-orders it by query-conditioned relevance -- the
-    signal the BM25+vector RRF only approximates.  Fail-open everywhere:
-    fewer than 4 candidates, rerank unconfigured, or any upstream failure
-    keeps the fused order (the rows carry the full body, so the document
-    text is the recall's own shape -- title + body head). */
+    signal the BM25+vector RRF only approximates.  Long rows ride their
+    segments; a row's rank is its BEST segment's rank.  Fail-open
+    everywhere: fewer than 8 candidates, rerank unconfigured, or any
+    upstream failure keeps the fused order (the rows carry the full
+    body, so the document text is the recall's own shape -- title +
+    body head). */
 async function rerankStage(
   query: string,
   rows: Array<{ item: KnowledgeItem; score: number }>,
   head = 16,
 ): Promise<Array<{ item: KnowledgeItem; score: number }>> {
-  if (rows.length < 4 || !rerankConfigured()) {
+  if (rows.length < 8 || !rerankConfigured()) {
     return rows;
   }
   const headRows = rows.slice(0, head);
+  const docs: string[] = [];
+  const spans: Array<{ start: number; count: number }> = [];
+  for (const row of headRows) {
+    const body = row.item.body ?? "";
+    let texts =
+      body.length >= RERANK_SEGMENT_BODY_MIN && docs.length + RERANK_SEGMENTS_PER_ROW <= RERANK_DOC_BUDGET
+        ? bodySegments(body, RERANK_SEGMENTS_PER_ROW)
+        : [];
+    if (docs.length + texts.length > RERANK_DOC_BUDGET) {
+      texts = [];
+    }
+    const start = docs.length;
+    if (texts.length) {
+      for (const segment of texts) {
+        docs.push(`${row.item.title} — ${segment}`);
+      }
+    } else {
+      docs.push(`${row.item.title} — ${body.slice(0, 400)}`);
+    }
+    spans.push({ start, count: docs.length - start });
+  }
   try {
-    const order = await rerankDocs(
-      query,
-      headRows.map((row) => `${row.item.title} — ${row.item.body.slice(0, 400)}`),
-    );
-    if (!order || order.length !== headRows.length) {
+    const order = await rerankDocs(query, docs);
+    if (!order || order.length !== docs.length) {
       return rows;
     }
-    const reranked = order.map((index) => headRows[index]).filter((row) => row !== undefined);
-    if (reranked.length !== headRows.length) {
-      return rows;
-    }
-    return [...reranked, ...rows.slice(head)];
+    // each document's position in the returned order -- the lower the
+    // better; a row ranks by its best segment
+    const position = new Array<number>(docs.length);
+    order.forEach((docIx, rank) => {
+      if (typeof docIx === "number" && docIx >= 0 && docIx < docs.length) {
+        position[docIx] = rank;
+      }
+    });
+    const rankedRows = headRows
+      .map((row, ix) => {
+        const span = spans[ix];
+        let best = Number.MAX_SAFE_INTEGER;
+        for (let d = 0; d < (span?.count ?? 1); d++) {
+          const pos = position[(span?.start ?? 0) + d];
+          if (typeof pos === "number" && pos < best) {
+            best = pos;
+          }
+        }
+        return { row, best };
+      })
+      .sort((a, b) => a.best - b.best)
+      .map((entry) => entry.row);
+    return [...rankedRows, ...rows.slice(head)];
   } catch {
     return rows;
   }

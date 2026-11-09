@@ -42,7 +42,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         three wasted rounds; the tokens join the run's
         ``usage.decision`` account and the verdict joins the ledger."""
         review = decision_features("plan_review")
-        if not items or not review.get("enabled") or not decision.enabled() or not decision.configured():
+        if not items or not review.get("enabled") or not decision.available():
             return
         try:
             max_tasks = int(review.get("max_tasks", 4) or 4)
@@ -119,7 +119,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         writer; the raw nouls land in the Decisions card via the judgment
         ledger."""
         cov = decision_features("coverage")
-        if not cov.get("enabled") or not decision.enabled() or not decision.configured():
+        if not cov.get("enabled") or not decision.available():
             return
         open_tasks = [t for t in self.coverage.task_list if t.get("status") != "done"]
         if not open_tasks or not self.round_new_titles:
@@ -193,7 +193,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         decision model, no candidates -- an empty list, the writer writes
         from everything."""
         gate = decision_features("evidence_check")
-        if not gate.get("enabled") or not decision.enabled() or not decision.configured():
+        if not gate.get("enabled") or not decision.available():
             return []
         # the check's face scales with the run's evidence base: a report
         # resting on 100+ sources warrants more than the chat-shaped 8
@@ -281,7 +281,7 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         Fail-open everywhere: no decision model, an empty corpus or no
         candidates simply marks nothing."""
         gate = decision_features("claim_check")
-        if not gate.get("enabled") or not decision.enabled() or not decision.configured():
+        if not gate.get("enabled") or not decision.available():
             return []
         candidates = [
             fact

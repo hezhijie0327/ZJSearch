@@ -60,7 +60,6 @@ def build_tool_surface(
     mode: str,
     depth_rung: int = 0,
     browser_on: bool = False,
-    judge_on: bool = False,
     recall_on: bool = False,
     has_images: bool = False,
     has_outline: bool = False,
@@ -69,11 +68,14 @@ def build_tool_surface(
     ``runs.profile.SEARCH_MODES``; ``depth_rung`` is the depth probe's
     grade (the delegation tools are the HEAVY deep question's -- rung
     >= 2 mints them); the ``*_on`` flags are the run's availability
-    gates (the browser engine, the decision model, a live recall);
-    ``has_images``/``has_outline`` reflect the request's attachments
-    and the report/deck outline.  PURE: no settings reads -- the MCP
-    servers' specs (the discovery index's content) are process state
-    consulted through :py:func:`search_tools.tools_surface`."""
+    gates (the browser engine, a live recall); ``has_images``/
+    ``has_outline`` reflect the request's attachments and the
+    report/deck outline.  The evaluate tool carries NO availability
+    gate: it rides the chat fallback (``llm.decision.judge_via_chat``)
+    when the decision model is absent, so the structured-judgment
+    capability never disappears from the surface.  PURE: no settings
+    reads -- the MCP servers' specs (the discovery index's content) are
+    process state consulted through :py:func:`search_tools.tools_surface`."""
     delegating = mode == "deep" and depth_rung >= 2
     research_tier = mode in ("balanced", "deep")
     if mode == "overview":
@@ -115,8 +117,7 @@ def build_tool_surface(
         # index round trip is a per-run tax the small bounded internal set
         # must not pay
         specs.append(list_engines_spec())
-        if judge_on:
-            specs.append(evaluate_spec())
+        specs.append(evaluate_spec())
         if recall_on:
             specs.append(recall_history_spec())
     if research_tier or has_images:

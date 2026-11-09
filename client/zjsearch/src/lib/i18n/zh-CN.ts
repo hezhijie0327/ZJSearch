@@ -313,6 +313,17 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_admin_events: "事件",
   knowledge_admin_size: "存储",
   knowledge_admin_reset: "重置数据库",
+  knowledge_admin_export: "导出知识库",
+  knowledge_admin_export_desc:
+    "把全部知识行、运行事件、线程、逐次运行汇总和记忆打包成一个 JSON 快照下载——不含向量（导入端用自己的模型重新嵌入）；附件原文件不包含，但包含它们转换后的正文。",
+  knowledge_admin_export_done: "快照已导出（{n} 条记录）",
+  knowledge_admin_import: "导入快照",
+  knowledge_admin_import_desc:
+    "把快照文件合并进本浏览器的知识库——逐行以较新记录为准，收藏和手动改名的线程标题保持不变。",
+  knowledge_admin_import_confirm: "把这份快照合并进本地知识库？逐行以较新记录为准；收藏和手动改名的线程标题保持不变。",
+  knowledge_admin_import_done: "快照已导入（{n} 条记录）",
+  knowledge_admin_snapshot_invalid: "这不是有效的知识库快照文件",
+  knowledge_admin_snapshot_failed: "快照传输失败",
   knowledge_admin_reset_desc: "删除本浏览器内知识库的全部数据（含嵌入用量统计）——下次使用时自动重建空库。",
   knowledge_admin_reset_confirm: "确认删除全部数据？",
   knowledge_admin_reset_done: "数据库已重置",

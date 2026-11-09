@@ -392,7 +392,7 @@ def make_synthesizer(
         failing claim earns ONE targeted rewrite -- the fix happens
         BEFORE delivery (the reason the old post-write audit was removed
         does not apply section-wise).  Fail-open everywhere."""
-        if not text or not (decision.enabled() and decision.configured()):
+        if not text or not decision.available():
             return
         gate_cfg = decision_features("citation_gate")
         if gate_cfg.get("enabled") is False:

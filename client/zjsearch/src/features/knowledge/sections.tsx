@@ -20,6 +20,7 @@ import {
   ExternalLink,
   FileDown,
   FileText,
+  FileUp,
   Gauge,
   Globe,
   LayoutTemplate,
@@ -1357,12 +1358,26 @@ export function KindItemRows({
 
 /** The admin surface as an IN-PANEL view (the panel navigates, no second
     drawer): per-kind row counts, the storage estimate, the embedding
-    model, and the two destructive actions behind confirm dialogs the
-    parent owns. */
-export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; onReset: () => void }) {
+    model, the snapshot export/import (the cross-device path -- the
+    export downloads immediately, the import files through the parent's
+    confirm dialog), and the destructive action behind its confirm
+    dialog the parent owns. */
+export function AdminView({
+  onExport,
+  onImport,
+  onReset,
+  stats,
+}: {
+  onExport: () => void;
+  onImport: (file: File) => void;
+  onReset: () => void;
+  stats: KnowledgeStats | null;
+}) {
   const t = useT();
   const [embedUsage, setEmbedUsage] = useState<EmbedUsageTotals | undefined>(undefined);
   const [rerankUsage, setRerankUsage] = useState<RerankUsageTotals | undefined>(undefined);
+  const [busy, setBusy] = useState<"export" | "import" | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let live = true;
     void readEmbedUsage().then((totals) => {
@@ -1531,6 +1546,47 @@ export function AdminView({ onReset, stats }: { stats: KnowledgeStats | null; on
           </dl>
         </div>
         <div className="space-y-3 px-5 py-5 sm:px-6">
+          {/* the snapshot pair: export downloads on the spot, import
+              rides the file picker and the parent's confirm dialog */}
+          <button
+            className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-start text-[13px] text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
+            disabled={busy !== null}
+            onClick={() => {
+              setBusy("export");
+              void Promise.resolve(onExport()).finally(() => setBusy(null));
+            }}
+            type="button"
+          >
+            {t("knowledge_admin_export")}
+            <FileDown aria-hidden="true" className="size-3.5" />
+          </button>
+          <p className="text-xs leading-relaxed text-ink-3">{t("knowledge_admin_export_desc")}</p>
+          <button
+            className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-start text-[13px] text-ink transition-colors hover:bg-surface-2 disabled:opacity-50"
+            disabled={busy !== null}
+            onClick={() => fileRef.current?.click()}
+            type="button"
+          >
+            {t("knowledge_admin_import")}
+            <FileUp aria-hidden="true" className="size-3.5" />
+          </button>
+          <p className="text-xs leading-relaxed text-ink-3">{t("knowledge_admin_import_desc")}</p>
+          <input
+            accept=".json,application/json"
+            aria-hidden="true"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) {
+                setBusy("import");
+                void Promise.resolve(onImport(file)).finally(() => setBusy(null));
+              }
+            }}
+            ref={fileRef}
+            tabIndex={-1}
+            type="file"
+          />
           <button
             className="flex w-full items-center justify-between rounded-xl border border-danger/40 px-4 py-3 text-start text-[13px] text-danger transition-colors hover:bg-danger/5"
             onClick={onReset}

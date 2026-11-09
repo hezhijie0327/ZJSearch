@@ -8,6 +8,7 @@ import { configureBrowserInput } from "@/lib/browserInput.ts";
 import { configureDecision } from "@/lib/decision.ts";
 import { configureEmbeddingDimensions, configureKnowledge } from "@/lib/kb/shared.ts";
 import { extractPageData, parseBootData, parseClientSettings, parseEmbeddedPageData } from "@/lib/pageData.ts";
+import { configurePgEmbedModel } from "@/lib/pg.ts";
 import { initPwaInstall } from "@/lib/pwa.ts";
 import { configureRerank } from "@/lib/rerank.ts";
 import { watchSystemTheme } from "@/lib/theme.ts";
@@ -62,10 +63,15 @@ async function bootstrap(): Promise<void> {
   // the thread-embedding capability rides the page-data globals: handed to
   // the thread store once, here at boot (absent = the history search hides)
   const embeddingCap = initialData?.globals.embedding;
-  configureEmbeddings(embeddingCap ? { token: embeddingCap.tk, dimensions: embeddingCap.dimensions } : null);
+  configureEmbeddings(
+    embeddingCap ? { token: embeddingCap.tk, dimensions: embeddingCap.dimensions, model: embeddingCap.model } : null,
+  );
   if (embeddingCap?.dimensions) {
     configureEmbeddingDimensions(embeddingCap.dimensions);
   }
+  // the vector space's other identity half (the reconcile pass keys on
+  // the model+width pair; a swap invalidates every stored vector)
+  configurePgEmbedModel(embeddingCap?.model ?? "");
   // the recall's rerank capability (absent = the recall keeps its fused order)
   const rerankCap = initialData?.globals.rerank;
   configureRerank(rerankCap ? { token: rerankCap.tk } : null);

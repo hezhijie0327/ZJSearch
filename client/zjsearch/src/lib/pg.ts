@@ -60,9 +60,20 @@ export function pgIsDegraded(): boolean {
     the capability cannot lock the columns at the default. */
 let pgDimensions = 1024;
 
+/** The embedding capability's model name -- the OTHER half of the vector
+    space's identity (rows record it per row; the reconcile pass keys on
+    the pair).  Set from the same boot payload as the dimensions. */
+let pgEmbedModel = "";
+
 export function configurePgDimensions(dims: number): void {
   if (pgPromise === null) {
     pgDimensions = dims;
+  }
+}
+
+export function configurePgEmbedModel(model: string): void {
+  if (pgPromise === null) {
+    pgEmbedModel = model;
   }
 }
 
@@ -93,7 +104,17 @@ export function pg(): Promise<Pg> {
     contents are destroyed. */
 export async function resetDatabase(): Promise<void> {
   const db = await pg();
-  for (const table of ["knowledge", "run_event", "thread_head", "run_summary", "stats", "attachment", "memory"]) {
+  for (const table of [
+    "knowledge",
+    "knowledge_vec",
+    "run_event",
+    "thread_head",
+    "run_summary",
+    "stats",
+    "attachment",
+    "memory",
+    "store_meta",
+  ]) {
     await db.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
   }
   await createSchema(db);
@@ -452,6 +473,27 @@ async function createSchema(db: Pg): Promise<void> {
   await db.query(
     "CREATE INDEX IF NOT EXISTS knowledge_hnsw ON knowledge USING hnsw (embedding vector_cosine_ops) WHERE embedding IS NOT NULL",
   );
+  // THE SEGMENT VECTORS (the long-read recall): the two full-text kinds
+  // (source = the reader's archived pages, document = the uploaded
+  // attachments) embed as ~1200-char line-boundary SEGMENTS instead of a
+  // single 4000-char head -- content past the head becomes findable by
+  // the semantic leg.  One row per (row_id, seg_ix); the row's own
+  // knowledge.embedding column stays NULL for segmented rows (their
+  // embed_model marks them done so the pending queue moves on).
+  await db.query(`CREATE TABLE IF NOT EXISTS knowledge_vec (
+    row_id      text NOT NULL,
+    seg_ix      integer NOT NULL,
+    embedding   vector(${dims}),
+    embed_model text NOT NULL,
+    PRIMARY KEY (row_id, seg_ix)
+  )`);
+  await db.query(
+    "CREATE INDEX IF NOT EXISTS knowledge_vec_hnsw ON knowledge_vec USING hnsw (embedding vector_cosine_ops)",
+  );
+  // the tiny kv the schema-level passes key on (the embedding identity
+  // reconcile, the segment-migration marker) -- infrastructure, not
+  // knowledge: the reset drops it and the fresh boot re-seeds it.
+  await db.query("CREATE TABLE IF NOT EXISTS store_meta (key text PRIMARY KEY, value text NOT NULL)");
   // the write-time projection triggers: bytes/head computed once per write;
   // the per-kind ledger maintained on every insert/update/delete (the
   // UPDATE guard skips no-op updates -- the embed pass touches columns the
@@ -538,6 +580,93 @@ async function createSchema(db: Pg): Promise<void> {
   // the thread directory's listing sort (the live subscription re-fires
   // it on every settle/pin/delete)
   await db.query("CREATE INDEX IF NOT EXISTS thread_head_listing ON thread_head (pinned DESC, updated DESC)");
+  await reconcileEmbeddingIdentity(db, dims);
+}
+
+/** THE EMBEDDING IDENTITY RECONCILE (boot, every lane): the vector space
+    is identified by the capability PAIR (model, dimensions) -- a change
+    in either invalidates EVERY stored vector (old-model vectors sit in a
+    different space; an old-width column rejects the new vectors outright
+    and would throw the whole semantic leg).  The pass compares the
+    boot capability against the stored markers and, on any change, wipes
+    every embedding back to the pending queue (the backfill pass
+    re-embeds) and re-widths the columns.  Without it a model swap
+    polluted the recall SILENTLY -- cross-space cosine rankings read as
+    plausible garbage.  One-time markers double as migration triggers:
+    ``doc_segments`` folds the pre-segmentation databases in (their
+    full-text rows re-embed as segments).  Capability absent = nothing
+    compares vectors this session: the pass stands down and the stored
+    identity survives. */
+async function reconcileEmbeddingIdentity(db: Pg, dims: number): Promise<void> {
+  const model = pgEmbedModel.trim();
+  if (!model) {
+    return;
+  }
+  const stored = new Map(
+    (
+      (
+        await db.query<{ key: string; value: string }>(
+          "SELECT key, value FROM store_meta WHERE key = ANY($1::text[])",
+          [["embed_dims", "embed_model", "doc_segments"]],
+        )
+      ).rows ?? []
+    ).map((row) => [String(row.key), String(row.value)] as [string, string]),
+  );
+  const storedDims = stored.get("embed_dims");
+  const storedModel = stored.get("embed_model");
+  const identityChanged =
+    (storedDims !== undefined && storedDims !== String(dims)) || (storedModel !== undefined && storedModel !== model);
+  const needsSegmentMigration = stored.get("doc_segments") !== "1";
+  if (!identityChanged && !needsSegmentMigration) {
+    return;
+  }
+  const changed: string[] = [];
+  if (identityChanged) {
+    changed.push(`${storedModel ?? "?"}/${storedDims ?? "?"} -> ${model}/${dims}`);
+    try {
+      await db.query(
+        "UPDATE knowledge SET embedding = NULL, embed_model = NULL WHERE embedding IS NOT NULL OR embed_model IS NOT NULL",
+      );
+      await db.query("DELETE FROM knowledge_vec");
+      await db.query(
+        "UPDATE memory SET embedding = NULL, embed_model = NULL WHERE embedding IS NOT NULL OR embed_model IS NOT NULL",
+      );
+    } catch (err) {
+      console.warn("zjsearch pg: the embedding reset failed (vectors may be stale)", err);
+    }
+    if (storedDims !== undefined && storedDims !== String(dims)) {
+      for (const table of ["knowledge", "knowledge_vec", "memory"]) {
+        try {
+          await db.query(`ALTER TABLE ${table} ALTER COLUMN embedding TYPE vector(${dims})`);
+        } catch (err) {
+          console.warn(`zjsearch pg: the ${table} vector column re-width failed (retried next boot)`, err);
+        }
+      }
+    }
+  }
+  if (needsSegmentMigration) {
+    // the pre-segmentation databases: their long-read rows were
+    // head-embedded -- back to the pending queue, the backfill segments
+    // them (documents and crawled sources alike)
+    try {
+      await db.query(
+        "UPDATE knowledge SET embedding = NULL, embed_model = NULL WHERE kind IN ('source', 'document') AND embed_model IS NOT NULL",
+      );
+    } catch (err) {
+      console.warn("zjsearch pg: the segment migration reset failed (retried next boot)", err);
+    }
+  }
+  for (const [key, value] of [
+    ["embed_dims", String(dims)],
+    ["embed_model", model],
+    ["doc_segments", "1"],
+  ] as const) {
+    await db.query(
+      "INSERT INTO store_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [key, value],
+    );
+  }
+  console.info(`zjsearch pg: embedding space reconciled (${changed.join("; ") || "segment migration"})`);
 }
 
 /** The keyword text behind a BM25 index: the CJK-aware pre-segmentation

@@ -42,6 +42,7 @@ import {
 } from "@/lib/kb/projections.ts";
 import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
+import { exportSnapshot, importSnapshot, SNAPSHOT_VERSION, totalImported } from "@/lib/kb/snapshot.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
 import {
@@ -299,7 +300,9 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     };
   }, [threadsLen, listingBump]);
   // ── dialogs ──────────────────────────────────────────────────────────
-  const [confirming, setConfirming] = useState<"reset" | { label: string; run: () => void } | null>(null);
+  const [confirming, setConfirming] = useState<"reset" | { label?: string; message?: string; run: () => void } | null>(
+    null,
+  );
   const pinItem = (item: KnowledgeItem, on: boolean) => {
     toggleItemPin(item.id, on);
     setListingBump((b) => b + 1);
@@ -316,10 +319,61 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
           // have no url, and a url-hash delete would silently no-op
           deleteItem(item.id);
         }
+        flashToast(t("knowledge_deleted"), { tone: "accent" });
         after?.();
       },
     });
   };
+
+  // ── the knowledge snapshot (the cross-device path) ────────────────────
+  const runExport = async (): Promise<void> => {
+    try {
+      const { json, meta } = await exportSnapshot();
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `zjsearch-knowledge-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      flashToast(t("knowledge_admin_export_done", { n: totalImported(meta) }), { tone: "ok" });
+    } catch (err) {
+      console.warn("zjsearch knowledge: the export failed", err);
+      flashToast(t("knowledge_admin_snapshot_failed"), { tone: "danger" });
+    }
+  };
+  const runImport = (file: File): Promise<void> =>
+    new Promise<void>((resolve) => {
+      void file.text().then((text) => {
+        // validate BEFORE the confirm dialog: a non-snapshot answers at
+        // once, the dialog only opens for a real merge
+        try {
+          const parsed = JSON.parse(text) as { version?: number };
+          if (parsed?.version !== SNAPSHOT_VERSION) {
+            throw new Error("version");
+          }
+        } catch {
+          flashToast(t("knowledge_admin_snapshot_invalid"), { tone: "danger" });
+          resolve();
+          return;
+        }
+        setConfirming({
+          message: t("knowledge_admin_import_confirm"),
+          run: () => {
+            void importSnapshot(text)
+              .then((imported) => {
+                flashToast(t("knowledge_admin_import_done", { n: imported }), { tone: "ok" });
+                setListingBump((b) => b + 1);
+              })
+              .catch((err: unknown) => {
+                console.warn("zjsearch knowledge: the import failed", err);
+                flashToast(t("knowledge_admin_snapshot_failed"), { tone: "danger" });
+              });
+            resolve();
+          },
+        });
+      });
+    });
 
   const navigateThread = (id: string) => {
     // panel context: the drawer fades while the main view swaps to the
@@ -520,7 +574,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             {/* ── body ── */}
             <div aria-labelledby={`knowledge-tab-${kind}`} className="mt-5" id="knowledge-panel" role="tabpanel">
               {kind === "admin" ? (
-                <AdminView onReset={() => setConfirming("reset")} stats={stats} />
+                <AdminView
+                  onExport={runExport}
+                  onImport={runImport}
+                  onReset={() => setConfirming("reset")}
+                  stats={stats}
+                />
               ) : kind === "templates" ? (
                 <TemplateManagerPanel search={debounced} />
               ) : kind === "memory" ? (
@@ -601,7 +660,10 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   onRemove={(thread) =>
                     setConfirming({
                       label: thread.title || t("ai_search"),
-                      run: () => deleteThread(thread.id),
+                      run: () => {
+                        deleteThread(thread.id);
+                        flashToast(t("knowledge_deleted"), { tone: "accent" });
+                      },
                     })
                   }
                   onRename={(thread, title) => {
@@ -624,7 +686,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
           confirming
             ? typeof confirming === "string"
               ? t("knowledge_admin_reset_confirm")
-              : t("ai_delete_body", { label: confirming.label })
+              : (confirming.message ?? t("ai_delete_body", { label: confirming.label ?? "" }))
             : ""
         }
         onConfirm={() => {
@@ -634,8 +696,9 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             setKind("graph");
             refreshStats();
           } else if (confirming) {
+            // the run owns its own toast (a deletion says deleted, an
+            // import says imported)
             confirming.run();
-            flashToast(t("knowledge_deleted"), { tone: "accent" });
             refreshStats();
             setListingBump((b) => b + 1);
           }

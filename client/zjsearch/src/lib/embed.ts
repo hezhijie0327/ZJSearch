@@ -18,6 +18,9 @@ export interface EmbeddingConfig {
   token: string;
   /** the vector width the server produces (the pg column's dimension) */
   dimensions?: number;
+  /** the server's model label -- the query-cache key's namespace (a
+      model swap must never serve stale-space vectors) */
+  model?: string;
 }
 
 let config: EmbeddingConfig | null = null;
@@ -37,6 +40,46 @@ export function embeddingsConfigured(): boolean {
     boot-data payload carried it).  null = unconfigured. */
 export function embeddingDimensions(): number | null {
   return config?.dimensions ?? null;
+}
+
+/** The configured model label (the query cache's namespace + the debug
+    reads).  null = unconfigured. */
+export function embeddingModel(): string | null {
+  return config?.model ?? null;
+}
+
+// ── the QUERY-vector cache: the recall's semantic leg embeds the query
+// on every search -- a resubmitted/reloaded query re-embeds verbatim
+// (the server's own run_batch keeps a 256-entry LRU for the same
+// reason).  64 entries, LRU-refreshed on hit, keyed by the model so a
+// capability swap can never serve a stale-space vector. ──
+const QUERY_CACHE_MAX = 64;
+const queryCache = new Map<string, number[]>();
+
+export async function embedQuery(text: string): Promise<number[] | null> {
+  const trimmed = text.trim();
+  if (!trimmed || !config) {
+    return null;
+  }
+  const key = `${config.model ?? ""}::${trimmed}`;
+  const hit = queryCache.get(key);
+  if (hit) {
+    queryCache.delete(key);
+    queryCache.set(key, hit);
+    return hit;
+  }
+  const vector = (await embedTexts([trimmed]))?.[0];
+  if (vector) {
+    queryCache.set(key, vector);
+    while (queryCache.size > QUERY_CACHE_MAX) {
+      const oldest = queryCache.keys().next();
+      if (oldest.done) {
+        break;
+      }
+      queryCache.delete(oldest.value);
+    }
+  }
+  return vector ?? null;
 }
 
 /** Embed a batch of texts (≤16, each ≤8000 chars server-side).  Resolves

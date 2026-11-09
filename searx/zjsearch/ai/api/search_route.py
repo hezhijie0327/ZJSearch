@@ -482,7 +482,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     pre_entry: dict[str, t.Any] | None = None
     if research_needed and clarify_state == "ask" and not history:
         pre = decision_features("clarify_gate")
-        if pre.get("enabled") and decision.enabled() and decision.configured():
+        if pre.get("enabled") and decision.available():
             try:
                 started = time.monotonic()
                 pre_out = decision.evaluate(
@@ -635,7 +635,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         "balanced": [12, 24, 36, 48, 60],
         "deep": [15, 35, 60, 90, 120],
     }
-    if probe.get("enabled") and mode in ("balanced", "deep") and decision.enabled() and decision.configured():
+    if probe.get("enabled") and mode in ("balanced", "deep") and decision.available():
         try:
             ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])] or _LADDER_DEFAULTS.get(mode, [])
             if ladder:
@@ -738,9 +738,10 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # the state's template)
     images_proxied = bool(sxng_request.preferences.get_value("image_proxy"))
     # the run's availability gates: the tool surface assembly (below)
-    # and the searches state read them -- the browser engine, the
-    # decision model and a live recall
-    judge_on = decision.enabled() and decision.configured() and decision.sdk_missing() is None
+    # and the searches state read them -- the browser engine and a
+    # live recall.  The evaluate tool needs NO gate: it rides the
+    # chat fallback (llm.decision.judge_via_chat) when the decision
+    # model is absent, so it registers on every research tier.
     recall_on = bool(recall_entries or live_recall)
     state = Searches(
         sxng_request.preferences,
@@ -1010,7 +1011,6 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         mode=mode,
         depth_rung=depth_rung,
         browser_on=browser_on,
-        judge_on=judge_on,
         recall_on=recall_on,
         has_images=bool(image_parts),
         has_outline=outline is not None,
@@ -1248,7 +1248,7 @@ class _SettleTail:
         decision model or transport leaves the client's mechanical derive
         standing."""
         candidate = fence_title or self.outline_title
-        if candidate and decision.enabled() and decision.configured():
+        if candidate and decision.available():
             try:
                 out = decision.evaluate(
                     {"question": self.question[:500], "title": candidate},

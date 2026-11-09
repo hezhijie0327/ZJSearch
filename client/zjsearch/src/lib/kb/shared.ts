@@ -158,4 +158,53 @@ export function safeParse(text: string): unknown {
   }
 }
 
+// ---------------------------------------------------------------- segments
+
+const SEGMENT_TARGET = 1200;
+/** The long-text segment's packing target -- the same ~1200-char
+    line-boundary recipe the server's writer-feed trim uses (one size,
+    both sides of the wire). */
+
+/** Pack a long text into ~``target``-char segments on the line
+    boundaries (an over-long line hard-splits), capped at
+    ``maxSegments`` pieces -- the tail past the cap stays unsegmented
+    (bounded embed spend, the same doctrine as the server trim).  The
+    segment-embedding consumers share this one packer: the knowledge_vec
+    backfill (projections.ts) and the rerank stage's long-row split
+    (recall.ts).  Empty/blank lines cost nothing and are dropped. */
+export function bodySegments(body: string, maxSegments = 16, target = SEGMENT_TARGET): string[] {
+  const segments: string[] = [];
+  if (!body) {
+    return segments;
+  }
+  let current = "";
+  const flush = (): void => {
+    if (current && segments.length < maxSegments) {
+      segments.push(current);
+    }
+    current = "";
+  };
+  for (const line of body.split("\n")) {
+    if (segments.length >= maxSegments) {
+      return segments;
+    }
+    if (!line.trim()) {
+      continue;
+    }
+    if (line.length > target) {
+      flush();
+      for (let at = 0; at < line.length && segments.length < maxSegments; at += target) {
+        segments.push(line.slice(at, at + target));
+      }
+      continue;
+    }
+    if (current && current.length + line.length + 1 > target) {
+      flush();
+    }
+    current = current ? `${current}\n${line}` : line;
+  }
+  flush();
+  return segments;
+}
+
 // ------------------------------------------------------------------ tags

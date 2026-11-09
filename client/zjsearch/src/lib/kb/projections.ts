@@ -18,7 +18,7 @@
 import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
 import { fetchJson } from "@/lib/http.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
-import { aiTokenValue, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
+import { aiTokenValue, bodySegments, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
 import { invalidateStatsCache } from "@/lib/kb/stats.ts";
 import { pgQuery, pgTransaction, resetDatabase, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
 
@@ -550,7 +550,8 @@ export function archiveDocument(url: string, title: string, markdown: string): v
     const snippet = String((current ?? [])[0]?.head ?? "");
     const updated = await pgQuery(
       `UPDATE knowledge SET body = $2, meta = jsonb_set(knowledge.meta, '{crawled}', $3::jsonb, true),
-         search_text = $4, updated = $5
+         search_text = $4, updated = $5,
+         embedding = NULL, embed_model = NULL
        WHERE url_hash = $1 AND kind = 'source' RETURNING id`,
       [hash, body, crawledMeta, search, now],
     );
@@ -602,7 +603,8 @@ export function archiveAttachments(
         `INSERT INTO knowledge (id, kind, thread_id, run_id, url_hash, url, host, title, body, meta, status, tags, search_text, created, updated, occurred_at)
          VALUES ($1, 'document', $2, $3, $4, NULL, '', $5, $6, $7::jsonb, 'done', $8::jsonb, $9, $10, $10, $10)
          ON CONFLICT (id) DO UPDATE SET body = EXCLUDED.body, meta = EXCLUDED.meta,
-           tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated`,
+           tags = EXCLUDED.tags, search_text = EXCLUDED.search_text, updated = EXCLUDED.updated,
+           embedding = NULL, embed_model = NULL`,
         [
           `doc:att:${hash}`,
           threadId,
@@ -625,36 +627,98 @@ export function archiveAttachments(
 
 let embedRunning = false;
 
+/** The long-read threshold: a full-text row (source = the reader's
+    archived page, document = the uploaded attachment) whose body
+    reaches this length embeds as SEGMENTS (knowledge_vec) instead of
+    one head vector -- content past the 4000-char head becomes findable
+    by the semantic leg. */
+const SEGMENT_BODY_MIN = 4000;
+
 /** Embed the rows whose search_text is non-empty but whose embedding is
-    still missing (primers.ts re-runs it after its own writes) (projections land unembedded when the capability is
-    off; they join the semantic search the next time this pass runs with
-    the capability on).  One /zjsearch/knowledge/embed call per 16 texts. */
+    still missing (primers.ts re-runs it after its own writes)
+    (projections land unembedded when the capability is off; they join
+    the semantic search the next time this pass runs with the
+    capability on).  One /zjsearch/knowledge/embed call per 16 texts;
+    the long full-text rows contribute their ~1200-char segments to the
+    same batches (knowledge_vec rows + the row's embed_model mark; the
+    knowledge.embedding column stays NULL for them -- the recall's
+    segment leg reads knowledge_vec). */
 export async function embedPending(): Promise<void> {
   if (embedRunning || !embeddingsConfigured()) {
     return;
   }
   embedRunning = true;
   try {
-    const rows = await pgQuery<{ id: string; search_text: string }>(
-      `SELECT id, search_text FROM knowledge
+    const rows = await pgQuery<{ id: string; kind: string; body: string; search_text: string }>(
+      `SELECT id, kind, body, search_text FROM knowledge
        WHERE embed_model IS NULL AND search_text <> '' AND kind <> 'source_ref' LIMIT 16`,
     );
-    for (let i = 0; i < (rows ?? []).length; i += 16) {
-      const batch = (rows ?? []).slice(i, i + 16);
-      const vectors = await embedTexts(batch.map((row) => row.search_text.slice(0, 4000)));
+    // the work list: (row, segment texts) pairs -- a long source/document
+    // carries up to 16 segments, every other row its 4000-char head
+    const model = embedModelName() ?? "unknown";
+    const works = (rows ?? []).map((row) => ({
+      row,
+      segments:
+        (row.kind === "source" || row.kind === "document") && row.body.length >= SEGMENT_BODY_MIN
+          ? bodySegments(row.body)
+          : [],
+    }));
+    const texts: string[] = [];
+    const owners: Array<{ workIx: number; segIx: number }> = [];
+    works.forEach((work, workIx) => {
+      const pieces = work.segments.length ? work.segments : [work.row.search_text.slice(0, 4000)];
+      pieces.forEach((piece, segIx) => {
+        texts.push(piece);
+        owners.push({ workIx, segIx });
+      });
+    });
+    for (let at = 0; at < texts.length; at += 16) {
+      const batch = texts.slice(at, at + 16);
+      const vectors = await embedTexts(batch);
       if (!vectors) {
         return; // capability gone mid-pass: rows stay pending
       }
+      // fold the batch's vectors onto their owners, then write per row:
+      // segmented rows DELETE + INSERT their knowledge_vec rows, the
+      // plain rows take the single vector into knowledge.embedding
+      const byRow = new Map<number, Array<{ segIx: number; vector: number[] }>>();
       for (let j = 0; j < batch.length; j++) {
+        const owner = owners[at + j];
         const vector = vectors[j];
-        const target = batch[j];
-        if (!vector || !target) {
+        if (!owner || !vector) {
           continue;
         }
-        await pgQuery(
-          "UPDATE knowledge SET embedding = $1::vector, embed_model = $2 WHERE id = $3 AND embed_model IS NULL",
-          [toVectorLiteral(vector), embedModelName() ?? "unknown", target.id],
-        );
+        const list = byRow.get(owner.workIx) ?? [];
+        list.push({ segIx: owner.segIx, vector });
+        byRow.set(owner.workIx, list);
+      }
+      for (const [workIndex, list] of byRow) {
+        const work = works[workIndex];
+        if (!work) {
+          continue;
+        }
+        if (work.segments.length) {
+          await pgQuery("DELETE FROM knowledge_vec WHERE row_id = $1", [work.row.id]);
+          for (const entry of list) {
+            await pgQuery(
+              "INSERT INTO knowledge_vec (row_id, seg_ix, embedding, embed_model) VALUES ($1, $2, $3::vector, $4)",
+              [work.row.id, entry.segIx, toVectorLiteral(entry.vector), model],
+            );
+          }
+          await pgQuery("UPDATE knowledge SET embed_model = $2 WHERE id = $1 AND embed_model IS NULL", [
+            work.row.id,
+            model,
+          ]);
+        } else {
+          const entry = list[0];
+          if (!entry) {
+            continue;
+          }
+          await pgQuery(
+            "UPDATE knowledge SET embedding = $1::vector, embed_model = $2 WHERE id = $3 AND embed_model IS NULL",
+            [toVectorLiteral(entry.vector), model, work.row.id],
+          );
+        }
       }
     }
   } catch {

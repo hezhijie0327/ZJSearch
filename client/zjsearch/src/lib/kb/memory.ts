@@ -13,7 +13,7 @@
     last_seen so the pre-send selection can decay softly (unseen facts
     sink, nothing auto-deletes). */
 
-import { embeddingsConfigured, embedTexts } from "@/lib/embed.ts";
+import { embeddingsConfigured, embedQuery, embedTexts } from "@/lib/embed.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import { embedModelName, enqueue } from "@/lib/kb/shared.ts";
 import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
@@ -190,13 +190,16 @@ export async function loadMemories(query?: string, limit = 50): Promise<MemoryRo
   }
   const chosen = new Map<string, MemoryRow>(all.filter((row) => row.pinned).map((row) => [row.id, row]));
   try {
-    const vector = embeddingsConfigured() ? (await embedTexts([query.trim()]))?.[0] : undefined;
+    const vector = embeddingsConfigured() ? await embedQuery(query.trim()) : undefined;
     if (vector) {
+      // the space guard: only THIS capability model's vectors compete
+      // (the boot reconcile resets the rest; the filter covers a swap
+      // in flight)
       const near = await pgQuery<Record<string, unknown>>(
         `SELECT ${MEMORY_COLUMNS} FROM memory
-         WHERE embedding IS NOT NULL
+         WHERE embedding IS NOT NULL AND embed_model = $3
          ORDER BY embedding <=> $1::vector LIMIT $2`,
-        [toVectorLiteral(vector), limit],
+        [toVectorLiteral(vector), limit, embedModelName() ?? ""],
       );
       for (const row of near ?? []) {
         const memory = rowToMemory(row);
@@ -291,16 +294,16 @@ export async function hybridMemoryHits(query: string, limit = 12): Promise<Knowl
       : Promise.resolve([] as Record<string, unknown>[]),
     embeddingsConfigured()
       ? (async () => {
-          const vector = (await embedTexts([trimmed]))?.[0];
+          const vector = await embedQuery(trimmed);
           if (!vector) {
             return [] as Record<string, unknown>[];
           }
           return pgQuery<Record<string, unknown>>(
             `SELECT ${MEMORY_COLUMNS}, 1 - (embedding <=> $1::vector) AS _score
              FROM memory
-             WHERE embedding IS NOT NULL
+             WHERE embedding IS NOT NULL AND embed_model = $3
              ORDER BY embedding <=> $1::vector LIMIT $2`,
-            [toVectorLiteral(vector), fetchN],
+            [toVectorLiteral(vector), fetchN, embedModelName() ?? ""],
           );
         })()
       : Promise.resolve([] as Record<string, unknown>[]),

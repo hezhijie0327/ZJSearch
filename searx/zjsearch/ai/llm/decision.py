@@ -23,6 +23,7 @@ import base64
 import importlib.util
 import io
 import logging
+import time
 import typing as t
 
 from searx.zjsearch.ai.core import config as core_config
@@ -117,6 +118,18 @@ def sdk_missing() -> str | None:
     if importlib.util.find_spec(package) is None:
         return package
     return None
+
+
+def available() -> bool:
+    """The decision model's FULL availability: the feature flag, the
+    transport config AND the SDK package importable -- the ONE gate every
+    framework-side consumer shares (the referee's gates, the depth
+    probe, the clarify pre-gate, the title judge).  The ``evaluate``
+    TOOL is the one consumer this deliberately does NOT gate: it has the
+    chat fallback (:py:func:`judge_via_chat`) and registers regardless
+    -- a framework gate must stay free, a model-invoked tool may cost
+    main-model tokens."""
+    return enabled() and configured() and sdk_missing() is None
 
 
 def capability() -> dict[str, str] | None:
@@ -402,3 +415,152 @@ def evaluate(  # pylint: disable=too-many-return-statements
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_decision: evaluate failed: %s", exc)
         return None
+
+
+_CHAT_JUDGE_SYSTEM = """\
+You are the structured judge of a research pipeline: you answer NAMED
+questions about exactly the state handed to you -- you cannot search
+and you know no facts beyond it.  Judge only what the state supports
+and give your best judgment anyway; never omit a question.
+
+Reply with ONE JSON object and nothing else:
+{"answers": {"<name>": <value>, ...}}
+-- one entry per question, keyed by its name.  The value's shape is the
+question's own type:
+
+- "choice": exactly ONE of the criteria's option names (a string).
+- "score": an INTEGER grading the state on the criteria's ordered
+  legend (0 = the first level, 1 = the second, and so on).
+- "noul": a probability between 0 and 1 that the answer is YES
+  (1.0 = certain yes, 0.0 = certain no).
+"""
+
+
+def _chat_judge_schema(trimmed: dict[str, dict[str, t.Any]]) -> dict[str, t.Any]:
+    """The per-call structured-output schema: ``answers`` with one
+    property per question name -- string for ``choice``, number for the
+    other two (the score's integer rounding and the noul's 0-1 clamp
+    happen at normalization)."""
+    props = {
+        name: {"type": "string" if q.get("type") == "choice" else "number"}
+        for name, q in trimmed.items()
+    }
+    return {
+        "type": "object",
+        "properties": {
+            "answers": {"type": "object", "properties": props, "required": list(props)},
+        },
+        "required": ["answers"],
+    }
+
+
+def _normalize_chat_answers(
+    payload: dict[str, t.Any] | None,
+    trimmed: dict[str, dict[str, t.Any]],
+) -> dict[str, dict[str, t.Any]]:
+    """The chat answer map into the decision wire's per-answer shapes --
+    exactly what the SDK families emit so the consumers (the timeline
+    row's probability bars, the feed's verdict lines) need no branch:
+    ``choice`` -> {type, choice, confidence}, ``score`` -> {type, score,
+    legend}, ``noul`` -> {type, noul}.  An answer that names an unknown
+    option or is not parseable is DROPPED (the consumer treats the
+    missing name as no verdict), never guessed."""
+    raw = payload.get("answers") if isinstance(payload, dict) else None
+    raw = raw if isinstance(raw, dict) else {}
+    answers: dict[str, dict[str, t.Any]] = {}
+    for name, question in trimmed.items():
+        qtype = question.get("type")
+        value = raw.get(name)
+        if qtype == "choice":
+            criteria = question.get("criteria") if isinstance(question.get("criteria"), dict) else {}
+            text = str(value or "").strip()
+            if criteria and text not in criteria:
+                text = next((key for key in criteria if key.lower() == text.lower()), "")
+            if not text:
+                continue
+            answers[name] = {"type": "choice", "choice": text, "confidence": 0.5}
+        elif qtype == "score":
+            legend_raw = question.get("criteria") if isinstance(question.get("criteria"), list) else []
+            legend = {str(index): str(entry) for index, entry in enumerate(legend_raw)}
+            try:
+                level = int(round(float(value)))
+            except (TypeError, ValueError):
+                continue
+            if legend:
+                level = max(0, min(level, len(legend) - 1))
+            answers[name] = {"type": "score", "score": float(level), "legend": legend}
+        else:
+            try:
+                prob = float(value)
+            except (TypeError, ValueError):
+                continue
+            answers[name] = {"type": "noul", "noul": max(0.0, min(prob, 1.0))}
+    return answers
+
+
+def judge_via_chat(
+    state: t.Any,
+    questions: dict[str, dict[str, t.Any]],
+    account: t.Any = None,
+) -> dict[str, t.Any] | None:
+    """The evaluate TOOL's chat fallback: the SAME named-question
+    judgment run through the main chat transport's structured-output
+    gate (the research_gate's own route) when the decision model is not
+    configured.  Returns the ``evaluate`` shape verbatim (answers +
+    usage + latency) or ``None`` -- the caller cannot tell the two
+    surfaces apart, and should not.  Scope discipline: ONLY the
+    model-invoked tool rides this -- the framework gates keep skipping
+    when the decision model is absent (a gate fires on every run and
+    must not silently become main-model spend), while a tool call is
+    the researcher's own judgment that the capability is worth its
+    tokens.  Images degrade: the chat gate is text-only, the
+    ``image-N`` references in the state read as text."""
+    from . import jsongate  # pylint: disable=import-outside-toplevel
+    from .config import llm_cfg  # pylint: disable=import-outside-toplevel
+
+    cfg = llm_cfg()
+    if not cfg.get("enabled") or not cfg.get("model"):
+        return None
+    trimmed = {
+        name: questions[name]
+        for name in list(questions)[:MAX_QUESTIONS]
+        if isinstance(questions.get(name), dict) and questions[name].get("type")
+    }
+    if not trimmed:
+        return None
+    spec_lines = []
+    for name, question in trimmed.items():
+        line = f"- {name} ({question.get('type')}): {str(question.get('instructions') or '').strip()}"
+        criteria = question.get("criteria")
+        if isinstance(criteria, dict) and criteria:
+            line += " -- options: " + "; ".join(str(key) for key in criteria)
+        elif isinstance(criteria, list) and criteria:
+            line += " -- legend: " + "; ".join(f"{index}={entry}" for index, entry in enumerate(criteria))
+        spec_lines.append(line)
+    messages = [
+        {"role": "system", "content": _CHAT_JUDGE_SYSTEM},
+        {
+            "role": "user",
+            "content": (
+                f"STATE:\n{str(state)[:MAX_STATE_CHARS]}\n\nQUESTIONS:\n"
+                + "\n".join(spec_lines)
+            ),
+        },
+    ]
+    started = time.monotonic()
+    try:
+        payload, usage = jsongate.json_completion(
+            cfg, messages, "decision_chat_judge", _chat_judge_schema(trimmed), account=account
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("zjsearch_decision: chat judge failed: %s", exc)
+        return None
+    answers = _normalize_chat_answers(payload, trimmed)
+    if not answers:
+        return None
+    return {
+        "answers": answers,
+        "usage": usage or {},
+        "latency_ms": int((time.monotonic() - started) * 1000),
+        "surface": "chat",
+    }

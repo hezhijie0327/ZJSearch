@@ -313,6 +313,18 @@ export const EN = {
   knowledge_admin_events: "Events",
   knowledge_admin_size: "Storage",
   knowledge_admin_reset: "Reset the database",
+  knowledge_admin_export: "Export the knowledge base",
+  knowledge_admin_export_desc:
+    "Downloads every knowledge row, run event, thread, per-run rollup and memory as one JSON snapshot — no vectors (the importing device re-embeds through its own model); the uploaded attachment FILES are not included, their converted text is.",
+  knowledge_admin_export_done: "Snapshot exported ({n} records)",
+  knowledge_admin_import: "Import a snapshot",
+  knowledge_admin_import_desc:
+    "Merges a snapshot file into this browser's store — newer records win per row, your pins and manual thread titles stay.",
+  knowledge_admin_import_confirm:
+    "Merge this snapshot into the local knowledge base? Newer records win per row; your pins and manual thread titles stay.",
+  knowledge_admin_import_done: "Snapshot imported ({n} records)",
+  knowledge_admin_snapshot_invalid: "That file is not a zjsearch knowledge snapshot",
+  knowledge_admin_snapshot_failed: "The snapshot transfer failed",
   knowledge_admin_reset_desc:
     "Drops every knowledge table in this browser and clears the embedding usage totals -- the schema is recreated empty on next use.",
   knowledge_admin_reset_confirm: "Really drop everything?",
