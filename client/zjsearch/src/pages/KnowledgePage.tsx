@@ -2,7 +2,7 @@
 
 import { LibraryBig, Star } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { PanelSearch } from "@/components/PanelSearch.tsx";
@@ -300,9 +300,20 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     };
   }, [threadsLen, listingBump]);
   // ── dialogs ──────────────────────────────────────────────────────────
-  const [confirming, setConfirming] = useState<"reset" | { label?: string; message?: string; run: () => void } | null>(
-    null,
-  );
+  const [confirming, setConfirming] = useState<
+    "reset" | { label?: string; message?: string; title?: string; run: () => void } | null
+  >(null);
+  // the pending import's promise release: the confirm dialog is SHARED
+  // with every deletion, so a CANCELLED import merge must also resolve
+  // its awaiting promise -- or the admin buttons' busy state would stay
+  // stuck disabled forever (the resolver rides a ref, the dialog's one
+  // cancel callback releases whatever is pending)
+  const importReleaseRef = useRef<(() => void) | null>(null);
+  const releasePendingImport = (): void => {
+    const release = importReleaseRef.current;
+    importReleaseRef.current = null;
+    release?.();
+  };
   const pinItem = (item: KnowledgeItem, on: boolean) => {
     toggleItemPin(item.id, on);
     setListingBump((b) => b + 1);
@@ -344,6 +355,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   };
   const runImport = (file: File): Promise<void> =>
     new Promise<void>((resolve) => {
+      importReleaseRef.current = resolve;
       void file.text().then((text) => {
         // validate BEFORE the confirm dialog: a non-snapshot answers at
         // once, the dialog only opens for a real merge
@@ -354,12 +366,15 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
           }
         } catch {
           flashToast(t("knowledge_admin_snapshot_invalid"), { tone: "danger" });
+          importReleaseRef.current = null;
           resolve();
           return;
         }
         setConfirming({
           message: t("knowledge_admin_import_confirm"),
+          title: t("knowledge_admin_import"),
           run: () => {
+            importReleaseRef.current = null;
             void importSnapshot(text)
               .then((imported) => {
                 flashToast(t("knowledge_admin_import_done", { n: imported }), { tone: "ok" });
@@ -681,7 +696,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       {/* ALWAYS mounted (the dialog owns its exit animation) -- the open
           flag drives it */}
       <ConfirmDialog
-        cancel={() => setConfirming(null)}
+        cancel={() => {
+          // a cancelled import merge must release its awaiting promise
+          // too (the admin buttons' busy state hangs on it)
+          releasePendingImport();
+          setConfirming(null);
+        }}
         message={
           confirming
             ? typeof confirming === "string"
@@ -705,7 +725,11 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
           setConfirming(null);
         }}
         open={confirming !== null}
-        title={t("ai_delete_title")}
+        title={
+          confirming !== null && typeof confirming === "object" && confirming.title
+            ? confirming.title
+            : t("ai_delete_title")
+        }
       />
     </Shell>
   );
