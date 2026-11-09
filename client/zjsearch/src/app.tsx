@@ -222,15 +222,28 @@ function PageFallback({
         <div className="zjs-boot-main">
           <div aria-hidden="true" className="zjs-boot-tabs">
             <span className="zjs-skeleton zjs-boot-tab is-selected" />
-            <span className="zjs-skeleton zjs-boot-tab" />
-            <span className="zjs-skeleton zjs-boot-tab" />
-            <span className="zjs-skeleton zjs-boot-tab" />
-            <span className="zjs-skeleton zjs-boot-tab" />
+            {Array.from({ length: 6 }, (_, i) => (
+              <span className="zjs-skeleton zjs-boot-tab" key={i} />
+            ))}
           </div>
           <div aria-hidden="true" className="zjs-boot-filters">
             <span className="zjs-skeleton zjs-boot-filter" />
             <span className="zjs-skeleton zjs-boot-filter" />
             <span className="zjs-skeleton zjs-boot-filter" />
+          </div>
+          {/* the real page inserts the meta row (found N / elapsed / AI
+              overview) and the related-suggestions strip between the
+              filters and the first card — the ghosts keep it shift-free */}
+          <div aria-hidden="true" className="zjs-boot-meta">
+            <span className="zjs-skeleton zjs-boot-meta-item" />
+            <span className="zjs-skeleton zjs-boot-meta-item is-w2" />
+            <span className="zjs-skeleton zjs-boot-meta-item is-w2" />
+          </div>
+          <div aria-hidden="true" className="zjs-boot-sugg">
+            <span className="zjs-skeleton zjs-boot-sugg-chip" />
+            <span className="zjs-skeleton zjs-boot-sugg-chip is-w2" />
+            <span className="zjs-skeleton zjs-boot-sugg-chip is-w3" />
+            <span className="zjs-skeleton zjs-boot-sugg-chip is-w4" />
           </div>
           <div aria-hidden="true" className="zjs-boot-cards">
             {[0, 1, 2, 3, 4].map((i) => (

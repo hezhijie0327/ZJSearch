@@ -4,9 +4,10 @@ import { imageAlt } from "@/lib/format.ts";
 /** Image results: borderless masonry grid; the lightbox opens through a portal. */
 
 import { ImageOff } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Lightbox } from "@/features/results/image/Lightbox.tsx";
+import { useT } from "@/lib/i18n.ts";
 import type { ResultItem } from "@/lib/types.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 import { useGraceThumb } from "@/lib/useGraceThumb.ts";
@@ -16,16 +17,26 @@ function ImageTile({
   index,
   thumbSrc,
   onOpen,
+  onFailed,
 }: {
   results: ResultItem[];
   index: number;
   thumbSrc: string;
   onOpen: (index: number) => void;
+  onFailed?: () => void;
 }) {
   const result = results[index];
   // missing or unloadable thumbnails collapse to a quiet placeholder tile
   // (a hung request gets the same treatment after a grace period)
   const { failed, loaded, setFailed, setLoaded } = useGraceThumb(thumbSrc || undefined);
+  const reported = useRef(false);
+  useEffect(() => {
+    // one report per tile: the grid aggregates the count for its notice
+    if (failed && !reported.current) {
+      reported.current = true;
+      onFailed?.();
+    }
+  }, [failed, onFailed]);
   if (!result) {
     return null;
   }
@@ -81,6 +92,7 @@ function ImageTile({
 
 /** Borderless masonry grid: pure images, info only on hover. */
 export function ImageGrid({ results }: { results: ResultItem[] }) {
+  const t = useT();
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   // the viewer keeps fading after the index clears; the last index feeds the
   // exit render so the image does not vanish mid-fade
@@ -90,39 +102,57 @@ export function ImageGrid({ results }: { results: ResultItem[] }) {
     lastIndex.current = openIndex;
   }
   const viewIndex = openIndex ?? lastIndex.current;
+  // THE FAILED-THUMB AGGREGATE: source hotlink blocks and dead CDNs take a
+  // whole masonry of quiet placeholder tiles — past a handful, one muted
+  // line above the grid names the cause instead of leaving a field of
+  // broken tiles unexplained
+  const failedKeys = useRef(new Set<string>());
+  const [failedCount, setFailedCount] = useState(0);
+  const reportFailed = useCallback((key: string) => {
+    const seen = failedKeys.current;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    setFailedCount(seen.size);
+  }, []);
 
   return (
-    // masonry density keys off the column width (container queries), like
-    // every other grid: 3 base steps + a 5th/6th column on wide containers
-    <div className="columns-2 gap-2 @[27rem]:columns-3 @[40rem]:columns-4 @[48rem]:columns-5 @5xl:columns-6 [&>*]:mb-2">
-      {results.map((result, index) => {
-        const thumbSrc = result.thumbnail_src || result.img_src || "";
-        return (
-          <ImageTile
-            index={index}
-            key={`${result.url}-${index}`}
-            onOpen={setOpenIndex}
-            results={results}
-            thumbSrc={thumbSrc}
-          />
-        );
-      })}
-      {renderViewer
-        ? createPortal(
-            <Lightbox
-              closing={viewerClosing}
-              index={viewIndex}
-              onClose={() => {
-                setOpenIndex(null);
-              }}
-              onNavigate={(index) => {
-                setOpenIndex(index);
-              }}
+    <>
+      {failedCount >= 3 ? (
+        <p className="mb-2 text-xs text-ink-3">{t("images_thumbs_failed", { n: failedCount })}</p>
+      ) : null}
+      <div className="columns-2 gap-2 @[27rem]:columns-3 @[40rem]:columns-4 @[48rem]:columns-5 @5xl:columns-6 [&>*]:mb-2">
+        {results.map((result, index) => {
+          const thumbSrc = result.thumbnail_src || result.img_src || "";
+          return (
+            <ImageTile
+              index={index}
+              key={`${result.url}-${index}`}
+              onFailed={() => reportFailed(`${result.url}-${index}`)}
+              onOpen={setOpenIndex}
               results={results}
-            />,
-            document.body,
-          )
-        : null}
-    </div>
+              thumbSrc={thumbSrc}
+            />
+          );
+        })}
+        {renderViewer
+          ? createPortal(
+              <Lightbox
+                closing={viewerClosing}
+                index={viewIndex}
+                onClose={() => {
+                  setOpenIndex(null);
+                }}
+                onNavigate={(index) => {
+                  setOpenIndex(index);
+                }}
+                results={results}
+              />,
+              document.body,
+            )
+          : null}
+      </div>
+    </>
   );
 }

@@ -8,10 +8,12 @@
     one CSS family keeps every boot handover shift-free.  Bars only: the
     labels are locale-owned, the geometry is not. */
 
-/** ghost HeaderActions: the 36px circles of the real icon buttons */
+/** ghost HeaderActions: the 36px circles of the real icon buttons — FOUR
+    of them (library / about / stats / preferences) */
 export function BootActions() {
   return (
     <div aria-hidden="true" className="zjs-boot-actions">
+      <span className="zjs-skeleton zjs-boot-action" />
       <span className="zjs-skeleton zjs-boot-action" />
       <span className="zjs-skeleton zjs-boot-action" />
       <span className="zjs-skeleton zjs-boot-action" />

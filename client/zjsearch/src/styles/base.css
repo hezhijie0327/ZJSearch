@@ -199,3 +199,35 @@ body {
   height: 1rem;
   cursor: pointer;
 }
+
+/* THE THIN SCROLLBAR: every overflow surface — inner panes and the page
+   itself — speaks one scroll language: a hairline thumb on a transparent
+   track.  The raw Windows scrollbar (grey track + arrow buttons) read as
+   foreign chrome against the paper ground in the autocomplete list, the
+   AI overview card and the machine-voice panes alike.  Components that
+   opt out keep winning: the explicit [scrollbar-width:none] attribute
+   selector and a ::-webkit-scrollbar { display: none } both beat these
+   element-level rules, so SCROLLBAR_NONE stays absolute. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

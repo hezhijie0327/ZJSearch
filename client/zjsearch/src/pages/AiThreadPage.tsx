@@ -78,8 +78,12 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
     boot-ghost blocks the server shell boots with (BootRunBody: run head +
     the 188px sources rail), so the store → real swap never changes shape. */
 function ThreadGhost() {
+  const t = useT();
   return (
     <div aria-busy="true" className="mt-4 animate-fade-up">
+      {/* the resume window has no query text yet (the store restores it) —
+          one muted line names the wait: attach probe → journal replay */}
+      <p className="mb-3 text-xs text-ink-3">{t("thread_resuming")}</p>
       <BootRunBody />
     </div>
   );

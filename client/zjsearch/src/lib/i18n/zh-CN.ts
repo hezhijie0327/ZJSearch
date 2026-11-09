@@ -324,6 +324,8 @@ export const ZH_CN: Record<StringKey, string> = {
   knowledge_admin_import_done: "快照已导入（{n} 条记录）",
   knowledge_admin_snapshot_invalid: "这不是有效的知识库快照文件",
   knowledge_admin_snapshot_failed: "快照传输失败",
+  thread_resuming: "正在接回研究——恢复时间线…",
+  images_thumbs_failed: "{n} 张缩略图未能加载——源站可能阻止了直接访问",
   knowledge_admin_reset_desc: "删除本浏览器内知识库的全部数据（含嵌入用量统计）——下次使用时自动重建空库。",
   knowledge_admin_reset_confirm: "确认删除全部数据？",
   knowledge_admin_reset_done: "数据库已重置",

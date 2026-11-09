@@ -325,6 +325,8 @@ export const EN = {
   knowledge_admin_import_done: "Snapshot imported ({n} records)",
   knowledge_admin_snapshot_invalid: "That file is not a zjsearch knowledge snapshot",
   knowledge_admin_snapshot_failed: "The snapshot transfer failed",
+  thread_resuming: "Reattaching to the research — restoring the timeline…",
+  images_thumbs_failed: "{n} thumbnails failed to load — the source may block direct access",
   knowledge_admin_reset_desc:
     "Drops every knowledge table in this browser and clears the embedding usage totals -- the schema is recreated empty on next use.",
   knowledge_admin_reset_confirm: "Really drop everything?",

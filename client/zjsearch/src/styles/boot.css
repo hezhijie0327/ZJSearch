@@ -235,6 +235,49 @@
     height: 2.25rem;
     border-radius: 0.75rem;
   }
+  /* ghost meta row (found N · elapsed · AI overview chips) + the related
+     suggestions strip — the real page inserts both between the filters
+     and the first card; ghosting them keeps the load shift-free.  The
+     meta bars sit at the 12px chip floor (min-h-6-ish), the suggestion
+     chips at the real pill's 32px. */
+  .zjs-boot-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+  .zjs-boot-meta-item {
+    display: block;
+    height: 1.25rem;
+    width: 4.5rem;
+    border-radius: 9999px;
+  }
+  .zjs-boot-meta-item.is-w2 {
+    width: 3.5rem;
+  }
+  .zjs-boot-sugg {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    overflow: hidden;
+  }
+  .zjs-boot-sugg-chip {
+    display: block;
+    flex: none;
+    height: 2rem;
+    width: 7rem;
+    border-radius: 9999px;
+  }
+  .zjs-boot-sugg-chip.is-w2 {
+    width: 8.5rem;
+  }
+  .zjs-boot-sugg-chip.is-w3 {
+    width: 6.5rem;
+  }
+  .zjs-boot-sugg-chip.is-w4 {
+    width: 5.5rem;
+  }
   /* card stack mirrors ResultSkeleton + the real list's space-y-1 */
   .zjs-boot-cards {
     display: flex;
