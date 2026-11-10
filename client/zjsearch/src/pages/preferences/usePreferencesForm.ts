@@ -28,9 +28,10 @@ export function usePreferencesForm(data: PreferencesPageData) {
   const [faviconResolver, setFaviconResolver] = useState(kv.favicon_resolver);
   const [safesearch, setSafesearch] = useState(String(kv.safesearch));
   const [tokens, setTokens] = useState(kv.tokens);
-  const [doiResolver, setDoiResolver] = useState(
-    Object.entries(data.doi_resolvers).find(([, url]) => url === kv.doi_resolver)?.[0] ?? "",
-  );
+  // kv.doi_resolver is the resolver NAME (upstream's choice set —
+  // globals.doi_resolver is the URL twin, for DOI link rewriting only);
+  // a stale value that is not a configured name falls back to ""
+  const [doiResolver, setDoiResolver] = useState(kv.doi_resolver in data.doi_resolvers ? kv.doi_resolver : "");
   const [locale, setLocale] = useState(kv.locale);
   const [theme, setTheme] = useState(kv.theme);
   const [themeStyle, setThemeStyle] = useState<string>(kv.simple_style);
