@@ -24,16 +24,6 @@ opens, settles and closes its own page.  The engine renders and
 extracts, nothing more: what the page MEANS (a sign-in wall, a captcha
 greeting the reader) is the model's judgment on the returned content --
 the reader has no opinions about content quality.
-
-Geometries: the launch window is a PROCESS property (Juggler's
-``set_viewport_size`` handshake hangs forever when a page asks for a
-size the pinned window cannot take -- daijro/camoufox#666), so per-call
-geometry switching rides a SECOND, lazy browser: reads naming the
-non-desktop preset (``geometry="mobile"`` on the read lane) open the
-alternate lane -- a NON-persistent context (a fresh identity per
-launch, no profile lock, no login-stage cookie store) that stays warm
-across a burst and is closed by the idle reaper, bounding the facility
-at two processes only while alternate reads are actually flowing.
 """
 
 from __future__ import annotations
@@ -60,11 +50,14 @@ READ_TIMEOUT = 90.0
 the document-stability budget plus settle plus the ``page.content()``
 serialization of a large DOM."""
 
-_ALT_IDLE_S = 300.0
-"""The alternate-geometry lane's idle budget: an alt browser with no
-read for this long is closed (memory back), the next alt read pays the
-launch again (~10s warm -- the bursty mobile-retry pattern amortizes it
-across the burst)."""
+WINDOW = (1920, 1080)
+"""The fixed desktop-shaped window, spoofed Camoufox-side (its ``window``
+option -- NOT a playwright ``viewport``, which deadlocks Juggler when
+the window is spoofed to a different size).  The reader extracts DOM
+text, but a realistic geometry keeps responsive layouts on their
+desktop branch (and the observe stage will mirror exactly this frame)
+-- 1920x1080 is the single most common desktop screen, and the
+session's viewport literals ride this constant."""
 
 _NAV_QUIET_S = 1.5
 _NET_QUIET_S = 1.0
@@ -95,30 +88,20 @@ _CODE_OWNED_KEYS = frozenset(
         "proxy",
         "geoip",
         "exclude_addons",
-        "window",
-        "config",
     }
 )
 """The launch keys ``zjsearch.browser.params`` may NOT override: the
 identity pins, the keys with their own semantic config knob (``proxy``/
 ``geoip`` -- the paired network block; ``exclude_addons`` -- the adblock
-switch; ``headless`` -- the mode tiers), the engine's runtime shape,
-and the geometry surfaces (``window`` is consumed by
-``config.window_size`` -- a raw merge could desync the launch window
-from the viewport literals and hang Juggler; ``config`` carries the
-mobile lane's devicePixelRatio/touch extras).  A params key for one
-warns once and is dropped."""
+switch; ``headless`` -- the mode tiers), and the engine's runtime
+shape.  A params key for one warns once and is dropped."""
 
 _PARAMS_OVERRIDE_WARNED = False
 
 _state: dict[str, t.Any] = {}
-"""Loop-side engine state: ``{"context": BrowserContext}`` -- the
-persistent desktop lane (the cookie store the login stages build on;
-the session lane rides it too) -- plus ``{"alt":
-{"geometry", "context", "browser", "used"}}``, the lazy alternate
-geometry's lane, and ``pages``, the shared page semaphore.  Every
-access happens inside a task on the shared loop -- there is nothing
-for the worker threads to lock."""
+"""Loop-side engine state: ``{"context": BrowserContext}`` after a
+successful launch.  Every access happens inside a task on the shared
+loop -- there is nothing for the worker threads to lock."""
 
 
 def _merge_params(launch_kwargs: dict[str, t.Any]) -> None:
@@ -162,33 +145,24 @@ async def _kill_stale_holders_async(profile: str) -> None:
     await asyncio.to_thread(_kill_stale_holders, profile)
 
 
-async def _launch(geometry: str) -> tuple["BrowserContext", t.Any]:
-    """One lane's browser: the desktop preset rides the PERSISTENT
-    context (the profile/cookie store); an alternate geometry launches
-    NON-persistent (fresh identity per launch, no profile lock) and
-    comes back as ``(context, browser)`` -- the browser handle is
-    what actually ends the process at reap time.  The window shape is
-    camoufox-side (its ``window`` option), and every playwright viewport
-    on this lane MUST ask for exactly that size: a differing request
-    hangs the Juggler handshake forever (daijro/camoufox#666), which is
-    why the literals all resolve through ``config.window_size``."""
+async def _launch() -> "BrowserContext":
     from camoufox.addons import DefaultAddons  # pylint: disable=import-outside-toplevel
     from camoufox.async_api import AsyncNewBrowser  # pylint: disable=import-outside-toplevel
     from playwright.async_api import async_playwright  # pylint: disable=import-outside-toplevel
 
     pw = await async_playwright().start()
-    persistent = geometry == browser_config.DEFAULT_GEOMETRY
-    profile = browser_config.profile_dir() if persistent else None
-    if profile is not None:
-        try:
-            os.makedirs(profile, exist_ok=True)
-        except OSError as exc:
-            raise browser_config.RenderError(
-                f"the built-in browser's profile directory is unusable: {profile} ({exc})"
-            ) from exc
+    profile = browser_config.profile_dir()
+    try:
+        os.makedirs(profile, exist_ok=True)
+    except OSError as exc:
+        raise browser_config.RenderError(
+            f"the built-in browser's profile directory is unusable: {profile} ({exc})"
+        ) from exc
     launch_kwargs: dict[str, t.Any] = {
+        "persistent_context": True,
+        "user_data_dir": profile,
         "headless": {"headed": False, "virtual": "virtual"}.get(browser_config.mode(), True),
-        "window": browser_config.window_size(geometry),
+        "window": WINDOW,
         "block_webrtc": True,
         # humanized cursor trajectories for every playwright click/scroll --
         # inert for the reader's pure reads, load-bearing the moment the
@@ -201,18 +175,12 @@ async def _launch(geometry: str) -> tuple["BrowserContext", t.Any]:
         # font groups (~850 MB, client/zjsearch/Dockerfile) -- move the two
         # together
         "os": "windows",
-    }
-    if persistent:
         # cert failures (expired/self-signed, TLS-intercepting corporate
         # proxies) are dead reads on the long-tail pages the reader exists
         # for -- accepted by default; zjsearch.browser.params restores
-        # strict validation (params merge last over these launch kwargs).
-        # A CONTEXT option: the persistent context is created AT launch
-        # (so it rides the launch kwargs); the alternate lane's context
-        # comes later (new_context below)
-        launch_kwargs["ignore_https_errors"] = True
-        launch_kwargs["persistent_context"] = True
-        launch_kwargs["user_data_dir"] = profile
+        # strict validation (params merge last over these launch kwargs)
+        "ignore_https_errors": True,
+    }
     if browser_config.proxy() is not None:
         launch_kwargs["proxy"] = browser_config.proxy()
         if browser_config.geoip():
@@ -222,31 +190,7 @@ async def _launch(geometry: str) -> tuple["BrowserContext", t.Any]:
             launch_kwargs["geoip"] = True
     if not browser_config.adblock():
         launch_kwargs["exclude_addons"] = [DefaultAddons.UBO]
-    if not persistent:
-        # THE MOBILE CLAIM'S SECOND HALF: the phone window rides a
-        # phone-shaped devicePixelRatio (iPhone-class 3) and touch
-        # digitizer (5 points -- camoufox's own BASELINE; its touch spoof
-        # reaches into the CSS pointer media queries, so the
-        # any-pointer:coarse / TouchEvent surfaces flip too, while
-        # pointer:coarse stays false and ontouchstart absent exactly as
-        # on a real touchscreen laptop).  The identity STAYS the desktop
-        # camoufox fingerprint (Windows UA/platform/GPU -- a touchscreen
-        # laptop is a real device; an Android UA would fight the Windows
-        # GPU strings).  KNOWN, ACCEPTED TELL: outerWidth reports the
-        # REAL window (Juggler measures it), and a real Firefox window
-        # floors at ~500px width -- so outer (500) sits 98px above the
-        # 402 viewport.  A config pin cannot fix it; the exact phone
-        # viewport was chosen over inner=outer=500 coherence because the
-        # viewport is what sites actually read.  Manual config keys warn
-        # camoufox-side (informational) and skip the screen-plausibility
-        # pass -- which the pinned window already implies.
-        launch_kwargs["config"] = {
-            "window.devicePixelRatio": 3,
-            "navigator.maxTouchPoints": 5,
-        }
     _merge_params(launch_kwargs)
-    context: "BrowserContext | None" = None
-    browser: t.Any = None
     try:
         # THE LAUNCH CEILING: a launch whose geoip lookup dies (ip-api's
         # free tier is 45 req/min PER EXIT IP -- a shared proxy exit
@@ -257,31 +201,14 @@ async def _launch(geometry: str) -> tuple["BrowserContext", t.Any]:
         # read queue forever.  A warmed launch costs ~10s; the install
         # prefetch keeps a cold one in the same range -- 3 minutes is
         # headroom, not a guess.
-        if persistent:
-            context = await asyncio.wait_for(AsyncNewBrowser(pw, **launch_kwargs), timeout=180.0)
-        else:
-            browser = await asyncio.wait_for(AsyncNewBrowser(pw, **launch_kwargs), timeout=180.0)
-            # camoufox attaches its context defaults (no_viewport et al)
-            # to the browser's factories -- pages here report the pinned
-            # window's dimensions exactly; the cert-acceptance rides the
-            # context where it belongs for a non-persistent launch
-            context = await browser.new_context(ignore_https_errors=True)
+        context = await asyncio.wait_for(AsyncNewBrowser(pw, **launch_kwargs), timeout=180.0)
     except Exception as exc:  # pylint: disable=broad-except
-        if browser is not None and context is None:
-            # the process launched but its context did not -- end the
-            # half-born browser instead of leaking it
-            try:
-                await browser.close()
-            except Exception:  # pylint: disable=broad-except
-                pass
-            browser = None
         retried = False
-        if persistent and "failed to launch" in str(exc).lower():
+        if "failed to launch" in str(exc).lower():
             # the classic cause after an unclean restart: the previous
             # instance's browser process still lives and holds the
-            # persistent profile's lock -- clean it and retry ONCE (an
-            # alternate lane has no profile and no lock -- no retry)
-            await _kill_stale_holders_async(profile or "")
+            # persistent profile's lock -- clean it and retry ONCE
+            await _kill_stale_holders_async(profile)
             try:
                 context = await AsyncNewBrowser(pw, **launch_kwargs)
                 retried = True
@@ -303,14 +230,12 @@ async def _launch(geometry: str) -> tuple["BrowserContext", t.Any]:
     await context.route("**/*", gate.gate)
     _register_shutdown()
     logger.info(
-        "zjsearch browser: launched (%s lane, camoufox, %s, %sx%s, adblock %s)",
-        geometry,
+        "zjsearch browser: launched (camoufox, %s, adblock %s, profile %s)",
         browser_config.mode(),
-        browser_config.window_size(geometry)[0],
-        browser_config.window_size(geometry)[1],
         browser_config.adblock(),
+        profile,
     )
-    return context, browser
+    return context
 
 
 _SHUTDOWN_REGISTERED = False
@@ -328,24 +253,10 @@ def _register_shutdown() -> None:
 
     def _shutdown() -> None:
         context = _state.get("context")
-        alt = _state.pop("alt", None)
-        reaper = _state.pop("alt_reaper", None)
-        if reaper is not None:
-            reaper.cancel()
-        if context is None and alt is None:
+        if context is None:
             return
-
-        async def _close_all() -> None:
-            for closer in (context, (alt or {}).get("context"), (alt or {}).get("browser")):
-                if closer is None:
-                    continue
-                try:
-                    await closer.close()
-                except Exception:  # pylint: disable=broad-except
-                    pass
-
         try:
-            asyncio.run_coroutine_threadsafe(_close_all(), get_loop()).result(timeout=5)
+            asyncio.run_coroutine_threadsafe(context.close(), get_loop()).result(timeout=5)
             logger.info("zjsearch browser: closed at shutdown")
         except Exception:  # pylint: disable=broad-except
             logger.warning("zjsearch browser: the shutdown close failed -- the process may linger")
@@ -353,75 +264,18 @@ def _register_shutdown() -> None:
     atexit.register(_shutdown)
 
 
-async def _context(geometry: str | None = None) -> "BrowserContext":
-    """One geometry's live context: the desktop preset rides the
-    persistent lane (launched once, kept warm), the alternate preset
-    rides the lazy non-persistent lane (relaunched on demand, stamped
-    on every checkout, reaped after ``_ALT_IDLE_S`` idle)."""
-    name = geometry if geometry in browser_config.GEOMETRY_PRESETS else browser_config.DEFAULT_GEOMETRY
-    if name == browser_config.DEFAULT_GEOMETRY:
-        context = _state.get("context")
-        if context is None:
-            context, _browser = await _launch(name)
-            _state["context"] = context
-        return context
-    alt = _state.get("alt")
-    if alt is None or alt.get("geometry") != name:
-        await _drop_alt()
-        context, browser = await _launch(name)
-        alt = {"geometry": name, "context": context, "browser": browser, "used": time.monotonic()}
-        _state["alt"] = alt
-    alt["used"] = time.monotonic()
-    _reap_alt_later()
-    return alt["context"]
-
-
-async def _drop_alt() -> None:
-    """Close the alternate lane (context first, then the process) and
-    forget its state.  Loop-task only."""
-    reaper = _state.pop("alt_reaper", None)
-    if reaper is not None:
-        reaper.cancel()
-    alt = _state.pop("alt", None)
-    if alt is None:
-        return
-    for closer in (alt.get("context"), alt.get("browser")):
-        if closer is None:
-            continue
-        try:
-            await closer.close()
-        except Exception:  # pylint: disable=broad-except
-            pass
-
-
-def _reap_alt_later() -> None:
-    """Arm the idle reaper (one live task; the next checkout re-arms it
-    -- the stamp check makes a mid-sleep refresh re-arm instead of
-    killing a lane that just got used)."""
-    old = _state.get("alt_reaper")
-    if old is not None:
-        old.cancel()
-    _state["alt_reaper"] = asyncio.ensure_future(_reap_alt())
-
-
-async def _reap_alt() -> None:
-    while True:
-        await asyncio.sleep(_ALT_IDLE_S)
-        alt = _state.get("alt")
-        if alt is None:
-            return
-        if time.monotonic() - float(alt.get("used") or 0.0) < _ALT_IDLE_S:
-            continue  # refreshed mid-sleep -- re-arm for the new stamp
-        await _drop_alt()
-        return
+async def _context() -> "BrowserContext":
+    context = _state.get("context")
+    if context is None:
+        context = await _launch()
+        _state["context"] = context
+    return context
 
 
 def drop_context() -> None:
-    """Forget the desktop lane's cached context (the browser died
-    mid-run): the next read or session action relaunches instead of
-    failing forever with the same "closed" error.  Safe from any thread
-    (dict pop).  The alternate lane heals inside ``_read`` (its cleanup
-    is async and runs on the loop)."""
+    """Forget the cached context (the browser died mid-run): the next
+    read or session action relaunches instead of failing forever with
+    the same "closed" error.  Safe from any thread (dict pop)."""
     _state.pop("context", None)
 
 
@@ -475,17 +329,14 @@ async def _stabilize(page: "Page") -> None:
             return
 
 
-async def _read_on(context: "BrowserContext", url: str, geometry: str) -> str:
+async def _read_on(context: "BrowserContext", url: str) -> str:
     semaphore = _state.get("pages")
     if semaphore is None:
         semaphore = asyncio.Semaphore(browser_config.max_pages())
         _state["pages"] = semaphore
     async with semaphore:
         page = await context.new_page()
-        # EXACTLY the lane's pinned window size (the Juggler handshake
-        # hangs on any differing request -- daijro/camoufox#666)
-        window = browser_config.window_size(geometry)
-        await page.set_viewport_size({"width": window[0], "height": window[1]})
+        await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
         try:
             # the stability observer must precede goto: it has to cover
             # the first document AND every reload the page performs
@@ -506,32 +357,25 @@ async def _read_on(context: "BrowserContext", url: str, geometry: str) -> str:
     return html
 
 
-async def _read(url: str, geometry: str | None = None) -> str:
-    name = geometry if geometry in browser_config.GEOMETRY_PRESETS else browser_config.DEFAULT_GEOMETRY
-    default = name == browser_config.DEFAULT_GEOMETRY
+async def _read(url: str) -> str:
     try:
-        return await _read_on(await _context(name), url, name)
+        return await _read_on(await _context(), url)
     except browser_config.RenderError:
         raise
     except Exception as exc:  # pylint: disable=broad-except
         if "closed" in str(exc).lower():
             # the browser died mid-run (crash, OOM kill): a poisoned
             # context would fail every later read with the same cryptic
-            # line -- drop the lane so the next read relaunches
-            if default:
-                _state.pop("context", None)
-            else:
-                await _drop_alt()
+            # line -- drop it so the next read relaunches
+            _state.pop("context", None)
         raise browser_config.RenderError(f"the built-in browser failed: {type(exc).__name__}: {_brief(exc)}") from exc
 
 
-def read_html(url: str, geometry: str | None = None) -> str:
+def read_html(url: str) -> str:
     """The rendered HTML of one public URL through the built-in browser
-    -- the exact seam the merged tool's read lane extracts from.
-    ``geometry`` names a :py:data:`config.GEOMETRY_PRESETS` preset (the
-    default renders in the deployment's launch shape; ``mobile`` rides
-    the alternate lane).  The caller runs on a worker thread."""
-    future = asyncio.run_coroutine_threadsafe(_read(url, geometry), get_loop())
+    -- the exact seam the merged tool's read lane extracts from.  The
+    caller runs on a worker thread."""
+    future = asyncio.run_coroutine_threadsafe(_read(url), get_loop())
     try:
         return future.result(timeout=READ_TIMEOUT)
     except concurrent.futures.TimeoutError as exc:

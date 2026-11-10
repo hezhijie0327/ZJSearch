@@ -7,7 +7,6 @@ gated visual branch, ``wait_user`` is the human's operation window, and
 page content is untrusted input."""
 
 import typing as t
-from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.core.text import raw_args
 
 BROWSE_TOOL = "browse"
@@ -27,16 +26,7 @@ for what the page itself contains.  Do not drown either: skip obviously
 thin results, never open pages just to "see what is there" once you hold
 the detail, and for long documents prefer one targeted site:-search over
 opening page after page.  A failed or empty page is a dead end: search a
-different source instead of retrying it.  ONE sanctioned retry exists:
-a desktop render that comes back empty, app-walled ("open in our
-app"), or suspiciously thin may yield to geometry="mobile" -- the page
-re-renders in a phone-sized window (402x874) where such walls are
-routinely weaker; retry ONCE, and only when the desktop read's FAILURE
-SHAPE (not merely its thinness) points at a device-class wall.  The
-reverse holds too: on a host you ALREADY expect to wall the desktop
-web (the app platforms -- app-download walls, login-only desktop
-shells), go mobile on the FIRST read and skip the doomed desktop
-round.  Opened content carries the
+different source instead of retrying it.  Opened content carries the
 source's [n] label -- the number it already had among your sources, or a
 fresh one appended for a url that was not among the results.
 
@@ -116,9 +106,7 @@ its current full content as compact markdown -- documents (.pdf / .docx
 / .pptx / .xlsx / .xls) natively as full text.  Reads run in parallel:
 batch several per round.  One page per read, not a recursive crawl -- to
 follow a link, read it in another explicit call.  Very long pages arrive
-truncated.  geometry="mobile" re-renders a page in a phone-sized window
-when its desktop render was blocked, app-walled or hollow -- the mobile
-branch is often the readable one.
+truncated.
 
 SESSION: open a page, snapshot its interactive elements and sizeable
 images as refs, click/type/press/scroll by ref, hover a menu open,
@@ -165,11 +153,6 @@ drove.""",
                 "url": {
                     "type": "string",
                     "description": 'open/read: the absolute http(s) URL.  read: omit it to read the page the session is currently on.',
-                },
-                "geometry": {
-                    "type": "string",
-                    "enum": sorted(browser_config.GEOMETRY_PRESETS),
-                    "description": 'read: the render window preset -- "desktop" (default, 1920x1080) or "mobile" (402x874, the iPhone-class window a phone-walled page yields to).  Ignored for documents.',
                 },
                 "ref": {
                     "type": "string",
@@ -241,12 +224,6 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     out: dict[str, t.Any] = {"action": action}
     if action in ("open", "read") or (action == "tab" and str(args.get("op") or "") == "new"):
         out["url"] = str(args.get("url") or "").strip()[:2000]
-    if action == "read" and out.get("url"):
-        # the render preset of a READ-LANE read (a session-lane read --
-        # no url -- ignores it): only a NAMED alternate preset is
-        # carried, empty means the deployment's launch default
-        geometry = str(args.get("geometry") or "").strip().lower()
-        out["geometry"] = geometry if geometry in browser_config.GEOMETRY_PRESETS else ""
     if action in ("click", "type", "screenshot", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
     if action == "screenshot":
