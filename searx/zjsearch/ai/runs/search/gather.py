@@ -327,10 +327,11 @@ approach from another angle or change language)"""
         if entries:
             yield ("sources", {"items": entries})
 
-    def _read_one(self, url: str) -> tuple[str, str]:
+    def _read_one(self, url: str, geometry: str | None = None) -> tuple[str, str]:
         """One ``browse`` read -- built-in-browser render + extraction;
-        needs no request context."""
-        return reader.read_page(url)
+        needs no request context.  ``geometry`` names the render preset
+        (an alternate one rides the engine's lazy second lane)."""
+        return reader.read_page(url, geometry)
 
     def _page_feed_text(self, title: str, text: str) -> str:  # pylint: disable=too-many-return-statements
         """The page's WRITER-FEED body: the whole extracted text when it
@@ -388,6 +389,7 @@ the research feed; the full text is archived under its source ...]"""
         rnd: int,
         idx: int,
         url: str,
+        geometry: str | None,
         fut: "concurrent.futures.Future[tuple[str, str]]",
         started: float,
         feeds: list[str | None],
@@ -405,8 +407,14 @@ the research feed; the full text is archived under its source ...]"""
             return
         norm = reader.normalize_url(url)
         # the read's dedup mark lands on COMPLETION, never at plan time: a
-        # page whose read failed stays retryable
-        self.reg.note_read(norm)
+        # page whose read failed stays retryable.  The key carries the
+        # render geometry -- an alternate-geometry read of an ALREADY-READ
+        # page is its own entry (the mobile branch is a different
+        # document), while the [n] registry below stays url-keyed and
+        # rejoins the page's existing number.
+        shape = reader.resolve_geometry(geometry)
+        read_key = norm if shape == reader.resolve_geometry(None) else f"{shape}:{norm}"
+        self.reg.note_read(read_key)
         known_n = self.reg.known(norm)
         if known_n is not None:
             n = known_n
@@ -498,7 +506,7 @@ the research feed; the full text is archived under its source ...]"""
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
-        page_jobs: list[tuple[int, str]],
+        page_jobs: list[tuple[int, str, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         # the settlements' serialization touches the flask request/app
@@ -523,7 +531,7 @@ the research feed; the full text is archived under its source ...]"""
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
-        page_jobs: list[tuple[int, str]],
+        page_jobs: list[tuple[int, str, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
@@ -539,8 +547,8 @@ the research feed; the full text is archived under its source ...]"""
                 wire_id,
                 (query, category, dedup_key, time.monotonic()),
             )
-        for wire_id, url in page_jobs:
-            futures[pool.submit(self._read_one, url)] = ("page", wire_id, (url, time.monotonic()))
+        for wire_id, url, geometry in page_jobs:
+            futures[pool.submit(self._read_one, url, geometry)] = ("page", wire_id, (url, geometry, time.monotonic()))
         pending = dict(futures)
         # no batch wall clock: every queued call gets to run and every
         # engine request / page read carries its own per-request timeout,
@@ -554,5 +562,5 @@ the research feed; the full text is archived under its source ...]"""
                     query, category, dedup_key, started = args
                     yield from self._finish(rnd, wire_id, query, category, dedup_key, fut, started, feeds)
                 else:
-                    url, started = args
-                    yield from self._finish_page(rnd, wire_id, url, fut, started, feeds)
+                    url, geometry, started = args
+                    yield from self._finish_page(rnd, wire_id, url, geometry, fut, started, feeds)

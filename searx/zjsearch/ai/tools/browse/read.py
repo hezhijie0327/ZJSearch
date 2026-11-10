@@ -115,11 +115,13 @@ def guard_url(url: str) -> str:
     return candidate
 
 
-def rendered_html(url: str) -> str:
+def rendered_html(url: str, geometry: str | None = None) -> str:
     """The rendered HTML of one URL through the built-in browser -- the
-    one render backend (the engine raises the model-facing failures)."""
+    one render backend (the engine raises the model-facing failures).
+    ``geometry`` selects the render preset (``mobile`` rides the
+    engine's lazy alternate lane)."""
     try:
-        return browser_engine.read_html(url)
+        return browser_engine.read_html(url, geometry)
     except browser_config.RenderError as exc:
         raise PageReadError(str(exc)) from exc
 
@@ -221,14 +223,23 @@ def _cache_put(key: str, title: str, text: str) -> None:
         _cache.popitem(last=False)
 
 
-def read_page(url: str) -> tuple[str, str]:
+def resolve_geometry(geometry: str | None) -> str:
+    """The render preset a read runs in: a named preset stands, anything
+    else is the persistent desktop lane."""
+    return geometry if geometry in browser_config.GEOMETRY_PRESETS else browser_config.DEFAULT_GEOMETRY
+
+
+def read_page(url: str, geometry: str | None = None) -> tuple[str, str]:
     """(title, markdown text) of one URL -- ``read(url)``'s whole world.
-    Raises :class:`PageReadError` with a message meant
+    ``geometry`` names the render preset; the render cache keys on it
+    (a desktop-blocked page and its mobile branch are DIFFERENT
+    documents).  Raises :class:`PageReadError` with a message meant
     for the model (the tool result)."""
     if not configured():
         raise PageReadError("the page reader is not configured on this instance")
     guarded = guard_url(url)
-    key = normalize_url(guarded)
+    shape = resolve_geometry(geometry)
+    key = f"{shape}:{normalize_url(guarded)}"
     cached = _cache_get(key)
     if cached is not None:
         return cached
@@ -236,9 +247,10 @@ def read_page(url: str) -> tuple[str, str]:
     if convert_service.is_document_extension(extension):
         # the browser renders these as viewer chrome or a download prompt,
         # never content -- a document url FETCHES its bytes and converts
+        # (geometry does not apply -- no render happens)
         title, text = _read_document(guarded, extension, max_chars())
     else:
-        html_text = rendered_html(guarded)
+        html_text = rendered_html(guarded, shape)
         if not html_text.strip():
             raise PageReadError("the browser rendered an empty page")
         title, text = extract_page(html_text, guarded, max_chars())

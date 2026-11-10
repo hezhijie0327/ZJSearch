@@ -64,14 +64,15 @@ def _capabilities() -> dict[str, dict[str, str] | None]:
         "rerank": rerank_route.capability(),
     }
     # the interactive session's LAUNCH viewport rides the ai capability --
-    # WINDOW stays the single source: the takeover's coordinate math keys
-    # off each frame's own dims, and this boot value is only the client's
-    # fallback for frames that carry none
+    # config.window_size stays the single source: the takeover's
+    # coordinate math keys off each frame's own dims, and this boot value
+    # is only the client's fallback for frames that carry none
     if isinstance(caps.get("ai"), dict):
-        from searx.zjsearch.ai.browser.engine import WINDOW  # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.browser import config as browser_config  # pylint: disable=import-outside-toplevel
 
-        caps["ai"]["vw"] = str(WINDOW[0])
-        caps["ai"]["vh"] = str(WINDOW[1])
+        w, h = browser_config.window_size()
+        caps["ai"]["vw"] = str(w)
+        caps["ai"]["vh"] = str(h)
     return caps
 
 

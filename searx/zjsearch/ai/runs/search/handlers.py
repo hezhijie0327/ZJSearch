@@ -477,7 +477,7 @@ action from what is visible."""
         self.round_new_titles = []
         self.round_learned = False
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
-        page_jobs: list[tuple[int, str]] = []
+        page_jobs: list[tuple[int, str, str]] = []
         sub_jobs: list[tuple[int, dict[str, str]]] = []
         followup_jobs: list[tuple[int, dict[str, str]]] = []
         gathered = False
@@ -1274,13 +1274,13 @@ section, do not re-type the numbers."""
                 # other action is the serialized session lane
                 browser_args = browse_tool.parse_browse_call(call)
                 if str(browser_args.get("action") or "") == "read" and browser_args.get("url"):
-                    feed, event, page_url = self._page_plan(call, wire_id)
+                    feed, event, page_url, geometry = self._page_plan(call, wire_id)
                     if feed:
                         feeds[wire_id - 1] = feed
                     if event:
                         yield ("call", event)
                     if page_url:
-                        page_jobs.append((wire_id, page_url))
+                        page_jobs.append((wire_id, page_url, geometry))
                         gathered = True
                         # the early active-mark: the subtask this url shape
                         # points at is being researched (the done-marking with
@@ -2190,13 +2190,20 @@ score, a just-published release -- re-run it with refresh: true.)"""
             (wire_id, query, category, time_range, include, exclude, dedup_key),
         )
 
-    def _page_plan(self, call: dict[str, t.Any], wire_id: int) -> tuple[str, dict[str, t.Any] | None, str | None]:
+    def _page_plan(
+        self, call: dict[str, t.Any], wire_id: int
+    ) -> tuple[str, dict[str, t.Any] | None, str | None, str]:
         """One ``read(url)`` call's pre-pool plan: (feed, settle event,
-        url-to-read) -- errors and duplicates settle here (the event
-        carries its ``ms``/``feed``, the debug contract), a fresh url is
-        queued; the read's dedup mark is taken at completion (a failed
-        read stays retryable)."""
-        raw_url = str(browse_tool.parse_browse_call(call).get("url") or "")
+        url-to-read, geometry) -- errors and duplicates settle here (the
+        event carries its ``ms``/``feed``, the debug contract), a fresh
+        url is queued; the read's dedup mark is taken at completion (a
+        failed read stays retryable).  The dedup KEY carries the render
+        geometry: the mobile retry of a desktop-blocked page is not a
+        duplicate (the completion-time mark qualifies the same way --
+        :py:meth:`Gather._finish_page`)."""
+        plan_args = browse_tool.parse_browse_call(call)
+        raw_url = str(plan_args.get("url") or "")
+        geometry = str(plan_args.get("geometry") or "")
         url = reader.normalize_url(raw_url)
         if not raw_url:
             feed_text = "error: empty url"
@@ -2211,8 +2218,11 @@ score, a just-published release -- re-run it with refresh: true.)"""
                     "raw": feed_text[:50_000],
                 },
                 None,
+                geometry,
             )
-        if url in self.reg.read_urls:
+        shape = reader.resolve_geometry(geometry)
+        read_key = url if shape == reader.resolve_geometry(None) else f"{shape}:{url}"
+        if read_key in self.reg.read_urls:
             feed_text = 'duplicate: this exact page was already opened in an earlier round and its content is already in the conversation -- do not re-read it.'
             return (
                 feed_text,
@@ -2225,6 +2235,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
                     "raw": feed_text[:50_000],
                 },
                 None,
+                geometry,
             )
         # the READ GATE (fail-open): with the page's feed metadata on
         # file, one injection noul decides whether the reader round
@@ -2283,13 +2294,14 @@ score, a just-published release -- re-run it with refresh: true.)"""
                             "raw": feed_text[:50_000],
                         },
                         None,
+                        geometry,
                     )
         # NO dedup mark here: completion-time marking (_finish_page) is the
         # contract -- a failed read must stay retryable, and a same-batch
         # re-read of a not-yet-settled url settles through the known-n
         # path (one identity, no duplicate numbering) exactly like
         # searches do.
-        return "", None, url
+        return "", None, url, geometry
 
     @staticmethod
     def _judge_answers(out: dict[str, t.Any]) -> str:

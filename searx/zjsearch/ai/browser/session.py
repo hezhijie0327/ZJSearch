@@ -36,12 +36,19 @@ from urllib.parse import urlsplit
 from searx.network.client import get_loop
 from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.browser import gate
-from searx.zjsearch.ai.browser.engine import _context, drop_context, WINDOW
+from searx.zjsearch.ai.browser.engine import _context, drop_context
 
 if t.TYPE_CHECKING:
     from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
+
+
+def _window_box() -> dict[str, int]:
+    """The launch-default geometry as a playwright viewport dict -- the
+    fallback when a page reports no viewport of its own."""
+    w, h = browser_config.window_size()
+    return {"width": w, "height": h}
 
 SNAPSHOT_MAX_ELEMENTS = 120
 """The outline's element budget -- the model's primary read must stay a
@@ -285,7 +292,10 @@ async def _ensure_page(sess: _Session) -> "Page":
         return sess.page
     context = await _context()
     page = await context.new_page()
-    await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+    # exactly the persistent lane's pinned window (the Juggler viewport
+    # handshake hangs on any differing request)
+    window = browser_config.window_size()
+    await page.set_viewport_size({"width": window[0], "height": window[1]})
     # the session page renders FOR THE USER: its stylesheets/fonts/images
     # pass the gate (the reader's pages stay text-only) -- strong refs
     # keyed by id(), the stale entry dropped on replace
@@ -567,7 +577,8 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
                 (pg for pg in page.context.pages if id(pg) not in known and not pg.is_closed()), None
             )
             if newcomer is not None:
-                await newcomer.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+                window = browser_config.window_size()
+                await newcomer.set_viewport_size({"width": window[0], "height": window[1]})
                 _register_tab(sess, newcomer)
                 await _settle_page(newcomer)
                 outline = await _snapshot_page(sess, newcomer)
@@ -726,7 +737,7 @@ def screenshot_b64(session_id: str, quality: int = 70) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             raw = await page.screenshot(type="jpeg", quality=int(quality))
-            vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
+            vp = page.viewport_size or _window_box()
             return {
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(vp["width"]),
@@ -782,7 +793,7 @@ def region_b64(
 
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
-            vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
+            vp = page.viewport_size or _window_box()
             vx = max(0, min(int(x), int(vp["width"]) - 1))
             vy = max(0, min(int(y), int(vp["height"]) - 1))
             vw = max(0, min(int(w), int(vp["width"]) - vx))
@@ -873,7 +884,7 @@ def frame(session_id: str = LEAD, tab_index: int | None = None) -> dict[str, t.A
                         await frame.evaluate(_ANNOTATE_REMOVE_JS)
                     except Exception:  # pylint: disable=broad-exception-caught
                         pass
-            vp = page.viewport_size or {"width": WINDOW[0], "height": WINDOW[1]}
+            vp = page.viewport_size or _window_box()
             out = {
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(vp["width"]),
@@ -969,7 +980,8 @@ def tab_new(session_id: str, url: str) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             context = await _context()
             page = await context.new_page()
-            await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+            window = browser_config.window_size()
+            await page.set_viewport_size({"width": window[0], "height": window[1]})
             try:
                 await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
             except Exception as exc:  # pylint: disable=broad-except

@@ -171,7 +171,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     `params` -- a 1:1 passthrough into camoufox's launch_options whose
     identity/security keys (os/block_webrtc/humanize/persistent_context/
     user_data_dir/headless/proxy/geoip/args/exclude_addons) are
-    code-owned and warn-drop) and
+    code-owned and warn-drop, and whose `window` is consumed by
+    `config.window_size` (the persistent desktop lane's explicit
+    override — a launch window that disagrees with the viewport literals
+    would hang Juggler, daijro/camoufox#666)) and
     owns the availability gate (`ready()` — enabled AND the `camoufox`
     package importable, warn-once otherwise); `gate` is the
     REQUEST-level SSRF fence (`context.route("**/*")`: string checks
@@ -268,9 +271,36 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     with a locked profile kills the stale holder of THIS profile and
     retries once; an atexit hook closes the browser on clean exits
     (granian workers skip it — the launch retry is the real net).
+    THE GEOMETRY LANES: the launch window is a PROCESS property (a
+    playwright viewport that disagrees with the pinned window hangs the
+    Juggler handshake forever), so per-call geometry switching rides a
+    SECOND lazy browser — `config.GEOMETRY_PRESETS` (`desktop`
+    1920×1080, the persistent lane / `mobile` 402×874, the iPhone 17
+    Pro logical viewport) + `read(url, geometry="mobile")` on the read
+    lane opens the alternate lane: NON-persistent (fresh identity per
+    launch, no profile lock, no login cookie store), warm across a
+    burst, closed by the 5-minute idle reaper — the facility holds two
+    processes only while alternate reads actually flow.  NO settings
+    knob: the per-call argument is the whole surface.  THE LOW-DETECTION
+    MOBILE CLAIM: the identity stays the desktop camoufox fingerprint
+    (camoufox has no mobile identities; an Android UA would fight the
+    Windows GPU strings) — the window rides a phone-shaped
+    `devicePixelRatio: 3` + `navigator.maxTouchPoints: 5` (camoufox
+    `config` keys, verified live: width/DPR/(any-pointer:
+    coarse)/TouchEvent all flip while `pointer: coarse` stays false and
+    `ontouchstart` absent, exactly like a REAL Windows touchscreen
+    laptop — a coherent, verifiable device story).  ONE accepted tell:
+    `outerWidth` reports the REAL window (Juggler measures it; Firefox
+    floors at ~500px width), so it sits ~98px above the 402 viewport —
+    a rare check, accepted in exchange for the exact phone viewport.
+    The read cache
+    and the run's read-dedup key carry the geometry prefix, so the
+    sanctioned mobile retry of a desktop-blocked page passes dedup
+    while the [n] registry stays url-keyed and rejoins the page's
+    existing number.
     Tool packages importing this layer: `tools/browse` — the ONE
     browser tool package (spec + session service + `read.py`, the
-    parallel read lane: knobs, guard, TTL cache).
+    parallel read lane: knobs, guard, TTL cache, per-call geometry).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
     (openai with both chat wire shapes + embeddings, anthropic,
     gemini, ark for the volcengine multimodal vectors), centrally

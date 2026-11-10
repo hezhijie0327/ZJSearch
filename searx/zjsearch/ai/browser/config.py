@@ -111,9 +111,53 @@ def params() -> dict[str, t.Any]:
     ``humanize`` -- the coherent-identity pins; ``persistent_context``/
     ``user_data_dir``/``headless`` -- the engine's runtime shape;
     ``proxy``/``geoip``/``args``/``exclude_addons`` -- each has its own
-    config key already)."""
+    config key already).  ``window`` is consumed by :py:func:`window_size`
+    (the named geometry presets' explicit override), never merged raw --
+    a launch window that disagrees with the viewport literals would hang
+    Juggler; ``config`` is engine-owned (the mobile lane's
+    devicePixelRatio/touch extras)."""
     raw = cfg().get("params")
     return raw if isinstance(raw, dict) else {}
+
+
+GEOMETRY_PRESETS: dict[str, tuple[int, int]] = {
+    "desktop": (1920, 1080),
+    "mobile": (402, 874),
+}
+"""The named render geometries (CSS-pixel viewports).  ``mobile`` is the
+iPhone 17 Pro's logical viewport (a 2622x1206 panel at DPR 3): a phone-
+shaped window flips responsive sites onto their mobile branch, where the
+anti-bot walls are routinely the weaker ones.  The identity STAYS the
+desktop camoufox fingerprint (camoufox has no mobile identities; an
+explicit mobile UA would fight the spoofed platform), so this is a
+geometry claim, not a device claim -- coherent by construction."""
+
+DEFAULT_GEOMETRY = "desktop"
+"""The persistent lane's preset (``GEOMETRY_PRESETS`` key): the launch
+window, the session lane's viewport and every read that names no
+``geometry``.  The OTHER preset's reads ride the engine's lazy alternate
+lane -- there is no settings knob for this; the per-call ``geometry``
+argument on the read lane is the whole surface."""
+
+
+def window_size(name: str | None = None) -> tuple[int, int]:
+    """The effective (width, height) of one geometry name (``None`` means
+    the persistent desktop lane).  The desktop lane's explicit
+    ``params.window`` override wins over its preset (validated 2-int
+    tuple, sane bounds); ``mobile`` keeps its preset shape -- the
+    per-call ``geometry`` argument is a product surface, the
+    deployment's window tuning stays a persistent-lane concern."""
+    preset = name if name in GEOMETRY_PRESETS else DEFAULT_GEOMETRY
+    if preset == DEFAULT_GEOMETRY:
+        raw = params().get("window")
+        if isinstance(raw, (list, tuple)) and len(raw) == 2:
+            try:
+                w, h = (int(raw[0]), int(raw[1]))
+            except (TypeError, ValueError):
+                w = h = 0
+            if 200 <= w <= 8192 and 200 <= h <= 8192:
+                return (w, h)
+    return GEOMETRY_PRESETS[preset]
 
 
 def max_pages() -> int:
