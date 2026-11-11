@@ -22,14 +22,18 @@ spec or claim the answer will lean on; read to resolve two snippets
 that disagree; a source that keeps reappearing across rounds deserves
 one read.  The rhythm is open -> read: open(url) navigates the session
 page, read (NO url) extracts it -- one page per open, to follow a link
-open it explicitly.  CRAWLING SEVERAL SOURCES: open the tabs first,
-then read them by strip index -- multi [tab new A, tab new B, read
-index=1, read index=2] opens two pages AND reads both in one call
-(read by index never activates the tab: the mirror stays where it is);
-without indexes, [tab new A, read, tab new B, read] reads two pages
-per batch (tab new keeps the previous page alive; plain [open A, read,
-open B, read] is fine when you will not revisit), and the next multi
-continues where the batch stopped.  DOCUMENT urls (pdf / office /
+open it explicitly.  CRAWLING SEVERAL SOURCES: open the tabs in the
+background, then read them by strip index -- multi [tab new A
+activate=false, tab new B activate=false, read indexes=[1, 2]] opens
+two pages AND reads all of them in one call (background tabs take no
+active slot and skip the outline; read by index never activates a tab:
+the mirror stays where it is; up to 6 indexes per read).  Without
+indexes, [tab new A, read, tab new B, read] reads two pages per batch
+(tab new keeps the previous page alive; plain [open A, read, open B,
+read] is fine when you will not revisit), and the next multi continues
+where the batch stopped.  Browse calls ride ALONGSIDE the same round's
+search_web calls, not after them -- batch searches and crawls into the
+same round.  DOCUMENT urls (pdf / office /
 data) skip the rhythm entirely: read(url) fetches and converts them
 directly -- the browser never opens them.  If the question contains an
 explicit URL and asks about that page (summarize it, read it, extract
@@ -218,7 +222,16 @@ drove.""",
                 },
                 "index": {
                     "type": "integer",
-                    "description": "tab: the tab index from the strip (switch / close).  read: the tab index to read INSTEAD of the active page -- no activation, the mirror stays put (multi: [tab new A, tab new B, read 0, read 1]).",
+                    "description": "tab: the tab index from the strip (switch / close).  read: the tab index to read INSTEAD of the active page -- no activation, the mirror stays put.",
+                },
+                "activate": {
+                    "type": "boolean",
+                    "description": "tab new: false opens the tab IN THE BACKGROUND -- no active switch, no outline (read it later by index; multi [tab new A activate=false, tab new B activate=false, read indexes=[1,2]]).",
+                },
+                "indexes": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "read: SEVERAL tab indexes in one call (max 6) -- every page's full text rides the result; multi [tab new A, tab new B, tab new C, read indexes=[1,2,3]].",
                 },
                 "x1": {"type": "integer", "description": "drag: start viewport X."},
                 "y1": {"type": "integer", "description": "drag: start viewport Y."},
@@ -313,6 +326,16 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
             out["index"] = int(args.get("index"))
         except (TypeError, ValueError):
             pass
+        raw_indexes = args.get("indexes")
+        if isinstance(raw_indexes, list):
+            indexes: list[int] = []
+            for raw in raw_indexes[:6]:
+                try:
+                    indexes.append(int(raw))
+                except (TypeError, ValueError):
+                    continue
+            if indexes:
+                out["indexes"] = indexes
     if action == "viewport":
         for key in ("width", "height"):
             try:
@@ -329,6 +352,7 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
             out["index"] = max(0, int(args.get("index")))
         except (TypeError, ValueError):
             pass
+        out["activate"] = args.get("activate") is not False
     if action == "multi":
         raw = args.get("steps")
         out["steps"] = [step for step in raw if isinstance(step, dict)][:5] if isinstance(raw, list) else []

@@ -1027,10 +1027,13 @@ def _register_tab(sess: _Session, page: "Page") -> None:
     sess.page = page
 
 
-def tab_new(session_id: str, url: str) -> dict[str, t.Any]:
-    """Open one NEW tab and make it active (the URL is the service's
-    gate- checked public http(s) one): goto, settle, fresh outline --
-    the model lands reading the new page, the old tab sleeps beside it."""
+def tab_new(session_id: str, url: str, activate: bool = True) -> dict[str, t.Any]:
+    """Open one NEW tab (the URL is the service's gate- checked public
+    http(s) one): goto, settle, fresh outline -- the model lands reading
+    the new page, the old tab sleeps beside it.  ``activate=False``
+    opens it IN THE BACKGROUND: the tab joins the strip without taking
+    the active slot, no outline rides back (read it by index later) --
+    the batch-open lane for crawling several sources."""
     sess = get(session_id)
     with sess.lock:
 
@@ -1043,12 +1046,26 @@ def tab_new(session_id: str, url: str) -> dict[str, t.Any]:
             except Exception as exc:  # pylint: disable=broad-except
                 await page.close()
                 raise SessionError(f"could not open the page ({_brief(exc)})") from exc
-            await _settle_page(page)
-            _register_tab(sess, page)
-            outline = await _snapshot_page(sess, page)
+            if activate:
+                await _settle_page(page)
+                _register_tab(sess, page)
+                outline = await _snapshot_page(sess, page)
+            else:
+                page.on("download", lambda dl: _schedule_download(sess, dl))
+                sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+                sess.pages.append(page)
+                await page.wait_for_timeout(browser_config.settle_ms())
+                outline = ""
             views = _tab_view(sess.pages, sess.active)
             await _tab_titles(sess.pages, views)
-            return {"url": str(page.url), "title": await page.title(), "snapshot": outline, "tabs": views}
+            result: dict[str, t.Any] = {
+                "url": str(page.url),
+                "title": await page.title(),
+                "tabs": views,
+            }
+            if activate:
+                result["snapshot"] = outline
+            return result
 
         return _run(run())
 
@@ -1226,6 +1243,62 @@ def drain_downloads(session_id: str = LEAD) -> list[dict[str, t.Any]]:
         new = sess.downloads[sess.download_cursor :]
         sess.download_cursor = len(sess.downloads)
         return new
+
+
+def extract_many(
+    session_id: str, max_chars: int | None, indexes: list[t.Any]
+) -> list[dict[str, str]]:
+    """Several strip tabs condensed to reading material in ONE action --
+    the pages' DOM is collected under a single lock pass, the extraction
+    runs per page afterwards.  Each entry carries its tab index so the
+    caller can attribute failures; out-of-range indexes answer as
+    ``{"error": ...}`` entries instead of failing the batch."""
+    # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.browser.extract import extract_page  # pylint: disable=import-outside-toplevel
+
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> list[dict[str, str]]:
+            await _ensure_page(sess)
+            live = [pg for pg in sess.pages if not pg.is_closed()]
+            states: list[dict[str, str]] = []
+            for raw in indexes:
+                try:
+                    idx = int(raw)
+                except (TypeError, ValueError):
+                    states.append({"index": str(raw), "error": "index must be an integer tab index"})
+                    continue
+                if 0 <= idx < len(live):
+                    page = live[idx]
+                    try:
+                        states.append(
+                            {
+                                "index": str(idx),
+                                "url": str(page.url),
+                                "title": await page.title(),
+                                "html": await page.content(),
+                            }
+                        )
+                    except Exception as exc:  # pylint: disable=broad-exception-caught
+                        states.append({"index": str(idx), "error": _brief(exc)})
+                else:
+                    states.append({"index": str(idx), "error": f"tab {idx} does not exist -- see tab list"})
+            return states
+
+        states = _run(run())
+    out: list[dict[str, str]] = []
+    for state in states:
+        if "error" in state:
+            out.append({"index": state["index"], "error": state["error"]})
+            continue
+        try:
+            title, text = extract_page(state["html"], state["url"], max_chars)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            out.append({"index": state["index"], "url": state["url"], "error": str(exc)[:160]})
+            continue
+        out.append({"index": state["index"], "url": state["url"], "title": title, "text": text})
+    return out
 
 
 def read_download(session_id: str, name: str) -> dict[str, str]:

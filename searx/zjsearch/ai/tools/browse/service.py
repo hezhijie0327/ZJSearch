@@ -349,6 +349,28 @@ def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
     # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.tools.browse.read import max_chars as reader_max_chars
 
+    indexes = args.get("indexes")
+    if isinstance(indexes, list) and indexes:
+        # MULTI-INDEX read: several background tabs in one call -- each
+        # page's section rides the feed and the batch's reads, so every
+        # one registers crawled + corpus
+        cap = reader_max_chars()
+        docs = session.extract_many(session_id, cap, indexes[:6])
+        sections: list[dict[str, str]] = []
+        lines: list[str] = []
+        for doc in docs:
+            if "error" in doc:
+                lines.append(f"[tab {doc.get('index')}] error: {doc['error']}")
+                continue
+            header = f"[tab {doc.get('index')}] {doc.get('title')} ({doc.get('url')})"
+            lines.append(f"{header}\n\n{doc.get('text')}")
+            sections.append({"url": str(doc.get("url") or ""), "title": str(doc.get("title") or ""), "text": str(doc.get("text") or "")})
+        return ActionResult(
+            feed="\n\n---\n\n".join(lines),
+            frames=[{**session.frame(session_id), "agent": session_id}],
+            page=({"url": sections[-1]["url"], "title": sections[-1]["title"]} if sections else None),
+            reads=tuple(sections[:-1]) if len(sections) > 1 else (),
+        )
     state = session.extract(session_id, reader_max_chars(), args.get("index"))
     return ActionResult(
         feed=f"{state['title']}\n\n{state['text']}",
@@ -376,7 +398,19 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
     op = str(args.get("op") or "list")
     if op == "new":
         url = _guard_open_url(str(args.get("url") or ""))
-        state = session.tab_new(session_id, url)
+        background = args.get("activate") is False
+        state = session.tab_new(session_id, url, activate=not background)
+        if background:
+            strip = state.get("tabs") or []
+            idx = next((t["index"] for t in strip if t.get("url") == state["url"]), "?")
+            return ActionResult(
+                feed=(
+                    f"opened in BACKGROUND as tab [{idx}]: {state['url']} -- {state['title']}"
+                    " (not active; read it with read + index)"
+                ),
+                frames=[{**session.frame(session_id), "agent": session_id}],
+                tabs=state.get("tabs"),
+            )
         result = _outline_result(
             f"new tab opened and active: {state['url']} -- {state['title']}\n\n{state['snapshot']}",
             state,

@@ -489,6 +489,7 @@ action from what is visible."""
         self.round_new_titles = []
         self.round_learned = False
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
+        browse_jobs: list[tuple[int, dict[str, t.Any]]] = []
         sub_jobs: list[tuple[int, dict[str, str]]] = []
         followup_jobs: list[tuple[int, dict[str, str]]] = []
         gathered = False
@@ -1282,10 +1283,28 @@ section, do not re-type the numbers."""
             if str(call.get("name") or "") == BROWSE_TOOL:
                 # every browse action is the SESSION lane now (Browser-use
                 # semantics: open -> read, tabs, viewport) -- read with a
-                # url is document-only and the service teaches the rhythm
-                # for page urls
-                if (yield from self._browser_call(call, wire_id, feeds)):
-                    gathered = True
+                # url is document-only and the service teaches the recipe
+                # for page urls.  FAST actions ride the pool ALONGSIDE the
+                # round's searches (the session lock serializes them among
+                # themselves); the human-blocking ones (wait_user, close,
+                # a multi that waits) stay INLINE -- their mirror frames
+                # must stream live, not arrive buffered at completion.
+                browser_args = browse_tool.parse_browse_call(call)
+                action_name = str(browser_args.get("action") or "")
+                blocks = action_name in ("wait_user", "close") or (
+                    action_name == "multi"
+                    and any(
+                        str(step.get("action") or "") == "wait_user"
+                        for step in (browser_args.get("steps") or [])
+                        if isinstance(step, dict)
+                    )
+                )
+                if blocks:
+                    if (yield from self._browser_call(call, wire_id, feeds)):
+                        gathered = True
+                    continue
+                browse_jobs.append((wire_id, call))
+                gathered = True
                 continue
             if str(call.get("name") or "") == delegate_tool.DELEGATE_RESEARCH_TOOL:
                 # the DELEGATION: one subagent per call, executed as the
@@ -1320,10 +1339,10 @@ section, do not re-type the numbers."""
         # disappears (client disconnect / stop) the generator closes right
         # here -- a with-exit would wait for the still-running work and
         # stall the shutdown
-        total = len(search_jobs)
+        total = len(search_jobs) + len(browse_jobs)
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=min(max(1, total), MAX_PARALLEL))
         try:
-            yield from self._dispatch(pool, rnd, search_jobs, feeds)
+            yield from self._dispatch(pool, rnd, search_jobs, browse_jobs, feeds)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
         # Jina's failure-becomes-information: an unproductive round tells

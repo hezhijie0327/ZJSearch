@@ -303,11 +303,52 @@ approach from another angle or change language)"""
         with RequestContext(app, environ, request=request_obj):
             return self._search_one(query, category, time_range, include, exclude)
 
+    def _run_browse_job(self, call: dict[str, t.Any], wire_id: int, feeds: list[str | None]):
+        """One browse action consumed to its events on a pool worker --
+        the session lock serializes the actions among themselves while
+        the round's searches run beside them.  The settlements touch the
+        flask request/app context (favicons, pretty urls), so the worker
+        rides its OWN cloned request context (the search job's pattern).
+        Returns ``(events, gathered)`` -- the generator's StopIteration
+        value carries the gathered flag."""
+        gen = self._browser_call(call, wire_id, feeds)
+        events: list[tuple[str, t.Any]] = []
+        while True:
+            try:
+                events.append(next(gen))
+            except StopIteration as stop:
+                return events, (stop.value or False)
+
+    def _finish_browse(
+        self,
+        rnd: int,
+        wire_id: int,
+        fut: "concurrent.futures.Future[t.Any]",
+        started: float,
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """Re-yield one pooled browse job's stored events in order, then
+        fold its gathered flag into the round (the stall detector counts
+        it like an inline settlement)."""
+        ms = int((time.monotonic() - started) * 1000)
+        try:
+            events, gathered = fut.result()
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch_ask_search: browse %d/%d failed: %r", rnd, wire_id, exc)
+            feed_text = f"error: {str(exc)[:300] or type(exc).__name__}"
+            feeds[wire_id - 1] = feed_text
+            yield ("call", {"call": wire_id, "status": "error", "ms": ms, "feed": feed_text[:800]})
+            return False
+        for event in events:
+            yield event
+        return bool(gathered)
+
     def _dispatch(  # pylint: disable=too-many-locals
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
+        browse_jobs: list[tuple[int, dict[str, t.Any]]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         # the settlements' serialization touches the flask request/app
@@ -323,15 +364,16 @@ approach from another angle or change language)"""
 
             app, environ, request_obj = self._search_ctx
             with RequestContext(app, environ, request=request_obj):
-                yield from self._dispatch_ctx(pool, rnd, search_jobs, feeds)
+                yield from self._dispatch_ctx(pool, rnd, search_jobs, browse_jobs, feeds)
             return
-        yield from self._dispatch_ctx(pool, rnd, search_jobs, feeds)
+        yield from self._dispatch_ctx(pool, rnd, search_jobs, browse_jobs, feeds)
 
     def _dispatch_ctx(  # pylint: disable=too-many-locals
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
+        browse_jobs: list[tuple[int, dict[str, t.Any]]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
@@ -347,6 +389,14 @@ approach from another angle or change language)"""
                 wire_id,
                 (query, category, dedup_key, time.monotonic()),
             )
+        for wire_id, call in browse_jobs:
+            # the session's own lock serializes browse actions among
+            # themselves -- beside them, this round's searches run free
+            futures[pool.submit(self._run_browse_job, call, wire_id, feeds)] = (
+                "browse",
+                wire_id,
+                (call, time.monotonic()),
+            )
         pending = dict(futures)
         # no batch wall clock: every queued call gets to run and every
         # engine request carries its own per-request timeout, which is
@@ -355,5 +405,11 @@ approach from another angle or change language)"""
             done, _not_done = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
             for fut in done:
                 kind, wire_id, args = pending.pop(fut)
+                if kind == "browse":
+                    call, started = args
+                    gathered = yield from self._finish_browse(rnd, wire_id, fut, started, feeds)
+                    if gathered:
+                        self.round_gathered = True
+                    continue
                 query, category, dedup_key, started = args
                 yield from self._finish(rnd, wire_id, query, category, dedup_key, fut, started, feeds)
