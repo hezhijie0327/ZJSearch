@@ -574,11 +574,24 @@ export function settle(core: Core, failed: { error: string } | null, stopped: bo
     const awaiting = !failed && run.ask !== null && !run.answer.trim() && !stopped;
     const endedAt = awaiting ? null : now;
     runs[lastIdx] = failed
-      ? { ...run, status: "error", error: failed.error, endedAt }
+      ? {
+          ...run,
+          status: "error",
+          error: failed.error,
+          endedAt,
+          browser: null,
+          browserSessions: {},
+        }
       : {
           ...run,
           endedAt,
           status: awaiting ? "awaiting" : ("done" as const),
+          // the LIVE mirror unmounts at the settle (the cookie store and
+          // the strip survive in the session lane -- the card was the
+          // run's live view, a frozen frame is not worth the rail space).
+          // An AWAITING run keeps it: the wait_user window's mirror IS
+          // the human's operation surface.
+          ...(!awaiting ? { browser: null, browserSessions: {} } : {}),
         };
   }
   const interrupted = interruptPending(runs);
@@ -588,6 +601,8 @@ export function settle(core: Core, failed: { error: string } | null, stopped: bo
           ...item,
           status: "done" as const,
           plan: completeTasks(item.plan),
+          browser: null,
+          browserSessions: {},
         }
       : item,
   );
