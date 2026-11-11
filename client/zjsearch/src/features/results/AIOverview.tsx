@@ -32,7 +32,7 @@ import { appendRunEvents } from "@/lib/kb/events.ts";
 import { settleRun, startRun } from "@/lib/kb/projections.ts";
 import { newThreadId, threadUrl } from "@/lib/kb/shared.ts";
 import { hostnameOf } from "@/lib/link.ts";
-import { holdBackTail, MD, SHARED_REMARK } from "@/lib/markdownParts.ts";
+import { holdBackTail, MD, normalizeEmphasis, SHARED_REMARK } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { CHIP_ACCENT, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -1029,7 +1029,7 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
       {text}
     </Markdown>
   );
-  const content = renderWithGalleries(markdown, galleries, body, (index, key) => (
+  const content = renderWithGalleries(normalizeEmphasis(markdown), galleries, body, (index, key) => (
     <AnswerGallery gallery={galleries?.[index] ?? EMPTY_GALLERY} key={key} onCite={onCite} />
   ));
   if (!figureLightbox) {

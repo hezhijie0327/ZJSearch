@@ -138,6 +138,15 @@ export const remarkCallouts = function remarkCallouts() {
     ZJBlog's content.ts); the math pipeline stays lazy beside it. */
 export const SHARED_REMARK = [remarkGfm, remarkMark, remarkEmoji, remarkCallouts, remarkDeflist];
 
+/** Model artifacts: a closing `**` preceded by whitespace is NOT
+    right-flanking in CommonMark (CJK answers habitually leave a space
+    between a citation link and the closing marker — `… [3](#x) **`) --
+    the whole span then renders literally.  Trim the INSIDE of each
+    emphasis pair so bold survives the model's spacing. */
+export function normalizeEmphasis(text: string): string {
+  return text.replace(/\*\*([^*\n]+?)\s*\*\*/g, "**$1**");
+}
+
 /** The family EDITORIAL recipe (DESIGN.md §5.1): every AI-content markdown
     surface (answers, report documents, the knowledge inspector) renders in
     ZJBlog's prose voice — serif body and headings, amber quote bars,
