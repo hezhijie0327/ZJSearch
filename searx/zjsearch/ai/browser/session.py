@@ -1052,6 +1052,12 @@ def tab_new(session_id: str, url: str, activate: bool = True) -> dict[str, t.Any
                 outline = await _snapshot_page(sess, page)
             else:
                 page.on("download", lambda dl: _schedule_download(sess, dl))
+                # background tabs JOIN the visual registry too: they may be
+                # peeked, switched to or index-read later, and a page whose
+                # stylesheets were gate-blocked at load time stays unstyled
+                # forever (the block happened per-request, registration is
+                # not retroactive)
+                gate.visual_pages[id(page)] = page
                 sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
                 sess.pages.append(page)
                 await page.wait_for_timeout(browser_config.settle_ms())

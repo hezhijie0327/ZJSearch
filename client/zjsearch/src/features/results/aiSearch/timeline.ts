@@ -129,6 +129,17 @@ export interface AiSearchCall {
   /** browse tab rows: the session's tab strip (index / url / title /
       active) -- the expansion renders the mirror tab strip's chips */
   tabs?: Array<{ index: number; url: string; title: string; active: boolean }>;
+  /** browse multi rows: the batch's per-step summaries (action / status /
+      label / url / chars) -- the expansion renders each step's DETAIL,
+      not the feed's bare first lines */
+  steps?: Array<{
+    action: string;
+    status: string;
+    label: string;
+    url?: string;
+    title?: string;
+    chars?: number;
+  }>;
   /** calculate: the exact evaluated result (the row shows expr = result) */
   result?: string;
   /** evaluate: the STRUCTURED verdict (question name -> choice/score/noul
@@ -1053,6 +1064,18 @@ export function applyEvent(
                       url: String(t.url ?? ""),
                       title: String(t.title ?? ""),
                       active: t.active === true,
+                    })),
+                  }
+                : {}),
+              ...(Array.isArray(event.steps)
+                ? {
+                    steps: (event.steps as Array<Record<string, unknown>>).map((s) => ({
+                      action: String(s.action ?? ""),
+                      status: String(s.status ?? ""),
+                      label: String(s.label ?? ""),
+                      url: s.url ? String(s.url) : undefined,
+                      title: s.title ? String(s.title) : undefined,
+                      chars: typeof s.chars === "number" ? s.chars : undefined,
                     })),
                   }
                 : {}),

@@ -238,6 +238,10 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
         sources event; returns ``(feed, extra, gathered)``."""
         feed = result.feed
         extra: dict[str, t.Any] = {"page": result.page}
+        if result.steps:
+            # the multi batch's per-step summaries -- the timeline row's
+            # step list renders DETAIL (url / chars), not bare first lines
+            extra["steps"] = list(result.steps)
         if result.tabs:
             extra["tabs"] = list(result.tabs)
         if result.frames:

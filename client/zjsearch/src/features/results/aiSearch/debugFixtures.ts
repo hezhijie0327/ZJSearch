@@ -564,7 +564,14 @@ const FULL_STAGE: DebugScenario = {
       // args + receipt; without this field the fixture cannot demo the fold
       text: "# 多肽原料药(CDMO)行业深度报告\n\n## 市场规模\n\n全球多肽原料药市场 2025 年规模 **41.2 亿美元**,2019-2025 年 CAGR 8.6%;其中 GLP-1 相关肽类占比从 31% 升至 58%。\n\n## 产能格局\n\n| 企业 | 产能(吨/年) | 扩产投资 |\n|---|---|---|\n| Polypeptide | ≈12 | €1.4亿 |\n| Bachem | ≈9 | CHF 1.1亿 |\n| 诺泰生物 | ≈5 | ¥8.2亿 |\n\n欧洲双雄占据高端合成订单,中国企业以 40-60% 的成本优势切入仿制肽与轻改造肽。\n\n## 采购要点\n\n- 长约锁价周期从 2 年缩短至 1 年,买方倾向分批定价;\n- 固相合成 overcrowding:2026 年新产能投产后价格战风险上升;\n- 质量审计成本占交付价 8-12%,FDA 483 记录是硬门槛。",
     },
-    { e: "call", id: 2, call: 2, status: "error", ms: 15200, feed: "error: could not open the page (net::ERR_NAME_NOT_RESOLVED at https://dead.example.com/404)" },
+    {
+      e: "call",
+      id: 2,
+      call: 2,
+      status: "error",
+      ms: 15200,
+      feed: "error: could not open the page (net::ERR_NAME_NOT_RESOLVED at https://dead.example.com/404)",
+    },
     {
       e: "call",
       id: 2,

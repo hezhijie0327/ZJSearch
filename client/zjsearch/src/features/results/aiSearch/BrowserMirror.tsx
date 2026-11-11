@@ -273,12 +273,16 @@ function BrowserLightbox({
   tab,
   onTab,
   view,
+  initialOverride,
 }: {
   onClose: () => void;
   sessions?: Record<string, MirrorView>;
   tab: string;
   onTab: (id: string) => void;
   view: MirrorView;
+  /** the card's peek frame -- enlarging while a strip peek is up must
+      open on THAT tab's frame, not the last wire frame. */
+  initialOverride?: MirrorView | null;
 }) {
   const t = useT();
   const dialogRef = useDialogFocus<HTMLDivElement>();
@@ -302,7 +306,7 @@ function BrowserLightbox({
       its own effect immediately (the model's settlements only update the
       mirror on their own beat); the next wire frame or tab switch clears
       it back to the streamed truth. */
-  const [override, setOverride] = useState<MirrorView | null>(null);
+  const [override, setOverride] = useState<MirrorView | null>(initialOverride ?? null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: tab/view are the TRIGGER, not reads -- a new wire frame or a tab switch clears the local overlay back to the streamed truth
   useEffect(() => {
     setOverride(null);
@@ -824,6 +828,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
         // open across the session tabs (a background tab inside it is the
         // read-only snapshot view)
         <BrowserLightbox
+          initialOverride={peek}
           onClose={() => {
             setFull(false);
           }}

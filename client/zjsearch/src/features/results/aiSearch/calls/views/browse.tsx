@@ -238,6 +238,20 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                   {tail}
                 </div>
               ) : null}
+              {(() => {
+                const d = call.steps?.[i];
+                if (!d || (!d.url && !d.chars)) {
+                  return null;
+                }
+                return (
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
+                    <span className="min-w-0 flex-1 truncate" dir="auto">
+                      {d.url ? readable(d.url) : ""}
+                      {d.chars ? `${d.url ? " · " : ""}${d.chars} chars` : ""}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </li>
         );
