@@ -400,8 +400,12 @@ export const browseView: ToolView = {
           ? `${t("ai_browser_act_viewport")} ${String(w)}×${String(h)}`
           : t("ai_browser_act_viewport");
       }
-      case "read":
-        return pageLabel(call.url || call.page?.url);
+      case "read": {
+        const target = call.url || call.page?.url;
+        // a pending session read has no url yet -- the generic running
+        // text beats a literal "read ?"
+        return target ? pageLabel(target) : t("ai_browser_row_running");
+      }
       case "wait_user":
         return t("ai_browser_act_wait");
       case "close":
