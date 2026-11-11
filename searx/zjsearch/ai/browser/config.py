@@ -40,13 +40,20 @@ def enabled() -> bool:
 
 
 def mode() -> str:
-    """``zjsearch.browser.mode`` -- the three display tiers, strongest
+    """``zjsearch.browser.mode`` -- the display tiers, strongest
     anti-detection first where each is available:
 
     - ``headed``: a REAL window on the host's display -- the strongest
       tier (real compositor, GPU, focus semantics) and, on a desktop
       deployment, the surface the user can watch and reach into (the
       login stage's interaction carrier).  Needs a display session.
+    - ``virtual-gpu``: a headless Xorg server bound to ONE REAL GPU
+      (camoufox PR #912) -- WebGL/Canvas render on the actual card, so
+      the fingerprint shows the host's own hardware instead of Mesa's
+      software rasterizer (the classic automation tell on a
+      Windows-claiming profile).  Needs a GPU + driver on the host and
+      its one-time ``camoufox gpu-setup <gpu> | sudo sh``; in Docker,
+      GPU passthrough (``--gpus all`` / ``/dev/dri``).
     - ``virtual``: camoufox's Xvfb mode for display-less LINUX servers
       (``headless="virtual"``) -- full fingerprint spoofing with a
       virtual framebuffer; needs the SYSTEM Xvfb binary on PATH
@@ -54,7 +61,7 @@ def mode() -> str:
     - ``headless`` (default): plain headless, works everywhere; the
       reader's pure-read stage is fully served by it."""
     value = str(cfg().get("mode") or "headless").strip().lower()
-    return value if value in ("headless", "headed", "virtual") else "headless"
+    return value if value in ("headless", "headed", "virtual", "virtual-gpu") else "headless"
 
 
 def profile_dir() -> str:

@@ -169,7 +169,9 @@ async def _launch() -> "BrowserContext":
     launch_kwargs: dict[str, t.Any] = {
         "persistent_context": True,
         "user_data_dir": profile,
-        "headless": {"headed": False, "virtual": "virtual"}.get(browser_config.mode(), True),
+        "headless": {"headed": False, "virtual": "virtual", "virtual-gpu": "virtual-gpu"}.get(
+            browser_config.mode(), True
+        ),
         "window": WINDOW,
         "block_webrtc": True,
         # humanized cursor trajectories for every playwright click/scroll --
