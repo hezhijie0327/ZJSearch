@@ -349,7 +349,7 @@ def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
     # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.tools.browse.read import max_chars as reader_max_chars
 
-    state = session.extract(session_id, reader_max_chars())
+    state = session.extract(session_id, reader_max_chars(), args.get("index"))
     return ActionResult(
         feed=f"{state['title']}\n\n{state['text']}",
         frames=[{**session.frame(session_id), "agent": session_id}],

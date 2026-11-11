@@ -946,9 +946,14 @@ def frame(session_id: str = LEAD, tab_index: int | None = None) -> dict[str, t.A
     return out
 
 
-def extract(session_id: str, max_chars: int | None) -> dict[str, str]:
+def extract(
+    session_id: str, max_chars: int | None, index: t.Any = None
+) -> dict[str, str]:
     """The CURRENT page condensed to reading material (title + markdown)
-    -- the reader's extraction pipeline over the live DOM."""
+    -- the reader's extraction pipeline over the live DOM.  An ``index``
+    reads ONE background tab straight from the strip (no activation, no
+    outline re-snapshot -- the mirror stays where it is); out-of-range
+    or malformed indexes fall back to the active page."""
     # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.browser.extract import (  # pylint: disable=import-outside-toplevel
         PageReadError,
@@ -960,6 +965,16 @@ def extract(session_id: str, max_chars: int | None) -> dict[str, str]:
 
         async def run() -> dict[str, str]:
             page = await _ensure_page(sess)
+            if index is not None:
+                try:
+                    idx = int(index)
+                except (TypeError, ValueError):
+                    raise SessionError("read index must be an integer tab index (see tab list)") from None
+                live = [pg for pg in sess.pages if not pg.is_closed()]
+                if 0 <= idx < len(live):
+                    page = live[idx]
+                else:
+                    raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
             return {"url": str(page.url), "title": await page.title(), "html": await page.content()}
 
         page_state = _run(run())

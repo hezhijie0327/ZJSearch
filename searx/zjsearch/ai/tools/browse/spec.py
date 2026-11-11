@@ -22,11 +22,14 @@ spec or claim the answer will lean on; read to resolve two snippets
 that disagree; a source that keeps reappearing across rounds deserves
 one read.  The rhythm is open -> read: open(url) navigates the session
 page, read (NO url) extracts it -- one page per open, to follow a link
-open it explicitly.  CRAWLING SEVERAL SOURCES: chain the rhythm in one
-multi -- [tab new A, read, tab new B, read] reads two pages per batch
-(tab new keeps the previous page alive in the strip; plain [open A,
-read, open B, read] is fine when you will not revisit), and the next
-multi continues where the batch stopped.  DOCUMENT urls (pdf / office /
+open it explicitly.  CRAWLING SEVERAL SOURCES: open the tabs first,
+then read them by strip index -- multi [tab new A, tab new B, read
+index=1, read index=2] opens two pages AND reads both in one call
+(read by index never activates the tab: the mirror stays where it is);
+without indexes, [tab new A, read, tab new B, read] reads two pages
+per batch (tab new keeps the previous page alive; plain [open A, read,
+open B, read] is fine when you will not revisit), and the next multi
+continues where the batch stopped.  DOCUMENT urls (pdf / office /
 data) skip the rhythm entirely: read(url) fetches and converts them
 directly -- the browser never opens them.  If the question contains an
 explicit URL and asks about that page (summarize it, read it, extract
@@ -215,7 +218,7 @@ drove.""",
                 },
                 "index": {
                     "type": "integer",
-                    "description": "tab: the tab index from the strip (switch / close).",
+                    "description": "tab: the tab index from the strip (switch / close).  read: the tab index to read INSTEAD of the active page -- no activation, the mirror stays put (multi: [tab new A, tab new B, read 0, read 1]).",
                 },
                 "x1": {"type": "integer", "description": "drag: start viewport X."},
                 "y1": {"type": "integer", "description": "drag: start viewport Y."},
@@ -306,6 +309,10 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     if action == "read":
         # a CAPTURED download's read-back instead of the live page
         out["download"] = str(args.get("download") or "").strip()[:200]
+        try:
+            out["index"] = int(args.get("index"))
+        except (TypeError, ValueError):
+            pass
     if action == "viewport":
         for key in ("width", "height"):
             try:
