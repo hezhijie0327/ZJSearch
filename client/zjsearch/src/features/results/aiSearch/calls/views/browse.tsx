@@ -179,7 +179,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
   const raw = (call.args as Record<string, unknown> | undefined)?.steps;
   const steps = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
   const lines = call.feed?.split("\n").filter((line) => /^\d+\. /.test(line)) ?? [];
-  if (!steps.length || !lines.length) {
+  if (!steps.length || (!lines.length && call.status === "ok")) {
     return null;
   }
   return (
@@ -190,6 +190,11 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         const line = readable(lines[i] ?? "");
         const cut = line.indexOf(". ");
         let tail = cut > 0 ? line.slice(cut + 2) : line;
+        // a PENDING batch has no feed lines yet -- the step's own url is
+        // what the reader wants to see (where this step is headed)
+        if (!tail) {
+          tail = String(step.url ?? "").slice(0, 120);
+        }
         // the service's tail leads with the ENGLISH action name ("scroll:")
         // -- the localized verb is rendered on the step's own line
         tail = tail.replace(/^[a-z_]+: /, "");
@@ -495,6 +500,17 @@ export const browseView: ToolView = {
     // (call.text -> CallContent); returning null falls through to it
     return null;
   },
-  expandable: ({ call, results }) =>
-    Boolean(call.img || call.snapshot || call.page || call.text || call.tabs) || results.length > 0,
+  expandable: ({ call, results }) => {
+    // a PENDING multi is expandable too: the planned steps are the one
+    // thing worth reading before the batch finishes (46s of silence
+    // otherwise)
+    if (
+      actionOf(call) === "multi" &&
+      Array.isArray((call.args as Record<string, unknown> | undefined)?.steps) &&
+      ((call.args as Record<string, unknown>).steps as unknown[]).length > 0
+    ) {
+      return true;
+    }
+    return Boolean(call.img || call.snapshot || call.page || call.text || call.tabs) || results.length > 0;
+  },
 };
