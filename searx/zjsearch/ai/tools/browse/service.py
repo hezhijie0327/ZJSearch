@@ -37,6 +37,7 @@ class ActionResult(t.NamedTuple):
     elements: int = 0
     tabs: t.Sequence[dict[str, t.Any]] | None = None
     reads: t.Sequence[dict[str, str]] = ()
+    steps: t.Sequence[dict[str, t.Any]] = ()
 
 
 def _obs(state: dict[str, str]) -> str:
@@ -476,6 +477,7 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
     steps = raw[:_MAX_MULTI_STEPS]
     feeds: list[str] = []
     reads: list[dict[str, str]] = []
+    step_rows: list[dict[str, t.Any]] = []
     last: ActionResult | None = None
     for i, step in enumerate(steps, 1):
         if not isinstance(step, dict):
@@ -483,6 +485,17 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
             break
         result = _dispatch(step, session_id)
         first = str(result.feed).split("\n", 1)[0]
+        summary: dict[str, t.Any] = {
+            "action": str(step.get("action") or ""),
+            "status": "error" if first.startswith("error:") else "ok",
+            "label": first[:140],
+        }
+        if result.page and result.page.get("url"):
+            summary["url"] = str(result.page["url"])[:200]
+            summary["title"] = str(result.page.get("title") or "")[:120]
+        if summary["action"] == "read":
+            summary["chars"] = len(str(result.feed))
+        step_rows.append(summary)
         if str(step.get("action") or "") == "read" and not first.startswith("error:"):
             feeds.append(f"{i}. read: {str(result.feed)}")
             page = result.page or {}
@@ -511,6 +524,7 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
         snapshot=last.snapshot,
         elements=last.elements,
         reads=tuple(reads),
+        steps=tuple(step_rows),
     )
 
 

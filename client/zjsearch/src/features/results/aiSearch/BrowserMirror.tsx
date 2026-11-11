@@ -21,6 +21,7 @@ import {
   Minimize2,
   MousePointer2,
   RotateCcw,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -744,28 +745,53 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
           >
             {sessionTabs.map((t2) => {
               const peeking = peek !== null && peek.url === t2.url;
+              const chipActive = peeking || (t2.active && peek === null);
               return (
-                <button
-                  aria-pressed={peeking || (t2.active && peek === null)}
-                  className={`inline-flex min-w-0 max-w-44 shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs transition-colors ${
-                    peeking || (t2.active && peek === null)
+                <span
+                  className={`inline-flex min-w-0 max-w-44 shrink-0 items-center gap-0.5 rounded-md border ps-1.5 text-xs transition-colors ${
+                    chipActive
                       ? "border-accent-strong bg-accent-soft font-medium text-accent"
-                      : "border-line text-ink-3 hover:text-ink"
+                      : "border-line text-ink-3"
                   }`}
                   key={t2.index}
-                  onClick={() => {
-                    if (t2.active) {
-                      setPeek(null);
-                    } else {
-                      peekTo(t2.index);
-                    }
-                  }}
-                  title={t2.title || t2.url}
-                  type="button"
                 >
-                  <span className="shrink-0 font-mono leading-none">[{t2.index}]</span>
-                  <span className="truncate">{t2.title || t2.url}</span>
-                </button>
+                  <button
+                    aria-pressed={chipActive}
+                    className={`flex min-w-0 items-center gap-1 py-0.5 transition-colors ${chipActive ? "" : "hover:text-ink"}`}
+                    onClick={() => {
+                      if (t2.active) {
+                        setPeek(null);
+                      } else {
+                        peekTo(t2.index);
+                      }
+                    }}
+                    title={t2.title || t2.url}
+                    type="button"
+                  >
+                    <span className="shrink-0 font-mono leading-none">[{t2.index}]</span>
+                    <span className="truncate">{t2.title || t2.url}</span>
+                  </button>
+                  <button
+                    aria-label={t("ai_browser_tab_close")}
+                    className="shrink-0 rounded p-0.5 transition-colors hover:bg-danger/10 hover:text-danger"
+                    onClick={() => {
+                      void postBrowserInput({ type: "close_tab", index: t2.index })
+                        .then((frame) => {
+                          if (frame) {
+                            // the fresh frame carries the UPDATED strip --
+                            // overlaid like a peek until the next wire
+                            // frame supersedes it
+                            setPeek({ ...activeView, ...frame, tabs: frame.tabs ?? activeView.tabs });
+                          }
+                        })
+                        .catch(() => {});
+                    }}
+                    title={t("ai_browser_tab_close")}
+                    type="button"
+                  >
+                    <X aria-hidden="true" className="size-3" />
+                  </button>
+                </span>
               );
             })}
             {peek ? (

@@ -33,7 +33,10 @@ indexes, [tab new A, read, tab new B, read] reads two pages per batch
 read] is fine when you will not revisit), and the next multi continues
 where the batch stopped.  Browse calls ride ALONGSIDE the same round's
 search_web calls, not after them -- batch searches and crawls into the
-same round.  DOCUMENT urls (pdf / office /
+same round.  the model's own frames carry it too) -- the VIEWER may also CLOSE tabs
+from the mirror at any time: strip indices shift when they do, so tab
+op=list re-grounds them before an index read.
+DOCUMENT urls (pdf / office /
 data) skip the rhythm entirely: read(url) fetches and converts them
 directly -- the browser never opens them.  If the question contains an
 explicit URL and asks about that page (summarize it, read it, extract

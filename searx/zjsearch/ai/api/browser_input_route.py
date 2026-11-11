@@ -47,6 +47,23 @@ def _browser_input_view() -> flask.Response:
             return flask.jsonify({"ok": True, "frame": session.frame(session_id, tab_index=index)})
         except session.SessionError as exc:
             return flask.jsonify({"error": str(exc)}), 502
+    if kind == "close_tab":
+        # the viewer's manual tab close from the strip: the tab leaves the
+        # session (the model's next tab list / index read sees the updated
+        # strip -- indices shift, its recipes re-list); the ACTIVE tab's
+        # close activates its neighbour and the fresh frame follows
+        try:
+            index = int(payload.get("index"))
+        except (TypeError, ValueError):
+            return flask.jsonify({"error": "close_tab needs an integer tab index"}), 422
+        try:
+            session.tab_close(session_id, index)
+        except session.SessionError as exc:
+            return flask.jsonify({"error": str(exc)}), 502
+        try:
+            return flask.jsonify({"ok": True, "frame": session.frame(session_id)})
+        except Exception:  # pylint: disable=broad-exception-caught
+            return flask.jsonify({"ok": True})
     if kind not in ("click", "drag", "wheel", "type", "key", "back", "forward", "reload"):
         return (
             flask.jsonify({"error": "type must be click / drag / wheel / type / key / back / forward / reload"}),

@@ -17,6 +17,7 @@ export type BrowserInputPayload =
   | { type: "forward" }
   | { type: "reload" }
   | { type: "peek"; index: number }
+  | { type: "close_tab"; index: number }
   | { type: "done" };
 
 /** The fresh mirror frame the input route returns after every forwarded

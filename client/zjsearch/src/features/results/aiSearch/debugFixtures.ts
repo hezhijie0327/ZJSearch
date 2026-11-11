@@ -539,6 +539,20 @@ const FULL_STAGE: DebugScenario = {
           args: { action: "viewport", width: 440, height: 956 },
         },
         {
+          id: 15,
+          tool: "browse",
+          q: "",
+          status: "pending",
+          args: {
+            action: "multi",
+            steps: [
+              { action: "tab", op: "new", url: "https://www.siemens.com/wincc", activate: false },
+              { action: "tab", op: "new", url: "https://docs.example.com/wincc-api", activate: false },
+              { action: "read", indexes: [2, 3] },
+            ],
+          },
+        },
+        {
           id: 12,
           tool: "ask_user",
           q: "",
@@ -583,6 +597,45 @@ const FULL_STAGE: DebugScenario = {
       args: { action: "viewport", width: 440, height: 956 },
       snapshot: "e1\tlink\t行业规模\ne2\tbutton\t下载PDF\ne3\tlink\t公司官网",
       feed: "viewport is now 440x956 -- tabs opened from now inherit it (the claimed OS / user agent stays desktop); the page re-flowed: https://example.com/peptide-report -- 多肽原料药行业深度报告\n\ne1\tlink\t行业规模\ne2\tbutton\t下载PDF\ne3\tlink\t公司官网",
+    },
+    {
+      e: "call",
+      id: 2,
+      call: 15,
+      status: "ok",
+      ms: 4100,
+      n: 2,
+      page: { url: "https://docs.example.com/wincc-api", title: "WinCC API 参考" },
+      steps: [
+        {
+          action: "tab",
+          status: "ok",
+          label: "opened in BACKGROUND as tab [2]: https://www.siemens.com/wincc -- Siemens WinCC",
+          url: "https://www.siemens.com/wincc",
+          title: "Siemens WinCC",
+        },
+        {
+          action: "tab",
+          status: "ok",
+          label: "opened in BACKGROUND as tab [3]: https://docs.example.com/wincc-api -- WinCC API 参考",
+          url: "https://docs.example.com/wincc-api",
+          title: "WinCC API 参考",
+        },
+        {
+          action: "read",
+          status: "ok",
+          label: "[tab 2] Siemens WinCC | Siemens",
+          url: "https://www.siemens.com/wincc",
+          chars: 4820,
+        },
+        {
+          action: "read",
+          status: "ok",
+          label: "[tab 3] WinCC API 参考",
+          url: "https://docs.example.com/wincc-api",
+          chars: 3105,
+        },
+      ],
     },
     {
       e: "call",
