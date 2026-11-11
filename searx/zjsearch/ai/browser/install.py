@@ -145,32 +145,29 @@ def main() -> int:
     # that actually contains beta.42
     REPO_CACHE_FILE.unlink(missing_ok=True)
 
-    # the fetch stays on the CLI (sync + channel bounds + cache
-    # resolution are upstream machinery)
-    result = _fetch_once()
-    if result != 0:
-        return result
-    # THE TRUE-MAX PIN: the CLI's channel-latest is a lexicographic first
-    # (the beta.40-vs-beta.41 lesson) -- pin the numeric maximum of the
-    # freshly synced listing and fetch again when the plain fetch
-    # installed something else.
+    # refresh the LISTING first (sync only queries the repos -- no
+    # download), compute the true numeric max, pin it, and fetch exactly
+    # ONE build: letting the CLI fetch choose downloads its lexicographic
+    # pick AND our pinned latest (~1.3 GB each)
+    sync = subprocess.run([sys.executable, "-m", "camoufox", "sync"], check=False)
+    if sync.returncode != 0:
+        print("warning: the release-listing sync failed -- falling back to the channel fetch", file=sys.stderr)
     target = _latest_official()
-    if target is not None:
-        try:
-            from camoufox.pkgman import installed_verstr  # pylint: disable=import-outside-toplevel
-
-            installed = installed_verstr()
-        except Exception:  # pylint: disable=broad-exception-caught
-            installed = ""
-        if installed != target:
-            cfg["pinned"] = target
-            cfg.pop("pinned_sha", None)
-            cfg.pop("active_version", None)
-            save_config(cfg)
-            print(f"zjsearch browser: pinning the numeric latest {target} (installed: {installed or 'none'})")
-            result = _fetch_once()
-            if result != 0:
-                return result
+    if target is None:
+        print("zjsearch browser: no release listing resolved -- falling back to the channel fetch", file=sys.stderr)
+        result = _fetch_once()
+        if result != 0:
+            return result
+    else:
+        cfg["channel"] = CHANNEL
+        cfg["pinned"] = target
+        cfg.pop("pinned_sha", None)
+        cfg.pop("active_version", None)
+        save_config(cfg)
+        print(f"zjsearch browser: selected the numeric latest {target}")
+        result = _fetch_once()
+        if result != 0:
+            return result
     try:
         from camoufox.pkgman import installed_verstr  # pylint: disable=import-outside-toplevel
 
@@ -233,16 +230,10 @@ def _prefetch_launch_payloads() -> None:
             f"warning: the geoip prefetch failed ({exc}); first launch with a proxy fetches them",
             file=sys.stderr,
         )
-    try:
-        from camoufox.addons import DefaultAddons, maybe_download_addons  # pylint: disable=import-outside-toplevel
-
-        maybe_download_addons([DefaultAddons.UBO])
-        print("zjsearch browser: ublock origin in place")
-    except Exception as exc:  # pylint: disable=broad-except
-        print(
-            f"warning: the ublock origin prefetch failed ({exc}); first launch fetches it",
-            file=sys.stderr,
-        )
+    # uBlock Origin needs NO prefetch since the bundled-addons releases:
+    # 0.5.9's builds ship it inside the build dir (addons.get_addon_path
+    # reads it from there at launch) -- the old maybe_download_addons
+    # call removed with that API.
 
 
 if __name__ == "__main__":
