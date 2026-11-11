@@ -22,18 +22,19 @@ spec or claim the answer will lean on; read to resolve two snippets
 that disagree; a source that keeps reappearing across rounds deserves
 one read.  The rhythm is open -> read: open(url) navigates the session
 page, read (NO url) extracts it -- one page per open, to follow a link
-open it explicitly.  Multiple pages live in the TAB STRIP: tab op=new
-opens the next source in a NEW tab (the old one sleeps beside it), and
-a multi chains the mechanical part -- [tab new A, read, tab new B,
-read] reads two sources in one call (each open returns the fresh
-outline; read extracts whatever page is active).  DOCUMENT urls (pdf /
-office / data) skip the rhythm: read(url) fetches and converts them
-directly.  If the question contains an explicit URL and asks about that
-page (summarize it, read it, extract from it), open it FIRST -- do not
-search for what the page itself contains.  Do not drown either: skip
-obviously thin results, never open pages just to "see what is there"
-once you hold the detail, and for long documents prefer one targeted
-site:-search over opening page after page.  A failed or empty page is a
+open it explicitly.  CRAWLING SEVERAL SOURCES: chain the rhythm in one
+multi -- [tab new A, read, tab new B, read] reads two pages per batch
+(tab new keeps the previous page alive in the strip; plain [open A,
+read, open B, read] is fine when you will not revisit), and the next
+multi continues where the batch stopped.  DOCUMENT urls (pdf / office /
+data) skip the rhythm entirely: read(url) fetches and converts them
+directly -- the browser never opens them.  If the question contains an
+explicit URL and asks about that page (summarize it, read it, extract
+from it), open it FIRST -- do not search for what the page itself
+contains.  Do not drown either: skip obviously
+thin results, never open pages just to "see what is there" once you hold
+the detail, and for long documents prefer one targeted site:-search over
+opening page after page.  A failed or empty page is a
 dead end: search a different source instead of retrying it.  Opened
 content carries the source's [n] label -- the number it already had
 among your sources, or a fresh one appended for a url that was not

@@ -122,9 +122,13 @@ def _examples(toolset: t.AbstractSet[str], mode: str) -> str:
     page_tool = BROWSE_TOOL in toolset
     task_tool = UPDATE_PLAN_TOOL in toolset
     delegating = DELEGATE_RESEARCH_TOOL in toolset
-    reader = ", then a browse read on the model card url" if page_tool else ""
+    reader = ", then open the model card url and read it" if page_tool else ""
     plan = ", and update_plan with that round's subtasks" if task_tool else ""
-    reflect_reader = f", reading the two strongest hits with {BROWSE_TOOL} reads" if page_tool else ""
+    reflect_reader = (
+        f", opening the two strongest hits with {BROWSE_TOOL} (multi: [open, read, open, read]) and reading them"
+        if page_tool
+        else ""
+    )
     disconfirm = (
         ""
         if mode == "speed"
