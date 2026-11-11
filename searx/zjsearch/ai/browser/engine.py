@@ -372,6 +372,13 @@ async def _read_on(context: "BrowserContext", url: str) -> str:
                 ) from exc
             await _stabilize(page)
             await page.wait_for_timeout(browser_config.settle_ms())
+            # the browser's own stop button: cut the stragglers (hung
+            # trackers, slow media) once the document had its hydration
+            # beat -- the parsed DOM stays, the fetch queue dies
+            try:
+                await page.evaluate("window.stop()")
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
             html = await page.content()
         finally:
             await page.close()

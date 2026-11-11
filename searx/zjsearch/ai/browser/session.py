@@ -35,7 +35,6 @@ from urllib.parse import urlsplit
 
 from searx.network.client import get_loop
 from searx.zjsearch.ai.browser import config as browser_config
-from searx.zjsearch.ai.browser import gate
 from searx.zjsearch.ai.browser.engine import (
     _context,
     drop_context,
@@ -245,8 +244,6 @@ def close(session_id: str) -> None:
         sess.page = None
         sess.pages = []
         sess.active = 0
-        for page in pages:
-            gate.visual_pages.pop(id(page), None)
         sess.wait_done.set()
 
         async def run() -> None:
@@ -296,12 +293,6 @@ async def _ensure_page(sess: _Session) -> "Page":
     context = await _context()
     page = await context.new_page()
     await page.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
-    # the session page renders FOR THE USER: its stylesheets/fonts/images
-    # pass the gate (the reader's pages stay text-only) -- strong refs
-    # keyed by id(), the stale entry dropped on replace
-    if sess.page is not None:
-        gate.visual_pages.pop(id(sess.page), None)
-    gate.visual_pages[id(page)] = page
     page.on("download", lambda dl: _schedule_download(sess, dl))
     sess.page = page
     sess.pages = [page]
@@ -433,12 +424,21 @@ async def _post_action_state(sess: "_Session", page: "Page", before_url: str, se
 
 async def _settle_page(page: "Page") -> None:
     """The open_url settle treatment for a navigated page: best-effort
-    network idle, then the configured hydration wait."""
+    network idle, then the configured hydration wait -- and finally the
+    browser's OWN stop button (``window.stop()``): stragglers (a hung
+    tracker, a slow CDN image) would otherwise keep the page "loading"
+    forever -- the fetches die here while the parsed DOM and the running
+    scripts stay.  Every wait is bounded, so the stop lands on a page
+    that already had its hydration beat."""
     try:
         await page.wait_for_load_state("networkidle", timeout=3_500)
-    except Exception:  # pylint: disable=broad-except
+    except Exception:  # pylint: disable=broad-exception-caught
         pass
     await page.wait_for_timeout(browser_config.settle_ms())
+    try:
+        await page.evaluate("window.stop()")
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
 
 
 async def _resolve_holder(page: "Page", ref: str) -> tuple["Page | object", str]:
@@ -1015,11 +1015,7 @@ async def _tab_titles(pages: "list[Page]", views: list[dict[str, t.Any]]) -> Non
 
 def _register_tab(sess: _Session, page: "Page") -> None:
     """One new page joins the tab set and takes the active slot (the
-    gate's visual-page registry rides along, the replaced page's entry
-    dropped)."""
-    if sess.page is not None:
-        gate.visual_pages.pop(id(sess.page), None)
-    gate.visual_pages[id(page)] = page
+    download capture rides along)."""
     page.on("download", lambda dl: _schedule_download(sess, dl))
     sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
     sess.pages.append(page)
@@ -1052,15 +1048,16 @@ def tab_new(session_id: str, url: str, activate: bool = True) -> dict[str, t.Any
                 outline = await _snapshot_page(sess, page)
             else:
                 page.on("download", lambda dl: _schedule_download(sess, dl))
-                # background tabs JOIN the visual registry too: they may be
-                # peeked, switched to or index-read later, and a page whose
-                # stylesheets were gate-blocked at load time stays unstyled
-                # forever (the block happened per-request, registration is
-                # not retroactive)
-                gate.visual_pages[id(page)] = page
+                # background tabs render like any other page (Browser-use:
+                # no resource policy) -- and the stop button lands here
+                # too: a background tab must not load forever
                 sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
                 sess.pages.append(page)
                 await page.wait_for_timeout(browser_config.settle_ms())
+                try:
+                    await page.evaluate("window.stop()")
+                except Exception:  # pylint: disable=broad-exception-caught
+                    pass
                 outline = ""
             views = _tab_view(sess.pages, sess.active)
             await _tab_titles(sess.pages, views)
@@ -1091,11 +1088,8 @@ def tab_switch(session_id: str, index: t.Any) -> dict[str, t.Any]:
             sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
             if idx < 0 or idx >= len(sess.pages):
                 raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
-            if sess.page is not None:
-                gate.visual_pages.pop(id(sess.page), None)
             sess.active = idx
             sess.page = sess.pages[idx]
-            gate.visual_pages[id(sess.page)] = sess.page
             outline = await _snapshot_page(sess, sess.page)
             views = _tab_view(sess.pages, sess.active)
             await _tab_titles(sess.pages, views)
@@ -1127,7 +1121,6 @@ def tab_close(session_id: str, index: t.Any) -> dict[str, t.Any]:
             if idx < 0 or idx >= len(sess.pages):
                 raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
             dying = sess.pages.pop(idx)
-            gate.visual_pages.pop(id(dying), None)
             if not dying.is_closed():
                 await dying.close()
             if sess.page is dying or not sess.pages:

@@ -176,8 +176,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     package importable, warn-once otherwise); `gate` is the
     REQUEST-level SSRF fence (`context.route("**/*")`: string checks
     via the shared `core.guard` + resolve-and-demand-global-address per
-    host + the `allow_hosts` exemption both gates honor; resource-type
-    rejection of image/media/font/stylesheet); `engine` lazy-launches
+    host + the `allow_hosts` exemption both gates honor — Browser-use
+    semantics: NOTHING is rejected by resource type, every page loads
+    stylesheets/images/fonts/media normally because open renders and
+    read extracts and the two never conflict; a browser that starves
+    its own resources is itself a bot signal, and captchas need them);
+    `engine` lazy-launches
     the persistent context (Camoufox: C++-level fingerprint coherence,
     no CDP — the strongest open position against the login-walled,
     JS-heavy pages the reader exists for; `block_webrtc` closes the one
