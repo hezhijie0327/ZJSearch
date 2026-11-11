@@ -135,7 +135,7 @@ def _guard_open_url(url: str) -> str:
 
 def _act_open(args: dict[str, t.Any], session_id: str) -> ActionResult:
     url = _guard_open_url(str(args.get("url") or ""))
-    state = session.open_url(session_id, url)
+    state = session.open_url(session_id, url, args.get("timeout"))
     return _outline_result(
         f"opened {state['url']} -- {state['title']}\n\n{state['snapshot']}", state, session_id
     )
@@ -400,7 +400,7 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
     if op == "new":
         url = _guard_open_url(str(args.get("url") or ""))
         background = args.get("activate") is False
-        state = session.tab_new(session_id, url, activate=not background)
+        state = session.tab_new(session_id, url, activate=not background, timeout_s=args.get("timeout"))
         if background:
             strip = state.get("tabs") or []
             idx = next((t["index"] for t in strip if t.get("url") == state["url"]), "?")

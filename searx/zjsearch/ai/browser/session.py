@@ -326,16 +326,31 @@ def _resolve_selector(ref: str) -> tuple[str, int]:
     return f'[data-zjs-ref="{m.group(2)}"]', int(m.group(1) or 0)
 
 
-def open_url(session_id: str, url: str) -> dict[str, str]:
+def _load_budget_ms(timeout_s: t.Any) -> int | None:
+    """The model's per-call load patience as milliseconds -- ``None``
+    when not requested (the deployment's goto budget applies); seconds
+    clamped to 5-40 (the 45s action bridge is the hard ceiling)."""
+    try:
+        seconds = int(timeout_s)
+    except (TypeError, ValueError):
+        return None
+    return max(5_000, min(seconds * 1_000, 40_000))
+
+
+def open_url(session_id: str, url: str, timeout_s: t.Any = None) -> dict[str, str]:
     """Navigate the session page; returns ``{url, title, snapshot}`` -- the
-    outline rides along so one call costs the model one round."""
+    outline rides along so one call costs the model one round.
+    ``timeout_s`` is the model's own patience for THIS page's load
+    (seconds, clamped 5-40 -- the 45s action bridge is the ceiling);
+    absent, the deployment's goto budget applies."""
     sess = get(session_id)
     with sess.lock:
 
         async def run() -> dict[str, str]:
             page = await _ensure_page(sess)
             try:
-                await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
+                goto_ms = _load_budget_ms(timeout_s) or browser_config.goto_timeout_ms()
+                await page.goto(url, wait_until="load", timeout=goto_ms)
             except Exception as exc:  # pylint: disable=broad-except
                 raise SessionError(f"could not open the page ({_brief(exc)})") from exc
             try:
@@ -1023,13 +1038,14 @@ def _register_tab(sess: _Session, page: "Page") -> None:
     sess.page = page
 
 
-def tab_new(session_id: str, url: str, activate: bool = True) -> dict[str, t.Any]:
+def tab_new(session_id: str, url: str, activate: bool = True, timeout_s: t.Any = None) -> dict[str, t.Any]:
     """Open one NEW tab (the URL is the service's gate- checked public
     http(s) one): goto, settle, fresh outline -- the model lands reading
     the new page, the old tab sleeps beside it.  ``activate=False``
     opens it IN THE BACKGROUND: the tab joins the strip without taking
     the active slot, no outline rides back (read it by index later) --
-    the batch-open lane for crawling several sources."""
+    the batch-open lane for crawling several sources.  ``timeout_s``:
+    the model's per-call load patience (seconds, clamped 5-40)."""
     sess = get(session_id)
     with sess.lock:
 
@@ -1038,7 +1054,8 @@ def tab_new(session_id: str, url: str, activate: bool = True) -> dict[str, t.Any
             page = await context.new_page()
             await page.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
             try:
-                await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
+                goto_ms = _load_budget_ms(timeout_s) or browser_config.goto_timeout_ms()
+                await page.goto(url, wait_until="load", timeout=goto_ms)
             except Exception as exc:  # pylint: disable=broad-except
                 await page.close()
                 raise SessionError(f"could not open the page ({_brief(exc)})") from exc

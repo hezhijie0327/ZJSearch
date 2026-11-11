@@ -35,7 +35,9 @@ where the batch stopped.  Browse calls ride ALONGSIDE the same round's
 search_web calls, not after them -- batch searches and crawls into the
 same round.  the model's own frames carry it too) -- the VIEWER may also CLOSE tabs
 from the mirror at any time: strip indices shift when they do, so tab
-op=list re-grounds them before an index read.
+op=list re-grounds them before an index read.  SLOW HEAVY PAGES: open
+and tab new accept timeout (seconds, 5-40) -- more patience before the
+stop lands, less for snappy ones.
 DOCUMENT urls (pdf / office /
 data) skip the rhythm entirely: read(url) fetches and converts them
 directly -- the browser never opens them.  If the question contains an
@@ -227,6 +229,10 @@ drove.""",
                     "type": "integer",
                     "description": "tab: the tab index from the strip (switch / close).  read: the tab index to read INSTEAD of the active page -- no activation, the mirror stays put.",
                 },
+                "timeout": {
+                    "type": "integer",
+                    "description": "open / tab new: THIS page's load-wait budget in SECONDS (5-40, default = the deployment's goto budget) -- give slow heavy pages more patience before the stop lands.",
+                },
                 "activate": {
                     "type": "boolean",
                     "description": "tab new: false opens the tab IN THE BACKGROUND -- no active switch, no outline (read it later by index; multi [tab new A activate=false, tab new B activate=false, read indexes=[1,2]]).",
@@ -284,6 +290,12 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     out: dict[str, t.Any] = {"action": action}
     if action in ("open", "read") or (action == "tab" and str(args.get("op") or "") == "new"):
         out["url"] = str(args.get("url") or "").strip()[:2000]
+    if action == "open" or (action == "tab" and str(args.get("op") or "") == "new"):
+        # the model's own load patience for THIS page (seconds)
+        try:
+            out["timeout"] = max(5, min(int(args.get("timeout")), 40))
+        except (TypeError, ValueError):
+            pass
     if action in ("click", "type", "screenshot", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
     if action == "screenshot":
