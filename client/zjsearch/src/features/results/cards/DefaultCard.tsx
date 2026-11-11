@@ -25,7 +25,10 @@ export function DefaultCard({ eager, result, globals }: CardProps) {
   return (
     <ResultArticle priority={result.priority}>
       <div className="flex gap-4">
-        <div className="min-w-0 w-full max-w-2xl">
+        {/* the 2xl cap keeps list lines readable beside the thumbnail; a row
+            without one drops the cap — the image slot folds back into the
+            text instead of sitting empty */}
+        <div className={`min-w-0 w-full ${result.thumbnail ? "max-w-2xl" : ""}`}>
           <PrettyUrl globals={globals} result={result} />
           <div className="mt-1">
             <Title globals={globals} result={result} />

@@ -19,7 +19,8 @@ export function ProductCard({ result, globals }: CardProps) {
   return (
     <ResultArticle priority={result.priority}>
       <div className="flex gap-4">
-        <div className="min-w-0 w-full max-w-2xl">
+        {/* same doctrine as DefaultCard: no thumbnail, no 2xl cap */}
+        <div className={`min-w-0 w-full ${result.thumbnail ? "max-w-2xl" : ""}`}>
           <PrettyUrl globals={globals} result={result} />
           <div className="mt-1">
             <Title globals={globals} result={result} />

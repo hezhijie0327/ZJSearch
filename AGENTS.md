@@ -1243,7 +1243,9 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
   button text into text-sm on the blog side; same name, same semantics).
 - 14px `text-sm`: body text (card snippets — capped so widescreen list lines
   stay readable: side-thumbnail cards cap the whole text block at `max-w-2xl`
-  and pin the thumbnail to the row end with `ms-auto`; text-only cards cap
+  and pin the thumbnail to the row end with `ms-auto`; a row WITHOUT a
+  thumbnail drops the cap — the image slot folds back into the text block,
+  an empty reserved slot reads as a layout bug; text-only cards cap
   the snippet itself at `max-w-prose`), infobox abstract, settings row
   titles.
 - 16px `text-base`: result titles (list/news/product/video grids all share
