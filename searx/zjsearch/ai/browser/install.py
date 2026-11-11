@@ -38,12 +38,64 @@ import subprocess
 import sys
 
 CHANNEL = "official/prerelease"
-"""The install tracks this camoufox channel: releases move fast and stale
-builds carry fixed bugs, so the channel is pinned in-process before the
-resolution and the fetch installs the channel's LATEST (the CLI's own
-spelling is `camoufox set official/prerelease`; the conservative train
-would be official/stable).  Without the pin, the package's PAIRED build
-(the one this camoufox release was tested against) is installed instead."""
+"""The install tracks the camoufox channel family: the release feed moves
+fast and stale builds carry fixed bugs.  The SELECTED build is computed
+below (the numeric maximum across the Official repo's WHOLE listing --
+camoufox's own channel model groups by the GitHub prerelease FLAG, and
+the newest release often lands in the other group: beta.41 ships
+is_prerelease=False while beta.40 was flagged true, so either channel
+alone lags)."""
+
+import re  # pylint: disable=wrong-import-position
+
+
+def _latest_official() -> str | None:
+    """The Official repo's TRUE newest release as a pin spec
+    (``version-build``, e.g. "158.0.1-beta.41") -- computed HERE because
+    camoufox's own channel-latest selects ``latest_per_build(...)[0]``,
+    a LEXICOGRAPHIC first ("158.0-beta.40" > "158.0.1-beta.41" since
+    '-' > '.'), which installs the wrong build whenever a new version
+    line opens.  ``None`` when the cache holds nothing usable (the
+    caller keeps whatever the plain fetch installed)."""
+    try:
+        # pylint: disable=import-outside-toplevel
+        from camoufox.multiversion import load_repo_cache
+    except ImportError:
+        return None
+    for repo_data in load_repo_cache().get("repos", []):
+        if repo_data.get("name", "").lower() != "official":
+            continue
+        versions = repo_data.get("versions", [])
+        if not versions:
+            return None
+
+        def key(v: dict) -> tuple:
+            try:
+                base = tuple(int(part) for part in str(v.get("version") or "0").split("."))
+            except ValueError:
+                base = (0,)
+            try:
+                build_tail = int(str(v.get("build") or "0").rsplit(".", 1)[-1])
+            except ValueError:
+                build_tail = 0
+            return (base, build_tail, str(v.get("asset_updated_at") or ""))
+
+        best = max(versions, key=key)
+        return f"{best['version']}-{best['build']}"
+    return None
+
+
+def _fetch_once() -> int:
+    """One CLI fetch (sync + channel bounds + cache resolution are
+    upstream machinery); a prerelease selection triggers an interactive
+    confirm -- a non-interactive install answers it through stdin
+    (non-prerelease builds never read it)."""
+    return subprocess.run(
+        [sys.executable, "-m", "camoufox", "fetch", *sys.argv[1:]],
+        input='y\n',
+        text=True,
+        check=False,
+    ).returncode
 
 
 def main() -> int:
@@ -63,6 +115,7 @@ def main() -> int:
         print("user cache (set XDG_CACHE_HOME to relocate)")
     from camoufox.multiversion import (  # pylint: disable=import-outside-toplevel
         COMPAT_FLAG,
+        REPO_CACHE_FILE,
         load_config,
         save_config,
     )
@@ -78,21 +131,46 @@ def main() -> int:
     cfg["channel"] = CHANNEL
     cfg.pop("pinned", None)
     cfg.pop("pinned_sha", None)
+    # an EXPLICIT active_version overrides channel-latest at launch (it
+    # reads as the user's own choice) -- drop it so every install resolves
+    # the channel's CURRENT latest: the next cycle's newest prerelease
+    # (beta.42, beta.43, ...) is picked up by re-running this installer,
+    # never stuck on the cycle the cache was written in (the
+    # beta.40-stuck-while-41-was-latest lesson).
+    cfg.pop("active_version", None)
     save_config(cfg)
     COMPAT_FLAG.touch()
+    # and force a FRESH release listing: REPO_CACHE_FILE answers with the
+    # cycle it was written in -- the beta.42 selection depends on a list
+    # that actually contains beta.42
+    REPO_CACHE_FILE.unlink(missing_ok=True)
 
     # the fetch stays on the CLI (sync + channel bounds + cache
-    # resolution are upstream machinery); the prerelease channel's
-    # latest triggers an interactive confirm -- a non-interactive
-    # install answers it through stdin (stable builds never read it)
-    result = subprocess.run(
-        [sys.executable, "-m", "camoufox", "fetch", *sys.argv[1:]],
-        input='y\n',
-        text=True,
-        check=False,
-    ).returncode
+    # resolution are upstream machinery)
+    result = _fetch_once()
     if result != 0:
         return result
+    # THE TRUE-MAX PIN: the CLI's channel-latest is a lexicographic first
+    # (the beta.40-vs-beta.41 lesson) -- pin the numeric maximum of the
+    # freshly synced listing and fetch again when the plain fetch
+    # installed something else.
+    target = _latest_official()
+    if target is not None:
+        try:
+            from camoufox.pkgman import installed_verstr  # pylint: disable=import-outside-toplevel
+
+            installed = installed_verstr()
+        except Exception:  # pylint: disable=broad-exception-caught
+            installed = ""
+        if installed != target:
+            cfg["pinned"] = target
+            cfg.pop("pinned_sha", None)
+            cfg.pop("active_version", None)
+            save_config(cfg)
+            print(f"zjsearch browser: pinning the numeric latest {target} (installed: {installed or 'none'})")
+            result = _fetch_once()
+            if result != 0:
+                return result
     try:
         from camoufox.pkgman import installed_verstr  # pylint: disable=import-outside-toplevel
 
