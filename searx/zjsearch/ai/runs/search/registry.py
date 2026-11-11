@@ -39,9 +39,6 @@ class SourcesRegistry:
         # results] -- a repeated query settles as ``duplicate`` without
         # hitting the engines
         self.ran: dict[str, list] = {}
-        # every page this run already opened (normalized) -- a re-read
-        # settles as ``duplicate`` without rendering again
-        self.read_urls: set[str] = set()
         # every source url of this run -> its global [n]: a re-read or a
         # repeat of a known url reuses the number instead of minting a
         # duplicate source (the FEED dedup rides the same registry)
@@ -103,7 +100,3 @@ class SourcesRegistry:
     def note_query(self, dedup_key: str, query: str) -> None:
         with self._lock:
             self.ran[dedup_key] = [query, 0]
-
-    def note_read(self, url: str) -> None:
-        with self._lock:
-            self.read_urls.add(url)

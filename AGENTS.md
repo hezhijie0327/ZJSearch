@@ -205,9 +205,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (`zjsearch.browser.mode`): `headless` default everywhere,
     `virtual` (camoufox Xvfb) for display-less Linux servers,
     `headed` (real window) on desktops — the strongest tier and the
-    login stage's interaction carrier.  `session` is the ONE interactive page the
-    ``browse`` tool drives (a serialized lane beside the reader's
-    parallel reads, same cookie store): snapshot refs via injected
+    login stage's interaction carrier.  `session` is the ONE interactive
+    page the ``browse`` tool drives (a serialized lane, the cookie store
+    shared with nothing else since the pooled one-shot read lane
+    retired): snapshot refs via injected
     `data-zjs-ref` attributes (interactive elements FIRST, then sizeable
     visible `img` elements — alt/src-basename named — so the aimed
     screenshot has targets; the scan walks CHILD FRAMES too, their refs
@@ -229,7 +230,17 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     the page's own fresh outline; the active page is the mirror's
     frame), a TARGETED SCROLL (`scroll` with `text=` brings the first
     matching region into view, the element's box riding the action
-    mark) and the BATCHED `multi` (up to 5 action objects executed in
+    mark), a VIEWPORT SWITCH (`viewport` with free width/height — the
+    session page re-flows to the model-chosen window, e.g. a 440×956
+    phone shape, with no reload; sizes clamp to 240–16384 per side
+    (the platform itself clamps nothing — probe-verified — the usable
+    window is ours) and the ONLY fixed shape left is the 1920×1080
+    fallback — the launch default and the no-dimensions reset — the
+    fresh outline rides because the re-layout mints and kills
+    elements wholesale, later tabs inherit the size, and the pinned
+    `windows` identity does NOT move — a hard UA sniffer still sees
+    desktop) and the BATCHED
+    `multi` (up to 5 action objects executed in
     order under one call, first failure stopping the batch — a latency
     tool for mechanical chains, never for steps that need judgment
     between them).  The click is GUARDED: a landing-point elementFromPoint
@@ -269,8 +280,16 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     retries once; an atexit hook closes the browser on clean exits
     (granian workers skip it — the launch retry is the real net).
     Tool packages importing this layer: `tools/browse` — the ONE
-    browser tool package (spec + session service + `read.py`, the
-    parallel read lane: knobs, guard, TTL cache).
+    browser tool package (spec + session service + `read.py`, the read
+    SERVICE: knobs, guard, and the document conversion path — READING
+    IS BROWSER-USE (user decision): `read` is a session action over the
+    ACTIVE page (`open`/`tab new` first, then `read`; a multi chains
+    `[tab new A, read, tab new B, read]`), and `read(url)` is
+    DOCUMENT-ONLY (pdf/office/data fetched direct and converted — the
+    browser renders those as viewer chrome); a page url on read errors
+    with the open->read recipe.  The old pooled one-shot `read(url)`
+    lane (page_jobs, read cache, the read_gate injection decision, the
+    rerank feed trim) was REMOVED with it).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family
     (openai with both chat wire shapes + embeddings, anthropic,
     gemini, ark for the volcengine multimodal vectors), centrally

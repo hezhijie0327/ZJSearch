@@ -36,7 +36,12 @@ from urllib.parse import urlsplit
 from searx.network.client import get_loop
 from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.browser import gate
-from searx.zjsearch.ai.browser.engine import _context, drop_context, WINDOW
+from searx.zjsearch.ai.browser.engine import (
+    _context,
+    drop_context,
+    normal_viewport,
+    WINDOW,
+)
 
 if t.TYPE_CHECKING:
     from playwright.async_api import Page
@@ -201,6 +206,11 @@ class _Session:  # pylint: disable=too-few-public-methods
         self.wait_done = threading.Event()
         self.mark: dict[str, t.Any] | None = None
         self.names: dict[str, str] = {}
+        # the session's current VIEWPORT ({"width", "height"} or None =
+        # the desktop WINDOW fallback): set by the ``viewport`` action,
+        # inherited by every page opened afterwards (new tabs land in
+        # the same shape the model is browsing in)
+        self.viewport: dict[str, int] | None = None
 
 
 _SESSIONS: dict[str, _Session] = {}
@@ -285,7 +295,7 @@ async def _ensure_page(sess: _Session) -> "Page":
         return sess.page
     context = await _context()
     page = await context.new_page()
-    await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+    await page.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
     # the session page renders FOR THE USER: its stylesheets/fonts/images
     # pass the gate (the reader's pages stay text-only) -- strong refs
     # keyed by id(), the stale entry dropped on replace
@@ -357,6 +367,49 @@ def snapshot(session_id: str = LEAD) -> dict[str, str]:
             page = await _ensure_page(sess)
             outline = await _snapshot_page(sess, page)
             return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
+
+        return _run(run())
+
+
+def viewport(session_id: str, width: t.Any = None, height: t.Any = None) -> dict[str, t.Any]:
+    """Resize the ACTIVE page's viewport -- the layout window responsive
+    sites key on, NOT the launch identity (the camoufox fingerprint and
+    its desktop user agent stay).  The SIZE CHOICE is the model's, free
+    of any fixed presets (a phone-shaped 440x956, a tablet 768x1024, a
+    narrow desktop 1280x800 -- it knows the common viewport vocabulary);
+    calling with NO dimensions resets to the one fixed shape left, the
+    1920x1080 ``WINDOW`` fallback.  Returns the state AFTER the re-flow
+    -- a fresh outline rides along (the re-layout can mint and kill
+    elements wholesale: the mobile nav replaces the desktop one), and
+    the session's ``viewport`` is updated so pages opened from now on
+    inherit the shape."""
+    if width is None and height is None:
+        size = {"width": WINDOW[0], "height": WINDOW[1]}
+    else:
+        clamped = normal_viewport(width, height)
+        if clamped is None:
+            raise SessionError(
+                "viewport needs integer width AND height (CSS px)"
+                " -- omit both to reset to the 1920x1080 fallback window"
+            )
+        size = {"width": clamped[0], "height": clamped[1]}
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            await page.set_viewport_size(size)
+            # the re-flow: CSS breakpoints re-evaluate synchronously, but
+            # hydration-driven mobile branches need a beat to settle
+            await page.wait_for_timeout(500)
+            sess.viewport = dict(size)
+            return {
+                "url": str(page.url),
+                "title": await page.title(),
+                "snapshot": await _snapshot_page(sess, page),
+                "width": size["width"],
+                "height": size["height"],
+            }
 
         return _run(run())
 
@@ -567,7 +620,7 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
                 (pg for pg in page.context.pages if id(pg) not in known and not pg.is_closed()), None
             )
             if newcomer is not None:
-                await newcomer.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+                await newcomer.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
                 _register_tab(sess, newcomer)
                 await _settle_page(newcomer)
                 outline = await _snapshot_page(sess, newcomer)
@@ -969,7 +1022,7 @@ def tab_new(session_id: str, url: str) -> dict[str, t.Any]:
         async def run() -> dict[str, t.Any]:
             context = await _context()
             page = await context.new_page()
-            await page.set_viewport_size({"width": WINDOW[0], "height": WINDOW[1]})
+            await page.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
             try:
                 await page.goto(url, wait_until="load", timeout=browser_config.goto_timeout_ms())
             except Exception as exc:  # pylint: disable=broad-except

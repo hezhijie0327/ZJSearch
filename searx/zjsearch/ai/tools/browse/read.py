@@ -1,21 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search: the ``browse`` tool's READ LANE -- the parallel
-one-shot page reads behind ``read(url)``.
+"""AI Search: the ``browse`` tool's read SERVICE -- the settings knobs,
+the SSRF guard and the DOCUMENT conversion path behind ``read``.
 
-The settings knobs, the SSRF guard, the render call and the TTL-cached
-read service.  The render itself is the built-in browser
-(:py:mod:`searx.zjsearch.ai.browser`, ``zjsearch.browser``); the
-extraction pipeline is the browser package's :py:mod:`.extract` (the
-shared error type lives there -- tools importing browser is the legal
-edge).  The session lane (ONE interactive page) lives beside this in
-:py:mod:`.session`; the executor routes ``read(url)`` here and every
-other action there."""
+Reading is a session ACTION now (Browser-use semantics): the model
+opens a page (``open``, or ``tab op=new``) and reads the active page's
+DOM -- the session lane owns all page reads.  What stays here is
+the shared knob/guard vocabulary and the DOCUMENT path: pdf / office /
+data urls the browser only ever renders as viewer chrome are fetched
+DIRECT (bytes -> the ONE converter) when ``read`` names one.  The
+session lane lives beside this in :py:mod:`.session`; the old pooled
+one-shot ``read(url)`` lane retired with the open->read rhythm."""
 
 import asyncio
-import collections
 import functools
 import logging
-import time
 import typing as t
 from urllib.parse import urlsplit
 
@@ -24,41 +22,41 @@ from searx.network.client import get_loop
 from searx.network.network import Network
 from searx.utils import gen_useragent
 from searx.zjsearch.ai.browser import config as browser_config
-from searx.zjsearch.ai.browser import engine as browser_engine
-from searx.zjsearch.ai.browser.extract import PageReadError, _cap, extract_page
+from searx.zjsearch.ai.browser.extract import PageReadError, _cap
 from searx.zjsearch.ai.core import config as core_config
 from searx.zjsearch.ai.core import convert as convert_service
 from searx.zjsearch.ai.core.guard import public_url_rejection
 
 logger = logging.getLogger(__name__)
 
-_CACHE_TTL = 600.0
-_CACHE_MAX = 128
-"""Same-page re-reads (a model returning to a source) reuse one render
-for ten minutes; the FIFO cap keeps a long-lived worker's memory flat."""
-
-_cache: "collections.OrderedDict[str, tuple[float, str, str]]" = collections.OrderedDict()
+__all__ = [
+    "PageReadError",
+    "configured",
+    "enabled",
+    "guard_url",
+    "max_chars",
+    "normalize_url",
+    "read_document",
+]
 
 
 def enabled() -> bool:
-    """The read lane's feature flag: ``zjsearch.reader.enabled`` --
+    """The reader's feature flag: ``zjsearch.reader.enabled`` --
     ``True`` unless explicitly switched off."""
     return core_config.zj_block("reader").get("enabled") is not False
 
 
 def configured() -> bool:
-    """True when ``read(url)`` may run: ``enabled``, the convert service
-    present (markitdown -- the ONE markdown engine since the unified
-    converter) and the render engine present (``zjsearch.browser.enabled``).
-    A missing piece warns once and answers False -- the reads fail with
-    one clear log line instead of erroring per read."""
+    """True when the reader stack may run: ``enabled`` and the convert
+    service present (markitdown -- the ONE markdown engine since the
+    unified converter).  A missing piece warns once and answers False."""
     if not enabled():
         return False
     missing = convert_service.missing()
     if missing is not None:
         _warn_once(f"zjsearch.reader: the {missing} package is missing -- browse reads stay unavailable")
         return False
-    return browser_config.ready()
+    return True
 
 
 _WARNED: set[str] = set()
@@ -72,7 +70,7 @@ def _warn_once(message: str) -> None:
 
 
 def normalize_url(url: str) -> str:
-    """The dedup / cache key of a page: whitespace-stripped, fragment-free."""
+    """The dedup key of a page: whitespace-stripped, fragment-free."""
     return str(url or "").strip().split("#", 1)[0]
 
 
@@ -92,7 +90,7 @@ def max_chars() -> int | None:
 
 def guard_url(url: str) -> str:
     """Public http(s) URLs only: the model is untrusted input, and the
-    render happens inside this host's network -- the shared public-address
+    fetch happens inside this host's network -- the shared public-address
     gate (:py:mod:`searx.zjsearch.ai.core.guard`), its reason surfaced as
     a :class:`PageReadError` the model moves on from.  Hosts on the
     engine's ``zjsearch.browser.allow_hosts`` list (the deployment's
@@ -113,15 +111,6 @@ def guard_url(url: str) -> str:
         if reason is not None:
             raise PageReadError(reason)
     return candidate
-
-
-def rendered_html(url: str) -> str:
-    """The rendered HTML of one URL through the built-in browser -- the
-    one render backend (the engine raises the model-facing failures)."""
-    try:
-        return browser_engine.read_html(url)
-    except browser_config.RenderError as exc:
-        raise PageReadError(str(exc)) from exc
 
 
 @functools.lru_cache(maxsize=1)
@@ -154,8 +143,8 @@ def _fetch_document(url: str) -> bytes:
     """The document's bytes -- the browser sits OUT for this path (it
     renders PDFs as viewer chrome and Office files as download prompts,
     never content): a direct fetch over the shared loop instead, behind
-    the same ``guard_url`` gate the render path passed.  Raises
-    :class:`PageReadError` on anything unreadable."""
+    the same ``guard_url`` gate the session lane's navigations passed.
+    Raises :class:`PageReadError` on anything unreadable."""
 
     async def _get():
         return await _document_network().request(
@@ -184,63 +173,24 @@ def _document_title(url: str) -> str:
     return (tail or "document")[:200]
 
 
-def _read_document(url: str, extension: str, limit: int | None) -> tuple[str, str]:
-    """One document as markdown -- markitdown's pass over the fetched
-    bytes (extract.py's PageReadError is the shared failure shape).
-    Papers, spreadsheets, slide decks skip the browser entirely."""
-    try:
-        text = convert_service.to_markdown(_fetch_document(url), extension)
-    except convert_service.ConvertError as exc:
-        raise PageReadError(f"the document could not be read ({exc})") from exc
-    return _document_title(url), _cap(text, limit)
-
-
-def _cache_get(key: str) -> tuple[str, str] | None:
-    # the get -> pop/move_to_end sequence races with a concurrent reader
-    # expiring the same entry (reads run on worker threads): every
-    # mutation tolerates the entry vanishing under it -- a cache miss is
-    # the worst outcome, never a KeyError tool error
-    item = _cache.get(key)
-    if item is None:
-        return None
-    stamp, title, text = item
-    if time.monotonic() - stamp > _CACHE_TTL:
-        _cache.pop(key, None)
-        return None
-    try:
-        _cache.move_to_end(key)
-    except KeyError:
-        return None
-    return (title, text)
-
-
-def _cache_put(key: str, title: str, text: str) -> None:
-    _cache[key] = (time.monotonic(), title, text)
-    _cache.move_to_end(key)
-    while len(_cache) > _CACHE_MAX:
-        _cache.popitem(last=False)
-
-
-def read_page(url: str) -> tuple[str, str]:
-    """(title, markdown text) of one URL -- ``read(url)``'s whole world.
-    Raises :class:`PageReadError` with a message meant
-    for the model (the tool result)."""
+def read_document(url: str) -> tuple[str, str]:
+    """(title, markdown text) of one DOCUMENT url (pdf / office / data)
+    -- the one path ``read`` still takes a url for.  A PAGE url here is
+    a :class:`PageReadError` that teaches the open -> read rhythm (the
+    browser only renders documents as viewer chrome, never content).
+    Raises :class:`PageReadError` with a message meant for the model
+    (the tool result)."""
     if not configured():
         raise PageReadError("the page reader is not configured on this instance")
     guarded = guard_url(url)
-    key = normalize_url(guarded)
-    cached = _cache_get(key)
-    if cached is not None:
-        return cached
     extension = urlsplit(guarded).path.lower().rsplit(".", 1)[-1]
-    if convert_service.is_document_extension(extension):
-        # the browser renders these as viewer chrome or a download prompt,
-        # never content -- a document url FETCHES its bytes and converts
-        title, text = _read_document(guarded, extension, max_chars())
-    else:
-        html_text = rendered_html(guarded)
-        if not html_text.strip():
-            raise PageReadError("the browser rendered an empty page")
-        title, text = extract_page(html_text, guarded, max_chars())
-    _cache_put(key, title, text)
-    return title, text
+    if not convert_service.is_document_extension(extension):
+        raise PageReadError(
+            "read(url) is for DOCUMENT urls only (pdf / office / data)"
+            " -- for a page, open(url) it (or tab op=new) and then read the active page"
+        )
+    try:
+        text = convert_service.to_markdown(_fetch_document(guarded), extension)
+    except convert_service.ConvertError as exc:
+        raise PageReadError(f"the document could not be read ({exc})") from exc
+    return _document_title(guarded), _cap(text, max_chars())

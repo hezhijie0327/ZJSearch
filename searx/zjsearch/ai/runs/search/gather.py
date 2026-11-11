@@ -1,19 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""AI Search executor: the WORKER POOL -- real instance searches and
-page reads.
+"""AI Search executor: the WORKER POOL -- real instance searches.
 
-:class:`GatherMixin` runs one round's network jobs on a small thread
-pool: ``search_web`` as the REAL ``SearchWithPlugins`` webapp path
-(plugins, preferences and the site operators included) and
-``browse`` read through the built-in browser; each settlement compiles
+:class:`GatherMixin` runs one round's ``search_web`` jobs on a small
+thread pool -- the REAL ``SearchWithPlugins`` webapp path (plugins,
+preferences and the site operators included); each settlement compiles
 the compact ``[n]`` feed block and yields the feature events for the
-wire protocol."""
+wire protocol.  The browse tool is the serialized session lane
+(open -> read) -- it never rides this pool."""
 
 import concurrent.futures
 import logging
 import time
 import typing as t
-from urllib.parse import urlsplit
 
 from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
@@ -21,7 +19,6 @@ from searx.webadapter import get_search_query_from_webapp
 from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.runs.search.feed import FEED_DEEP, RESULTS_CAP, build_search_feed, serialize_results
 from searx.zjsearch.ai.llm.decision import features as decision_features
-from searx.zjsearch.ai.llm import rerank as rerank_service
 from searx.zjsearch.ai.runs.search.rank import (
     RERANK_HEAD,
     bm25_order,
@@ -38,40 +35,6 @@ _ANSWER_FEED_MAX = 3
 
 _ANSWER_FEED_CHARS = 600
 """One plugin answer's feed cap (the stock card's text form fits)."""
-
-
-PAGE_TRIM_ABOVE = 6_000
-"""The extracted page length past which the writer-feed relevance trim
-may run: below it the whole text rides the feed (the cap eviction at
-24k+ is far away), above it the page's MIDDLE -- the section the writer
-will actually lean on -- is worth one rerank call to keep."""
-_PAGE_SEGMENT_CHARS = 1_200
-"""The trim's segment size (one readable paragraph block; the corpus
-splitter's shape)."""
-_SEGMENT_HEAD_CHARS = 380
-"""What one segment sends to the rerank model (the cascade's head
-discipline -- rank the head, keep the whole)."""
-_FEED_PAGE_BUDGET = 8_000
-"""The writer-feed budget per long page when ``zjsearch.reader.max_chars``
-is unset -- the same order of magnitude as the classic deep read."""
-
-
-def _split_segments(text: str) -> list[str]:
-    """Line-boundary segments of ~:py:data:`_PAGE_SEGMENT_CHARS` (the
-    corpus splitter's shape -- a paragraph block per segment, never a
-    mid-sentence cut)."""
-    segments: list[str] = []
-    buf: list[str] = []
-    size = 0
-    for line in text.split("\n"):
-        if size + len(line) > _PAGE_SEGMENT_CHARS and buf:
-            segments.append("\n".join(buf))
-            buf, size = [], 0
-        buf.append(line)
-        size += len(line) + 1
-    if buf:
-        segments.append("\n".join(buf))
-    return segments
 
 
 class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
@@ -327,159 +290,6 @@ approach from another angle or change language)"""
         if entries:
             yield ("sources", {"items": entries})
 
-    def _read_one(self, url: str) -> tuple[str, str]:
-        """One ``browse`` read -- built-in-browser render + extraction;
-        needs no request context."""
-        return reader.read_page(url)
-
-    def _page_feed_text(self, title: str, text: str) -> str:  # pylint: disable=too-many-return-statements
-        """The page's WRITER-FEED body: the whole extracted text when it
-        fits, the rerank-relevant segments when it does not.  A long
-        read's feed block used to ride verbatim (only the reader's
-        ``max_chars`` -- UNSET by default -- and the 24k whole-block
-        eviction bound it), so an 8k-table-of-contents page could crowd
-        the 3 paragraphs the writer actually needs.  The trim splits the
-        text into line-boundary segments, ONE rerank call ranks the
-        segment heads against the run's question, and the top segments
-        reassemble in ORIGINAL reading order within the page budget.
-        Fail-open everywhere: unconfigured rerank, a short page, an
-        empty question, a failed call -- the full text stands.  The
-        corpus and the client's reading pane keep the FULL text; only
-        the feed slims."""
-        if len(text) <= PAGE_TRIM_ABOVE:
-            return text
-        if not rerank_service.configured():
-            return text
-        question = str(getattr(self, "question_held", "") or "").strip()
-        if not question:
-            return text
-        segments = _split_segments(text)
-        if len(segments) < 4:
-            return text
-        budget = reader.max_chars() or _FEED_PAGE_BUDGET
-        if budget >= len(text):
-            return text
-        heads = [f"{title}. {segment[:_SEGMENT_HEAD_CHARS]}" for segment in segments]
-        try:
-            order, _tokens = rerank_service.rerank(question, heads, account=self.account)
-        except Exception:  # pylint: disable=broad-except
-            return text
-        if not order or len(order) != len(segments):
-            return text
-        keep: set[int] = set()
-        used = 0
-        for slot in order:  # most relevant first, at least one always fits
-            size = len(segments[slot]) + 1
-            if keep and used + size > budget:
-                continue
-            keep.add(slot)
-            used += size
-        kept = "\n".join(segments[i] for i in sorted(keep))
-        dropped = len(segments) - len(keep)
-        if dropped:
-            kept += f"""\
-
-[... {dropped} less-relevant section(s) of this page were trimmed from
-the research feed; the full text is archived under its source ...]"""
-        return kept
-
-    def _finish_page(
-        self,
-        rnd: int,
-        idx: int,
-        url: str,
-        fut: "concurrent.futures.Future[tuple[str, str]]",
-        started: float,
-        feeds: list[str | None],
-    ) -> t.Iterator[tuple[str, t.Any]]:
-        ms = int((time.monotonic() - started) * 1000)
-        try:
-            title, text = fut.result()
-        except Exception as exc:  # pylint: disable=broad-except
-            # PageReadError or a worker-level surprise -- one dead-end line
-            # for the model, an error row for the client
-            logger.warning("zjsearch_ask_search: page %d/%d failed (%s): %r", rnd, idx, url[:120], exc)
-            feed_text = f"error: {str(exc)[:300] or type(exc).__name__}"
-            feeds[idx - 1] = feed_text
-            yield ("call", {"call": idx, "status": "error", "url": url, "ms": ms, "feed": feed_text[:800]})
-            return
-        norm = reader.normalize_url(url)
-        # the read's dedup mark lands on COMPLETION, never at plan time: a
-        # page whose read failed stays retryable
-        self.reg.note_read(norm)
-        known_n = self.reg.known(norm)
-        if known_n is not None:
-            n = known_n
-            cite = f"source [{n}] (already among your sources -- cite it as [{n}])"
-        else:
-            n = self.reg.mint()
-            self.reg.note_url(norm, n)
-            cite = f"NEW source [{n}] -- cite it as [{n}]"
-        netloc = urlsplit(url).netloc
-        feed_text = f'Opened {url} (title: "{title}"; {cite}):\n\n{self._page_feed_text(title, text)}'
-        feeds[idx - 1] = feed_text
-        self.feed.append(feeds[idx - 1])
-        self.feed_chars += len(feeds[idx - 1])
-        self.corpus.add(text, ref_n=n, title=title[:160], url=url, kind="page")
-        self.round_new_hits += 1
-        # the read's subtask coverage with the REAL title: the matched
-        # subtask goes done and the opened page's [n] rides its provenance
-        if self.coverage.task_list:
-            try:
-                self.coverage.track(url, [title], [n])
-            except Exception as exc:  # pylint: disable=broad-except
-                # coverage bookkeeping must never kill the settlement (the
-                # card falls back to queue-time state, the read itself is
-                # already recorded)
-                logger.warning("zjsearch_ask_search: page %d/%d coverage tracking failed: %r", rnd, idx, exc)
-        # the read page always rides a sources event FIRST: a NEW url
-        # registers its card, an already-numbered one re-emits its [n] with
-        # ``crawled`` set -- the client upgrades the existing card in place
-        # (the read-in-full badge marks what the model verified
-        # first-hand).  Sources lead so the call settlement below can look
-        # the title up on the card when it archives the page.
-        yield (
-            "sources",
-            {
-                "items": [
-                    {
-                        "n": n,
-                        "round": rnd,
-                        "id": idx,
-                        "idx": 0,
-                        "agent": getattr(self, "agent_key", "lead"),
-                        "title": title,
-                        "url": url,
-                        "netloc": netloc,
-                        "favicon": "",
-                        "pretty_url": url,
-                        "published_date": "",
-                        "crawled": True,
-                    }
-                ]
-            },
-        )
-        # the row settlement is a CALL event (wire v2's closed set -- the
-        # reader's payload rides the row exactly like an MCP preview):
-        # chars for the count, text for the READING PANE (what did the
-        # model actually see?) and the reader-cache archive.  The pre-v2
-        # tuple name "page" never joined the closed set -- every
-        # successful read crashed the whole stream with
-        # ``unknown wire event: 'page'``.
-        yield (
-            "call",
-            {
-                "call": idx,
-                "status": "ok",
-                "url": url,
-                "ms": ms,
-                "chars": len(text),
-                "text": text,
-                "feed": feed_text[:800],
-                "raw": feed_text[:50_000],
-            },
-        )
-
     def _run_in_ctx(self, query: str, category: str, time_range: str, include: list[str], exclude: list[str]):
         """One search inside a CLONED request context (a fresh
         RequestContext per job -- see ``state._search_ctx`` for why the
@@ -498,7 +308,6 @@ the research feed; the full text is archived under its source ...]"""
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
-        page_jobs: list[tuple[int, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         # the settlements' serialization touches the flask request/app
@@ -514,16 +323,15 @@ the research feed; the full text is archived under its source ...]"""
 
             app, environ, request_obj = self._search_ctx
             with RequestContext(app, environ, request=request_obj):
-                yield from self._dispatch_ctx(pool, rnd, search_jobs, page_jobs, feeds)
+                yield from self._dispatch_ctx(pool, rnd, search_jobs, feeds)
             return
-        yield from self._dispatch_ctx(pool, rnd, search_jobs, page_jobs, feeds)
+        yield from self._dispatch_ctx(pool, rnd, search_jobs, feeds)
 
     def _dispatch_ctx(  # pylint: disable=too-many-locals
         self,
         pool: concurrent.futures.ThreadPoolExecutor,
         rnd: int,
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
-        page_jobs: list[tuple[int, str]],
         feeds: list[str | None],
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
@@ -539,20 +347,13 @@ the research feed; the full text is archived under its source ...]"""
                 wire_id,
                 (query, category, dedup_key, time.monotonic()),
             )
-        for wire_id, url in page_jobs:
-            futures[pool.submit(self._read_one, url)] = ("page", wire_id, (url, time.monotonic()))
         pending = dict(futures)
         # no batch wall clock: every queued call gets to run and every
-        # engine request / page read carries its own per-request timeout,
-        # which is what bounds a batch -- the user's stop button is the
-        # only control
+        # engine request carries its own per-request timeout, which is
+        # what bounds a batch -- the user's stop button is the only control
         while pending:
             done, _not_done = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
             for fut in done:
                 kind, wire_id, args = pending.pop(fut)
-                if kind == "search":
-                    query, category, dedup_key, started = args
-                    yield from self._finish(rnd, wire_id, query, category, dedup_key, fut, started, feeds)
-                else:
-                    url, started = args
-                    yield from self._finish_page(rnd, wire_id, url, fut, started, feeds)
+                query, category, dedup_key, started = args
+                yield from self._finish(rnd, wire_id, query, category, dedup_key, fut, started, feeds)

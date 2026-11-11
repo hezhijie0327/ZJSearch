@@ -22,8 +22,12 @@ class ActionResult(t.NamedTuple):
     """One non-wait action's outcome: the model's feed text, the mirror
     frames to stream, the screenshot's data URL (screenshot only -- the
     caller injects it as the next turn's image), the page the action
-    left the session on, and the fresh outline when the action produced
-    one (open / snapshot / a click-through navigation)."""
+    left the session on, the fresh outline when the action produced
+    one (open / snapshot / a click-through navigation) -- and the
+    multi batch's READS: every read step's {url, title, text}, so the
+    settlement registers each one (crawled + corpus + writer feed) --
+    the batch's single settlement would otherwise drop every
+    intermediate page."""
 
     feed: str
     frames: t.Sequence[dict[str, t.Any]] = ()
@@ -32,6 +36,7 @@ class ActionResult(t.NamedTuple):
     snapshot: str | None = None
     elements: int = 0
     tabs: t.Sequence[dict[str, t.Any]] | None = None
+    reads: t.Sequence[dict[str, str]] = ()
 
 
 def _obs(state: dict[str, str]) -> str:
@@ -289,6 +294,29 @@ def _act_history(args: dict[str, t.Any], session_id: str) -> ActionResult:
     return _state_result(f"{op}.", state, session_id)
 
 
+def _act_viewport(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """The viewport switch (free width/height the model chooses; no
+    dimensions = the 1920x1080 fallback reset): the fresh outline rides
+    back (the re-flow can mint and kill elements wholesale), the feed
+    names the shape and the one honest caveat -- the identity stayed
+    desktop."""
+    if ("width" in args) != ("height" in args):
+        return ActionResult(
+            feed="error: viewport needs width AND height together"
+            " (CSS px -- e.g. 440 and 956 for a phone-shaped window), or"
+            " neither to reset to the 1920x1080 fallback window"
+        )
+    state = session.viewport(session_id, args.get("width"), args.get("height"))
+    shape = f"{state['width']}x{state['height']}"
+    return _outline_result(
+        f"viewport is now {shape} -- tabs opened from now inherit it"
+        " (the claimed OS / user agent stays desktop); the page re-flowed:"
+        f" {state['url']} -- {state['title']}\n\n{state['snapshot']}",
+        state,
+        session_id,
+    )
+
+
 def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
     name = str(args.get("download") or "").strip()
     if name:
@@ -299,8 +327,25 @@ def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
             feed=f"{name}\n\n{doc['text']}",
             frames=[{**session.frame(session_id), "agent": session_id}],
         )
+    url = str(args.get("url") or "").strip()
+    if url:
+        # DOCUMENT urls read direct (bytes -> markdown -- the browser
+        # renders pdfs as viewer chrome, never content); a PAGE url is
+        # the open -> read rhythm, taught with the error
+        # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.tools.browse.read import PageReadError, read_document
+
+        try:
+            title, text = read_document(url)
+        except PageReadError as exc:
+            raise SessionError(str(exc)) from exc
+        return ActionResult(
+            feed=f"{title}\n\n{text}",
+            frames=[{**session.frame(session_id), "agent": session_id}],
+            page={"url": url, "title": title},
+        )
     # the read lane's cap is the shared extraction budget (lazy import:
-    # the read module pulls the render engine)
+    # the read module pulls nothing heavy now, but the pattern stands)
     # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.tools.browse.read import max_chars as reader_max_chars
 
@@ -383,16 +428,20 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
     """BATCHED actions in ONE call (browser-use's multi_act): each step
     is a full action object, executed in order; the first failure stops
     the batch (its error rides the feed).  Each step contributes its
-    FIRST feed line; the LAST successful step's visual result (frames /
-    page / snapshot / image) is the batch's -- an intermediate
-    navigation's outline is superseded by the final state, and a step
-    after a navigation fails fast with the re-snapshot recipe (the
-    batch's own stop)."""
+    first feed line -- EXCEPT a read step, whose whole text rides the
+    feed (the text is the step's product; a first line would silently
+    drop every intermediate page) and joins the batch's ``reads`` so the
+    settlement registers each one.  The LAST successful step's visual
+    result (frames / page / snapshot / image) is the batch's -- an
+    intermediate navigation's outline is superseded by the final state,
+    and a step after a navigation fails fast with the re-snapshot recipe
+    (the batch's own stop)."""
     raw = args.get("steps")
     if not isinstance(raw, list) or not raw:
         return ActionResult(feed="error: multi needs steps -- a non-empty list of action objects")
     steps = raw[:_MAX_MULTI_STEPS]
     feeds: list[str] = []
+    reads: list[dict[str, str]] = []
     last: ActionResult | None = None
     for i, step in enumerate(steps, 1):
         if not isinstance(step, dict):
@@ -400,7 +449,18 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
             break
         result = _dispatch(step, session_id)
         first = str(result.feed).split("\n", 1)[0]
-        feeds.append(f"{i}. {step.get('action')}: {first}")
+        if str(step.get("action") or "") == "read" and not first.startswith("error:"):
+            feeds.append(f"{i}. read: {str(result.feed)}")
+            page = result.page or {}
+            reads.append(
+                {
+                    "url": str(page.get("url") or ""),
+                    "title": str(page.get("title") or ""),
+                    "text": str(result.feed),
+                }
+            )
+        else:
+            feeds.append(f"{i}. {step.get('action')}: {first}")
         if first.startswith("error:"):
             break
         last = result
@@ -416,6 +476,7 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
         page=last.page,
         snapshot=last.snapshot,
         elements=last.elements,
+        reads=tuple(reads),
     )
 
 
@@ -430,6 +491,7 @@ _ACTORS = {
     "hover": _act_hover,
     "select": _act_select,
     "drag": _act_drag,
+    "viewport": _act_viewport,
     "read": _act_read,
     "history": _act_history,
     "tab": _act_tab,

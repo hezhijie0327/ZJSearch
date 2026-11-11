@@ -561,6 +561,7 @@ export const EN = {
   ai_browser_act_hover: "Hover",
   ai_browser_act_select: "Select",
   ai_browser_act_drag: "Drag",
+  ai_browser_act_viewport: "Viewport",
   ai_browser_act_wait: "Waiting for you",
   ai_browser_act_close: "Close session",
   ai_browser_elements: "{n} interactive elements",

@@ -59,6 +59,14 @@ desktop branch (and the observe stage will mirror exactly this frame)
 -- 1920x1080 is the single most common desktop screen, and the
 session's viewport literals ride this constant."""
 
+VIEWPORT_BOUNDS = (240, 16384)
+"""The enforced viewport range, BOTH axes -- the platform itself clamps
+nothing (headless camoufox honors 0x0 through 100000x100000 verbatim,
+probe-verified), so the usable window is OURS: below ~240px a page
+renders garbage, above ~16384 the screenshots and the compositor turn
+absurd.  Out-of-range sizes CLAMP into it (the feed speaks the applied
+shape), and the tool prompt names the range."""
+
 _NAV_QUIET_S = 1.5
 _NET_QUIET_S = 1.0
 _DOM_QUIET_S = 1.0
@@ -327,6 +335,21 @@ async def _stabilize(page: "Page") -> None:
             and dom_quiet
         ):
             return
+
+
+def normal_viewport(width: t.Any = None, height: t.Any = None) -> tuple[int, int] | None:
+    """The caller's requested viewport as a clamped ``(width, height)``
+    tuple -- ``None`` when nothing was requested; non-integers read as
+    not-requested.  The ONE bounds definition (``VIEWPORT_BOUNDS``)
+    behind the session's ``viewport`` action."""
+    try:
+        if width is None and height is None:
+            return None
+        w, h = int(width), int(height)
+    except (TypeError, ValueError):
+        return None
+    lo, hi = VIEWPORT_BOUNDS
+    return (max(lo, min(w, hi)), max(lo, min(h, hi)))
 
 
 async def _read_on(context: "BrowserContext", url: str) -> str:

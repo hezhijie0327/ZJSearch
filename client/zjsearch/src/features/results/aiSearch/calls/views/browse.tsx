@@ -19,6 +19,7 @@ import {
   MousePointerClick,
   MoveHorizontal,
   Pointer,
+  Smartphone,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
@@ -69,6 +70,7 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   hover: Pointer,
   select: ChevronsUpDown,
   drag: MoveHorizontal,
+  viewport: Smartphone,
   read: BookOpenText,
   history: History,
   tab: Layers,
@@ -372,6 +374,13 @@ export const browseView: ToolView = {
           ? `${t("ai_browser_act_drag")} → ${x2 ?? "?"},${y2 ?? "?"}`
           : t("ai_browser_act_drag");
       }
+      case "viewport": {
+        const w = args?.width;
+        const h = args?.height;
+        return w !== undefined && h !== undefined
+          ? `${t("ai_browser_act_viewport")} ${String(w)}×${String(h)}`
+          : t("ai_browser_act_viewport");
+      }
       case "read":
         return pageLabel(call.url || call.page?.url);
       case "wait_user":
@@ -402,6 +411,7 @@ export const browseView: ToolView = {
       case "press":
       case "history":
       case "tab":
+      case "viewport":
         if (!call.n) {
           return null;
         }
@@ -457,7 +467,8 @@ export const browseView: ToolView = {
       action === "hover" ||
       action === "select" ||
       action === "drag" ||
-      action === "history"
+      action === "history" ||
+      action === "viewport"
     ) {
       return (
         <>
