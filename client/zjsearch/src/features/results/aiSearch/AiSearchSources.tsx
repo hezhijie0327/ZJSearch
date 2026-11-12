@@ -198,6 +198,8 @@ function SourceCard({ cited, source }: { cited: boolean; source: AiSearchSource 
 const RAIL_CAP = 4;
 /** The rail list's default footprint: sources [1] - [4]. */
 
+type SourceFilter = "cited" | "crawled" | "all";
+
 export function AiSearchSources({
   cited,
   sources,
@@ -214,21 +216,55 @@ export function AiSearchSources({
   onToggleExpanded: (next: boolean) => void;
 }) {
   const t = useT();
+  const [filter, setFilter] = useState<SourceFilter>("cited");
   if (sources.length === 0) {
     return null;
   }
-  const hidden = Math.max(0, sources.length - RAIL_CAP);
+  const citedCount = sources.reduce((sum, s) => sum + (cited.has(s.n) ? 1 : 0), 0);
+  const crawledCount = sources.reduce((sum, s) => sum + (s.crawled ? 1 : 0), 0);
+  // the selected filter yielding ZERO sources falls back to the full list
+  // (a direct answer cites nothing -- an empty default would read as a bug)
+  const filtered = sources.filter((s) =>
+    filter === "cited" ? cited.has(s.n) : filter === "crawled" ? s.crawled : true,
+  );
+  const effective: SourceFilter = filter !== "all" && filtered.length === 0 ? "all" : filter;
+  const list = effective === "all" ? sources : filtered;
+  const hidden = Math.max(0, list.length - RAIL_CAP);
   // numbering order: the evidence list reads [1] -> [N] (the [n] chips in
   // the answer index into this exact order); the older tail folds in a
   // Collapse (the +N reveal plays as a height animation)
-  const view = sources.slice(0, RAIL_CAP);
-  const extra = sources.slice(RAIL_CAP);
+  const view = list.slice(0, RAIL_CAP);
+  const extra = list.slice(RAIL_CAP);
+  const chips: Array<{ id: SourceFilter; label: string; count: number }> = [
+    { id: "cited", label: t("ai_sources_filter_cited"), count: citedCount },
+    { id: "crawled", label: t("ai_sources_filter_crawled"), count: crawledCount },
+    { id: "all", label: t("ai_sources_filter_all"), count: sources.length },
+  ];
   return (
     // the rail is viewport-capped and scrolls INSIDE (the aside owns the
     // scroll); this section pins its heading and lists the cards
     <section aria-label={t("ai_search_sources")} className="mb-5">
-      <RailHeader count={sources.length} icon={BookOpen} title={t("ai_search_sources")} />
-      <div className="mt-3 flex flex-col gap-2 px-1">
+      <RailHeader count={list.length} icon={BookOpen} title={t("ai_search_sources")} />
+      <div className="mt-2 flex items-center gap-1.5 px-1">
+        {chips.map((chip) => (
+          <button
+            aria-pressed={effective === chip.id}
+            className={`min-h-6 rounded-full px-2 py-0.5 text-xs transition-colors ${
+              effective === chip.id
+                ? "border border-accent-strong bg-accent-soft font-medium text-accent"
+                : `border border-line text-ink-3 ${CHIP_HOVER}`
+            }`}
+            key={chip.id}
+            onClick={() => {
+              setFilter(chip.id);
+            }}
+            type="button"
+          >
+            {chip.label} <span className="tabular-nums text-ink-3">{chip.count}</span>
+          </button>
+        ))}
+      </div>
+      <div className="mt-2 flex flex-col gap-2 px-1">
         {view.map((source) => (
           <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
         ))}
