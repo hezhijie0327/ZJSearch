@@ -35,7 +35,10 @@ where the batch stopped.  Browse calls ride ALONGSIDE the same round's
 search_web calls, not after them -- batch searches and crawls into the
 same round.  the model's own frames carry it too) -- the VIEWER may also CLOSE tabs
 from the mirror at any time: strip indices shift when they do, so tab
-op=list re-grounds them before an index read.  SLOW HEAVY PAGES: open
+op=list re-grounds them before an index read.  THE RUN'S END closes
+every tab (memory recovery) -- page state does not survive across runs;
+read texts stay archived in your sources, and re-opening a page is
+always cheap.  SLOW HEAVY PAGES: open
 and tab new accept timeout (seconds, 5-40) -- more patience before the
 stop lands, less for snappy ones.
 DOCUMENT urls (pdf / office /

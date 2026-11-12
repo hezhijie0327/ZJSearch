@@ -1382,6 +1382,37 @@ def close_page(session_id: str = LEAD) -> None:
     close(session_id)
 
 
+def close_tabs(session_id: str = LEAD) -> dict[str, t.Any]:
+    """Close EVERY tab in the strip (memory recovery at a run's settle) --
+    the pages go, the SESSION and its cookie store stay (follow-up runs
+    keep their logins), and read texts are already archived under their
+    urls.  Called post-settle on done / error runs; an AWAITING run keeps
+    its tabs (the wait_user mirror is the human's operation surface)."""
+    sess = get(session_id)
+    with sess.lock:
+        pages = sess.pages
+        count = len(pages)
+        sess.page = None
+        sess.pages = []
+        sess.active = 0
+        sess.mark = None
+        sess.names = {}
+
+        async def run() -> None:
+            for page in pages:
+                if not page.is_closed():
+                    try:
+                        await page.close()
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        pass
+
+        try:
+            _run(run(), timeout=30)
+        except SessionError:
+            pass  # a wedged close must not fail the settle path
+        return {"closed": count}
+
+
 def session_input(
     # pylint: disable=invalid-name
     session_id: str,

@@ -1296,6 +1296,18 @@ class _SettleTail:
         related fallback and the memory extraction (related/memory
         suppressed on an awaiting run), then the trailing usage event
         with the absolute gates sum."""
+        if not awaiting:
+            # THE RUN'S TABS GO HOME: the research settled (done / error)
+            # -- every strip tab closes (memory recovery; the cookie
+            # store and the read texts survive).  An AWAITING run keeps
+            # its tabs (the wait_user mirror is the human's surface).
+            try:
+                # pylint: disable=import-outside-toplevel
+                from searx.zjsearch.ai.browser import session as browser_session
+
+                browser_session.close_tabs()
+            except Exception:  # pylint: disable=broad-exception-caught
+                pass
         if awaiting or not answer:
             return
         title = self._title_pass(answer, fence_title)
