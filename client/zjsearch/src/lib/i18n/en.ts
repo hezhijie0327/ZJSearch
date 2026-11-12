@@ -246,6 +246,7 @@ export const EN = {
   ai_sources_filter_cited: "Cited",
   ai_sources_filter_crawled: "Read",
   ai_sources_filter_all: "All",
+  ai_sources_empty: "No sources gathered in this run.",
   ai_search_process: "Research",
   ai_search_calls_count: "{n} calls",
   ai_calc_running: "Computing…",

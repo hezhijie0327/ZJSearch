@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   AlignLeft,
+  BookOpen,
   Brain,
   Check,
   ChevronDown,
@@ -93,6 +94,7 @@ import {
   CHIP_ACCENT,
   CHIP_BTN,
   CHIP_GHOST,
+  CHIP_HOVER,
   CHIP_OUTLINE,
   CHIP_OUTLINE_ACTIVE,
   CHIP_OUTLINE_IDLE,
@@ -151,7 +153,17 @@ function CallRow({
     check, uncovered warning), a done/total counter in the header.  How
     each subtask was researched is the research process timeline's job;
     this card never expands. */
-function TaskCard({ plan, live }: { plan: AiSearchRun["plan"]; live: boolean }) {
+function TaskCard({
+  plan,
+  live,
+  onCiteN,
+}: {
+  plan: AiSearchRun["plan"];
+  live: boolean;
+  /** the citation-locate chain (chips -> expand -> scroll + flash) for a
+      subtask's own source list */
+  onCiteN?: (n: number) => void;
+}) {
   const t = useT();
   if (plan.length === 0) {
     return null;
@@ -162,7 +174,7 @@ function TaskCard({ plan, live }: { plan: AiSearchRun["plan"]; live: boolean }) 
       <RailHeader count={`${done}/${plan.length}`} icon={ListTodo} title={t("ai_task_card")} />
       <ul className="mt-3 space-y-1.5">
         {plan.map((task, index) => (
-          <TaskItem key={`${index}-${task.title}`} live={live} task={task} />
+          <TaskItem key={`${index}-${task.title}`} live={live} onCiteN={onCiteN} task={task} />
         ))}
       </ul>
     </div>
@@ -444,8 +456,21 @@ function GapsCard({
 /** One task row: the colored status mark + the subtask title (+ its source
     count once covered).  Not interactive -- the process lives in the
     research timeline. */
-function TaskItem({ task, live }: { task: AiSearchRun["plan"][number]; live: boolean }) {
+function TaskItem({
+  task,
+  live,
+  onCiteN,
+}: {
+  task: AiSearchRun["plan"][number];
+  live: boolean;
+  onCiteN?: (n: number) => void;
+}) {
   const t = useT();
+  // the subtask's own source list: the count chip toggles an inline
+  // [n] chip row -- each chip rides the citation-locate chain (expand +
+  // scroll + flash on the source card)
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const sourceCount = task.sources?.length ?? 0;
   return (
     <li>
       <div className="flex items-start gap-2 text-[13px]">
@@ -488,14 +513,37 @@ function TaskItem({ task, live }: { task: AiSearchRun["plan"][number]; live: boo
             <span className="whitespace-nowrap text-xs text-warning">{t("ai_task_missed")}</span>
           ) : null}
         </div>
-        {task.status === "done" && (task.sources?.length ?? 0) > 0 ? (
-          <span className="shrink-0 text-xs tabular-nums text-ink-3">
-            {t((task.sources?.length ?? 0) === 1 ? "ai_task_source_one" : "ai_task_sources", {
-              n: String(task.sources?.length ?? 0),
+        {task.status === "done" && sourceCount > 0 ? (
+          <button
+            aria-expanded={sourcesOpen}
+            className="shrink-0 text-xs tabular-nums text-ink-3 transition-colors hover:text-accent"
+            onClick={() => {
+              setSourcesOpen(!sourcesOpen);
+            }}
+            type="button"
+          >
+            {t(sourceCount === 1 ? "ai_task_source_one" : "ai_task_sources", {
+              n: String(sourceCount),
             })}
-          </span>
+          </button>
         ) : null}
       </div>
+      {sourcesOpen && sourceCount > 0 ? (
+        <div className="mt-1 flex flex-wrap items-center gap-1 ps-5">
+          {(task.sources ?? []).map((n) => (
+            <button
+              className={`${CHIP} ${CHIP_HOVER} tabular-nums`}
+              key={n}
+              onClick={() => {
+                onCiteN?.(n);
+              }}
+              type="button"
+            >
+              #{n}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -2328,7 +2376,9 @@ function AiSearchRunSectionImpl({
             ) : null}
             {run.clarify !== undefined ? <AskArchiveCard clarify={run.clarify} /> : null}
             <DecisionsCard decisions={run.decisions ?? []} />
-            {run.plan.length > 0 ? <TaskCard live={run.status === "streaming"} plan={run.plan} /> : null}
+            {run.plan.length > 0 ? (
+              <TaskCard live={run.status === "streaming"} onCiteN={handleCite} plan={run.plan} />
+            ) : null}
             {(run.findings ?? []).length > 0 ? (
               <FindingsCard
                 expanded={findingsExpanded}
@@ -2353,8 +2403,13 @@ function AiSearchRunSectionImpl({
                 onToggleExpanded={setSourcesExpanded}
                 sources={run.sources}
               />
-            ) : (
+            ) : run.status === "streaming" ? (
               <AiSearchSourcesSkeleton />
+            ) : (
+              <section aria-label={t("ai_search_sources")} className="mb-5">
+                <RailHeader count={0} icon={BookOpen} title={t("ai_search_sources")} />
+                <p className="mt-2 px-1 text-xs text-ink-3">{t("ai_sources_empty")}</p>
+              </section>
             )}
           </aside>
         ) : null}

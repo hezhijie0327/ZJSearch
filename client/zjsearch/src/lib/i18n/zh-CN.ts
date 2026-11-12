@@ -247,6 +247,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_sources_filter_cited: "已引用",
   ai_sources_filter_crawled: "已阅读",
   ai_sources_filter_all: "全部",
+  ai_sources_empty: "本次调研没有收集到来源。",
   ai_search_process: "研究过程",
   ai_search_calls_count: "{n} 次调用",
   ai_calc_running: "计算中…",
