@@ -529,10 +529,10 @@ function TaskItem({
         ) : null}
       </div>
       {sourcesOpen && sourceCount > 0 ? (
-        <div className="mt-1 flex flex-wrap items-center gap-1 ps-5">
+        <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 ps-5">
           {(task.sources ?? []).map((n) => (
             <button
-              className={`${CHIP} ${CHIP_HOVER} tabular-nums`}
+              className="rounded-md border border-line bg-surface-2/50 px-1.5 py-px text-xs leading-4 text-ink-2 transition-colors hover:border-accent/50 hover:text-accent"
               key={n}
               onClick={() => {
                 onCiteN?.(n);
