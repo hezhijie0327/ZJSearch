@@ -76,6 +76,7 @@ def _browser_input_view() -> flask.Response:
             x=int(payload.get("x") or 0),
             y=int(payload.get("y") or 0),
             delta_y=int(payload.get("deltaY") or 0),
+            delta_x=int(payload.get("deltaX") or 0),
             text=str(payload.get("text") or "")[:_MAX_TEXT],
             key=str(payload.get("key") or "")[:24],
             x2=int(payload.get("x2") or 0),

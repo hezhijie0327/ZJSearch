@@ -82,7 +82,11 @@ _SNAPSHOT_JS = """
     + '[role="combobox"], [role="radio"], [role="searchbox"], [role="tab"]';
   const out = [];
   window.__zjsRef = window.__zjsRef || 0;
-  for (const el of document.querySelectorAll(sel)) {
+  // shadow-root piercing: document.querySelectorAll cannot see web-component
+  // internals (player chrome, design-system widgets) -- walk every reachable
+  // open shadowRoot depth-first (closed roots stay closed by design)
+  const deep = (root, out) => {
+    for (const el of root.querySelectorAll(sel)) {
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
     const style = getComputedStyle(el);
@@ -96,10 +100,14 @@ _SNAPSHOT_JS = """
       || el.getAttribute('title') || el.getAttribute('name') || '').replace(/\\s+/g, ' ').trim().slice(0, 80);
     const role = el.getAttribute('role') || el.tagName.toLowerCase();
     out.push(ref + '\\t' + role + '\\t' + name);
-    if (out.length >= %d) break;
-  }
-  for (const el of document.querySelectorAll('img')) {
-    if (out.length >= %d) break;
+    if (out.length >= %d) return;
+    if (el.shadowRoot) deep(el.shadowRoot, out);
+    }
+  };
+  deep(document, out);
+  const imgs = (root, out) => {
+    for (const el of root.querySelectorAll('img')) {
+    if (out.length >= %d) return;
     const r = el.getBoundingClientRect();
     if (r.width < 30 || r.height < 15) continue;
     const style = getComputedStyle(el);
@@ -109,7 +117,10 @@ _SNAPSHOT_JS = """
     const file = (el.currentSrc || el.src || '').split(/[?#]/)[0].split('/').pop() || '';
     const name = (el.getAttribute('alt') || file).replace(/\\s+/g, ' ').trim().slice(0, 80);
     out.push(ref + '\\timg\\t' + name);
-  }
+    if (el.shadowRoot) imgs(el.shadowRoot, out);
+    }
+  };
+  imgs(document, out);
   return out.join('\\n');
 }
 """
@@ -140,7 +151,10 @@ _ANNOTATE_JS = """
   root.id = '__zjs_ann';
   root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
   let n = 0;
-  for (const el of document.querySelectorAll('[data-zjs-ref]')) {
+  // the same shadow-root piercing the scan uses (a ref inside an open
+  // shadow root must get its mirror badge too)
+  const deep = (root) => {
+  for (const el of root.querySelectorAll('[data-zjs-ref]')) {
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
     if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
@@ -161,7 +175,10 @@ _ANNOTATE_JS = """
       + 'text-shadow:0 1px 1px rgba(0,0,0,.15);';
     root.append(box, tag);
     n++;
+  if (el.shadowRoot) deep(el.shadowRoot);
   }
+  };
+  deep(document);
   if (n) document.documentElement.appendChild(root);
   return n;
 }
@@ -202,6 +219,17 @@ class _Session:  # pylint: disable=too-few-public-methods
         # new tail after every mutating action and speaks it into the feed
         self.downloads: list[dict[str, t.Any]] = []
         self.download_cursor: int = 0
+        # the LEDGER'S OWN lock: the capture tasks append from the event
+        # loop (never holding the session lock), the drains read+advance
+        # the cursor from worker threads -- a two-statement drain without
+        # this lock could jump the cursor past an entry that landed in
+        # between (a REJECTED download line vanishing from the feed)
+        self.download_lock = threading.Lock()
+        # the PENDING FILECHOOSER: playwright intercepts the native dialog
+        # (page.on('filechooser')) -- an upload action consumes the last
+        # one; the slot carries (chooser, monotonic deadline) and a stale
+        # chooser simply errors on set_files
+        self.filechooser: tuple[t.Any, float] | None = None
         self.wait_done = threading.Event()
         self.mark: dict[str, t.Any] | None = None
         self.names: dict[str, str] = {}
@@ -272,12 +300,17 @@ def _run(coro: t.Any, timeout: float = 45.0) -> t.Any:
         # playwright's crash/closed vocabulary only -- a plain dead
         # upstream ("net::ERR_CONNECTION_CLOSED") must NOT drop the warm
         # context and cost a relaunch
-        if "has been closed" in msg or ("closed" in msg and ("browser" in msg or "context" in msg or "target" in msg)):
+        if "has been closed" in msg or (
+            "closed" in msg
+            and ("browser" in msg or "context" in msg or "target" in msg)
+        ):
             # the browser died mid-run: drop the poisoned context so the
             # next action relaunches (the engine's read path heals the
             # same way) -- without this every later action fails forever
             drop_context()
-        raise SessionError(f"browser session failed: {type(exc).__name__}: {_brief(exc)}") from exc
+        raise SessionError(
+            f"browser session failed: {type(exc).__name__}: {_brief(exc)}"
+        ) from exc
 
 
 async def _ensure_page(sess: _Session) -> "Page":
@@ -292,8 +325,16 @@ async def _ensure_page(sess: _Session) -> "Page":
         return sess.page
     context = await _context()
     page = await context.new_page()
-    await page.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
+    await page.set_viewport_size(
+        sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]}
+    )
     page.on("download", lambda dl: _schedule_download(sess, dl))
+    page.on(
+        "filechooser",
+        lambda chooser: setattr(
+            sess, "filechooser", (chooser, time.monotonic() + 120.0)
+        ),
+    )
     sess.page = page
     sess.pages = [page]
     sess.active = 0
@@ -322,7 +363,9 @@ def _resolve_selector(ref: str) -> tuple[str, int]:
     attribute inside the frame stays the bare ``e5``)."""
     m = re.fullmatch(r"(?:f(\d+))?(e\d+)", str(ref or "").strip())
     if not m:
-        raise SessionError("a snapshot ref (e.g. e12 or f1e5) is required -- take a fresh snapshot")
+        raise SessionError(
+            "a snapshot ref (e.g. e12 or f1e5) is required -- take a fresh snapshot"
+        )
     return f'[data-zjs-ref="{m.group(2)}"]', int(m.group(1) or 0)
 
 
@@ -358,8 +401,16 @@ def open_url(session_id: str, url: str, timeout_s: t.Any = None) -> dict[str, st
             except Exception:  # pylint: disable=broad-except
                 pass
             await page.wait_for_timeout(browser_config.settle_ms())
+            # the settle treatment every OTHER navigation lane applies: a
+            # hung tracker on a fresh open kept the page "loading"
+            # forever (frames/snapshots caught mid-load states)
+            await _settle_page(page)
             outline = await _snapshot_page(sess, page)
-            return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
+            return {
+                "url": str(page.url),
+                "title": await page.title(),
+                "snapshot": outline,
+            }
 
         return _run(run())
 
@@ -372,12 +423,18 @@ def snapshot(session_id: str = LEAD) -> dict[str, str]:
         async def run() -> dict[str, str]:
             page = await _ensure_page(sess)
             outline = await _snapshot_page(sess, page)
-            return {"url": str(page.url), "title": await page.title(), "snapshot": outline}
+            return {
+                "url": str(page.url),
+                "title": await page.title(),
+                "snapshot": outline,
+            }
 
         return _run(run())
 
 
-def viewport(session_id: str, width: t.Any = None, height: t.Any = None) -> dict[str, t.Any]:
+def viewport(
+    session_id: str, width: t.Any = None, height: t.Any = None
+) -> dict[str, t.Any]:
     """Resize the ACTIVE page's viewport -- the layout window responsive
     sites key on, NOT the launch identity (the camoufox fingerprint and
     its desktop user agent stay).  The SIZE CHOICE is the model's, free
@@ -420,7 +477,9 @@ def viewport(session_id: str, width: t.Any = None, height: t.Any = None) -> dict
         return _run(run())
 
 
-async def _post_action_state(sess: "_Session", page: "Page", before_url: str, settle_wait_ms: int) -> dict[str, t.Any]:
+async def _post_action_state(
+    sess: "_Session", page: "Page", before_url: str, settle_wait_ms: int
+) -> dict[str, t.Any]:
     """The state after one mutating action: url + title, PLUS a fresh
     outline when the action navigated (navigation invalidates every
     injected ref -- riding the new outline with the action's result is
@@ -527,16 +586,15 @@ async def _snapshot_page(sess: "_Session", page: "Page") -> str:
     child_lines = 0
     for idx, frame in enumerate(frames[:3], start=1):
         try:
-            sub = await frame.evaluate(
-                _SNAPSHOT_JS_TEMPLATE % SNAPSHOT_CHILD_FRAME_CAP
-            )
+            sub = await frame.evaluate(_SNAPSHOT_JS_TEMPLATE % SNAPSHOT_CHILD_FRAME_CAP)
         except Exception:  # pylint: disable=broad-exception-caught
             continue  # a frame that forbids evaluation (crashed, detached) reads as absent
         if not sub:
             continue
         host = urlsplit(frame.url).hostname or frame.url[:40]
         prefixed = "\n".join(
-            f"f{idx}{line}" if line and not line.startswith("--") else line for line in sub.splitlines()
+            f"f{idx}{line}" if line and not line.startswith("--") else line
+            for line in sub.splitlines()
         )
         outlines.append(_SNAP_FRAME_HEADER.format(idx, host) + prefixed)
         child_lines += len(sub.splitlines())
@@ -548,7 +606,12 @@ async def _snapshot_page(sess: "_Session", page: "Page") -> str:
 
 
 async def _mark_ref_action(
-    sess: "_Session", holder: "Page | object", sel: str, kind: str, ref: str, name: str | None = None
+    sess: "_Session",
+    holder: "Page | object",
+    sel: str,
+    kind: str,
+    ref: str,
+    name: str | None = None,
 ) -> None:
     """Best-effort ACTION MARK of one ref-targeted action: the element's
     bounding box + landing point ride the next mirror frame, and the
@@ -566,13 +629,21 @@ async def _mark_ref_action(
         box = await loc.bounding_box(timeout=1_500)
     except Exception:  # pylint: disable=broad-exception-caught
         box = None
-    mark: dict[str, t.Any] = {"pk": kind, "name": name if name is not None else sess.names.get(ref) or ref}
+    mark: dict[str, t.Any] = {
+        "pk": kind,
+        "name": name if name is not None else sess.names.get(ref) or ref,
+    }
     if box:
         mark.update(
             {
                 "px": int(box["x"] + box["width"] / 2),
                 "py": int(box["y"] + box["height"] / 2),
-                "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])],
+                "box": [
+                    int(box["x"]),
+                    int(box["y"]),
+                    int(box["width"]),
+                    int(box["height"]),
+                ],
             }
         )
     sess.mark = mark
@@ -591,7 +662,9 @@ _OCCLUSION_JS = """
 """
 
 
-async def _assert_not_occluded(holder: "Page | object", sel: str, box: "list[int] | None") -> None:
+async def _assert_not_occluded(
+    holder: "Page | object", sel: str, box: "list[int] | None"
+) -> None:
     """The click's landing check (the browser-use lesson): something the
     scan saw as the topmost interactive element can still be COVERED at
     click time -- a consent overlay, a cookie banner, a sticky bar.
@@ -611,7 +684,9 @@ async def _assert_not_occluded(holder: "Page | object", sel: str, box: "list[int
     except Exception:  # pylint: disable=broad-exception-caught
         return  # a frame that forbids evaluation reads as unprobeable -- click anyway
     if occluder:
-        raise SessionError(f"blocked: {occluder} covers this element -- dismiss it first, then re-click")
+        raise SessionError(
+            f"blocked: {occluder} covers this element -- dismiss it first, then re-click"
+        )
 
 
 def click(session_id: str, ref: str) -> dict[str, t.Any]:
@@ -632,10 +707,17 @@ def click(session_id: str, ref: str) -> dict[str, t.Any]:
             # there, and an untracked popup would be an orphan the strip
             # never shows
             newcomer = next(
-                (pg for pg in page.context.pages if id(pg) not in known and not pg.is_closed()), None
+                (
+                    pg
+                    for pg in page.context.pages
+                    if id(pg) not in known and not pg.is_closed()
+                ),
+                None,
             )
             if newcomer is not None:
-                await newcomer.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
+                await newcomer.set_viewport_size(
+                    sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]}
+                )
                 _register_tab(sess, newcomer)
                 await _settle_page(newcomer)
                 outline = await _snapshot_page(sess, newcomer)
@@ -686,7 +768,15 @@ def scroll(session_id: str, direction: str) -> dict[str, str]:
 
         async def run() -> dict[str, str]:
             page = await _ensure_page(sess)
-            await page.mouse.wheel(0, 600 if str(direction) == "down" else -600)
+            # the horizontal directions (left/right) reach carousels and
+            # wide strips the vertical wheel never touches
+            dx, dy = {
+                "down": (0, 600),
+                "up": (0, -600),
+                "right": (600, 0),
+                "left": (-600, 0),
+            }.get(str(direction), (0, 600))
+            await page.mouse.wheel(dx, dy)
             await page.wait_for_timeout(400)
             return {"url": str(page.url), "title": await page.title()}
 
@@ -720,18 +810,26 @@ def click_xy(session_id: str, x: t.Any, y: t.Any) -> dict[str, t.Any]:
         return _run(run())
 
 
-def hover(session_id: str, ref: str) -> dict[str, t.Any]:
+def hover(
+    session_id: str, ref: str, x: t.Any = None, y: t.Any = None
+) -> dict[str, t.Any]:
     """Hover one ref-targeted element -- hover-opened menus and tooltips
-    are real UI the snapshot cannot see until the pointer rests there."""
+    are real UI the snapshot cannot see until the pointer rests there.
+    The COORDINATE form (x/y viewport-space, like click's) reaches menus
+    inside canvases and widget interiors a ref cannot name."""
     sess = get(session_id)
     with sess.lock:
 
         async def run() -> dict[str, t.Any]:
             page = await _ensure_page(sess)
             before = str(page.url)
-            holder, sel = await _resolve_holder(page, ref)
-            await _mark_ref_action(sess, holder, sel, "hover", ref)
-            await holder.locator(sel).first.hover(timeout=_ACTION_TIMEOUT_MS)
+            if x is None and y is None:
+                holder, sel = await _resolve_holder(page, ref)
+                await _mark_ref_action(sess, holder, sel, "hover", ref)
+                await holder.locator(sel).first.hover(timeout=_ACTION_TIMEOUT_MS)
+            else:
+                cx, cy = _clamp_xy(x, y)
+                await page.mouse.move(cx, cy)
             return await _post_action_state(sess, page, before, 400)
 
         return _run(run())
@@ -751,16 +849,28 @@ def select_options(session_id: str, ref: str, values: list[str]) -> dict[str, t.
             page = await _ensure_page(sess)
             before = str(page.url)
             holder, sel = await _resolve_holder(page, ref)
-            chosen = await holder.locator(sel).first.select_option(clean, timeout=_ACTION_TIMEOUT_MS)
-            await _mark_ref_action(
-                sess, holder, sel, "select", ref, name=", ".join(str(c) for c in chosen)[:80]
+            chosen = await holder.locator(sel).first.select_option(
+                clean, timeout=_ACTION_TIMEOUT_MS
             )
-            return {**(await _post_action_state(sess, page, before, 300)), "chosen": [str(c) for c in chosen]}
+            await _mark_ref_action(
+                sess,
+                holder,
+                sel,
+                "select",
+                ref,
+                name=", ".join(str(c) for c in chosen)[:80],
+            )
+            return {
+                **(await _post_action_state(sess, page, before, 300)),
+                "chosen": [str(c) for c in chosen],
+            }
 
         return _run(run())
 
 
-def drag(session_id: str, x1: t.Any, y1: t.Any, x2: t.Any, y2: t.Any, steps: int = 15) -> dict[str, t.Any]:
+def drag(
+    session_id: str, x1: t.Any, y1: t.Any, x2: t.Any, y2: t.Any, steps: int = 15
+) -> dict[str, t.Any]:
     """A mouse drag between two viewport points (down → interpolated
     moves → up): the slider-captcha primitive.  ``mouse.move``'s own
     interpolation plus the engine's humanized trajectories carry the
@@ -827,7 +937,16 @@ def inspect_b64(session_id: str, ref: str, quality: int = 75) -> dict[str, t.Any
                 "img": base64.b64encode(raw).decode("ascii"),
                 "w": int(box["width"]) if box else 0,
                 "h": int(box["height"]) if box else 0,
-                "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])] if box else None,
+                "box": (
+                    [
+                        int(box["x"]),
+                        int(box["y"]),
+                        int(box["width"]),
+                        int(box["height"]),
+                    ]
+                    if box
+                    else None
+                ),
                 "url": str(page.url),
                 "title": await page.title(),
             }
@@ -865,7 +984,12 @@ def region_b64(
             raw = await page.screenshot(
                 type="jpeg",
                 quality=int(quality),
-                clip={"x": vx + float(off[0]), "y": vy + float(off[1]), "width": vw, "height": vh},
+                clip={
+                    "x": vx + float(off[0]),
+                    "y": vy + float(off[1]),
+                    "width": vw,
+                    "height": vh,
+                },
                 timeout=_ACTION_TIMEOUT_MS,
             )
             return {
@@ -894,7 +1018,9 @@ def set_mark(session_id: str, mark: dict[str, t.Any]) -> None:
     get(session_id).mark = mark
 
 
-def frame(session_id: str = LEAD, tab_index: int | None = None) -> dict[str, t.Any]:
+def frame(
+    session_id: str = LEAD, tab_index: int | None = None, quality: int = 55
+) -> dict[str, t.Any]:
     """The mirror frame: the viewport capture at mirror quality wearing
     the ref annotation overlay (browser-use's visual -- every scanned
     element's dashed outline + ref badge, injected for THIS capture and
@@ -930,7 +1056,7 @@ def frame(session_id: str = LEAD, tab_index: int | None = None) -> dict[str, t.A
                     # one paint cycle: the overlay's fixed-position divs
                     # must reach the compositor before the bytes land
                     await page.wait_for_timeout(60)
-                raw = await page.screenshot(type="jpeg", quality=55)
+                raw = await page.screenshot(type="jpeg", quality=int(quality))
             finally:
                 try:
                     await page.evaluate(_ANNOTATE_REMOVE_JS)
@@ -984,13 +1110,21 @@ def extract(
                 try:
                     idx = int(index)
                 except (TypeError, ValueError):
-                    raise SessionError("read index must be an integer tab index (see tab list)") from None
+                    raise SessionError(
+                        "read index must be an integer tab index (see tab list)"
+                    ) from None
                 live = [pg for pg in sess.pages if not pg.is_closed()]
                 if 0 <= idx < len(live):
                     page = live[idx]
                 else:
-                    raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
-            return {"url": str(page.url), "title": await page.title(), "html": await page.content()}
+                    raise SessionError(
+                        f"tab {idx} does not exist -- call tab with op=list for the strip"
+                    )
+            return {
+                "url": str(page.url),
+                "title": await page.title(),
+                "html": await page.content(),
+            }
 
         page_state = _run(run())
     try:
@@ -1030,15 +1164,66 @@ async def _tab_titles(pages: "list[Page]", views: list[dict[str, t.Any]]) -> Non
 
 def _register_tab(sess: _Session, page: "Page") -> None:
     """One new page joins the tab set and takes the active slot (the
-    download capture rides along)."""
+    download capture rides along).  IDEMPOTENT: the context-level
+    popup net (adopt_page) may have registered the page before the
+    click path's own diff reaches it -- a re-register just ACTIVATES."""
     page.on("download", lambda dl: _schedule_download(sess, dl))
+    page.on(
+        "filechooser",
+        lambda chooser: setattr(
+            sess, "filechooser", (chooser, time.monotonic() + 120.0)
+        ),
+    )
     sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+    if any(pg is page for pg in sess.pages):
+        sess.active = sess.pages.index(page)
+        sess.page = page
+        return
     sess.pages.append(page)
     sess.active = len(sess.pages) - 1
     sess.page = page
 
 
-def tab_new(session_id: str, url: str, activate: bool = True, timeout_s: t.Any = None) -> dict[str, t.Any]:
+async def adopt_page(page: "Page") -> None:
+    """The context-level popup net (engine._adopt_popup): a page spawned
+    OUTSIDE a click (window.open during a load, a redirect script) joins
+    its opener's session tab set -- activated, viewport wired, download
+    capture riding; no opener session falls back to the lead's.
+
+    Deliberately WITHOUT the session lock: this runs ON the shared loop,
+    and a worker thread holding the lock while it bridges its own next
+    coroutine onto that loop would deadlock against us -- the tab-set
+    append is one list op, and a worst-case race with a concurrent
+    action costs an ordering flip, never a crash (register is
+    idempotent)."""
+    if page.is_closed():
+        return
+    sess: _Session | None = None
+    try:
+        opener = await page.opener()
+        if opener is not None:
+            for candidate in _SESSIONS.values():
+                if any(pg is opener for pg in candidate.pages):
+                    sess = candidate
+                    break
+    except Exception:  # pylint: disable=broad-except
+        sess = None
+    if sess is None:
+        sess = _SESSIONS.get(LEAD)
+    if sess is None:
+        return
+    try:
+        await page.set_viewport_size(
+            sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]}
+        )
+    except Exception:  # pylint: disable=broad-except
+        pass
+    _register_tab(sess, page)
+
+
+def tab_new(
+    session_id: str, url: str, activate: bool = True, timeout_s: t.Any = None
+) -> dict[str, t.Any]:
     """Open one NEW tab (the URL is the service's gate- checked public
     http(s) one): goto, settle, fresh outline -- the model lands reading
     the new page, the old tab sleeps beside it.  ``activate=False``
@@ -1052,7 +1237,9 @@ def tab_new(session_id: str, url: str, activate: bool = True, timeout_s: t.Any =
         async def run() -> dict[str, t.Any]:
             context = await _context()
             page = await context.new_page()
-            await page.set_viewport_size(sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]})
+            await page.set_viewport_size(
+                sess.viewport or {"width": WINDOW[0], "height": WINDOW[1]}
+            )
             try:
                 goto_ms = _load_budget_ms(timeout_s) or browser_config.goto_timeout_ms()
                 await page.goto(url, wait_until="load", timeout=goto_ms)
@@ -1065,6 +1252,12 @@ def tab_new(session_id: str, url: str, activate: bool = True, timeout_s: t.Any =
                 outline = await _snapshot_page(sess, page)
             else:
                 page.on("download", lambda dl: _schedule_download(sess, dl))
+                page.on(
+                    "filechooser",
+                    lambda chooser: setattr(
+                        sess, "filechooser", (chooser, time.monotonic() + 120.0)
+                    ),
+                )
                 # background tabs render like any other page (Browser-use:
                 # no resource policy) -- and the stop button lands here
                 # too: a background tab must not load forever
@@ -1101,10 +1294,14 @@ def tab_switch(session_id: str, index: t.Any) -> dict[str, t.Any]:
             try:
                 idx = int(index)
             except (TypeError, ValueError):
-                raise SessionError("tab switch needs an integer index (see tab list)") from None
+                raise SessionError(
+                    "tab switch needs an integer index (see tab list)"
+                ) from None
             sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
             if idx < 0 or idx >= len(sess.pages):
-                raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
+                raise SessionError(
+                    f"tab {idx} does not exist -- call tab with op=list for the strip"
+                )
             sess.active = idx
             sess.page = sess.pages[idx]
             outline = await _snapshot_page(sess, sess.page)
@@ -1133,15 +1330,21 @@ def tab_close(session_id: str, index: t.Any) -> dict[str, t.Any]:
             try:
                 idx = int(index)
             except (TypeError, ValueError):
-                raise SessionError("tab close needs an integer index (see tab list)") from None
+                raise SessionError(
+                    "tab close needs an integer index (see tab list)"
+                ) from None
             sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
             if idx < 0 or idx >= len(sess.pages):
-                raise SessionError(f"tab {idx} does not exist -- call tab with op=list for the strip")
+                raise SessionError(
+                    f"tab {idx} does not exist -- call tab with op=list for the strip"
+                )
             dying = sess.pages.pop(idx)
             if not dying.is_closed():
                 await dying.close()
             if sess.page is dying or not sess.pages:
-                sess.page = sess.pages[min(idx, len(sess.pages) - 1)] if sess.pages else None
+                sess.page = (
+                    sess.pages[min(idx, len(sess.pages) - 1)] if sess.pages else None
+                )
                 sess.active = min(idx, len(sess.pages) - 1) if sess.pages else 0
             views = _tab_view(sess.pages, sess.active)
             await _tab_titles(sess.pages, views)
@@ -1195,7 +1398,12 @@ def scroll_to_text(session_id: str, text: str) -> dict[str, t.Any]:
                     "py": int(box["y"] + box["height"] / 2),
                     "pk": "scroll",
                     "name": clean[:60],
-                    "box": [int(box["x"]), int(box["y"]), int(box["width"]), int(box["height"])],
+                    "box": [
+                        int(box["x"]),
+                        int(box["y"]),
+                        int(box["width"]),
+                        int(box["height"]),
+                    ],
                 }
             await page.wait_for_timeout(300)
             return {"url": str(page.url), "title": await page.title()}
@@ -1221,16 +1429,20 @@ async def _capture_download(sess: _Session, download: t.Any) -> None:
     # pylint: disable=import-outside-toplevel
     from searx.zjsearch.ai.core import convert
 
-    name = str(download.suggested_filename or "download.bin").strip()[:120] or "download.bin"
+    name = (
+        str(download.suggested_filename or "download.bin").strip()[:120]
+        or "download.bin"
+    )
     extension = name.rsplit(".", 1)[-1].lower() if "." in name else ""
     if not convert.supported(extension):
-        sess.downloads.append(
-            {
-                "name": name,
-                "state": "rejected",
-                "reason": "only readable documents (pdf / office / text) are ever saved -- this kind is refused",
-            }
-        )
+        with sess.download_lock:
+            sess.downloads.append(
+                {
+                    "name": name,
+                    "state": "rejected",
+                    "reason": "only readable documents (pdf / office / text) are ever saved -- this kind is refused",
+                }
+            )
         try:
             await download.delete()
         except Exception:  # pylint: disable=broad-exception-caught
@@ -1242,12 +1454,25 @@ async def _capture_download(sess: _Session, download: t.Any) -> None:
         size = dest.stat().st_size
         if size > 20 * 1024 * 1024:
             dest.unlink(missing_ok=True)
-            sess.downloads.append({"name": name, "state": "rejected", "reason": "larger than the 20 MB read ceiling"})
+            with sess.download_lock:
+                sess.downloads.append(
+                    {
+                        "name": name,
+                        "state": "rejected",
+                        "reason": "larger than the 20 MB read ceiling",
+                    }
+                )
             return
-        sess.downloads.append({"name": name, "state": "saved", "path": str(dest), "bytes": size})
+        with sess.download_lock:
+            sess.downloads.append(
+                {"name": name, "state": "saved", "path": str(dest), "bytes": size}
+            )
     except Exception as exc:  # pylint: disable=broad-exception-caught
         dest.unlink(missing_ok=True)
-        sess.downloads.append({"name": name, "state": "failed", "reason": str(exc)[:120]})
+        with sess.download_lock:
+            sess.downloads.append(
+                {"name": name, "state": "failed", "reason": str(exc)[:120]}
+            )
 
 
 def drain_downloads(session_id: str = LEAD) -> list[dict[str, t.Any]]:
@@ -1255,7 +1480,7 @@ def drain_downloads(session_id: str = LEAD) -> list[dict[str, t.Any]]:
     in arrival order) -- called after every mutating action so the feed
     names what the page made the browser download, refusals included."""
     sess = get(session_id)
-    with sess.lock:
+    with sess.download_lock:
         new = sess.downloads[sess.download_cursor :]
         sess.download_cursor = len(sess.downloads)
         return new
@@ -1270,7 +1495,9 @@ def extract_many(
     caller can attribute failures; out-of-range indexes answer as
     ``{"error": ...}`` entries instead of failing the batch."""
     # pylint: disable=import-outside-toplevel
-    from searx.zjsearch.ai.browser.extract import extract_page  # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.browser.extract import (
+        extract_page,
+    )  # pylint: disable=import-outside-toplevel
 
     sess = get(session_id)
     with sess.lock:
@@ -1283,7 +1510,12 @@ def extract_many(
                 try:
                     idx = int(raw)
                 except (TypeError, ValueError):
-                    states.append({"index": str(raw), "error": "index must be an integer tab index"})
+                    states.append(
+                        {
+                            "index": str(raw),
+                            "error": "index must be an integer tab index",
+                        }
+                    )
                     continue
                 if 0 <= idx < len(live):
                     page = live[idx]
@@ -1299,7 +1531,12 @@ def extract_many(
                     except Exception as exc:  # pylint: disable=broad-exception-caught
                         states.append({"index": str(idx), "error": _brief(exc)})
                 else:
-                    states.append({"index": str(idx), "error": f"tab {idx} does not exist -- see tab list"})
+                    states.append(
+                        {
+                            "index": str(idx),
+                            "error": f"tab {idx} does not exist -- see tab list",
+                        }
+                    )
             return states
 
         states = _run(run())
@@ -1311,10 +1548,74 @@ def extract_many(
         try:
             title, text = extract_page(state["html"], state["url"], max_chars)
         except Exception as exc:  # pylint: disable=broad-exception-caught
-            out.append({"index": state["index"], "url": state["url"], "error": str(exc)[:160]})
+            out.append(
+                {"index": state["index"], "url": state["url"], "error": str(exc)[:160]}
+            )
             continue
-        out.append({"index": state["index"], "url": state["url"], "title": title, "text": text})
+        out.append(
+            {"index": state["index"], "url": state["url"], "title": title, "text": text}
+        )
     return out
+
+
+def upload_file(session_id: str, name: str, ref: str) -> dict[str, t.Any]:
+    """Attach a CAPTURED download to the page: a form's file input by ref
+    (``input[type=file]`` carries a snapshot ref like any element), or
+    the pending filechooser a click on the page's upload button just
+    opened.  The SOURCE is always the session's own download ledger --
+    the same readable-documents gate the capture applied holds in
+    reverse (nothing unparseable ever round-trips through this stack),
+    and a path that escaped the ledger never reaches the page.
+
+    Returns the post-upload page state (the recipe: submit the form
+    next)."""
+    sess = get(session_id)
+    with sess.lock:
+
+        async def run() -> dict[str, t.Any]:
+            page = await _ensure_page(sess)
+            # the file comes from the LEDGER ONLY (saved entries): the
+            # name is matched exactly against the capture names -- a
+            # model-invented path or /tmp glob never resolves
+            path: str | None = None
+            with sess.download_lock:
+                for entry in sess.downloads:
+                    if (
+                        entry.get("state") == "saved"
+                        and str(entry.get("name") or "") == name
+                    ):
+                        path = str(entry.get("path") or "")
+                        break
+            if not path or not os.path.exists(path):
+                raise SessionError(
+                    f"no captured download named {name!r} -- only files this session captured"
+                    " (the feed's download lines) can be uploaded"
+                )
+            pending = sess.filechooser
+            chooser = pending[0] if pending and pending[1] > time.monotonic() else None
+            try:
+                if ref:
+                    holder, sel = await _resolve_holder(page, ref)
+                    await _mark_ref_action(
+                        sess, holder, sel, "upload", ref, name=name[:40]
+                    )
+                    await holder.set_input_files(sel, path, timeout=_ACTION_TIMEOUT_MS)
+                elif chooser is not None:
+                    await chooser.set_files(path)
+                    sess.filechooser = None
+                else:
+                    raise SessionError(
+                        "upload takes the file input's ref (snapshot: input[type=file] elements"
+                        " carry refs) -- or click the page's upload button FIRST so the"
+                        " filechooser opens, then upload without a ref"
+                    )
+            except SessionError:
+                raise
+            except Exception as exc:  # pylint: disable=broad-except
+                raise SessionError(f"the upload failed ({_brief(exc)})") from exc
+            return await _post_action_state(sess, page, str(page.url), 400)
+
+        return _run(run())
 
 
 def read_download(session_id: str, name: str) -> dict[str, str]:
@@ -1323,7 +1624,14 @@ def read_download(session_id: str, name: str) -> dict[str, str]:
     clean = str(name or "").strip()
     sess = get(session_id)
     with sess.lock:
-        entry = next((d for d in sess.downloads if d.get("name") == clean and d.get("state") == "saved"), None)
+        entry = next(
+            (
+                d
+                for d in sess.downloads
+                if d.get("name") == clean and d.get("state") == "saved"
+            ),
+            None,
+        )
         path = str(entry.get("path") or "") if entry else ""
     if entry is None:
         known = ", ".join(d.get("name", "?") for d in sess.downloads[-6:]) or "none"
@@ -1332,9 +1640,13 @@ def read_download(session_id: str, name: str) -> dict[str, str]:
     from searx.zjsearch.ai.core import convert
 
     try:
-        text = convert.to_markdown(Path(path).read_bytes(), Path(path).suffix.lstrip("."))
+        text = convert.to_markdown(
+            Path(path).read_bytes(), Path(path).suffix.lstrip(".")
+        )
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        raise SessionError(f"the download {clean!r} could not be converted: {exc}") from exc
+        raise SessionError(
+            f"the download {clean!r} could not be converted: {exc}"
+        ) from exc
     # READ-ONCE THEN DESTROY: the text now lives in the transcript -- the
     # bytes leave the disk the moment they are read (a re-read answers
     # honestly instead of pretending the file is still around)
@@ -1420,6 +1732,7 @@ def session_input(
     x: int = 0,
     y: int = 0,
     delta_y: int = 0,
+    delta_x: int = 0,
     text: str = "",
     key: str = "",
     x2: int = 0,
@@ -1442,7 +1755,10 @@ def session_input(
                 await page.wait_for_timeout(120)
                 await page.mouse.up()
             elif kind == "wheel":
-                await page.mouse.wheel(0, int(delta_y))
+                # both axes: a horizontal gesture (shift+wheel, sideways
+                # trackpad swipe, a carousel) used to arrive as a pure
+                # vertical -600 and scroll the page the wrong way
+                await page.mouse.wheel(int(delta_x), int(delta_y))
             elif kind == "type":
                 await page.keyboard.type(str(text))
             elif kind == "key":

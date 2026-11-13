@@ -33,7 +33,7 @@ indexes, [tab new A, read, tab new B, read] reads two pages per batch
 read] is fine when you will not revisit), and the next multi continues
 where the batch stopped.  Browse calls ride ALONGSIDE the same round's
 search_web calls, not after them -- batch searches and crawls into the
-same round.  the model's own frames carry it too) -- the VIEWER may also CLOSE tabs
+same round.  The VIEWER may also CLOSE tabs
 from the mirror at any time: strip indices shift when they do, so tab
 op=list re-grounds them before an index read.  THE RUN'S END closes
 every tab (memory recovery) -- page state does not survive across runs;
@@ -101,7 +101,9 @@ saved recipe is replayed to you the next time you land on that site.
 MOBILE-SIZED PAGES apply here too: the viewport action reshapes the
 page you are driving, no reload needed.
 Child-frame refs are
-prefixed with their frame index (f1e5) -- embedded widgets live there; a
+prefixed with their frame index (f1e5) -- embedded widgets live there;
+ONLY the first 3 frames are scanned, so a deeper frame's widgets are
+reachable by coordinate alone; a
 screenshot of the frame's box plus coordinate clicks is how you work
 INSIDE a widget that does not expose its internals to the outline.  A
 click or submit that NAVIGATES returns the fresh outline itself; a ref
@@ -128,6 +130,7 @@ _ACTIONS = (
     "history",
     "tab",
     "multi",
+    "upload",
     "wait_user",
     "close",
 )
@@ -140,55 +143,31 @@ def browse_spec() -> dict[str, t.Any]:
     return {
         "name": BROWSE_TOOL,
         "description": """\
-Drive a browser: ONE interactive session you operate, page by page.
-
-READING RHYTHM: open(url) navigates the session page and returns its
-interactive-element outline; read (NO url) extracts the active page's
-full content as compact markdown -- documents (.pdf / .docx / .pptx /
-.xlsx / .xls / .csv / .json / .xml / .txt / .md) are the ONE exception
-where read takes a url and fetches+converts the bytes directly.
-Multiple sources live in the TAB STRIP: tab op=new opens the next page
-in a new active tab (its outline rides back, the old tab sleeps beside
-it), tab op=switch returns to one, tab op=close closes one; a multi can
-chain the mechanical part ([tab new A, read, tab new B, read]).
-viewport resizes the session page to a free width x height you choose
-in CSS px (a phone-shaped 440 and 956, a tablet 768 and 1024) -- omit
-both to reset to the 1920x1080 fallback; sizes clamp to 240-16384 and
-responsive sites re-flow onto the matching branch in place (no reload).
-
-SESSION: open a page, snapshot its interactive elements and sizeable
-images as refs, click/type/press/scroll by ref, hover a menu open,
-select a native dropdown's options, drag between two viewport points
-(sliders), screenshot, or wait_user while the USER operates the page in
-the live mirror (sign-in, verification -- anything human-only; their
-operations land in the same page you keep reading).
-
-MORE SESSION SURFACES: scroll accepts text= to bring the first page
-region matching it into view (the targeted alternative to the blind
-wheel).  history walks the active page (op=back / forward / reload --
-reload always returns the fresh outline).  tab manages the session's
-page strip -- op=new opens a url in a new active tab (its outline rides
-back), op=switch activates one (refs are PER-PAGE: the page's own
-outline follows the switch), op=close closes one, op=list shows the
-strip; a click on a target=_blank link ACTIVATES the spawned tab
-automatically.  multi batches up
-to 5 action objects as steps --
-executed in order, first failure stops the batch: use it for mechanical
-chains (scroll -> type -> submit, or the open -> read rhythm), NOT for
-steps that need judgment between them (each step's result deserves a
-read before the next decision).
-
-DOWNLOADS: a download the page triggers is captured ONLY when this
-stack can actually read it (pdf / docx / pptx / xlsx / xls / csv /
-json / xml / txt / md / html, max 20 MB) -- the feed names every capture
-AND every refusal (executables and unknown kinds are deleted unread,
-never saved).  Read a captured file with read + download="<filename>".
-
-Reach for the session when a page's content cannot be seen through
-without interaction or a human; everything else stays search-first.
-Pages you open become citable sources: open mints the [n], read
-registers the page's full text under it -- the writer cites what you
-drove.""",
+Drive ONE interactive browser session, page by page -- the reader for
+pages a plain fetch cannot see through (JS walls, sign-ins, apps) and
+the human handoff when only a person can proceed.  Actions: open(url)
+navigates and returns the interactive-element outline; read (NO url)
+extracts the active page as markdown -- documents (pdf / office / data
+types) are the exception where read takes a url and converts the bytes
+directly.  snapshot re-lists the current page's refs; click / type /
+press / scroll (direction or text=) / hover (ref or x/y) / select /
+drag act by ref or viewport coordinates; screenshot shoots the
+viewport, an element close-up (ref), or a region (x/y/w/h); tab
+op=new/switch/close/list manages the page strip (refs are PER-PAGE;
+background tabs via activate=false are read later by index -- read
+accepts index and indexes for them); history op=back/forward/reload
+walks the active page; viewport re-flows the page to any width/height
+(mobile branches included); multi batches up to 5 mechanical steps
+(first failure stops the batch -- wait_user cannot ride inside one);
+upload attaches a captured download to a form's file input (by ref, or
+the filechooser a click just opened -- the only file source is this
+session's own captures); wait_user hands the page to the USER through
+the live mirror for sign-ins and verification; close ends the session.  Downloads are
+captured only when readable (documents, max 20 MB -- refusals are
+spoken in the feed); read + download="<filename>" reads one back.
+Opened pages become citable sources: open mints the [n], read
+registers the full text under it.  The reading rhythm, the crawl
+patterns and the session craft live in the tool notes.""",
         "annotations": {"openWorldHint": True},
         "inputSchema": {
             "type": "object",
@@ -204,7 +183,7 @@ drove.""",
                 },
                 "ref": {
                     "type": "string",
-                    "description": 'click/type/hover/select: the snapshot ref (e12; child-frame elements are f1e5).  screenshot: capture that ONE element as a close-up instead of the whole viewport -- give ref OR x/y/w/h, not both.',
+                    "description": 'click/type/hover/select/upload: the snapshot ref (e12; child-frame elements are f1e5).  hover also takes x/y INSTEAD of a ref (widget interiors); screenshot: capture that ONE element as a close-up instead of the whole viewport -- give ref OR x/y/w/h, not both.',
                 },
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},
                 "key": {"type": "string", "description": "press: the key (Enter, Escape, Tab...)."},
@@ -226,7 +205,7 @@ drove.""",
                 },
                 "download": {
                     "type": "string",
-                    "description": 'read: the captured download\'s filename (from the feed\'s download lines) to read INSTEAD of the live page.',
+                    "description": 'read: the captured download\'s filename (from the feed\'s download lines) to read INSTEAD of the live page.  upload: the captured file\'s name to attach to the page\'s file input.',
                 },
                 "index": {
                     "type": "integer",
@@ -261,20 +240,29 @@ drove.""",
                         {"type": "integer", "description": "drag: interpolation steps (5-40, default 15)."},
                     ],
                 },
-                "x": {"type": "integer", "description": "click: viewport X when clicking by COORDINATES instead of ref.  screenshot: region left edge (with y/w/h)."},
-                "y": {"type": "integer", "description": "click: viewport Y when clicking by COORDINATES instead of ref.  screenshot: region top edge (with x/w/h)."},
-                "w": {"type": "integer", "description": "screenshot: region width (with x/y/h) -- crops that viewport rectangle instead of the full viewport."},
+                "x": {
+                    "type": "integer",
+                    "description": "click: viewport X when clicking by COORDINATES instead of ref.  hover: viewport X when hovering by COORDINATES (widget interiors a ref cannot name).  screenshot: region left edge (with y/w/h).",
+                },
+                "y": {
+                    "type": "integer",
+                    "description": "click: viewport Y when clicking by COORDINATES instead of ref.  hover: viewport Y when hovering by COORDINATES.  screenshot: region top edge (with x/w/h).",
+                },
+                "w": {
+                    "type": "integer",
+                    "description": "screenshot: region width (with x/y/h) -- crops that viewport rectangle instead of the full viewport.",
+                },
                 "h": {"type": "integer", "description": "screenshot: region height (with x/y/w)."},
-                "x1": {"type": "integer", "description": "drag: start viewport X."},
-                "y1": {"type": "integer", "description": "drag: start viewport Y."},
-                "x2": {"type": "integer", "description": "drag: end viewport X."},
-                "y2": {"type": "integer", "description": "drag: end viewport Y."},
                 "values": {
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "select: option values or labels to pick (max 6).",
                 },
-                "direction": {"type": "string", "enum": ["up", "down"], "description": "scroll direction."},
+                "direction": {
+                    "type": "string",
+                    "enum": ["up", "down", "left", "right"],
+                    "description": "scroll direction (left/right reach carousels and wide strips).",
+                },
                 "seconds": {"type": "integer", "description": "wait_user: the human's operation window (10-600)."},
             },
             "required": ["action"],
@@ -301,6 +289,13 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
             pass
     if action in ("click", "type", "screenshot", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
+    if action == "hover":
+        # the coordinate form: a widget interior a ref cannot name
+        for key in ("x", "y"):
+            try:
+                out[key] = max(0, int(args.get(key)))
+            except (TypeError, ValueError):
+                pass
     if action == "screenshot":
         region = [args.get(k) for k in ("x", "y", "w", "h")]
         if any(v is not None for v in region):
@@ -334,7 +329,8 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     if action == "press":
         out["key"] = str(args.get("key") or "").strip()[:24]
     if action == "scroll":
-        out["direction"] = "up" if str(args.get("direction") or "") == "up" else "down"
+        direction = str(args.get("direction") or "down")
+        out["direction"] = direction if direction in ("up", "down", "left", "right") else "down"
         # the TARGETED scroll: the first page region matching this text
         out["text"] = str(args.get("text") or "").strip()[:200]
     if action == "read":
@@ -374,6 +370,9 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     if action == "multi":
         raw = args.get("steps")
         out["steps"] = [step for step in raw if isinstance(step, dict)][:5] if isinstance(raw, list) else []
+    if action == "upload":
+        out["download"] = str(args.get("download") or "").strip()[:200]
+        out["ref"] = str(args.get("ref") or "").strip()[:16]
     if action == "wait_user":
         try:
             out["seconds"] = max(10, min(int(args.get("seconds")), 600))

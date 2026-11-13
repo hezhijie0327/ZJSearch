@@ -11,6 +11,9 @@ from urllib.parse import urlsplit
 
 from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.browser import session
+from searx.zjsearch.ai.browser.session import (
+    drain_downloads,
+)  # pylint: disable=unused-import; re-export
 from searx.zjsearch.ai.browser.session import SessionError
 
 _WAIT_POLL_S = 2.0
@@ -38,6 +41,10 @@ class ActionResult(t.NamedTuple):
     tabs: t.Sequence[dict[str, t.Any]] | None = None
     reads: t.Sequence[dict[str, str]] = ()
     steps: t.Sequence[dict[str, t.Any]] = ()
+    # the multi-index read's LAST section ({url, title, text}): the feed
+    # joins every tab's body with --- separators, so the finish branch's
+    # old feed-split archived tab 1's body under the last tab's identity
+    last_read: dict[str, str] | None = None
 
 
 def _obs(state: dict[str, str]) -> str:
@@ -53,7 +60,10 @@ def _page(state: dict[str, t.Any]) -> dict[str, str]:
 
 
 def _navigated_tail(snapshot: str) -> str:
-    return "\n\n-- the action navigated: every old ref is dead, the fresh" f" outline is below --\n\n{snapshot}"
+    return (
+        "\n\n-- the action navigated: every old ref is dead, the fresh"
+        f" outline is below --\n\n{snapshot}"
+    )
 
 
 def _download_lines(session_id: str) -> str:
@@ -70,7 +80,9 @@ def _download_lines(session_id: str) -> str:
         state = str(entry.get("state") or "")
         if state == "saved":
             kb = max(1, round(int(entry.get("bytes") or 0) / 1024))
-            lines.append(f'downloaded {name} ({kb} KB) -- read it with read and download="{name}"')
+            lines.append(
+                f'downloaded {name} ({kb} KB) -- read it with read and download="{name}"'
+            )
         elif state == "rejected":
             lines.append(f"REJECTED download {name}: {entry.get('reason')}")
         else:
@@ -78,7 +90,9 @@ def _download_lines(session_id: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _outline_result(feed: str, state: dict[str, t.Any], session_id: str) -> ActionResult:
+def _outline_result(
+    feed: str, state: dict[str, t.Any], session_id: str
+) -> ActionResult:
     """An outline-bearing action (open / snapshot): the outline is both
     the model's feed and the settlement's ``snapshot``/``elements``."""
     frame = session.frame(session_id)
@@ -137,13 +151,17 @@ def _act_open(args: dict[str, t.Any], session_id: str) -> ActionResult:
     url = _guard_open_url(str(args.get("url") or ""))
     state = session.open_url(session_id, url, args.get("timeout"))
     return _outline_result(
-        f"opened {state['url']} -- {state['title']}\n\n{state['snapshot']}", state, session_id
+        f"opened {state['url']} -- {state['title']}\n\n{state['snapshot']}",
+        state,
+        session_id,
     )
 
 
 def _act_snapshot(_args: dict[str, t.Any], session_id: str) -> ActionResult:
     state = session.snapshot(session_id)
-    return _outline_result(f"{state['url']} -- {state['title']}\n\n{state['snapshot']}", state, session_id)
+    return _outline_result(
+        f"{state['url']} -- {state['title']}\n\n{state['snapshot']}", state, session_id
+    )
 
 
 def _act_click(args: dict[str, t.Any], session_id: str) -> ActionResult:
@@ -152,13 +170,16 @@ def _act_click(args: dict[str, t.Any], session_id: str) -> ActionResult:
         # cannot name (challenge tiles inside an iframe the snapshot reffed
         # as one box, canvas hit-regions)
         state = session.click_xy(session_id, args.get("x"), args.get("y"))
-        return _state_result(f"clicked at {args.get('x')},{args.get('y')}.", state, session_id)
+        return _state_result(
+            f"clicked at {args.get('x')},{args.get('y')}.", state, session_id
+        )
     state = session.click(session_id, str(args.get("ref") or ""))
     if state.get("popup"):
         # the click spawned a page (target=_blank): it is IN the tab set
         # and active now, its own outline riding below
         return _outline_result(
-            f"the click opened a NEW TAB -- it is active now: {state['url']} -- {state['title']}\n\n{state['snapshot']}",
+            f"the click opened a NEW TAB -- it is active now:"
+            f" {state['url']} -- {state['title']}\n\n{state['snapshot']}",
             state,
             session_id,
         )
@@ -166,11 +187,20 @@ def _act_click(args: dict[str, t.Any], session_id: str) -> ActionResult:
 
 
 def _act_hover(args: dict[str, t.Any], session_id: str) -> ActionResult:
-    return _state_result("hovered.", session.hover(session_id, str(args.get("ref") or "")), session_id)
+    ref = str(args.get("ref") or "")
+    has_xy = args.get("x") is not None or args.get("y") is not None
+    if not ref and not has_xy:
+        raise SessionError("hover takes a ref (element) or x/y (viewport coordinates)")
+    if ref and has_xy:
+        raise SessionError("hover takes a ref OR x/y, not both")
+    state = session.hover(session_id, ref, args.get("x"), args.get("y"))
+    return _state_result("hovered.", state, session_id)
 
 
 def _act_select(args: dict[str, t.Any], session_id: str) -> ActionResult:
-    state = session.select_options(session_id, str(args.get("ref") or ""), list(args.get("values") or []))
+    state = session.select_options(
+        session_id, str(args.get("ref") or ""), list(args.get("values") or [])
+    )
     chosen = ", ".join(str(c) for c in state.get("chosen") or [])
     return _state_result(f"selected: {chosen}.", state, session_id)
 
@@ -193,14 +223,19 @@ def _act_drag(args: dict[str, t.Any], session_id: str) -> ActionResult:
 
 def _act_type(args: dict[str, t.Any], session_id: str) -> ActionResult:
     state = session.type_text(
-        session_id, str(args.get("ref") or ""), str(args.get("text") or ""), args.get("submit") is True
+        session_id,
+        str(args.get("ref") or ""),
+        str(args.get("text") or ""),
+        args.get("submit") is True,
     )
     return _state_result("typed.", state, session_id)
 
 
 def _act_press(args: dict[str, t.Any], session_id: str) -> ActionResult:
     return _state_result(
-        f"pressed {args.get('key')}.", session.press_key(session_id, str(args.get("key") or "")), session_id
+        f"pressed {args.get('key')}.",
+        session.press_key(session_id, str(args.get("key") or "")),
+        session_id,
     )
 
 
@@ -223,9 +258,13 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
     ref = str(args.get("ref") or "")
     region = [args.get(k) for k in ("x", "y", "w", "h")]
     if ref and any(v is not None for v in region):
-        raise SessionError("screenshot takes a ref (element close-up) OR a region (x y w h), not both")
+        raise SessionError(
+            "screenshot takes a ref (element close-up) OR a region (x y w h), not both"
+        )
     if any(v is not None for v in region) and not all(v is not None for v in region):
-        raise SessionError("the screenshot region needs x, y, w and h together (viewport coordinates)")
+        raise SessionError(
+            "the screenshot region needs x, y, w and h together (viewport coordinates)"
+        )
     if ref:
         # the aimed shot: ONE element close-up instead of the viewport
         # (the crop is what the model sees next turn)
@@ -243,14 +282,18 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
                 },
             )
         else:
-            session.set_mark(session_id, {"pk": "shot", "name": session.ref_name(session_id, ref)})
+            session.set_mark(
+                session_id, {"pk": "shot", "name": session.ref_name(session_id, ref)}
+            )
     elif all(v is not None for v in region):
         # the region crop: a viewport rectangle by coordinates (the same
         # viewport space the coordinate clicks aim in)
         try:
             x, y, w, h = (max(0, int(v)) for v in region)
         except (TypeError, ValueError) as exc:
-            raise SessionError(f"the screenshot region needs integer x y w h: {exc}") from exc
+            raise SessionError(
+                f"the screenshot region needs integer x y w h: {exc}"
+            ) from exc
         shot = session.region_b64(session_id, x, y, w, h, quality=75)
         box = shot["box"]
         session.set_mark(
@@ -365,18 +408,45 @@ def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
                 continue
             header = f"[tab {doc.get('index')}] {doc.get('title')} ({doc.get('url')})"
             lines.append(f"{header}\n\n{doc.get('text')}")
-            sections.append({"url": str(doc.get("url") or ""), "title": str(doc.get("title") or ""), "text": str(doc.get("text") or "")})
+            sections.append(
+                {
+                    "url": str(doc.get("url") or ""),
+                    "title": str(doc.get("title") or ""),
+                    "text": str(doc.get("text") or ""),
+                }
+            )
         return ActionResult(
             feed="\n\n---\n\n".join(lines),
             frames=[{**session.frame(session_id), "agent": session_id}],
-            page=({"url": sections[-1]["url"], "title": sections[-1]["title"]} if sections else None),
+            page=(
+                {"url": sections[-1]["url"], "title": sections[-1]["title"]}
+                if sections
+                else None
+            ),
             reads=tuple(sections[:-1]) if len(sections) > 1 else (),
+            last_read=sections[-1] if sections else None,
         )
     state = session.extract(session_id, reader_max_chars(), args.get("index"))
     return ActionResult(
         feed=f"{state['title']}\n\n{state['text']}",
         frames=[{**session.frame(session_id), "agent": session_id}],
         page=_page(state),
+    )
+
+
+def _act_upload(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """Attach a captured download to the page (a form's file input by
+    ref, or the filechooser a click just opened) -- the ONLY file source
+    is this session's own download ledger, so the readable-documents
+    gate holds in reverse."""
+    name = str(args.get("download") or "").strip()
+    if not name:
+        raise SessionError(
+            "upload takes download=<the captured file's name> (from the feed's download lines)"
+        )
+    state = session.upload_file(session_id, name, str(args.get("ref") or ""))
+    return _state_result(
+        f"attached {name} -- submit the form when ready.", state, session_id
     )
 
 
@@ -400,7 +470,9 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
     if op == "new":
         url = _guard_open_url(str(args.get("url") or ""))
         background = args.get("activate") is False
-        state = session.tab_new(session_id, url, activate=not background, timeout_s=args.get("timeout"))
+        state = session.tab_new(
+            session_id, url, activate=not background, timeout_s=args.get("timeout")
+        )
         if background:
             strip = state.get("tabs") or []
             idx = next((t["index"] for t in strip if t.get("url") == state["url"]), "?")
@@ -473,8 +545,23 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
     (the batch's own stop)."""
     raw = args.get("steps")
     if not isinstance(raw, list) or not raw:
-        return ActionResult(feed="error: multi needs steps -- a non-empty list of action objects")
+        return ActionResult(
+            feed="error: multi needs steps -- a non-empty list of action objects"
+        )
     steps = raw[:_MAX_MULTI_STEPS]
+    if any(
+        isinstance(step, dict) and str(step.get("action") or "") == "wait_user"
+        for step in steps
+    ):
+        # the honest up-front rejection: the batch engine has NO actor for
+        # wait_user (its frames stream through the top-level lane only --
+        # buffered inside a pool-run multi they would freeze the mirror
+        # then burst).  The old routing sent such batches here to die as
+        # "unknown action 'wait_user'" mid-batch.
+        return ActionResult(
+            feed="error: wait_user cannot run inside a multi -- run it as its own action"
+            " (the interactive window's frames stream live only on the top-level lane)"
+        )
     feeds: list[str] = []
     reads: list[dict[str, str]] = []
     step_rows: list[dict[str, t.Any]] = []
@@ -550,6 +637,7 @@ _ACTORS = {
     "history": _act_history,
     "tab": _act_tab,
     "multi": _act_multi,
+    "upload": _act_upload,
     "close": _act_close,
 }
 
@@ -590,7 +678,9 @@ def final_frame(session_id: str = session.LEAD) -> dict[str, t.Any] | None:
         return None
 
 
-def wait_user_frames(seconds: int, session_id: str = session.LEAD) -> t.Iterator[dict[str, t.Any]]:
+def wait_user_frames(
+    seconds: int, session_id: str = session.LEAD
+) -> t.Iterator[dict[str, t.Any]]:
     """The human's operation window, one mirror frame per poll -- the
     frames double as the stream's heartbeats (a blocking wait must keep
     the wire fed or the transport guard kills the run).  LEAD-ONLY: a
@@ -600,7 +690,9 @@ def wait_user_frames(seconds: int, session_id: str = session.LEAD) -> t.Iterator
     the wire silent for the whole window with a frozen mirror -- the
     post-window snapshot surfaces the failure to the model."""
     if session_id != session.LEAD:
-        raise SessionError("wait_user is the lead session's window -- subagents decide alone")
+        raise SessionError(
+            "wait_user is the lead session's window -- subagents decide alone"
+        )
     session.reset_wait(session_id)
     deadline = time.monotonic() + max(10, min(int(seconds), 600))
     failures = 0
@@ -611,7 +703,10 @@ def wait_user_frames(seconds: int, session_id: str = session.LEAD) -> t.Iterator
         if session.wait_done(session_id):
             return
         try:
-            frame = session.frame(session_id)
+            # the wait window is the wire's heaviest lane (a frame every
+            # poll for up to ten minutes) -- its frames ride at the
+            # leaner wait quality (the client scales them anyway)
+            frame = session.frame(session_id, quality=40)
             failures = 0
         except SessionError:
             failures += 1
@@ -625,7 +720,9 @@ def wait_user_frames(seconds: int, session_id: str = session.LEAD) -> t.Iterator
         time.sleep(_WAIT_POLL_S)
 
 
-def wait_user_snapshot(max_chars: int | None, session_id: str = session.LEAD) -> dict[str, t.Any]:
+def wait_user_snapshot(
+    max_chars: int | None, session_id: str = session.LEAD
+) -> dict[str, t.Any]:
     """The feed after the human's window: where the page stands now -- the
     fresh outline AND the page's readable text (the model judges from
     CONTENT whether the goal is met, not from element names alone).  The
@@ -647,4 +744,9 @@ def wait_user_snapshot(max_chars: int | None, session_id: str = session.LEAD) ->
             "text": page["text"],
         }
     except SessionError:
-        return {"feed": header, "url": str(state["url"]), "title": str(state["title"]), "text": ""}
+        return {
+            "feed": header,
+            "url": str(state["url"]),
+            "title": str(state["title"]),
+            "text": "",
+        }

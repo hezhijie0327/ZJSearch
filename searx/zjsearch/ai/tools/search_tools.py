@@ -30,6 +30,16 @@ from searx.zjsearch.ai.tools.mcp import mcp_cfg, mcp_specs, server_instructions,
 DISCOVERY_TOOL = "search_tools"
 """The wire name -- the model's ONLY visible surface for the long tail."""
 
+INLINE_TOOL_THRESHOLD = 4
+"""A surface this small rides the tools array INLINE -- the discovery
+round trip costs more than the tool schemas it would hide.  Past it the
+progressive-disclosure discovery tool takes over (a schema dump would
+outweigh every prompt cache)."""
+
+_SCHEMA_FEED_CAP = 4_000
+"""One matched tool's inputSchema byte budget IN THE MODEL FEED (the
+structured wire row keeps the full schema for the client's card)."""
+
 _SEMANTIC_FLOOR = 0.4
 """The cosine floor a semantic fallback match must clear (keyword
 scoring found nothing; below this the "match" is noise)."""
@@ -178,6 +188,25 @@ def run_call(
         wire = dict(spec)
         if instructions:
             wire["instructions"] = instructions
+        schema = wire.get("inputSchema")
+        if isinstance(schema, dict) and len(json.dumps(schema, ensure_ascii=False)) > _SCHEMA_FEED_CAP:
+            # the per-row byte cap: a sprawling MCP schema x 6 matches
+            # rode straight into the model feed -- the elided shape keeps
+            # every property NAME + type (enough to call correctly), the
+            # structured row keeps the full schema for the client card
+            wire["inputSchema"] = {
+                "type": "object",
+                "properties": {
+                    name: {"type": str((prop or {}).get("type") or "?")}
+                    for name, prop in (schema.get("properties") or {}).items()
+                    if isinstance(prop, dict)
+                },
+                "required": list(schema.get("required") or []),
+            }
+            wire["schema_note"] = (
+                "schema elided for size (names + types only) -- call with the"
+                " parameters you can infer; the tool's own error teaches the rest"
+            )
         feed_matches.append(wire)
         schema = spec.get("inputSchema") or {}
         view_matches.append(
@@ -214,26 +243,28 @@ def _no_match_note(query: str, internal_specs: list[dict[str, t.Any]] | None) ->
             f"{server} ({known[server][:120]})" if known.get(server) else server for server, _, _ in mcp_cfg()
         )
         parts.append(
-            f"The connected MCP servers -- {servers} -- expose: "
-            + ", ".join(spec["name"] for spec in specs[:40])
-            + "."
+            f"The connected MCP servers -- {servers} -- expose: " + ", ".join(spec["name"] for spec in specs[:40]) + "."
         )
     parts.append("Try different keywords.")
     return "  ".join(parts)
 
 
 def tools_surface(internal_specs: list[dict[str, t.Any]] | None = None) -> list[dict[str, t.Any]]:
-    """What the RUN registers: ALWAYS just the progressive-disclosure
-    discovery tool -- however small the surface, the model sees ONE
-    search box and earns the full schemas on a keyword match.  The index
-    covers the external MCP servers' tools (the internal niche tools
-    ride the surface inline -- ``runs.search.surface``; the parameter
-    survives for a future true long tail).  When the index has nothing
-    to hold, there is nothing to disclose and the run registers no
-    discovery tool at all."""
+    """What the RUN registers: past the INLINE threshold, the
+    progressive-disclosure discovery tool only -- the model sees ONE
+    search box and earns the full schemas on a keyword match.  A tiny
+    surface (<= 4 MCP tools) rides the tools array directly instead:
+    a discovery instrument for ONE tool is a tax, not a disclosure.
+    The index covers the external MCP servers' tools (the internal niche
+    tools ride the surface inline -- ``runs.search.surface``; the
+    parameter survives for a future true long tail).  When the index has
+    nothing to hold, there is nothing to disclose and the run registers
+    no discovery tool at all."""
     specs = mcp_specs()
     if not specs and not internal_specs:
         return []
+    if len(specs) <= INLINE_TOOL_THRESHOLD:
+        return list(specs)
     return [
         discovery_spec(
             len(specs),

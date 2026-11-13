@@ -153,6 +153,21 @@ async def _kill_stale_holders_async(profile: str) -> None:
     await asyncio.to_thread(_kill_stale_holders, profile)
 
 
+async def _adopt_popup(page: t.Any) -> None:
+    """Pull a context-level popup into the session's tab set (the click
+    path's own pull-in, applied to popups that arrive outside a click):
+    viewport wiring, the download capture and an ACTIVATED switch (a
+    script that opened a window wants to be seen -- its outline rides
+    the next action).  Best-effort: an adopt failure just logs."""
+    try:
+        # pylint: disable=import-outside-toplevel
+        from searx.zjsearch.ai.browser import session
+
+        await session.adopt_page(page)
+    except Exception:  # pylint: disable=broad-except
+        logger.warning("zjsearch browser: popup adopt failed", exc_info=True)
+
+
 async def _launch() -> "BrowserContext":
     from camoufox.addons import DefaultAddons  # pylint: disable=import-outside-toplevel
     from camoufox.async_api import AsyncNewBrowser  # pylint: disable=import-outside-toplevel
@@ -238,6 +253,35 @@ async def _launch() -> "BrowserContext":
                 " zjsearch.browser.profile elsewhere"
             ) from exc
     await context.route("**/*", gate.gate)
+    # the ORPHANED DOWNLOADS sweep: a captured file that was never read
+    # back used to live in /tmp forever (only the read deletes it) -- one
+    # sweep per launch clears the stale ones (kept: anything younger than
+    # 6h, a run's read-back may legitimately lag its capture)
+    try:
+        import tempfile  # pylint: disable=import-outside-toplevel
+
+        tmp = tempfile.gettempdir()
+        cutoff = time.time() - 6 * 3600
+        for entry in os.listdir(tmp):
+            if entry.startswith("zjs-dl-"):
+                path = os.path.join(tmp, entry)
+                try:
+                    if os.path.getmtime(path) < cutoff:
+                        os.unlink(path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    # the CONTEXT-LEVEL popup net: a page opened by anything OTHER than a
+    # click on a target=_blank link (a window.open during a load, a
+    # redirect script) used to spawn an untracked page -- invisible to
+    # the tab strip, rendering (and downloading) with no settlement.  It
+    # joins the session's tab set with the same wiring the click path
+    # applies, activated (a script that opened a window wants to BE seen).
+    context.on(
+        "page",
+        lambda page: asyncio.get_running_loop().create_task(_adopt_popup(page)),
+    )
     _register_shutdown()
     logger.info(
         "zjsearch browser: launched (camoufox, %s, adblock %s, profile %s)",
