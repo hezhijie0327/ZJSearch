@@ -155,7 +155,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     the shared text guards (`text`), the ONE SSRF gate (`guard`), the
     shared calendar primitives (`dates` — the fixed English weekday
     table and the tolerant IANA resolve; `spine`'s `<today>`/`<now>`
-    blocks and the `clock` tool both consume it, so the zone-fallback
+    blocks and the `calendar` tool both consume it, so the zone-fallback
     and weekday doctrines never drift), the shared NDJSON stream
     wrapper (`ndjson`) and the ONE document
     converter (`convert` — markitdown behind a single
@@ -351,7 +351,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (`runs/search/`: profile/prompts/gates/tools/executor/route;
     THREE tiers, three products on ONE loop -- Search (speed: the
     AI-Overview feel, one round, the minimal toolset: search/calculate/
-    clock/ask_user/memory/record_findings, inspect_image only when the request
+    calendar/ask_user/memory/record_findings, inspect_image only when the request
     carries images), Deep Search (balanced: the probe
     ladder 12-60 rounds, the plan + ledger machinery), Deep Research
     (deep: the ladder 15-120, decomposition, the ONLY tier with the
@@ -462,8 +462,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     round policy, few-shot recipes).  The tool implementations are
     self-contained packages under `ai/tools/` (one package per tool:
     spec + sanitizer + service; `core/`, `prompts/`, `runs/`, `api/`
-    complete the layout — see NEXTGEN-DESIGN.md).  THE COMPOSITE CLOCK
-    (tools/clock.py, EVERY tier + the overview surface): the wall clock
+    complete the layout — see NEXTGEN-DESIGN.md).  THE COMPOSITE CALENDAR
+    (tools/calendar.py, EVERY tier + the overview surface): the wall clock
     (no args — date, HH:MM:SS, weekday, UTC offset, UTC, unix) and a
     calendar lookup table in one call — `date` accepts the full
     `YYYY-MM-DD`, loose `MM-DD` (current year) or a bare `DD`
@@ -472,10 +472,28 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     every resolution is a deterministic `datetime`/`ZoneInfo` ladder
     anchored to the USER'S zone, an explicit bad tz is a fixable
     error, and the payload (mode-tagged now/date) rides the call event
-    for the row's value card.  THE DATE/TIME DIVISION OF LABOR:
+    for the row's value card.  EVERY payload also carries a LUNAR block
+    (cnlunar, table-driven 1900–2100): ganzhi year/month/day + zodiac +
+    the leap-aware lunar month/day, the day's solar term + the next
+    one, the traditional lunar festivals (a fixed (month, day) table —
+    the CJK audit's functional-data exemption — plus the statutory
+    feed; 除夕 is computed as the eve of 正月初一, never assumed from
+    the month length, and festivals never land in a leap month), the
+    folk observances, the traditional almanac (宜/忌, 吉凶神, 建除十二
+    神 + 黄黑道, 二十八宿, 纳音, 彭祖百忌, 吉神方位, 胎神, 月相 — the
+    row renders the date line + term/festival chips only; the almanac
+    is the MODEL's answer material) and the STATUTORY WORKDAY verdict
+    (chinesecalendar: `off`/`workday`/`makeup` with the package's own
+    holiday name; `coverage_until` names the data's last announced
+    day).  BOTH calendar deps are OPTIONAL (absent install → the block
+    is omitted, never faked), and the STALE-DATA doctrine is taught in
+    INSTRUCTIONS: for a date past `coverage_until` (next year's
+    arrangement not yet announced/loaded) the model says so and falls
+    back to a web search — it never infers a holiday or a make-up
+    workday.  THE DATE/TIME DIVISION OF LABOR:
     `<today>` stays DATE-ONLY on the researched tiers — byte-stable
     across a same day's runs so the prompt-cache prefix survives — and
-    the clock TOOL is the freshness channel (call-time answer, market
+    the calendar TOOL is the freshness channel (call-time answer, market
     hours, mid-run re-checks); the ZERO-TOOL direct lane bakes the
     hour in instead (`spine.now_line` at write time), keeping its
     zero-tool shape.  Weekday tables and the zone resolve live in ONE
@@ -553,10 +571,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   batch's per-step summaries; a read step's `text` is the wire-only
   document the step pane renders and archives) and `text`/`chars`
   for the read action (the clean content, archived under `url`).
-  The `clock` settlement rides `clock` (the mode-tagged now/date
-  payload — the row's value card renders it, the weekday re-localized
-  through the theme's catalog table `lib/weekdays.ts`, the ISO dates
-  left bare).  The
+  The `calendar` settlement rides `calendar` (the mode-tagged now/date
+  payload plus the lunar block — ganzhi/zodiac, solar terms,
+  festivals, the statutory workday verdict with its `coverage_until`,
+  the almanac riding for the model — the row renders the value card,
+  the weekday re-localized through the theme's catalog table
+  `lib/weekdays.ts`, the ISO dates left bare).  The
   session's pages JOIN the [n] registry (open mints the identity,
   read/wait_user register the full text — the writer cites what the
   model drove; coverage + entries ride along; about:blank mints
@@ -757,7 +777,7 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
   `searchParams.ts`, `router.tsx`, `i18n/`, `categories.ts`, `cookies.ts`,
   `settings.ts`, `theme.ts`, `format.ts`, `weekdays.ts` (the one
   `getDay()` → `weekday_*` catalog-key table behind every weekday
-  label — clock row, weather strip; the theme owns the language, not
+  label — calendar row, weather strip; the theme owns the language, not
   Intl), `link.ts`, `motion.ts`.
   Never imports from `components/` / `features/` / `pages/`.
 - `src/components/` — UI shared across pages (Shell, Link, SearchBox,

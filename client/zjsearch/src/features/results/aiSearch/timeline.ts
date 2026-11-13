@@ -78,12 +78,42 @@ export interface AiEngineInventory {
   disabled: Array<{ name: string; bang: string; cats: string[]; paid?: boolean }>;
 }
 
-/** clock rows: the composite time/date payload (the settlement's
+/** calendar rows: the lunar-calendar block (cnlunar + the statutory
+    table) -- display-ready Chinese terms (the proper nouns ARE the
+    data); the statutory workday verdict is omitted outside the
+    announced coverage.  The almanac block rides for the MODEL's
+    answers; the row renders the date line + term/festival/workday
+    chips only. */
+export interface AiCalendarLunar {
+  year: string;
+  year_cn: string;
+  zodiac: string;
+  month: string;
+  day: string;
+  leap: boolean;
+  season: string;
+  ganzhi: { year: string; month: string; day: string };
+  term: string;
+  next_term: { name: string; date: string };
+  festivals: string[];
+  solar_holidays: string[];
+  folk: string[];
+  /** the statutory verdict; `status: null` = the date sits outside the
+      data's announced coverage (coverage_until names the boundary) */
+  workday: {
+    status: "off" | "workday" | "makeup" | null;
+    name: string | null;
+    coverage_until: string;
+  } | null;
+  almanac: Record<string, unknown>;
+}
+
+/** calendar rows: the composite time/date payload (the settlement's
     structured answer) -- `mode` discriminates the two shapes: `now`
     carries the instant fields, `date` the calendar lookup's.  The
     weekday is the fixed English name from the server; the row renders
     it localized off the ISO date. */
-export interface AiClockPayload {
+export interface AiCalendarPayload {
   mode: "now" | "date";
   timezone: string | null;
   today: string;
@@ -99,6 +129,8 @@ export interface AiClockPayload {
   iso_week?: number;
   days_from_today?: number;
   relation?: "past" | "today" | "future";
+  /** the lunar block; null/absent outside the engine's coverage */
+  lunar?: AiCalendarLunar | null;
 }
 
 export interface AiSearchCall {
@@ -108,7 +140,7 @@ export interface AiSearchCall {
   tool:
     | "search_web"
     | "calculate"
-    | "clock"
+    | "calendar"
     | "mcp"
     | "memory"
     | "recall_history"
@@ -167,10 +199,10 @@ export interface AiSearchCall {
     chars?: number;
     text?: string;
   }>;
-  /** clock: the composite time/date payload -- the row's expansion
+  /** calendar: the composite time/date payload -- the row's expansion
       renders the instant (time / weekday / zone / UTC / unix) or the
       calendar lookup (target / weekday / ISO week / relation) */
-  clock?: AiClockPayload;
+  calendar?: AiCalendarPayload;
   /** calculate: the exact evaluated result (the row shows expr = result) */
   result?: string;
   /** evaluate: the STRUCTURED verdict (question name -> choice/score/noul
@@ -1126,7 +1158,9 @@ export function applyEvent(
                     })),
                   }
                 : {}),
-              ...(event.clock !== undefined && event.clock !== null ? { clock: normalizeClock(event.clock) } : {}),
+              ...(event.calendar !== undefined && event.calendar !== null
+                ? { calendar: normalizeCalendar(event.calendar) }
+                : {}),
             }
           : call;
       // a page read's extracted text persists as a document row (the
@@ -1586,7 +1620,7 @@ export function applyEvent(
 const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "search_web",
   "calculate",
-  "clock",
+  "calendar",
   "mcp",
   "memory",
   "recall_history",
@@ -1603,11 +1637,51 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "set_deliverable",
 ]);
 
+/** One lunar block, sanitized: the strings survive as strings, the
+    verdict only as its three legal values, the lists as string arrays
+    (a legacy/garbage field degrades to null -- the row simply hides
+    the lunar line). */
+function normalizeLunar(value: unknown): AiCalendarLunar | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const l = value as Record<string, unknown>;
+  const g = (l.ganzhi ?? {}) as Record<string, unknown>;
+  const nt = (l.next_term ?? {}) as Record<string, unknown>;
+  const w = (l.workday ?? null) as Record<string, unknown> | null;
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+  return {
+    year: String(l.year ?? ""),
+    year_cn: String(l.year_cn ?? ""),
+    zodiac: String(l.zodiac ?? ""),
+    month: String(l.month ?? ""),
+    day: String(l.day ?? ""),
+    leap: l.leap === true,
+    season: String(l.season ?? ""),
+    ganzhi: { year: String(g.year ?? ""), month: String(g.month ?? ""), day: String(g.day ?? "") },
+    term: typeof l.term === "string" ? l.term : "",
+    next_term: { name: String(nt.name ?? ""), date: String(nt.date ?? "") },
+    festivals: strings(l.festivals),
+    solar_holidays: strings(l.solar_holidays),
+    folk: strings(l.folk),
+    workday:
+      w && typeof w.coverage_until === "string" && w.coverage_until
+        ? {
+            status: w.status === "off" || w.status === "workday" || w.status === "makeup" ? w.status : null,
+            name: typeof w.name === "string" && w.name ? w.name : null,
+            coverage_until: w.coverage_until,
+          }
+        : null,
+    almanac: (l.almanac ?? {}) as Record<string, unknown>,
+  };
+}
+
 /** One settled clock payload, sanitized: the mode resolves to its two
     legal values, the strings survive only as strings, the numerics only
     as numbers (a legacy/garbage field degrades to undefined, never a
     runtime surprise in the row). */
-function normalizeClock(value: unknown): AiClockPayload {
+function normalizeCalendar(value: unknown): AiCalendarPayload {
   const c = (value ?? {}) as Record<string, unknown>;
   return {
     mode: c.mode === "date" ? "date" : "now",
@@ -1624,6 +1698,7 @@ function normalizeClock(value: unknown): AiClockPayload {
     days_from_today: typeof c.days_from_today === "number" ? c.days_from_today : undefined,
     relation:
       c.relation === "past" || c.relation === "future" ? c.relation : c.today === c.target ? "today" : undefined,
+    lunar: "lunar" in c ? normalizeLunar(c.lunar) : undefined,
   };
 }
 

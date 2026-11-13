@@ -26,7 +26,7 @@ from searx.zjsearch.ai.tools import search_tools
 from searx.zjsearch.ai.tools import browse as browse_tool
 from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.tools import calculate
-from searx.zjsearch.ai.tools import clock as clock_tool
+from searx.zjsearch.ai.tools import calendar as calendar_tool
 from searx.zjsearch.ai.tools import recall_history as recall_history_cap
 from searx.zjsearch.ai.tools import memory as memory_cap
 from searx.zjsearch.ai.tools import list_engines as list_engines_tool
@@ -60,7 +60,7 @@ from searx.zjsearch.ai.tools import (
     EVALUATE_TOOL,
     RECORD_FINDINGS_TOOL,
     CALCULATE_TOOL,
-    CLOCK_TOOL,
+    CALENDAR_TOOL,
     parse_call,
     parse_record_findings_call,
     parse_query,
@@ -538,18 +538,18 @@ action from what is visible."""
                     },
                 )
                 continue
-            if tool_name == CLOCK_TOOL:
-                # the composite clock: instant local work (no pool slot),
+            if tool_name == CALENDAR_TOOL:
+                # the composite calendar: instant local work (no pool slot),
                 # anchored to the USER'S zone -- the payload rides the
                 # event so the row renders the real value
-                feed, event = clock_tool.run_call(call, rnd, wire_id, self.tz)
+                feed, event = calendar_tool.run_call(call, rnd, wire_id, self.tz)
                 feeds[wire_id - 1] = feed
                 yield (
                     "call",
                     {
                         "call": wire_id,
                         "status": event.get("status", "ok"),
-                        "clock": event.get("clock"),
+                        "calendar": event.get("calendar"),
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed[:800],
                         "raw": feed[:50_000],

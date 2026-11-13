@@ -29,12 +29,12 @@ typing-extensions==4.16.0
 #                     and rides the openai family)
 # consumers: infra/sdk/*.py, infra/embed.py, infra/decision.py,
 # runtime/rank.py
-openai==3.42.1
-anthropic==2.4.0
-google-genai==2.34.0
-dashscope==2.0.3
+openai==3.46.0
+anthropic==2.6.0
+google-genai==3.0.0
+dashscope==2.0.4
 typesafe-sdk==0.7.5
-arkruntime==0.17.0
+arkruntime==0.19.0
 
 # zjsearch theme: the BM25 result reranker (searx/plugins/bm25_reranker.py)
 # -- Apache-2.0, numpy is its only runtime dependency
@@ -60,3 +60,14 @@ mcp==2.3.0
 # via `python -m searx.zjsearch.ai.browser.install` (the Docker recipe lives in
 # AGENTS.md's render-contract section)
 camoufox[geoip]==0.5.9
+
+# zjsearch theme: the clock tool's lunar + statutory-holiday calendar
+# engines (searx/zjsearch/ai/tools/clock.py -- solar<->lunar dates,
+# ganzhi year, zodiac, solar terms + the State-Council holiday and
+# make-up-workday table).  cnlunar is pure python, table-driven,
+# coverage 1900-2100; chinesecalendar is community-maintained, ONE
+# version bump per year after the annual announcement.  Both payload
+# blocks are OPTIONAL: an absent install (or a date outside the
+# announced coverage) omits the block, the clock itself keeps answering
+cnlunar==0.2.5
+chinesecalendar==1.12.1

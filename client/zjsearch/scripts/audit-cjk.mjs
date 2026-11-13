@@ -22,6 +22,8 @@
 //     their query/answer/title content is test data, not UI strings.
 //   - stock_quote.py `in market_label` lines — functional detection of the
 //     upstream data source's own Chinese field values.
+//   - tools/calendar.py `in _LUNAR_FESTIVALS table data` — the traditional
+//     lunar festival name table, fixed data keyed by (lunar month, day).
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -54,6 +56,9 @@ function isAllowlisted(relPath, line) {
     return true;
   }
   if (relPath.replaceAll(sep, "/").endsWith("stock_quote.py") && line.includes("in market_label")) {
+    return true;
+  }
+  if (relPath.replaceAll(sep, "/").endsWith("tools/calendar.py") && line.includes("in _LUNAR_FESTIVALS table data")) {
     return true;
   }
   return false;

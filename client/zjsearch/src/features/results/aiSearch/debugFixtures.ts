@@ -554,14 +554,14 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 16,
-          tool: "clock",
+          tool: "calendar",
           q: "",
           status: "pending",
           args: {},
         },
         {
           id: 17,
-          tool: "clock",
+          tool: "calendar",
           q: "11-13",
           status: "pending",
           args: { date: "11-13" },
@@ -663,8 +663,9 @@ const FULL_STAGE: DebugScenario = {
       ms: 2,
       // the composite clock's NOW shape: the instant fields (the weekday
       // stays the fixed English name -- the answer language directive
-      // localizes the prose around it)
-      clock: {
+      // localizes the prose around it) + the lunar block (the almanac
+      // fields ride the payload for the model; the row shows the line)
+      calendar: {
         mode: "now",
         timezone: "Asia/Shanghai",
         today: "2026-11-13",
@@ -674,6 +675,38 @@ const FULL_STAGE: DebugScenario = {
         datetime: "2026-11-13T14:32:05+08:00",
         utc: "2026-11-13T06:32:05+00:00",
         unix: 1763008325,
+        lunar: {
+          year: "丙午",
+          year_cn: "二零二六",
+          zodiac: "马",
+          month: "十月",
+          day: "初五",
+          leap: false,
+          season: "孟冬",
+          ganzhi: { year: "丙午", month: "己亥", day: "辛卯" },
+          term: "",
+          next_term: { name: "小雪", date: "2026-11-22" },
+          festivals: [],
+          solar_holidays: [],
+          folk: ["达摩祖师诞"],
+          workday: { status: "workday", name: null },
+          almanac: {
+            suited: ["结婚姻", "宴会", "开市"],
+            avoided: ["出行", "安葬"],
+            gods: ["岁德合"],
+            avoid_gods: ["死气"],
+            officer: "定",
+            ecliptic: "黑道日",
+            duty_god: "玄武",
+            mansions: "亢金龙",
+            east_star: "析木",
+            nayin: "松柏木",
+            pengzu: "辛不合酱 主人不尝,卯不穿井 水泉不香",
+            directions: ["喜神西南", "财神正东"],
+            fetus_god: "厨灶门外正南",
+            moon: "",
+          },
+        },
       },
       feed: '{"clock": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"now","time":"14:32:05","datetime":"2026-11-13T14:32:05+08:00","utc":"2026-11-13T06:32:05+00:00","unix":1763008325}}',
     },
@@ -684,8 +717,9 @@ const FULL_STAGE: DebugScenario = {
       status: "ok",
       ms: 2,
       // the DATE shape ("11/13 是周几" -> 11-13): the loose MM-DD form
-      // resolves in the current year; relation "today" is the truth tell
-      clock: {
+      // resolves in the current year; relation "today" is the truth tell;
+      // the lunar block is the TARGET's (a festival day shows its name)
+      calendar: {
         mode: "date",
         timezone: "Asia/Shanghai",
         today: "2026-11-13",
@@ -695,6 +729,23 @@ const FULL_STAGE: DebugScenario = {
         iso_week: 46,
         days_from_today: 0,
         relation: "today",
+        lunar: {
+          year: "丙午",
+          year_cn: "二零二六",
+          zodiac: "马",
+          month: "十月",
+          day: "初五",
+          leap: false,
+          season: "孟冬",
+          ganzhi: { year: "丙午", month: "己亥", day: "辛卯" },
+          term: "",
+          next_term: { name: "小雪", date: "2026-11-22" },
+          festivals: [],
+          solar_holidays: [],
+          folk: ["达摩祖师诞"],
+          workday: { status: "workday", name: null },
+          almanac: {},
+        },
       },
       feed: '{"clock": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"date","target":"2026-11-13","iso_week":46,"days_from_today":0,"relation":"today"}}',
     },

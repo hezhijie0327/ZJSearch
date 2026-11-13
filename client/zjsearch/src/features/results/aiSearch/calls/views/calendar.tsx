@@ -2,14 +2,14 @@
 
 import { Clock, Copy } from "lucide-react";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
-import type { AiClockPayload } from "@/features/results/aiSearch/timeline.ts";
+import type { AiCalendarLunar, AiCalendarPayload } from "@/features/results/aiSearch/timeline.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import type { Translate } from "@/lib/i18n.ts";
 import { CHIP_HOVER, MONO_CHIP } from "@/lib/styles.ts";
 import { weekdayKey } from "@/lib/weekdays.ts";
 
 /**
- * The clock view: the composite time/date answer renders as a value card
+ * The calendar view: the composite time/date answer renders as a value card
  * -- the instant (time hero + weekday/date + zone chips) or the calendar
  * lookup (target date hero + weekday + relation + offsets).  The server
  * speaks a fixed English weekday for the model; the row re-localizes the
@@ -25,20 +25,52 @@ function weekdayLabel(iso: string, t: Translate): string {
   return (key ? t(key) : "") || "";
 }
 
-function relationChip(payload: AiClockPayload, t: Translate): string {
+function relationChip(payload: AiCalendarPayload, t: Translate): string {
   switch (payload.relation) {
     case "today":
-      return t("ai_clock_rel_today");
+      return t("ai_calendar_rel_today");
     case "future":
-      return t("ai_clock_rel_future");
+      return t("ai_calendar_rel_future");
     case "past":
-      return t("ai_clock_rel_past");
+      return t("ai_calendar_rel_past");
     default:
       return "";
   }
 }
 
-function NowBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"] }) {
+/** The lunar line: the composed catalog date (the glue lives in the
+    catalog -- the zh value renders the ganzhi year, zodiac and lunar
+    month/day verbatim) + the workday verdict, the day's solar term and
+    the festival chips.  The Chinese terms are runtime proper nouns
+    (the payload's data), not literals.  The folk/religious feed and
+    the deep almanac stay payload-only -- the row speaks one line, the
+    model answers the almanac questions. */
+function LunarLine({ lunar, t }: { lunar: AiCalendarLunar; t: ToolRowProps["t"] }) {
+  const workday =
+    lunar.workday === null || lunar.workday.status === null
+      ? null
+      : lunar.workday.status === "off"
+        ? t("ai_calendar_workday_off")
+        : lunar.workday.status === "makeup"
+          ? t("ai_calendar_workday_makeup")
+          : t("ai_calendar_workday_work");
+  return (
+    <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs" dir="auto">
+      <span className="min-w-0 truncate text-ink-2">
+        {t("ai_calendar_lunar_date", { year: lunar.year, zodiac: lunar.zodiac, month: lunar.month, day: lunar.day })}
+      </span>
+      {workday ? <span className={MONO_CHIP}>{workday}</span> : null}
+      {lunar.term ? <span className={MONO_CHIP}>{lunar.term}</span> : null}
+      {lunar.festivals.map((festival) => (
+        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent" key={festival}>
+          {festival}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function NowBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps["t"] }) {
   const copyToast = useCopyToast();
   const weekday = weekdayLabel(payload.today, t) || payload.weekday;
   return (
@@ -49,6 +81,7 @@ function NowBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"]
           {weekday} · {payload.today}
         </span>
       </div>
+      {payload.lunar ? <LunarLine lunar={payload.lunar} t={t} /> : null}
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         {payload.timezone ? (
           <span className={MONO_CHIP}>
@@ -56,7 +89,7 @@ function NowBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"]
             {payload.utc_offset ? ` ${payload.utc_offset.slice(3)}` : ""}
           </span>
         ) : (
-          <span className={MONO_CHIP}>{t("ai_clock_server_local")}</span>
+          <span className={MONO_CHIP}>{t("ai_calendar_server_local")}</span>
         )}
         {payload.utc ? (
           <button
@@ -67,7 +100,7 @@ function NowBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"]
             title={t("copy")}
             type="button"
           >
-            {t("ai_clock_utc")} {payload.utc.replace("T", " ")}
+            {t("ai_calendar_utc")} {payload.utc.replace("T", " ")}
             <Copy aria-hidden="true" className="size-3" />
           </button>
         ) : null}
@@ -80,7 +113,7 @@ function NowBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"]
             title={t("copy")}
             type="button"
           >
-            {t("ai_clock_unix")} {payload.unix}
+            {t("ai_calendar_unix")} {payload.unix}
             <Copy aria-hidden="true" className="size-3" />
           </button>
         ) : null}
@@ -89,7 +122,7 @@ function NowBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"]
   );
 }
 
-function DateBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"] }) {
+function DateBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps["t"] }) {
   const target = payload.target ?? payload.today;
   const weekday = weekdayLabel(target, t) || payload.weekday;
   const days = payload.days_from_today ?? 0;
@@ -115,39 +148,40 @@ function DateBody({ payload, t }: { payload: AiClockPayload; t: ToolRowProps["t"
           </span>
         ) : null}
       </div>
+      {payload.lunar ? <LunarLine lunar={payload.lunar} t={t} /> : null}
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         <span className={MONO_CHIP}>{days >= 0 ? `+${days}d` : `${days}d`}</span>
         {typeof payload.iso_week === "number" ? <span className={MONO_CHIP}>W{payload.iso_week}</span> : null}
-        <span className={MONO_CHIP}>{t("ai_clock_today_label", { date: payload.today })}</span>
+        <span className={MONO_CHIP}>{t("ai_calendar_today_label", { date: payload.today })}</span>
         {payload.timezone ? <span className={MONO_CHIP}>{payload.timezone}</span> : null}
       </div>
     </div>
   );
 }
 
-export const clockView: ToolView = {
+export const calendarView: ToolView = {
   Icon: Clock,
-  label: ({ call, t }) => call.q || t("ai_clock_row"),
+  label: ({ call, t }) => call.q || t("ai_calendar_row"),
   metric: ({ call, t }) => {
     if (call.status === "pending") {
-      return t("ai_clock_running");
+      return t("ai_calendar_running");
     }
-    if (call.status !== "ok" || !call.clock) {
+    if (call.status !== "ok" || !call.calendar) {
       return null;
     }
-    return call.clock.mode === "now" ? (call.clock.time ?? null) : (call.clock.target ?? null);
+    return call.calendar.mode === "now" ? (call.calendar.time ?? null) : (call.calendar.target ?? null);
   },
   Content: ({ call, t }) => {
-    if (!call.clock) {
+    if (!call.calendar) {
       // legacy/error replays: the feed head (the kernel's debug panes)
       // is the honest body
       return null;
     }
-    return call.clock.mode === "date" ? (
-      <DateBody payload={call.clock} t={t} />
+    return call.calendar.mode === "date" ? (
+      <DateBody payload={call.calendar} t={t} />
     ) : (
-      <NowBody payload={call.clock} t={t} />
+      <NowBody payload={call.calendar} t={t} />
     );
   },
-  expandable: ({ call }) => Boolean(call.clock),
+  expandable: ({ call }) => Boolean(call.calendar),
 };

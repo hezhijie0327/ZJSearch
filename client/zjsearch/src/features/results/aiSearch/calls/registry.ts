@@ -5,7 +5,7 @@ import { askUserView } from "@/features/results/aiSearch/calls/views/askUser.tsx
 import { browseView } from "@/features/results/aiSearch/calls/views/browse.tsx";
 import { buildTableView } from "@/features/results/aiSearch/calls/views/buildTable.tsx";
 import { calculateView } from "@/features/results/aiSearch/calls/views/calculate.tsx";
-import { clockView } from "@/features/results/aiSearch/calls/views/clock.tsx";
+import { calendarView } from "@/features/results/aiSearch/calls/views/calendar.tsx";
 import { delegateResearchView } from "@/features/results/aiSearch/calls/views/delegateResearch.ts";
 import { evaluateView } from "@/features/results/aiSearch/calls/views/evaluate.tsx";
 import { inspectImageView } from "@/features/results/aiSearch/calls/views/inspectImage.tsx";
@@ -30,7 +30,7 @@ export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
   search_web: searchWebView,
   browse: browseView,
   calculate: calculateView,
-  clock: clockView,
+  calendar: calendarView,
   update_plan: updatePlanView,
   record_findings: recordFindingsView,
   ask_user: askUserView,
