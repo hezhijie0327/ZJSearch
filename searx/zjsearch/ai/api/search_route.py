@@ -120,6 +120,7 @@ def _budget_extension_tail(
     """The loop's budget-tail callback factory: ONE judged extension (the
     gate reads the ledger's live state), the grant clamped to a fraction
     of the base budget -- a tail-lights top-up, never a doubling."""
+
     def tail(executed_rounds: int) -> tuple[int, str]:
         extra, reason = extend_budget_gate(cfg, question, executed_rounds, state.facts, state.gaps, account=account)
         return min(max(extra, 0), max(2, base_rounds // 6)), reason
@@ -466,8 +467,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # always researches (the transcript IS the research, no gate spend)
     account = ModelAccount()
     research_needed = resume is not None or (
-        mode != "overview"
-        and (bool(_URL_RE.search(q)) or research_gate(cfg, q, account=account))
+        mode != "overview" and (bool(_URL_RE.search(q)) or research_gate(cfg, q, account=account))
     )
     # the clarify PRE-GATE (fail-open): two decision nouls decide whether
     # the query even reaches the (expensive) clarify completion -- AMBIGUOUS
@@ -580,9 +580,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         # whole corpus -- the writer cites them positionally, exactly like
         # a researched run's feed, and the shape ladder's overview rung
         # sizes the answer
-        overview_feed = (
-            [line for line in overview_ctx.split("\n") if line.strip()] if mode == "overview" else []
-        )
+        overview_feed = [line for line in overview_ctx.split("\n") if line.strip()] if mode == "overview" else []
         events = engine.run(
             cfg,
             writer_messages(
@@ -828,8 +826,8 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             return None
         route = outline is not None
         if template_pick is not None:
-            eff_deck = shape_pick if shape_pick is not None else (
-                deck_requested if route else bool((flip or {}).get("deck"))
+            eff_deck = (
+                shape_pick if shape_pick is not None else (deck_requested if route else bool((flip or {}).get("deck")))
             )
             eff_outline: dict[str, t.Any] | None = report_outline.build_outline_from_template(
                 cfg,
@@ -954,6 +952,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
     # journal keeps the ending for the late collector across restarts
     # and beyond the terminal TTL.
     handle = run_host.register(linger=True)
+
     # the direct-answer pick's STATE-SIDE withdrawal: the drained steer's
     # structured meta reaches back here (the loop's round boundary, the
     # driver thread) so the remaining research rounds see the withdrawal
@@ -968,6 +967,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             state.deliverable_entities = []
 
     handle.on_steer = _withdraw_route_shape
+
     # every research run journals: the tail a disconnected client missed
     # is exactly what nothing else preserves (the client's evt log stops
     # at its disconnect, the host buffer dies with the process / the
@@ -1061,7 +1061,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             thread_ledger=thread_ledger,
             mcp_servers=(mcp.server_instructions() or None) if mcp.mcp_specs() else None,
             tool_notes=tool_notes or None,
-            tz=user_tz,
+            user_tz=user_tz,
             overview_context=(overview_ctx if mode == "overview" else None),
         )
 

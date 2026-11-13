@@ -186,6 +186,11 @@ class AnthropicSdk:
             # the endpoint.
             kwargs.pop("thinking", None)
             kwargs["messages"] = _messages(messages, False)
+            if caching.anthropic_cache_on(cfg):
+                # the rebuild from the RAW list dropped the tail breakpoint
+                # the first pass applied -- without re-stamping it this
+                # turn re-writes the whole history at full price
+                caching.anthropic_cache_tail(kwargs["messages"])
             stream = await client.messages.create(**kwargs)
         calls: dict[int, dict[str, str]] = {}
         finish: str | None = None

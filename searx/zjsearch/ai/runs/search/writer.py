@@ -119,7 +119,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             role,
             shared.block(
                 "role_note",
-                'This request needs NO web research -- it is a greeting, a chat or a writing task.  Answer directly and naturally in prose; ignore every source and citation rule (no [n] marks, no [*]); do not invent sources.',
+                "This request needs NO web research -- it is a greeting, a chat or a writing task.  Answer directly and naturally in prose; ignore every source and citation rule (no [n] marks, no [*]); do not invent sources.",
             ),
             shared.identity(),
             # the ZERO-TOOL lane's clock: this lane has no clock tool, so
@@ -136,7 +136,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             lang,
             role,
             shape=shared.shape_ladder(mode),
-            tz=tz,
+            user_tz=tz,
             sources_note=shared.block(
                 "sources_note",
                 f"The numbered sources gathered for this question follow the question below.  [n] labels are global and contiguous; sources [1]..[{sources_base}] predate this thread's question; cite only sources visible in the context.",
@@ -148,7 +148,9 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # question asked to "follow the attachment" must produce an answer
         # that actually does (the framework case: META-01 demanded rule-ID
         # citations and the bare writer never delivered them)
-        names = ", ".join(f'"{str(f.get("name") or "attachment")}"' for f in attached_files[:3])
+        names = ", ".join(
+            f'"{str(f.get("name") or "attachment")}"' for f in attached_files[:3]
+        )
         lines.append(
             shared.block(
                 "attached_files_note",
@@ -245,7 +247,8 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # researcher never sees ready-made sources): pre-numbered after
         # the live feed, clearly marked as unverified this run
         recalled = "\n".join(
-            f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}" for item in past_sources
+            f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}"
+            for item in past_sources
         )
         lines.append(
             shared.block(
@@ -264,7 +267,9 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     # the attachment rides the SAME single turn -- its bulk comes off the
     # feed's budget so the turn always fits the window (report mode never
     # lands here: the synthesizer packs per-section instead)
-    attach_chars = sum(min(len(str(f.get("text") or "")), 60_000) for f in attached_files or [])
+    attach_chars = sum(
+        min(len(str(f.get("text") or "")), 60_000) for f in attached_files or []
+    )
     if attach_chars:
         cap = max(20_000, cap - attach_chars)
     context = "\n\n".join(_fit_context(feed, cap, relevance))
@@ -272,14 +277,18 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # a single oversized block: the last-resort slice the eviction
         # cannot fix
         context = context[:cap] + "\n\n[... the feed was truncated ...]"
-    user = shared.block("question", question) + "\n" + shared.block(
-        "context", context if not direct else "No sources: this answer does not need them."
+    user = (
+        shared.block("question", question)
+        + "\n"
+        + shared.block(
+            "context",
+            context if not direct else "No sources: this answer does not need them.",
+        )
     )
     for file in attached_files or []:
         text = str(file.get("text") or "")[:60_000]
-        user += (
-            "\n"
-            + shared.block("attached_file", text, name=file.get("name") or "attachment.md")
+        user += "\n" + shared.block(
+            "attached_file", text, name=file.get("name") or "attachment.md"
         )
     if image_parts:
         user = shared.user_message(user, image_parts)

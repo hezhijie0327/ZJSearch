@@ -68,9 +68,12 @@ def sdk_timeout() -> t.Any:
     return httpx2.Timeout(_SDK_READ_TIMEOUT, connect=_SDK_CONNECT_TIMEOUT)
 
 
-_sdk_clients: dict[tuple[str, str], t.Any] = {}
-"""SDK clients cached per family + base -- constructed on the shared network
-loop (httpx2 / anyio bind lazily) and reused across requests for the pool."""
+_sdk_clients: dict[tuple[str, str, str], t.Any] = {}
+"""SDK clients cached per (family, base, api_key) -- constructed on the shared
+network loop (httpx2 / anyio bind lazily) and reused across requests for the
+pool.  The KEY rides the cache tuple like the sync surfaces' own caches: a
+runtime key rotation (or a second config block sharing family+base) gets its
+own client instead of silently reusing the first block's credentials."""
 
 
 def openai_client(cfg: dict[str, t.Any], base: str, family: str = "openai") -> t.Any:
@@ -79,7 +82,7 @@ def openai_client(cfg: dict[str, t.Any], base: str, family: str = "openai") -> t
     keys -- one cached client per (family, base), never a shared one."""
     from openai import AsyncOpenAI  # pylint: disable=import-outside-toplevel
 
-    key = (family, base)
+    key = (family, base, str(config.chat_key(cfg) or ""))
     client = _sdk_clients.get(key)
     if client is None:
         client = AsyncOpenAI(
@@ -97,7 +100,7 @@ def openai_client(cfg: dict[str, t.Any], base: str, family: str = "openai") -> t
 def anthropic_client(cfg: dict[str, t.Any], base: str, family: str = "anthropic") -> t.Any:
     from anthropic import AsyncAnthropic  # pylint: disable=import-outside-toplevel
 
-    key = (family, base)
+    key = (family, base, str(config.chat_key(cfg) or ""))
     client = _sdk_clients.get(key)
     if client is None:
         client = AsyncAnthropic(
@@ -117,7 +120,7 @@ def gemini_client(cfg: dict[str, t.Any], base: str, family: str = "gemini") -> t
     from google.genai import types  # pylint: disable=import-outside-toplevel
     from google import genai  # pylint: disable=import-outside-toplevel
 
-    key = (family, base)
+    key = (family, base, str(config.chat_key(cfg) or ""))
     client = _sdk_clients.get(key)
     if client is None:
         api_key = config.chat_key(cfg)

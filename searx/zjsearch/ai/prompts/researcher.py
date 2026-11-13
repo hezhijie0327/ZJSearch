@@ -62,7 +62,6 @@ _DEPTH_RESEARCH: dict[str, str] = {
     tags each -- they name the run's topics in the knowledge graph).
     Ask the user only to avoid a genuinely wrong high-stakes guess (see
     the ask tool); otherwise never.""",
-
     "balanced": """\
     Depth: DEEP SEARCH -- a handful of rounds covering the main facets:
     what it is, how it works or why it matters, and whatever context the
@@ -310,7 +309,12 @@ def _episodes_block(episodes: list[dict[str, str]] | None) -> str:
     if not rows:
         return ""
     lines = "\n".join(
-        f"- {e['title']}" + (f" -- {str(e.get('preview') or '').strip()}" if str(e.get("preview") or "").strip() else "")
+        f"- {e['title']}"
+        + (
+            f" -- {str(e.get('preview') or '').strip()}"
+            if str(e.get("preview") or "").strip()
+            else ""
+        )
         for e in rows
     )
     return shared.block(
@@ -396,23 +400,26 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     memories_live: bool = False,
     mcp_servers: dict[str, str] | None = None,
     tool_notes: list[tuple[str, str]] | None = None,
-    tz: str | None = None,
+    user_tz: str | None = None,
     overview_context: str | None = None,
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
     answer), ``<today>``, ``<step_notes>`` language, ``<how_to_search>``,
     ``<examples>`` (few-shot), ``<tool_notes>`` (the registered tools'
-    own doctrine), ``<depth>`` (the round policy half -- output shape
-    belongs to the writer), ``<research_policy>`` and the clarify
-    round-trip blocks.  Every tool-conditional block keys off
+    own doctrine) and ``<depth>`` (the round policy half -- output shape
+    belongs to the writer).  ``<research_policy>`` rides the USER
+    message's ``<run_context>`` -- its max_rounds/depth-rung values are
+    graded PER RUN, and a per-run block in the system prompt would break
+    the cross-run prefix cache there (the module's own caching doctrine
+    above).  Every tool-conditional block keys off
     ``toolset`` -- the names of the specs this run actually registered
     -- so the prompt can never promise a tool the model does not have.
     The SHARED answer contract (citations, markdown, grounding, voice)
     is the WRITER's."""
     lines: list[str] = [
         _role(),
-        shared.today_line(tz),
+        shared.today_line(user_tz),
         shared.block(
             "step_notes",
             f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",
@@ -423,10 +430,9 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     tool_notes_block = _tool_notes(tool_notes)
     if tool_notes_block:
         lines.append(tool_notes_block)
-    lines.append(shared.block("depth", _DEPTH_RESEARCH.get(mode, _DEPTH_RESEARCH["balanced"])))
-    research_policy = _research_policy(max_rounds, depth_rung)
-    if research_policy:
-        lines.append(research_policy)
+    lines.append(
+        shared.block("depth", _DEPTH_RESEARCH.get(mode, _DEPTH_RESEARCH["balanced"]))
+    )
     if steerable:
         lines.append(_user_steering())
 
@@ -436,6 +442,9 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     # the memory block's plain assignment below them silently DISCARDED
     # what they had built
     run_context = ""
+    research_policy = _research_policy(max_rounds, depth_rung)
+    if research_policy:
+        run_context += f"{research_policy}\n"
     if clarifications:
         run_context += (
             shared.block(
@@ -448,7 +457,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         run_context += (
             shared.block(
                 "clarified",
-                'The user declined to clarify the direction: proceed with your best interpretation and cover the plausible facets.',
+                "The user declined to clarify the direction: proceed with your best interpretation and cover the plausible facets.",
             )
             + "\n"
         )
@@ -475,8 +484,16 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     follow_up = _follow_up(sources_base)
     if follow_up:
         run_context += f"{follow_up}\n"
-    facts = [str(x).strip() for x in ((thread_ledger or {}).get("facts") or []) if str(x).strip()]
-    gaps = [str(x).strip() for x in ((thread_ledger or {}).get("gaps") or []) if str(x).strip()]
+    facts = [
+        str(x).strip()
+        for x in ((thread_ledger or {}).get("facts") or [])
+        if str(x).strip()
+    ]
+    gaps = [
+        str(x).strip()
+        for x in ((thread_ledger or {}).get("gaps") or [])
+        if str(x).strip()
+    ]
     if facts or gaps:
         ledger_note = (
             " Re-affirm the ones you build on into your own findings ledger"
@@ -509,7 +526,9 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # with the rest of <run_context>, never the cached system prompt.
         # (The internal tools' instructions are registry constants --
         # they live in the system prompt's <tool_notes> instead.)
-        listed = "\n".join(f"- {name}: {text}" for name, text in mcp_servers.items() if text)
+        listed = "\n".join(
+            f"- {name}: {text}" for name, text in mcp_servers.items() if text
+        )
         if listed:
             run_context += (
                 shared.block(
@@ -560,7 +579,11 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # arrive WHOLE -- the old 30K re-cap cut the 57KB BP framework in
         # half and the run could never cite the rules it never saw)
         text = str(file.get("text") or "")[:60_000]
-        trunc = "\n[... the file was truncated ...]" if len(str(file.get("text") or "")) > 60_000 else ""
+        trunc = (
+            "\n[... the file was truncated ...]"
+            if len(str(file.get("text") or "")) > 60_000
+            else ""
+        )
         name = file.get("name") or "attachment.md"
         run_context += (
             shared.block(
@@ -578,4 +601,6 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"
     user_text = f"{run_context}{shared.block('q', question)}"
-    return shared.build_messages("\n".join(lines), shared.user_message(user_text, image_parts), history)
+    return shared.build_messages(
+        "\n".join(lines), shared.user_message(user_text, image_parts), history
+    )
