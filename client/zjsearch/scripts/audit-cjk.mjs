@@ -48,6 +48,10 @@ const CJK_PUNCT = /[\u3000-\u303f\uff01-\uff5e\uffe0-\uffef]/;
 const CODE_CONTEXT =
   /(re\.(compile|split|match|sub|search|fullmatch|findall)|\.split\(|\.matchAll\(|\.match\(|\.exec\(|\.test\(|\.replace\(|new RegExp|=\s*\/|===|!==)/;
 
+// the calendar festival table's block state (set inside isAllowlisted --
+// the table's lines carry no per-line marker, the block bounds itself)
+let inFestivalTable = false;
+
 function isAllowlisted(relPath, line) {
   if (relPath.startsWith(`src${sep}lib${sep}i18n${sep}`) || relPath.startsWith("src/lib/i18n/")) {
     return true;
@@ -58,8 +62,24 @@ function isAllowlisted(relPath, line) {
   if (relPath.replaceAll(sep, "/").endsWith("stock_quote.py") && line.includes("in market_label")) {
     return true;
   }
-  if (relPath.replaceAll(sep, "/").endsWith("tools/calendar.py") && line.includes("in _LUNAR_FESTIVALS table data")) {
-    return true;
+  if (relPath.replaceAll(sep, "/").endsWith("tools/calendar.py")) {
+    // the whole `_LUNAR_FESTIVALS = { ... }` block is sanctioned (black
+    // splits the one-line table into nine data lines -- a line-marker
+    // form only covers the line it rides on); the closing brace carries
+    // the same marker, so the block bounds itself
+    if (line.includes("in _LUNAR_FESTIVALS table data")) {
+      return true;
+    }
+    if (line.includes("_LUNAR_FESTIVALS = {")) {
+      inFestivalTable = true;
+      return true;
+    }
+    if (inFestivalTable) {
+      if (line.trimStart().startsWith("}")) {
+        inFestivalTable = false;
+      }
+      return true;
+    }
   }
   return false;
 }

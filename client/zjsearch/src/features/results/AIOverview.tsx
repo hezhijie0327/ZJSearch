@@ -977,7 +977,8 @@ function markdownComponents(
     a sizable dependency, lazy-loaded only when the answer actually
     carries math; until it loads the body renders as plain markdown (the
     delimiters flash raw for a beat -- the mermaid placeholder's own
-    pattern).  DELIBERATE FAMILY DIVERGENCE (DESIGN.md §5.1 分隔符缝):
+    pattern).  DELIBERATE FAMILY DIVERGENCE (DESIGN.md §5.1's separator
+    seam):
     singleDollarTextMath is OFF -- our content is UNAUDITED model output,
     and a currency pair ($3,000 ... $5,000) would ride straight into
     KaTeX as garbled formulas (the false-positive class ZJBlog's

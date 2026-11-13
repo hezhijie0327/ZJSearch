@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { BookOpenText, Clock, Copy, SearchCheck } from "lucide-react";
+import { BookOpenText, CalendarDays, Clock, Copy, SearchCheck } from "lucide-react";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiCalendarLunar, AiCalendarPayload } from "@/features/results/aiSearch/timeline.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
@@ -41,6 +41,32 @@ function relationChip(payload: AiCalendarPayload, t: Translate): string {
     default:
       return "";
   }
+}
+
+type CalendarMode = "now" | "date" | "find" | "terms";
+
+/** The call's MODE, inferred the same way the server resolves it (the
+    ARGUMENTS first -- a pending row's only vocabulary -- then the
+    settled payload).  The four shapes speak four different verbs: a
+    bare `q` ("11-13") reads like a time of day, and a uniform fallback
+    label (the tool's own generic name) made every row's intent
+    unguessable. */
+function calendarMode(call: ToolRowProps["call"]): CalendarMode {
+  const settled = call.calendar?.mode;
+  if (settled === "now" || settled === "date" || settled === "find" || settled === "terms") {
+    return settled;
+  }
+  const args = (call.args ?? {}) as Record<string, unknown>;
+  if (args.list_terms) {
+    return "terms";
+  }
+  if (typeof args.find_suited === "string" && args.find_suited.trim()) {
+    return "find";
+  }
+  if (args.date !== undefined || args.offset_days !== undefined) {
+    return "date";
+  }
+  return "now";
 }
 
 /** One labeled chip row of the almanac block (the label key localized,
@@ -94,7 +120,7 @@ function AlmanacBlock({ lunar, t }: { lunar: AiCalendarLunar; t: ToolRowProps["t
   const facts = [a.mansions, a.nayin, a.east_star].filter(Boolean);
   // an almanac the sanitizer degraded to all-empty fields (a payload
   // without the traditional block) renders NOTHING here -- a bare
-  // separator with a hanging 宜 label read as a broken card
+  // separator with a hanging suited label read as a broken card
   const pengzuTerms = a.pengzu
     .split(/[,，]/)
     .map((clause) => clause.trim())
@@ -180,7 +206,11 @@ function NowBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps["
   const weekday = weekdayLabel(payload.today, t) || payload.weekday;
   return (
     <div className="mt-1 rounded-xl bg-surface-2/50 px-3 py-2.5">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      {/* the card's IDENTITY line (FindBody/TermsBody's title pattern):
+          the big mono number alone could be a time OR a date -- the
+          caption names what this card answers */}
+      <p className="text-xs font-medium text-ink-2">{t("ai_calendar_card_now")}</p>
+      <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="font-mono text-xl font-semibold tabular-nums text-ink">{payload.time}</span>
         <span className="text-[13px] text-ink-2" dir="auto">
           {weekday} · {payload.today}
@@ -235,7 +265,10 @@ function DateBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps[
   const relation = relationChip(payload, t);
   return (
     <div className="mt-1 rounded-xl bg-surface-2/50 px-3 py-2.5">
-      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+      {/* the identity line: a date hero alone reads like a clock -- the
+          caption names it the QUERIED date */}
+      <p className="text-xs font-medium text-ink-2">{t("ai_calendar_card_date")}</p>
+      <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="font-mono text-xl font-semibold tabular-nums text-ink">{target}</span>
         <span className="text-[13px] text-ink-2" dir="auto">
           {weekday}
@@ -350,30 +383,50 @@ function FindBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps[
 
 export const calendarView: ToolView = {
   Icon: Clock,
-  // the mode carries its own icon + label: the clock icon names the
-  // instant/lookup shapes, the scan reads as a search and the
-  // vocabulary as a reference list (a terms row wearing the clock
+  // the mode carries its own icon + label: the clock names the instant,
+  // the calendar page the date lookup, the scan reads as a search and
+  // the vocabulary as a reference list (a terms row wearing the clock
   // icon + the generic clock label read as a rendering bug)
   iconFor: ({ call }) => {
-    const args = call.args as Record<string, unknown> | undefined;
-    const mode = call.calendar?.mode ?? (args?.list_terms ? "terms" : args?.find_suited ? "find" : "");
-    const Icon = mode === "find" ? SearchCheck : mode === "terms" ? BookOpenText : Clock;
+    const mode = calendarMode(call);
+    const Icon =
+      mode === "find" ? SearchCheck : mode === "terms" ? BookOpenText : mode === "date" ? CalendarDays : Clock;
     return <Icon aria-hidden="true" className="size-3 shrink-0" />;
   },
   label: ({ call, t }) => {
-    const args = call.args as Record<string, unknown> | undefined;
-    const mode = call.calendar?.mode ?? (args?.list_terms ? "terms" : "");
+    // a VERB PHRASE per mode, never the bare query: the row must name
+    // WHAT is being answered (the current clock vs a date lookup vs an
+    // auspicious-day scan) before the metric shows the value
+    const mode = calendarMode(call);
     if (mode === "terms") {
       return t("ai_calendar_terms_row");
     }
     if (mode === "find") {
-      return call.calendar?.activity || call.q || t("ai_calendar_row");
+      const activity =
+        call.calendar?.activity ||
+        String(((call.args ?? {}) as Record<string, unknown>).find_suited ?? "").trim() ||
+        call.q;
+      return t("ai_calendar_row_find", { activity: activity || "…" });
     }
-    return call.q || t("ai_calendar_row");
+    if (mode === "date") {
+      const target = call.q || call.calendar?.target || "";
+      return target ? t("ai_calendar_row_date", { target }) : t("ai_calendar_row_date_bare");
+    }
+    return t("ai_calendar_row_now");
   },
   metric: ({ call, t }) => {
     if (call.status === "pending") {
-      return t("ai_calendar_running");
+      // the PENDING verb follows the mode too (a uniform "reading the
+      // clock…" made a date/scan row announce the wrong question)
+      return t(
+        calendarMode(call) === "find"
+          ? "ai_calendar_running_find"
+          : calendarMode(call) === "terms"
+            ? "ai_calendar_running_terms"
+            : calendarMode(call) === "date"
+              ? "ai_calendar_running_date"
+              : "ai_calendar_running",
+      );
     }
     if (call.status !== "ok" || !call.calendar) {
       return null;

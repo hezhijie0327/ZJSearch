@@ -1279,6 +1279,23 @@ ink-3 onto the ACTIVE chip's accent-soft ground (4.21:1 — the count
 inherits the chip's color).  A11y floors are absolutes: a node at 4.2:1
 is a shipped bug even when the gate's last run passed.
 
+THE TOOL-ROW i18n IDENTITY LADDER (2026-11-14, the owner's calendar
+complaint): a multi-mode tool's row must speak a VERB PHRASE per mode,
+never the bare query nor the tool's generic name — the calendar's date
+row was labeled `11-13` (indistinguishable from a time of day), the now
+row fell back to the generic 时钟, the pending verb was uniform
+读取时钟…, and the value cards carried no title naming what they
+answer.  The fix (calendar.tsx + 9 new keys): mode inferred args-first
+(pending vocabulary) then payload — now=当前时间 / date=查询日期
+{target} / find=挑吉日 · {activity} / terms=黄历词表, per-mode pending
+verbs, identity caption lines on the now/date cards, CalendarDays for
+the date row's icon.  The sweep confirmed every OTHER view is either
+single-purpose or already per-action — the doctrine: a new tool mode
+ships with its own row vocabulary in BOTH catalogs (unknown keys are
+compile errors; `node scripts/audit-cjk.mjs` keeps code comments
+English-only — its festival-table exemption is BLOCK-scoped now, black
+having split the one-line dict the line-marker form covered).
+
 Verification: gates green (black/pylint — touched files 10.00 or their
 pre-existing baseline / tsc / biome / audit-cjk / full build + gzip
 siblings); the mock wire replay 141 events 0 error rows settle done
