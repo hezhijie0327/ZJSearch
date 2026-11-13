@@ -244,23 +244,25 @@ function StepDetail({
       ) : null}
       {d.text ? (
         <>
-          <button
-            aria-expanded={open}
-            className="flex min-w-0 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
-            onClick={() => {
-              setOpen(!open);
-            }}
-            type="button"
-          >
-            <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
-            <span className="min-w-0 flex-1 truncate text-start">
-              {t("ai_page_chars", { n: String(d.chars ?? 0) })}
-            </span>
-            <ChevronDown
-              aria-hidden="true"
-              className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-            />
-          </button>
+          {/* the chars fold hugs the RIGHT edge (the card's meta
+              convention: title row left, meta right) */}
+          <div className="flex justify-end">
+            <button
+              aria-expanded={open}
+              className="flex items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
+              onClick={() => {
+                setOpen(!open);
+              }}
+              type="button"
+            >
+              <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
+              <span>{t("ai_page_chars", { n: String(d.chars ?? 0) })}</span>
+              <ChevronDown
+                aria-hidden="true"
+                className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+              />
+            </button>
+          </div>
           <Collapse className={open ? "mt-1" : ""} open={open}>
             <div className="group relative">
               <div className={`relative ${READ_PANE} max-h-96 overflow-y-auto overscroll-contain`} dir="auto">

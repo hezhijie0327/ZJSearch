@@ -1279,6 +1279,29 @@ ink-3 onto the ACTIVE chip's accent-soft ground (4.21:1 — the count
 inherits the chip's color).  A11y floors are absolutes: a node at 4.2:1
 is a shipped bug even when the gate's last run passed.
 
+THE i18n CASING LADDER (2026-11-14, the owner's sweep ask): the two
+catalogs' casing is judged BY ROLE, not uniformly — interactive
+controls (buttons, toggles, segment options) are Capitalized (clear/
+search/show-hide/auto-light-dark-black were drifting lowercase against
+their capitalized siblings Copy/Remove/Open source — fixed), META
+vocabulary (statuses, relations, counts, gerund running… states) is
+deliberately lowercase sentence-fragments and stays so (74 lower-first
+entries ruled in one pass; `files`/`took` are count meta — stay), and
+body TITLE lines are sentences (the calendar find title/empty keys
+joined the terms title's capitalization).  The sweep is scriptable:
+extract both catalogs, flag lower-first + non-allowlisted ALL-CAPS,
+judge each by role — zh carries no case, only stray-latin checks.
+
+THE STOP→STORE PATH IS VERIFIED END-TO-END (2026-11-14, the owner's
+missing-thread report): a real prod-settings run stopped mid-research
+lands its thread_head + run row (`stopped: "true"` in meta) + the
+drawer's 研究 tab lists it — the checkpoint effect fires on the local
+stopped settle unconditionally.  A failed run records the same way.
+If a stopped thread ever appears missing on a deployment: check
+`__zjsKnowledge.degraded()` first (a degraded store records to memory
+and evaporates), then the image's source commit (the path predates no
+recent change).
+
 THE PER-TOOL VISUAL WALKTHROUGH (2026-11-14, same day): every tool
 row's EXPANDED body inspected against its payload shape in the debug
 stage — search_web=result cards, evaluate=probability bars,
