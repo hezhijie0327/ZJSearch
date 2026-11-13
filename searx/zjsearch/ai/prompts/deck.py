@@ -89,8 +89,7 @@ DECK_SLIDE_DIALECT = spine.block(
 )
 
 _DECK_SECTION_ROLE = (
-    "You write one chapter's slides of a research deck, grounded in the"
-    " numbered sources of THIS run."
+    "You write one chapter's slides of a research deck, grounded in the" " numbered sources of THIS run."
 )
 
 

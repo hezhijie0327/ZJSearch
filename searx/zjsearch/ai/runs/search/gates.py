@@ -106,7 +106,7 @@ gaps are nice-to-have, or the rounds have gone stale.  When extending,
 size the grant to what the gaps actually need (a couple of rounds per
 material gap, never a blanket doubling).  Output ONLY a JSON object:
 {"extend": true, "rounds": <int>, "reason": "<one line>"} or {"extend":
-false, "reason": "<one line>"}."""
+false, "reason": "<one line>"}.""",
         },
         {
             "role": "user",
@@ -164,7 +164,7 @@ engine always answers with live, cited sources.  A request that points
 at the user's OWN saved material (their knowledge base, their past
 research, an uploaded file) ALSO needs research: the research loop
 carries the recall tools that reach it.  Output ONLY a JSON object, no
-prose, no code fences: {"research": true} or {"research": false}."""
+prose, no code fences: {"research": true} or {"research": false}.""",
         },
         {"role": "user", "content": spine.block("q", question)},
     ]
@@ -192,7 +192,7 @@ that can be researched WITHOUT the conversation.  Resolve pronouns and
 ellipsis using the conversation; never answer it, never add facts.
 Output ONLY a JSON object, no prose, no code fences: {{"question":
 "<the rewritten question>"}} -- or {{"question": ""}} when it is already
-self-contained.  Write in {lang}."""
+self-contained.  Write in {lang}.""",
         },
         {
             "role": "user",
@@ -239,7 +239,7 @@ always add free text.  Output ONLY a JSON object, no prose, no code
 fences: {{"ask": true, "intro": "<one sentence on why you ask>",
 "questions": [{{"q": "<question>", "type": "single", "options":
 ["<short option>", ...]}}]}} -- or {{"ask": false}} when research can
-start directly.  Write in {lang}."""
+start directly.  Write in {lang}.""",
         },
         {"role": "user", "content": f"<q>{question}</q>{attachments_note}"},
     ]
@@ -273,7 +273,7 @@ Name a research thread. Output ONLY a JSON object, no prose, no
 markdown, no code fences: {"title": "<title>"} -- ONE short noun phrase
 (8-20 characters) in the question's language, specific to the subject:
 not generic ("research report", "survey"), not a question, no quotes,
-no trailing punctuation."""
+no trailing punctuation.""",
         },
         {
             "role": "user",
@@ -295,7 +295,7 @@ def related_questions(cfg: dict[str, t.Any], question: str, answer: str, lang: s
     messages = [
         {
             "role": "system",
-            "content": 'Suggest follow-up questions for a search session. Output ONLY a JSON object, no prose, no markdown, no code fences: {"questions": ["<question 1>", "<question 2>", "<question 3>"]} -- exactly 3 short question strings.'
+            "content": 'Suggest follow-up questions for a search session. Output ONLY a JSON object, no prose, no markdown, no code fences: {"questions": ["<question 1>", "<question 2>", "<question 3>"]} -- exactly 3 short question strings.',
         },
         {
             "role": "user",

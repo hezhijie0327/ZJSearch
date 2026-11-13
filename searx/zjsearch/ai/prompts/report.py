@@ -16,9 +16,7 @@ from searx.zjsearch.ai.prompts import spine
 OUTLINE_EDITOR_LINE = "You are the outline editor of a research desk."
 """Both outline gates' role line -- one research desk, two deliverables."""
 
-_OUTLINE_RESPONSE_CONTRACT = (
-    'Respond with ONLY: {"title": "...", "subtitle": "...", "sections": [{"title": "...", "brief": "...", "key_questions": ["...", ...]}, ...], "entities": [{"name": "...", "why": "..."}, ...]}'
-)
+_OUTLINE_RESPONSE_CONTRACT = 'Respond with ONLY: {"title": "...", "subtitle": "...", "sections": [{"title": "...", "brief": "...", "key_questions": ["...", ...]}, ...], "entities": [{"name": "...", "why": "..."}, ...]}'
 """The JSON contract every outline completion answers with -- identical
 for the free gate, the template adaptation, and the deck's variants."""
 
@@ -83,7 +81,8 @@ OUTLINE_SYSTEM = (
         "section",
         extra_clause='(when the question asks for "opportunities for X", X itself belongs here unless a section studies it)',
     )
-    + "  " + _OUTLINE_RESPONSE_CONTRACT
+    + "  "
+    + _OUTLINE_RESPONSE_CONTRACT
 )
 
 _OUTLINE_TEMPLATE = """\
@@ -98,8 +97,10 @@ key_questions so the section's evidence answers THIS question."""
 
 TEMPLATE_ADAPT_SYSTEM = (
     f"{OUTLINE_EDITOR_LINE}  {_OUTLINE_TEMPLATE}"
-    + "  " + outline_entities_paragraph("section")
-    + "  " + _OUTLINE_RESPONSE_CONTRACT
+    + "  "
+    + outline_entities_paragraph("section")
+    + "  "
+    + _OUTLINE_RESPONSE_CONTRACT
 )
 
 REPORT_SHAPE = spine.block(
@@ -159,6 +160,7 @@ def report_section_system(tz: str | None = None) -> str:
     at midnight AND duplicated the fresh block the synthesizer prepends."""
     return section_system(_SECTION_ROLE, "report", REPORT_SHAPE, tz)
 
+
 SUMMARY_SYSTEM = """\
 You write the EXECUTIVE SUMMARY of a finished research report: 3-5
 bold-led findings ("**Bottom line.** ..." -- a BOLD short label, a
@@ -169,6 +171,7 @@ by section; the reader has not read them yet.  Ground every statement in
 the sections' own citations, and write every label in the report's
 language."""
 
+
 def summary_user(q: str, digest: str) -> str:
     """The executive summary's user turn (the tags via :func:`spine.block`)."""
     return (
@@ -177,5 +180,6 @@ def summary_user(q: str, digest: str) -> str:
         + spine.block("written_sections", digest)
         + "\nWrite the executive summary in the report's language."
     )
+
 
 CITATION_GATE_INSTRUCTIONS = "For each numbered claim, judge whether the cited source's material actually supports it (a source that merely mentions the topic does NOT support a specific figure)."

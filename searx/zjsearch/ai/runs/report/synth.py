@@ -603,13 +603,11 @@ support, and never invent a rule ID the framework does not contain."""
                 lines.append(f"note: {artifact['note']}")
             tables.append("\n".join(lines))
         tables_text = "\n\n".join(tables)
-        parts.append(
-            f"""\
+        parts.append(f"""\
 <recorded_tables>
 These tables were verified during research -- reproduce them as-is
 (markdown tables render as real tables) and interpret them; do not
 retype their numbers in prose.
 {tables_text}
-</recorded_tables>"""
-        )
+</recorded_tables>""")
     return "\n".join(p for p in parts if p)

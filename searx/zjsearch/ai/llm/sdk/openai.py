@@ -254,9 +254,7 @@ async def _responses_pump(  # pylint: disable=too-many-branches, too-many-locals
     ``("finish", meta)`` event (``max_output_tokens`` maps to ``length``)."""
     cfg = sdk.cfg
     client = clients.openai_client(cfg, sdk.base, family=sdk.family)
-    extra: dict[str, t.Any] = (
-        {"tools": [dict(function_tool(tool), type="function") for tool in tools]} if tools else {}
-    )
+    extra: dict[str, t.Any] = {"tools": [dict(function_tool(tool), type="function") for tool in tools]} if tools else {}
     stream = await client.responses.create(
         model=str(cfg.get("model")),
         input=_responses_input(messages),

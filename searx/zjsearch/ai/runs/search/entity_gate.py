@@ -154,9 +154,9 @@ def run_once(state: t.Any, items: list[dict[str, str]]) -> str | None:
             "record_questions": [
                 {
                     "name": f"task_{index}",
-                    "instructions": (
-                        f"{name} -- {entities[index].get('why')}" if entities[index].get("why") else name
-                    )[:200],
+                    "instructions": (f"{name} -- {entities[index].get('why')}" if entities[index].get("why") else name)[
+                        :200
+                    ],
                 }
                 for index, name in enumerate(names)
             ],
