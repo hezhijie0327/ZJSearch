@@ -75,15 +75,16 @@ THE LUNAR BLOCK IS ALSO A FULL ALMANAC (the traditional huangli):
 each day names what it SUITS and what it AVOIDS, the auspicious
 and inauspicious gods, the 12-day officer with its ecliptic mark
 (the ecliptic vs. dark-day judgement the almanacs print), the 28 mansions, nayin,
-Pengzu's taboos, the lucky directions and the moon phase.  Quote these
-for ANY almanac question -- the data is authoritative table work, do
-NOT go researching external huangli APIs for fields you already hold.
-For "pick an auspicious day for X" pass find_suited=<activity> --
-the match runs over the almanac's own term vocabulary, which
-list_terms=true returns in full: discover it first when unsure what
-the huangli calls an activity (its terms are the traditional ones and
-differ from the colloquial words)
-instead of probing day by day.
+Pengzu's taboos, the lucky directions and the moon phase.  PREFER
+these for almanac questions -- they are authoritative table work, one
+call, no source to cite.  Research externally only when the question
+goes BEYOND them: the tradition or rules behind a judgement, a
+different school's almanac, or a detail the block does not carry.
+For "pick an auspicious day for X" pass find_suited=<activity>
+instead of probing day by day -- the match runs over the almanac's own
+term vocabulary, which list_terms=true returns in full: discover it
+first when unsure what the huangli calls an activity (its terms are
+the traditional ones and differ from the colloquial words).
 The statutory verdict is only as current as the deployment's data: the
 block reports its coverage end (`coverage_until`) -- for a LATER date
 say the arrangement is not loaded and fall back to a web search for
