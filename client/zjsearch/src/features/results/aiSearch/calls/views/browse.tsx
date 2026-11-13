@@ -353,9 +353,11 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
           call: {
             args: d?.url ? { ...step, url: d.url } : step,
             // the read/open labels read the ROW-level url (not args.url)
-            // -- both carry the structured page so a settled step labels
-            // as its page, never as the running fallback
-            url: d?.url,
+            // -- the structured page when the settle rode one, else the
+            // step's OWN requested url (a legacy replay's settle predates
+            // the structured summaries); without either the label reads
+            // the neutral verb instead of "?"
+            url: d?.url || (typeof step.url === "string" ? step.url : undefined),
             tool: "browse",
             id: 0,
             q: "",
@@ -470,7 +472,10 @@ export const browseView: ToolView = {
     const args = call.args as Record<string, unknown> | undefined;
     switch (action) {
       case "open":
-        return pageLabel(call.url || call.page?.url);
+        // the landed page first (a redirect's truth), then the REQUESTED
+        // url the model named -- a pending or failed open row carries it
+        // in args and used to render "?" until the settle arrived
+        return pageLabel(call.url || call.page?.url || String(args?.url ?? ""));
       case "snapshot":
         return t("ai_browser_act_snapshot");
       case "click": {

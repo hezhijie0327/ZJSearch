@@ -1279,6 +1279,23 @@ ink-3 onto the ACTIVE chip's accent-soft ground (4.21:1 — the count
 inherits the chip's color).  A11y floors are absolutes: a node at 4.2:1
 is a shipped bug even when the gate's last run passed.
 
+THE PER-TOOL VISUAL WALKTHROUGH (2026-11-14, same day): every tool
+row's EXPANDED body inspected against its payload shape in the debug
+stage — search_web=result cards, evaluate=probability bars,
+build_table=real table + [n] refs, list_engines=directory grids,
+mcp discovery=tool cards, memory/plan/findings=per-action bodies,
+inspect_image=image+lightbox — all conformant.  The walkthrough caught
+the "?" CLASS: a browse open row's label read only the ROW-level url
+(the landed page), so a PENDING open, a FAILED open and a legacy
+multi's step rows all rendered pageLabel(undefined) = "?" while the
+model's requested url sat right there in args — the label now falls
+back to the requested url (landed page first, requested target
+second), and the multi step synthesis passes the step's own url.
+calculate's row gains the fold with the FULL-PRECISION result as a
+copyable value chip (the hash/ip vocabulary — the metric slot
+truncates long decimals and a computed figure is a payload the reader
+takes elsewhere).
+
 THE TOOL-ROW i18n IDENTITY LADDER (2026-11-14, the owner's calendar
 complaint): a multi-mode tool's row must speak a VERB PHRASE per mode,
 never the bare query nor the tool's generic name — the calendar's date
