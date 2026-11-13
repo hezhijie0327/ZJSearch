@@ -70,17 +70,39 @@ month -- pass a full date when the user means another month or year.
 Every payload carries a lunar block (ganzhi year, zodiac, lunar
 month/day, solar term, festivals, the statutory workday verdict) --
 quote it for lunar-calendar, festival and workday questions, never
-compose a lunar date yourself.  The statutory verdict is only as
-current as the deployment's data: the block reports its coverage end
-(`coverage_until`) -- for a LATER date say the arrangement is not
-loaded and fall back to a web search for the official announcement;
-never infer a holiday or a make-up workday.
+compose a lunar date yourself.
+THE LUNAR BLOCK IS ALSO A FULL ALMANAC (the traditional huangli):
+each day names what it SUITS and what it AVOIDS, the auspicious
+and inauspicious gods, the 12-day officer with its ecliptic mark
+(the ecliptic vs. dark-day judgement the almanacs print), the 28 mansions, nayin,
+Pengzu's taboos, the lucky directions and the moon phase.  Quote these
+for ANY almanac question -- the data is authoritative table work, do
+NOT go researching external huangli APIs for fields you already hold.
+For "pick an auspicious day for X" pass find_suited=<activity> --
+the match runs over the almanac's own term vocabulary, which
+list_terms=true returns in full: discover it first when unsure what
+the huangli calls an activity (its terms are the traditional ones and
+differ from the colloquial words)
+instead of probing day by day.
+The statutory verdict is only as current as the deployment's data: the
+block reports its coverage end (`coverage_until`) -- for a LATER date
+say the arrangement is not loaded and fall back to a web search for
+the official announcement; never infer a holiday or a make-up workday.
 One call answers in the user's zone by default; pass tz to convert for
 another zone."""
 
 _MAX_OFFSET_DAYS = 3650
 """Offset clamp: a decade either way -- the honest bound for a research
 calendar (an offset beyond it is a model slip, not a question)."""
+
+_MAX_FIND_DAYS = 60
+"""The auspicious-day scan window (two months) -- an auspicious-day
+hunt beyond that is a different conversation (the model narrows the
+ask)."""
+
+_MAX_FIND_HITS = 10
+"""The scan's hit cap -- ten auspicious days name a schedule; more is
+noise the model cannot use."""
 
 _LUNAR_MIN_YEAR = 1900
 _LUNAR_MAX_YEAR = 2100
@@ -103,6 +125,46 @@ _NEW_YEARS_EVE = chr(0x9664) + chr(0x5915)
 """The year's-eve festival name -- composed by codepoint (the same
 doctrine); the DAY it lands on is computed against the library, never
 assumed from the month length."""
+
+_ALMANAC_TERMS_CACHE: list[str] | None = None
+"""The almanac's EMITTED vocabulary -- the union of the suited/avoided
+terms the library actually produces, sampled over a two-year window
+(the term set is calendar-periodic; a sparse sample converges with the
+full-year enumeration).  NOT the config's sort-order table: the
+per-day lists use terms that table never names (the discovery surface
+must list what find_suited can really hit)."""
+
+
+def _almanac_terms() -> list[str]:
+    """The full activity vocabulary (thingsSort order first), or []
+    when the engine is absent."""
+    global _ALMANAC_TERMS_CACHE
+    if _ALMANAC_TERMS_CACHE is not None:
+        return _ALMANAC_TERMS_CACHE
+    if cnlunar is None:
+        _ALMANAC_TERMS_CACHE = []
+        return _ALMANAC_TERMS_CACHE
+    try:
+        from cnlunar.config import thingsSort  # pylint: disable=import-outside-toplevel
+
+        start = datetime.date.today()
+        suited: set[str] = set()
+        avoided: set[str] = set()
+        for off in range(0, 730, 3):
+            day = start + datetime.timedelta(days=off)
+            try:
+                d = cnlunar.Lunar(datetime.datetime(day.year, day.month, day.day), godType="8char")
+                suited |= {str(term) for term in d.goodThing if term}
+                avoided |= {str(term) for term in d.badThing if term}
+            except Exception:  # pylint: disable=broad-except
+                continue
+        order = [str(term) for term in thingsSort]
+        terms = [term for term in order if term in suited or term in avoided]
+        terms += sorted((suited | avoided) - set(order))
+        _ALMANAC_TERMS_CACHE = terms
+    except Exception:  # pylint: disable=broad-except
+        _ALMANAC_TERMS_CACHE = []
+    return _ALMANAC_TERMS_CACHE
 
 
 def _as_list(value: t.Any) -> list[str]:
@@ -263,6 +325,23 @@ of the user's.""",
                     "type": "number",
                     "description": "Relative date lookup: the date N days from today (tomorrow=1, yesterday=-1).",
                 },
+                "find_suited": {
+                    "type": "string",
+                    "description": (
+                        "Auspicious-day scan: the activity to look for (e.g. a wedding,"
+                        " a business opening) -- returns the days within the next two"
+                        " months whose almanac SUITS it, one call instead of probing"
+                        " day by day.  Match by the almanac's own terms -- pass"
+                        " list_terms first when unsure of the vocabulary."
+                    ),
+                },
+                "list_terms": {
+                    "type": "boolean",
+                    "description": (
+                        "Return the almanac's full activity vocabulary (the terms"
+                        " the suited/avoided lists and find_suited speak)."
+                    ),
+                },
                 "tz": {
                     "type": "string",
                     "description": 'IANA timezone to answer in ("Asia/Shanghai"); default is the user\'s zone.',
@@ -273,23 +352,25 @@ of the user's.""",
     }
 
 
-def parse_calendar_call(call: dict[str, t.Any]) -> tuple[str, str, int | None]:
-    """(tz, date, offset_days) of one ``calendar`` call -- sanitized: the
-    tz/date strings capped, the offset clamped to the legal range
-    (None when absent)."""
+def parse_calendar_call(call: dict[str, t.Any]) -> tuple[str, str, int | None, str, bool]:
+    """(tz, date, offset_days, find_suited, list_terms) of one
+    ``calendar`` call -- sanitized: the tz/date/find strings capped, the
+    offset clamped to the legal range (None when absent)."""
     args = raw_args(call)
     # the tz string needs no local cap -- resolve_zone bounds it (and the
     # date cap keeps the ladder's length checks meaningful)
     tz = str(args.get("tz") or "").strip()
     date = str(args.get("date") or "").strip()[:10]
+    find_suited = str(args.get("find_suited") or "").strip()[:40]
+    list_terms = args.get("list_terms") is True or str(args.get("list_terms") or "").lower() in ("1", "true")
     offset_raw = args.get("offset_days")
     if offset_raw is None or (isinstance(offset_raw, str) and not offset_raw.strip()):
-        return tz, date, None
+        return tz, date, None, find_suited, list_terms
     try:
         offset = max(-_MAX_OFFSET_DAYS, min(int(float(offset_raw)), _MAX_OFFSET_DAYS))
     except (TypeError, ValueError):
         raise CalendarError(f"offset_days must be an integer ({-_MAX_OFFSET_DAYS}..{_MAX_OFFSET_DAYS})") from None
-    return tz, date, offset
+    return tz, date, offset, find_suited, list_terms
 
 
 def _resolve_zone(tz: str) -> tuple[ZoneInfo | None, str]:
@@ -330,10 +411,13 @@ def calendar_payload(
     tz: str = "",
     date: str = "",
     offset_days: int | None = None,
+    find_suited: str = "",
+    list_terms: bool = False,
     default_tz: str | None = None,
 ) -> dict[str, t.Any]:
-    """One call -> its payload dict: the ``now`` mode (instant fields)
-    or the ``date`` mode (calendar fields), plus the shared zone ground
+    """One call -> its payload dict: the ``now`` mode (instant fields),
+    the ``date`` mode (calendar fields) or the ``find`` mode (the
+    auspicious-day scan), plus the shared zone ground
     (``timezone``/``today``/``weekday``/``utc_offset``).  ``default_tz``
     is the run's user zone (the ``<today>`` anchor); a run without one
     answers on the server's local clock and says so (``timezone: null``)."""
@@ -350,6 +434,46 @@ def calendar_payload(
         "weekday": weekday,
         "utc_offset": f"UTC{offset[:3]}:{offset[3:]}" if offset else None,
     }
+    if list_terms:
+        # the TERMS mode: the almanac's full activity vocabulary -- the
+        # discovery surface for find_suited (the model learns WHICH
+        # terms the suited/avoided lists speak before scanning)
+        payload["mode"] = "terms"
+        payload["terms"] = _almanac_terms()
+        return payload
+    if find_suited:
+        # the FIND mode: the auspicious-day scan -- one call answers the
+        # pick-an-auspicious-day question the per-date lookups cannot
+        activity = find_suited.strip()
+        if not activity:
+            raise CalendarError("find_suited needs the activity to scan for")
+        findings: list[dict[str, t.Any]] = []
+        for off in range(_MAX_FIND_DAYS + 1):
+            day = today + datetime.timedelta(days=off)
+            block = _lunar_block(day)
+            if not block:
+                continue
+            suited = block["almanac"].get("suited") or []
+            matched = [term for term in suited if activity in term or term in activity]
+            if not matched:
+                continue
+            findings.append(
+                {
+                    "date": day.isoformat(),
+                    "days_from_today": off,
+                    "weekday": weekday_name(day),
+                    "suited": matched,
+                    "festivals": block["festivals"],
+                    "term": block["term"],
+                }
+            )
+            if len(findings) >= _MAX_FIND_HITS:
+                break
+        payload["mode"] = "find"
+        payload["activity"] = activity
+        payload["scanned_days"] = _MAX_FIND_DAYS
+        payload["findings"] = findings
+        return payload
     if date or offset_days is not None:
         if date:
             target = _parse_date(date, today)
@@ -388,8 +512,8 @@ def run_call(
     (instant, no pool slot) and the ``calendar`` payload rides the event so
     the client's row renders the real value."""
     try:
-        tz_arg, date_arg, offset_arg = parse_calendar_call(call)
-        payload = calendar_payload(tz_arg, date_arg, offset_arg, default_tz)
+        tz_arg, date_arg, offset_arg, find_arg, terms_arg = parse_calendar_call(call)
+        payload = calendar_payload(tz_arg, date_arg, offset_arg, find_arg, terms_arg, default_tz)
     except CalendarError as exc:
         return f"error: {exc}", {"round": rnd, "id": wire_id, "status": "error"}
     return (

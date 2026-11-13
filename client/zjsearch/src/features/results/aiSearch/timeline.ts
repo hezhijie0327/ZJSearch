@@ -78,6 +78,36 @@ export interface AiEngineInventory {
   disabled: Array<{ name: string; bang: string; cats: string[]; paid?: boolean }>;
 }
 
+/** calendar rows: the traditional almanac (the huangli fields) --
+    display-ready Chinese terms (the proper nouns ARE the data); the
+    row renders them as labeled chip rows inside the value card. */
+export interface AiCalendarAlmanac {
+  suited: string[];
+  avoided: string[];
+  gods: string[];
+  avoid_gods: string[];
+  officer: string;
+  ecliptic: string;
+  duty_god: string;
+  mansions: string;
+  east_star: string;
+  nayin: string;
+  pengzu: string;
+  directions: string[];
+  fetus_god: string;
+  moon: string;
+}
+
+/** one auspicious-day scan hit (the find mode) */
+export interface AiCalendarFinding {
+  date: string;
+  days_from_today: number;
+  weekday: string;
+  suited: string[];
+  festivals: string[];
+  term: string;
+}
+
 /** calendar rows: the lunar-calendar block (cnlunar + the statutory
     table) -- display-ready Chinese terms (the proper nouns ARE the
     data); the statutory workday verdict is omitted outside the
@@ -105,7 +135,7 @@ export interface AiCalendarLunar {
     name: string | null;
     coverage_until: string;
   } | null;
-  almanac: Record<string, unknown>;
+  almanac: AiCalendarAlmanac;
 }
 
 /** calendar rows: the composite time/date payload (the settlement's
@@ -114,7 +144,7 @@ export interface AiCalendarLunar {
     weekday is the fixed English name from the server; the row renders
     it localized off the ISO date. */
 export interface AiCalendarPayload {
-  mode: "now" | "date";
+  mode: "now" | "date" | "find" | "terms";
   timezone: string | null;
   today: string;
   weekday: string;
@@ -131,6 +161,12 @@ export interface AiCalendarPayload {
   relation?: "past" | "today" | "future";
   /** the lunar block; null/absent outside the engine's coverage */
   lunar?: AiCalendarLunar | null;
+  /** find mode: the auspicious-day scan */
+  activity?: string;
+  scanned_days?: number;
+  findings?: AiCalendarFinding[];
+  /** terms mode: the almanac's full activity vocabulary */
+  terms?: string[];
 }
 
 export interface AiSearchCall {
@@ -1641,6 +1677,12 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
     verdict only as its three legal values, the lists as string arrays
     (a legacy/garbage field degrades to null -- the row simply hides
     the lunar line). */
+/** The string-array sanitizer shared by the lunar/almanac/find folds:
+    only non-empty strings survive, anything else degrades to []. */
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+}
+
 function normalizeLunar(value: unknown): AiCalendarLunar | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -1649,8 +1691,6 @@ function normalizeLunar(value: unknown): AiCalendarLunar | null {
   const g = (l.ganzhi ?? {}) as Record<string, unknown>;
   const nt = (l.next_term ?? {}) as Record<string, unknown>;
   const w = (l.workday ?? null) as Record<string, unknown> | null;
-  const strings = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
   return {
     year: String(l.year ?? ""),
     year_cn: String(l.year_cn ?? ""),
@@ -1662,9 +1702,9 @@ function normalizeLunar(value: unknown): AiCalendarLunar | null {
     ganzhi: { year: String(g.year ?? ""), month: String(g.month ?? ""), day: String(g.day ?? "") },
     term: typeof l.term === "string" ? l.term : "",
     next_term: { name: String(nt.name ?? ""), date: String(nt.date ?? "") },
-    festivals: strings(l.festivals),
-    solar_holidays: strings(l.solar_holidays),
-    folk: strings(l.folk),
+    festivals: asStringArray(l.festivals),
+    solar_holidays: asStringArray(l.solar_holidays),
+    folk: asStringArray(l.folk),
     workday:
       w && typeof w.coverage_until === "string" && w.coverage_until
         ? {
@@ -1673,7 +1713,7 @@ function normalizeLunar(value: unknown): AiCalendarLunar | null {
             coverage_until: w.coverage_until,
           }
         : null,
-    almanac: (l.almanac ?? {}) as Record<string, unknown>,
+    almanac: normalizeAlmanac(l.almanac),
   };
 }
 
@@ -1684,7 +1724,7 @@ function normalizeLunar(value: unknown): AiCalendarLunar | null {
 function normalizeCalendar(value: unknown): AiCalendarPayload {
   const c = (value ?? {}) as Record<string, unknown>;
   return {
-    mode: c.mode === "date" ? "date" : "now",
+    mode: c.mode === "date" ? "date" : c.mode === "find" ? "find" : c.mode === "terms" ? "terms" : "now",
     timezone: typeof c.timezone === "string" && c.timezone ? c.timezone : null,
     today: String(c.today ?? ""),
     weekday: String(c.weekday ?? ""),
@@ -1699,6 +1739,41 @@ function normalizeCalendar(value: unknown): AiCalendarPayload {
     relation:
       c.relation === "past" || c.relation === "future" ? c.relation : c.today === c.target ? "today" : undefined,
     lunar: "lunar" in c ? normalizeLunar(c.lunar) : undefined,
+    activity: typeof c.activity === "string" ? c.activity : undefined,
+    scanned_days: typeof c.scanned_days === "number" ? c.scanned_days : undefined,
+    terms: asStringArray(c.terms),
+    findings: Array.isArray(c.findings)
+      ? (c.findings as Array<Record<string, unknown>>).map((f) => ({
+          date: String(f.date ?? ""),
+          days_from_today: typeof f.days_from_today === "number" ? f.days_from_today : 0,
+          weekday: String(f.weekday ?? ""),
+          suited: asStringArray(f.suited),
+          festivals: asStringArray(f.festivals),
+          term: typeof f.term === "string" ? f.term : "",
+        }))
+      : undefined,
+  };
+}
+
+/** the almanac block, sanitized -- every field degrades to its empty
+    value, the row renders what arrived. */
+function normalizeAlmanac(value: unknown): AiCalendarAlmanac {
+  const a = (value ?? {}) as Record<string, unknown>;
+  return {
+    suited: asStringArray(a.suited),
+    avoided: asStringArray(a.avoided),
+    gods: asStringArray(a.gods),
+    avoid_gods: asStringArray(a.avoid_gods),
+    officer: typeof a.officer === "string" ? a.officer : "",
+    ecliptic: typeof a.ecliptic === "string" ? a.ecliptic : "",
+    duty_god: typeof a.duty_god === "string" ? a.duty_god : "",
+    mansions: typeof a.mansions === "string" ? a.mansions : "",
+    east_star: typeof a.east_star === "string" ? a.east_star : "",
+    nayin: typeof a.nayin === "string" ? a.nayin : "",
+    pengzu: typeof a.pengzu === "string" ? a.pengzu : "",
+    directions: asStringArray(a.directions),
+    fetus_god: typeof a.fetus_god === "string" ? a.fetus_god : "",
+    moon: typeof a.moon === "string" ? a.moon : "",
   };
 }
 

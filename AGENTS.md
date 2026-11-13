@@ -469,6 +469,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     `YYYY-MM-DD`, loose `MM-DD` (current year) or a bare `DD`
     (current month; the "25号是周几" shape), `offset_days` covers the
     relative forms ("next Wednesday" = read today's weekday, add N);
+    `find_suited` is the AUSPICIOUS-DAY SCAN (挑吉日 in one call: the
+    next 60 days whose 宜 lists name the activity, hit-capped at 10,
+    the row labels itself with the activity) — a per-day probe cannot
+    answer that shape; `list_terms` returns the almanac's full EMITTED
+    vocabulary (the union of the terms the per-day lists actually
+    produce, sampled over two years — richer and occasionally different
+    from the config's sort-order table), the discovery surface the
+    model reads before scanning;
     every resolution is a deterministic `datetime`/`ZoneInfo` ladder
     anchored to the USER'S zone, an explicit bad tz is a fixable
     error, and the payload (mode-tagged now/date) rides the call event
@@ -481,8 +489,11 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     the month length, and festivals never land in a leap month), the
     folk observances, the traditional almanac (宜/忌, 吉凶神, 建除十二
     神 + 黄黑道, 二十八宿, 纳音, 彭祖百忌, 吉神方位, 胎神, 月相 — the
-    row renders the date line + term/festival chips only; the almanac
-    is the MODEL's answer material) and the STATUTORY WORKDAY verdict
+    row renders the almanac as LABELED CHIP ROWS (宜 ok-toned, 忌
+danger-toned, the officer/mansions/nayin as mono chips) beside the
+    lunar line, AND the model quotes it for almanac questions — the
+    INSTRUCTIONS forbid researching external huangli APIs for fields
+    the payload already holds) and the STATUTORY WORKDAY verdict
     (chinesecalendar: `off`/`workday`/`makeup` with the package's own
     holiday name; `coverage_until` names the data's last announced
     day).  BOTH calendar deps are OPTIONAL (absent install → the block

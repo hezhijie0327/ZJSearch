@@ -181,7 +181,10 @@ function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[nu
   }
   return (
     <div className="mt-0.5 min-w-0 ps-[18px]">
-      {d.url ? (
+      {/* the link row renders only on TITLED pages -- a titleless read
+          would print its host twice (the verb line already names the
+          page, the pane's chip carries the outbound link) */}
+      {d.url && d.title ? (
         <a
           className="flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
           dir="auto"
@@ -191,7 +194,7 @@ function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[nu
           title={d.url}
         >
           <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
-          <span className="min-w-0 flex-1 truncate font-medium">{d.title || pageLabel(d.url)}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">{d.title}</span>
           <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(d.url)}</span>
           <ArrowUpRight aria-hidden="true" className="size-3 shrink-0" />
         </a>
@@ -217,7 +220,7 @@ function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[nu
           </button>
           <Collapse className={open ? "mt-1" : ""} open={open}>
             <div className="group relative">
-              <div className={`relative ${READ_PANE} max-h-56 overflow-y-auto overscroll-contain`} dir="auto">
+              <div className={`relative ${READ_PANE} max-h-96 overflow-y-auto overscroll-contain`} dir="auto">
                 {d.text}
               </div>
               <div className="absolute end-2 top-2 flex gap-0.5">
@@ -253,14 +256,14 @@ function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[nu
   );
 }
 
-/** The multi action's rendered result: one row per STEP -- the step's own
-    icon + localized verb (the label() vocabulary, driven off the step's
-    action args) + the settled tail (the observation, urls decoded for
-    display), failed steps in danger red.  The service composes the feed
-    lines the tails read from; the batch's shape (which steps ran, which
-    failed, where it stopped) is the args/steps x feed pairing.  A step
-    with a structured summary renders its DETAIL through StepDetail -- the
-    link + reading pane treatment its standalone row gets. */
+/** The multi action's rendered result: one row per STEP, speaking the
+    SAME anatomy its standalone row speaks -- the localized verb (the
+    label() vocabulary over the step's own args, merged with the
+    structured summary's url so a settled read labels as its page, never
+    as the running fallback), then StepDetail's link + reading pane.
+    The feed tails render ONLY for steps without a structured summary
+    (legacy replays, the pending plan) -- a structured step's feed line
+    is receipt material, its raw urls never join the verb line. */
 function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["t"] }) {
   const readable = (line: string) =>
     line.replace(/https?:\/\/[^\s)]+/g, (url) => {
@@ -273,7 +276,13 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
   const raw = (call.args as Record<string, unknown> | undefined)?.steps;
   const steps = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
   const lines = call.feed?.split("\n").filter((line) => /^\d+\. /.test(line)) ?? [];
-  if (!steps.length || (!lines.length && call.status === "ok")) {
+  // a structured batch renders from its summaries alone (verb + link +
+  // pane) -- the feed is only the legacy/pending vocabulary's source
+  const structuredRenderable = steps.some((_, i) => {
+    const d = call.steps?.[i];
+    return d !== undefined && d.status !== "error" && (Boolean(d.url) || Boolean(d.text));
+  });
+  if (!steps.length || (!lines.length && !structuredRenderable && call.status === "ok")) {
     return null;
   }
   return (
@@ -281,9 +290,11 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
       {steps.map((step, i) => {
         const action = String(step.action ?? "");
         const Icon = ACTION_ICONS[action] ?? AppWindow;
-        // the structured summary (when the settlement carries one) drives
-        // the detail below; the feed line stays the observation source
+        // the structured summary drives the rendering when it exists --
+        // the feed line is the fallback vocabulary (legacy replays /
+        // pending steps) and the failed step's error carrier
         const d = call.steps?.[i];
+        const structured = d !== undefined && d.status !== "error";
         const line = readable(lines[i] ?? "");
         const cut = line.indexOf(". ");
         let tail = cut > 0 ? line.slice(cut + 2) : line;
@@ -295,21 +306,25 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         // the service's tail leads with the ENGLISH action name ("scroll:")
         // -- the localized verb is rendered on the step's own line
         tail = tail.replace(/^[a-z_]+: /, "");
-        // a read step's feed line carries the WHOLE document -- the head
-        // is all the verb line needs (the full text lives in StepDetail's
-        // reading pane; the raw megabyte never joins the DOM twice)
-        if (d?.text && tail.length > 200) {
-          tail = `${tail.slice(0, 200).trimEnd()}…`;
-        }
-        const failed = tail.includes("error:");
+        const failed = d?.status === "error" || tail.includes("error:");
         const verb = browseView.label({
-          call: { args: step, tool: "browse", id: 0, q: "", category: "", status: "ok" } as ToolRowProps["call"],
+          call: {
+            args: d?.url ? { ...step, url: d.url } : step,
+            // the read/open labels read the ROW-level url (not args.url)
+            // -- both carry the structured page so a settled step labels
+            // as its page, never as the running fallback
+            url: d?.url,
+            tool: "browse",
+            id: 0,
+            q: "",
+            category: "",
+            status: "ok",
+          } as ToolRowProps["call"],
           results: [],
           t,
         });
-        // TWO LINES per step: the verb line (what the model did) and the
-        // destination line (where the session landed -- the observation's
-        // "now:" page); a failed step's second line carries the error
+        // the legacy observation lines (no structured summary): the
+        // destination (the feed's "now:" page) and the raw rest
         const nowAt = tail.indexOf(". now: ");
         const dest = nowAt > 0 ? tail.slice(nowAt + 7).replace(/\s*\([^)]*\)\s*$/, "") : "";
         const rest = nowAt > 0 ? tail.slice(0, nowAt) : tail;
@@ -328,28 +343,25 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                 <span className={`min-w-0 flex-1 truncate font-medium ${failed ? "text-danger" : "text-ink-2"}`}>
                   {verb}
                 </span>
-                {!dest && !failed ? (
-                  <span className="shrink-0 truncate text-ink-3" dir="auto">
-                    {rest}
-                  </span>
-                ) : null}
               </div>
-              {dest && !d?.url ? (
-                // the feed's observation line -- suppressed when the
-                // structured link row below carries the same page (the
-                // link is the destination, clickable)
+              {failed ? (
+                <div className="mt-0.5 truncate ps-[18px] text-danger" dir="auto">
+                  {tail}
+                </div>
+              ) : structured ? (
+                <StepDetail d={d} t={t} />
+              ) : dest ? (
                 <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
                   <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
                   <span className="min-w-0 flex-1 truncate" dir="auto">
                     {dest}
                   </span>
                 </div>
-              ) : failed ? (
-                <div className="mt-0.5 truncate ps-[18px] text-danger" dir="auto">
-                  {tail}
+              ) : (
+                <div className="mt-0.5 truncate ps-[18px] text-ink-3" dir="auto">
+                  {rest}
                 </div>
-              ) : null}
-              {d && d.status !== "error" ? <StepDetail d={d} t={t} /> : null}
+              )}
             </div>
           </li>
         );
@@ -495,9 +507,13 @@ export const browseView: ToolView = {
       }
       case "read": {
         const target = call.url || call.page?.url;
+        if (target) {
+          return pageLabel(target);
+        }
         // a pending session read has no url yet -- the generic running
-        // text beats a literal "read ?"
-        return target ? pageLabel(target) : t("ai_browser_row_running");
+        // text beats a literal "read ?"; a SETTLED row without one (an
+        // interrupted read that never settled) shows the neutral verb
+        return call.status === "pending" ? t("ai_browser_row_running") : t("ai_browser_act_read");
       }
       case "wait_user":
         return t("ai_browser_act_wait");

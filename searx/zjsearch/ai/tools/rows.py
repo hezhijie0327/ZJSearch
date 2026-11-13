@@ -197,6 +197,9 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
         offset = clock_args.get("offset_days")
         if not target and offset is not None:
             target = f"today {int(offset):+d}d" if isinstance(offset, (int, float)) else "today ±Nd"
+        # the auspicious-day scan labels its row with the ACTIVITY
+        if not target:
+            target = str(clock_args.get("find_suited") or "").strip()[:24]
         return {
             "id": idx,
             "tool": CALENDAR_TOOL,
