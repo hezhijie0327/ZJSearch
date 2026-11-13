@@ -152,8 +152,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
 
   - **core/** — cross-cutting foundations with zero AI semantics: the
     settings-block readers (`config`), the HMAC token gate (`security`),
-    the shared text guards (`text`), the ONE SSRF gate (`guard`) and the
-    shared NDJSON stream wrapper (`ndjson`) and the ONE document
+    the shared text guards (`text`), the ONE SSRF gate (`guard`), the
+    shared calendar primitives (`dates` — the fixed English weekday
+    table and the tolerant IANA resolve; `spine`'s `<today>`/`<now>`
+    blocks and the `clock` tool both consume it, so the zone-fallback
+    and weekday doctrines never drift), the shared NDJSON stream
+    wrapper (`ndjson`) and the ONE document
     converter (`convert` — markitdown behind a single
     `to_markdown(data, extension)` call: the reader's HTML pass,
     `web_reader`'s native PDF reads, and the uploaded attachments
@@ -247,7 +251,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     `multi` (up to 5 action objects executed in
     order under one call, first failure stopping the batch — a latency
     tool for mechanical chains, never for steps that need judgment
-    between them).  The click is GUARDED: a landing-point elementFromPoint
+    between them; the settlement carries per-step summaries —
+    action/status/label/url/title/chars, and a read step carries its
+    full document `text` — so the client renders each step like its
+    STANDALONE row: a real outbound link for the landing page and a
+    click-open reading pane per read step, folded by default per the
+    reading-pane doctrine; the read steps also join the client's
+    document archive exactly like standalone reads).  The click is GUARDED: a landing-point elementFromPoint
     probe fails fast with the occluder's own description when an overlay
     covers the target (no 15s actionability timeout), and a spawned
     popup (target=_blank) is pulled into the tab set and activated with
@@ -341,7 +351,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     (`runs/search/`: profile/prompts/gates/tools/executor/route;
     THREE tiers, three products on ONE loop -- Search (speed: the
     AI-Overview feel, one round, the minimal toolset: search/calculate/
-    ask_user/memory/record_findings, inspect_image only when the request
+    clock/ask_user/memory/record_findings, inspect_image only when the request
     carries images), Deep Search (balanced: the probe
     ladder 12-60 rounds, the plan + ledger machinery), Deep Research
     (deep: the ladder 15-120, decomposition, the ONLY tier with the
@@ -436,7 +446,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     zero separate design), plus `embed_route` and the thread page.  The
     prompt layer is `ai/prompts/` — the ONE home of the product voice:
     `spine.py` (the shared fragments + `block()` + `answer_contract` +
-    `shape_ladder`), `researcher.py` (the lead's opener, blocks keyed off
+    `shape_ladder` + `now_line` — the clock-bearing block the zero-tool
+    direct lane bakes at write time), `researcher.py` (the lead's opener, blocks keyed off
     the run's registered `toolset` frozenset), `subagent.py` (the
     delegation persona), `notes.py` (the run-level honesty notes),
     `report.py`/`deck.py`/`extractor.py`; every prompt string is authored
@@ -451,7 +462,25 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     round policy, few-shot recipes).  The tool implementations are
     self-contained packages under `ai/tools/` (one package per tool:
     spec + sanitizer + service; `core/`, `prompts/`, `runs/`, `api/`
-    complete the layout — see NEXTGEN-DESIGN.md).  THE
+    complete the layout — see NEXTGEN-DESIGN.md).  THE COMPOSITE CLOCK
+    (tools/clock.py, EVERY tier + the overview surface): the wall clock
+    (no args — date, HH:MM:SS, weekday, UTC offset, UTC, unix) and a
+    calendar lookup table in one call — `date` accepts the full
+    `YYYY-MM-DD`, loose `MM-DD` (current year) or a bare `DD`
+    (current month; the "25号是周几" shape), `offset_days` covers the
+    relative forms ("next Wednesday" = read today's weekday, add N);
+    every resolution is a deterministic `datetime`/`ZoneInfo` ladder
+    anchored to the USER'S zone, an explicit bad tz is a fixable
+    error, and the payload (mode-tagged now/date) rides the call event
+    for the row's value card.  THE DATE/TIME DIVISION OF LABOR:
+    `<today>` stays DATE-ONLY on the researched tiers — byte-stable
+    across a same day's runs so the prompt-cache prefix survives — and
+    the clock TOOL is the freshness channel (call-time answer, market
+    hours, mid-run re-checks); the ZERO-TOOL direct lane bakes the
+    hour in instead (`spine.now_line` at write time), keeping its
+    zero-tool shape.  Weekday tables and the zone resolve live in ONE
+    place (`core/dates.py`), consumed by `spine` and the tool alike.
+  THE
   DEPLOYMENT-DERIVED SEARCH SURFACE: `search_web`'s `category` enum is
   NOT a fixed list — `available_categories()` (tools/search_web.py)
   derives it from `searx.engines` at spec-build time (every category ≥1
@@ -520,8 +549,14 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   a shot-marked img in the event log — the ZCode tool-result pattern,
   the row shows the image in replays — while mirror frames are
   stripped), `snapshot`+`n` (the fresh outline + element count
-  for open/snapshot/a click-through navigation) and `text`/`chars`
-  for the read action (the clean content, archived under `url`).  The
+  for open/snapshot/a click-through navigation), `steps` (the multi
+  batch's per-step summaries; a read step's `text` is the wire-only
+  document the step pane renders and archives) and `text`/`chars`
+  for the read action (the clean content, archived under `url`).
+  The `clock` settlement rides `clock` (the mode-tagged now/date
+  payload — the row's value card renders it, the weekday re-localized
+  through the theme's catalog table `lib/weekdays.ts`, the ISO dates
+  left bare).  The
   session's pages JOIN the [n] registry (open mints the identity,
   read/wait_user register the full text — the writer cites what the
   model drove; coverage + entries ride along; about:blank mints
@@ -720,7 +755,10 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
 
 - `src/lib/` — foundations: `types.ts` (server contract), `pageData.ts`,
   `searchParams.ts`, `router.tsx`, `i18n/`, `categories.ts`, `cookies.ts`,
-  `settings.ts`, `theme.ts`, `format.ts`, `link.ts`, `motion.ts`.
+  `settings.ts`, `theme.ts`, `format.ts`, `weekdays.ts` (the one
+  `getDay()` → `weekday_*` catalog-key table behind every weekday
+  label — clock row, weather strip; the theme owns the language, not
+  Intl), `link.ts`, `motion.ts`.
   Never imports from `components/` / `features/` / `pages/`.
 - `src/components/` — UI shared across pages (Shell, Link, SearchBox,
   SearchControls, Dropdown, CopyButton, HelpModal, BackToTop, Brand,
