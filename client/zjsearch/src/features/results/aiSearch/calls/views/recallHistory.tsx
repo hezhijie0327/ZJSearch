@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { ArrowUpRight, BookMarked } from "lucide-react";
+import { BODY_ROW } from "@/features/results/aiSearch/calls/rowBase.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
 /** host of a match url (the identity row's right slot; a malformed url
@@ -58,8 +59,7 @@ export const recallHistoryView: ToolView = {
               ) : null}
             </>
           );
-          const rowClass =
-            "flex min-w-0 items-center gap-1.5 rounded-md bg-surface-2/50 px-1.5 py-1 text-xs transition-colors";
+          const rowClass = `flex min-w-0 items-center gap-1.5 text-xs transition-colors ${BODY_ROW}`;
           return url ? (
             <a
               className={`${rowClass} hover:text-ink`}

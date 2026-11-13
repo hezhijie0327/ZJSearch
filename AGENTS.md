@@ -1519,6 +1519,18 @@ Shared style & logic tokens (import, never re-type):
   divide-y sectioned card), `SectionLabel` (the gray band header inside a
   Card) and `SettingRow`/`IconTile` (icon-square + title/description +
   right control) -- tune panel styling THERE, never per page.
+- `features/results/aiSearch/calls/bodyParts.tsx` is the TOOL-ROW BODY
+  furniture (the search_web result-card standard at body scale) --
+  REUSE-FIRST: a new list-shaped tool body composes these instead of
+  re-typing grounds (six views had hand-rolled the same structures
+  before this was extracted).  `BodyRow` (one item card on the body
+  ground -- items are objects, never lines on a slab), `CopyValue`
+  (full-precision mono value + copy chip -- the hash/ip vocabulary) and
+  `DirectoryGrid` (the name [+ count] inventory grid: list_engines'
+  categories, the calendar's almanac terms -- ONE grid language for
+  every inventory).  Per-mode vocabulary rides the VIEW (each mode its
+  own verb label/pending/body caption -- see the §7.9 identity ladder);
+  per-item grounds ride THESE.
 - `lib/styles.ts`: `CHIP` (transition-colors baked in), `MONO_CHIP`,
   `CHIP_HOVER` (`hover:text-ink`), `CODE_CHIP` (square code token),
   `SEGMENT` / `SEGMENT_ACTIVE` / `SEGMENT_IDLE` (segmented-control rows:

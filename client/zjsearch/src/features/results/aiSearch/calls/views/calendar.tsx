@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { BookOpenText, CalendarDays, Clock, Copy, SearchCheck } from "lucide-react";
+import { DirectoryGrid } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiCalendarLunar, AiCalendarPayload } from "@/features/results/aiSearch/timeline.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
@@ -305,25 +306,16 @@ function DateBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps[
 function TermsBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps["t"] }) {
   const terms = payload.terms ?? [];
   return (
-    <div className="mt-1 rounded-xl bg-surface-2/50 px-3 py-2.5">
-      {/* the vocabulary as a DIRECTORY GRID (the list_engines
-          inventory's cell vocabulary): 83 terms laid out multi-column
-          -- a chip wall read as noise, one flat paragraph as
-          unrendered text; the grid scans */}
+    <div className="mt-1">
+      {/* the list_engines inventory's EXACT directory-grid vocabulary:
+          each term its own elevated CELL on the page ground (surface on
+          surface-2 read as floating text), left-aligned, the same
+          auto-fill columns -- one grid language across the two
+          inventories */}
       <p className="text-xs font-medium text-ink-2" dir="auto">
         {t("ai_calendar_terms_title", { n: String(terms.length) })}
       </p>
-      <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-1">
-        {terms.map((term) => (
-          <span
-            className="truncate rounded-md bg-surface px-2 py-1 text-center text-xs text-ink-2"
-            dir="auto"
-            key={term}
-          >
-            {term}
-          </span>
-        ))}
-      </div>
+      <DirectoryGrid entries={terms.map((term) => ({ key: term, label: term }))} />
     </div>
   );
 }

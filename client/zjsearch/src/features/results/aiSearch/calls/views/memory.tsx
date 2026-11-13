@@ -2,6 +2,7 @@
 
 import { BookUser } from "lucide-react";
 import type { ReactNode } from "react";
+import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { Translate } from "@/lib/i18n.ts";
 
@@ -106,14 +107,14 @@ export const memoryView: ToolView = {
       return null;
     }
     return (
-      <ul className="space-y-1 rounded-lg bg-surface-2/50 px-2.5 py-2">
+      <ul className="space-y-1">
         {lines.map((line, index) => (
-          <li className="flex items-start gap-2 text-[13px]" key={index}>
+          <BodyRow className="flex items-start gap-2 text-[13px]" key={index}>
             <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
             <span className="min-w-0 flex-1 break-words text-ink-2" dir="auto">
               {line}
             </span>
-          </li>
+          </BodyRow>
         ))}
       </ul>
     );

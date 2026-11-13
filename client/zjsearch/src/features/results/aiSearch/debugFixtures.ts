@@ -655,6 +655,7 @@ const FULL_STAGE: DebugScenario = {
           status: "ok",
           label: "[tab 2] Siemens WinCC | Siemens",
           url: "https://www.siemens.com/wincc",
+          title: "Siemens WinCC",
           chars: 4820,
           // the WIRE-ONLY per-step document (title + body) -- the step row
           // opens the same reading pane a standalone read does
@@ -664,6 +665,7 @@ const FULL_STAGE: DebugScenario = {
           action: "read",
           status: "ok",
           label: "[tab 3] WinCC API 参考",
+          title: "WinCC API 参考",
           url: "https://docs.example.com/wincc-api",
           chars: 3105,
           text: "WinCC API 参考\n\n## 认证\n\n所有写操作要求 Bearer token（本地会话通过 /tokens 签发，有效期 3600s）。\n\n## 变量读取\n\nGET /api/v2/tags?filter=area%3Dline1 返回分页变量表；时间序列走 /api/v2/tags/{id}/archive?from=…&to=…，粒度最小 1s。\n\n## 报警应答\n\nPOST /api/v2/alarms/{id}/ack 需要携带操作员身份；批量应答上限 100 条/次。",

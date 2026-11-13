@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ListTodo } from "lucide-react";
+import { Check, ListTodo } from "lucide-react";
+import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
 /** The update_plan view: the rendered PLAN ITEMS fold open under the
@@ -27,20 +28,27 @@ export const updatePlanView: ToolView = {
       return null;
     }
     return (
-      <ul className="space-y-1 rounded-lg bg-surface-2/50 px-2.5 py-2">
+      // the search_web standard: each item its OWN elevated card (the
+      // BODY_ROW vocabulary), the status glyph the task card speaks --
+      // done = check, active = accent dot, pending = faint dot
+      <ul className="space-y-1">
         {items.map((item, index) => {
           const status = String(item.status ?? "pending");
           const done = status === "done";
           return (
-            <li className="flex items-start gap-2 text-[13px]" key={index}>
-              <span
-                aria-hidden="true"
-                className={`mt-2 size-1.5 shrink-0 rounded-full ${done ? "bg-ok" : status === "active" ? "bg-accent" : "bg-ink-3/50"}`}
-              />
+            <BodyRow className="flex items-start gap-2 text-[13px]" key={index}>
+              {done ? (
+                <Check aria-hidden="true" className="mt-px size-3.5 shrink-0 text-ok" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className={`mt-1.5 size-1.5 shrink-0 rounded-full ${status === "active" ? "bg-accent" : "bg-ink-3/50"}`}
+                />
+              )}
               <span className={`min-w-0 flex-1 break-words ${done ? "text-ink-3" : "text-ink"}`} dir="auto">
                 {String(item.title ?? "")}
               </span>
-            </li>
+            </BodyRow>
           );
         })}
       </ul>

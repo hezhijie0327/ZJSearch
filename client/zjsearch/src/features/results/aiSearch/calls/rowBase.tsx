@@ -304,6 +304,12 @@ export function CallContent({ call }: { call: AiSearchCall }) {
     result page.  Fed from the run's [n] registry slice for that call --
     the DEFAULT expansion body (every row whose content is neither a
     reading pane nor a bare args pane falls through to it). */
+export const BODY_ROW = "rounded-md bg-surface-2/60 px-2.5 py-2";
+/** One tool-row body's ITEM ground -- the search_web result card's
+    vocabulary at list scale: items are OBJECTS on the box (their own
+    elevated card, one gap step between), never text lines on a slab.
+    Every list-shaped tool body composes this. */
+
 export function CallResults({ results }: { results: AiSearchSource[] }) {
   return (
     <div className={`mt-1 flex gap-2 overflow-x-auto pb-1 ${SCROLLBAR_NONE} [&>*]:shrink-0`}>

@@ -3,6 +3,7 @@
 import { CircleDollarSign, DatabaseSearch } from "lucide-react";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
+import { DirectoryGrid } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiEngineInventory } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -48,14 +49,9 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
       <p className="text-xs text-ink-3">
         {t("ai_engine_info_summary", { n: String(inv.total), m: String(categories.length) })}
       </p>
-      <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-1">
-        {categories.map((category) => (
-          <div className={`flex items-baseline justify-between gap-2 ${CELL}`} key={category.name}>
-            <span className="truncate text-xs text-ink-2">{category.name}</span>
-            <span className="text-xs tabular-nums text-ink-3">{category.count}</span>
-          </div>
-        ))}
-      </div>
+      <DirectoryGrid
+        entries={categories.map((category) => ({ key: category.name, label: category.name, trailing: category.count }))}
+      />
       {inv.disabled.length > 0 ? (
         <>
           <p className="mt-2.5 text-xs text-ink-3">{t("ai_engine_info_bang", { n: String(inv.disabled.length) })}</p>

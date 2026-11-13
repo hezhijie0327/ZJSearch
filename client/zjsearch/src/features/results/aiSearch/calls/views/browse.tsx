@@ -30,6 +30,7 @@ import { type ReactNode, useState } from "react";
 
 import { Collapse } from "@/components/Collapse.tsx";
 import { Lightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
+import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { HOVER_CHIP, READ_PANE } from "@/lib/styles.ts";
@@ -218,13 +219,17 @@ function StepDetail({
     return null;
   }
   return (
-    <div className="mt-0.5 min-w-0 ps-[18px]">
+    // ONE grounded card per step (the batch's own anatomy: verb line ->
+    // card) -- the link row, the chars toggle and the reading pane live
+    // INSIDE it; a bare "N chars" toggle floating between verb and card
+    // read as three disconnected pieces
+    <BodyRow className="mt-0.5 ms-[18px] space-y-1">
       {/* the link row renders only on TITLED pages -- a titleless read
           would print its host twice (the verb line already names the
           page, the pane's chip carries the outbound link) */}
       {d.url && d.title ? (
         <a
-          className="flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
+          className="flex min-w-0 items-center gap-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
           dir="auto"
           href={d.url}
           rel="noreferrer"
@@ -241,7 +246,7 @@ function StepDetail({
         <>
           <button
             aria-expanded={open}
-            className="mt-0.5 flex min-w-0 items-center gap-1 rounded-lg px-1 py-1 text-xs text-ink-3 transition-colors hover:text-ink"
+            className="flex min-w-0 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
             onClick={() => {
               setOpen(!open);
             }}
@@ -290,7 +295,7 @@ function StepDetail({
           </Collapse>
         </>
       ) : null}
-    </div>
+    </BodyRow>
   );
 }
 
@@ -302,6 +307,62 @@ function StepDetail({
     The feed tails render ONLY for steps without a structured summary
     (legacy replays, the pending plan) -- a structured step's feed line
     is receipt material, its raw urls never join the verb line. */
+/** One multi step's localized VERB (the standalone label's vocabulary
+    minus the detail: the numbered step's target renders in its own card,
+    so the verb line carries the verb alone). */
+function stepVerb(action: string, step: Record<string, unknown>, t: ToolRowProps["t"]): string {
+  switch (action) {
+    case "open":
+      return t("ai_browser_act_open");
+    case "snapshot":
+      return t("ai_browser_act_snapshot");
+    case "click":
+      return t("ai_browser_act_click");
+    case "type":
+      return t("ai_browser_act_type");
+    case "press":
+      return t("ai_browser_act_press");
+    case "scroll":
+      return t("ai_browser_act_scroll");
+    case "screenshot":
+      return t("ai_browser_act_screenshot");
+    case "hover":
+      return t("ai_browser_act_hover");
+    case "select":
+      return t("ai_browser_act_select");
+    case "drag":
+      return t("ai_browser_act_drag");
+    case "viewport":
+      return t("ai_browser_act_viewport");
+    case "read":
+      return t("ai_browser_act_read");
+    case "upload":
+      return t("ai_browser_act_upload");
+    case "history":
+      return t(
+        String(step.op ?? "") === "reload"
+          ? "ai_browser_act_reload"
+          : String(step.op ?? "") === "forward"
+            ? "ai_browser_act_forward"
+            : "ai_browser_act_back",
+      );
+    case "tab":
+      return t(
+        String(step.op ?? "new") === "switch"
+          ? "ai_browser_tab_switch"
+          : String(step.op ?? "new") === "close"
+            ? "ai_browser_tab_close"
+            : "ai_browser_tab_new",
+      );
+    case "wait_user":
+      return t("ai_browser_act_wait");
+    case "close":
+      return t("ai_browser_act_close");
+    default:
+      return action || "?";
+  }
+}
+
 function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["t"] }) {
   const readable = (line: string) =>
     line.replace(/https?:\/\/[^\s)]+/g, (url) => {
@@ -349,24 +410,12 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         // -- the localized verb is rendered on the step's own line
         tail = tail.replace(/^[a-z_]+: /, "");
         const failed = d?.status === "error" || tail.includes("error:");
-        const verb = browseView.label({
-          call: {
-            args: d?.url ? { ...step, url: d.url } : step,
-            // the read/open labels read the ROW-level url (not args.url)
-            // -- the structured page when the settle rode one, else the
-            // step's OWN requested url (a legacy replay's settle predates
-            // the structured summaries); without either the label reads
-            // the neutral verb instead of "?"
-            url: d?.url || (typeof step.url === "string" ? step.url : undefined),
-            tool: "browse",
-            id: 0,
-            q: "",
-            category: "",
-            status: "ok",
-          } as ToolRowProps["call"],
-          results: [],
-          t,
-        });
+        // the step's VERB: the localized action name, never the target
+        // (the standalone label composes verb+detail because the row has
+        // no second line -- a numbered step's target lives in its card
+        // below, so the verb line stays the VERB; reusing the standalone
+        // label rendered the read step's host where its verb belongs)
+        const verb = stepVerb(action, step, t);
         // the legacy observation lines (no structured summary): the
         // destination (the feed's "now:" page) and the raw rest
         const nowAt = tail.indexOf(". now: ");
@@ -634,10 +683,15 @@ export const browseView: ToolView = {
       );
     }
     if (action === "multi") {
+      // the landing card duplicates the LAST step's own card when the
+      // batch ended on that page (an open/read step renders it) -- show
+      // it only when no structured step already carries the url
+      const landing = call.page?.url;
+      const covered = (call.steps ?? []).some((st) => st.status !== "error" && st.url === landing);
       return (
         <>
           <MultiSteps call={call} t={t} />
-          {call.page ? <LocationLine page={call.page} /> : null}
+          {call.page && !covered ? <LocationLine page={call.page} /> : null}
           {call.snapshot ? <BrowserOutline snapshot={call.snapshot} t={t} /> : null}
         </>
       );

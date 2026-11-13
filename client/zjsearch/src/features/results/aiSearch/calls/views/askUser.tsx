@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { MessageCircleQuestion } from "lucide-react";
+import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
+import { CHIP } from "@/lib/styles.ts";
 
 /** The ask_user view: the question's intro folds open with the ask spec
     (each question + its options); the settled row shows the bare timing
@@ -26,16 +28,26 @@ export const askUserView: ToolView = {
             {intro}
           </p>
         ) : null}
-        {questions.map((question, index) => (
-          <div key={index}>
-            <p className="break-words text-[13px] text-ink" dir="auto">
-              {String(question.q ?? "")}
-            </p>
-            <p className="break-words text-xs text-ink-3" dir="auto">
-              {(Array.isArray(question.options) ? question.options : []).map(String).join("  ·  ")}
-            </p>
-          </div>
-        ))}
+        {questions.map((question, index) => {
+          const options = (Array.isArray(question.options) ? question.options : []).map(String).filter(Boolean);
+          return (
+            // each question its own card, the options as CHIPS (the
+            // clarify card's own option vocabulary -- a middot-joined
+            // string read as prose, not as the pickable set it is)
+            <BodyRow key={index}>
+              <p className="break-words text-[13px] text-ink" dir="auto">
+                {String(question.q ?? "")}
+              </p>
+              <span className="mt-1 flex flex-wrap gap-1">
+                {options.map((option) => (
+                  <span className={CHIP} key={option}>
+                    {option}
+                  </span>
+                ))}
+              </span>
+            </BodyRow>
+          );
+        })}
       </div>
     );
   },

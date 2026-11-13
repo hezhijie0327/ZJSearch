@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { NotebookPen } from "lucide-react";
+import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
 import { escapeHtml } from "@/lib/print.ts";
@@ -29,7 +30,9 @@ export const recordFindingsView: ToolView = {
       return null;
     }
     return (
-      <ul className="space-y-1 rounded-lg bg-surface-2/50 px-2.5 py-2">
+      // the search_web standard: each fact its OWN elevated card (the
+      // BODY_ROW vocabulary), not a line on a slab
+      <ul className="space-y-1">
         {list.map((fact, index) => {
           const tags = Array.isArray(fact.tags)
             ? fact.tags
@@ -38,7 +41,7 @@ export const recordFindingsView: ToolView = {
                 .slice(0, 3)
             : [];
           return (
-            <li className="flex items-start gap-2" key={index}>
+            <BodyRow className="flex items-start gap-2" key={index}>
               <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
               <div className="min-w-0 flex-1">
                 <Snippet
@@ -55,7 +58,7 @@ export const recordFindingsView: ToolView = {
                   </span>
                 ) : null}
               </div>
-            </li>
+            </BodyRow>
           );
         })}
       </ul>
