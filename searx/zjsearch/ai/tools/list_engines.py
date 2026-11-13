@@ -116,17 +116,12 @@ def build_inventory(
         lines: list[str] = [
             f"The '{category}' vertical: {per_category[category]} enabled"
             " engines"
-            + (
-                " -- " + ", ".join(enabled_names[category])
-                if enabled_names[category]
-                else " (none enabled)"
-            )
+            + (" -- " + ", ".join(enabled_names[category]) if enabled_names[category] else " (none enabled)")
             + ".",
         ]
     else:
         lines = [
-            f"This deployment searches {enabled} enabled engines"
-            f" across {len(categories)} categories:",
+            f"This deployment searches {enabled} enabled engines" f" across {len(categories)} categories:",
             "  " + " · ".join(f"{name} ({per_category[name]})" for name in categories),
         ]
     disabled = [

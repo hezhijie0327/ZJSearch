@@ -81,9 +81,12 @@ CREATE TABLE IF NOT EXISTS run_journal (
   PRIMARY KEY (run_key))""",  # fmt: skip
     }
 
-    SQL_INDEX = """INSERT INTO run_index (thread_id, run_key, q, mode) VALUES (?, ?, ?, ?)
-ON CONFLICT (run_key) DO UPDATE SET q = excluded.q, mode = excluded.mode"""
-    SQL_LATEST_FOR_THREAD = """SELECT run_key, q, mode FROM run_index WHERE thread_id = ? ORDER BY created DESC, rowid DESC LIMIT 1"""
+    SQL_INDEX = """INSERT INTO run_index (thread_id, run_key, q, mode, run_no) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (run_key) DO UPDATE SET q = excluded.q, mode = excluded.mode, run_no = excluded.run_no"""
+    SQL_LATEST_FOR_THREAD = (
+        """SELECT run_key, q, mode, run_no FROM run_index
+WHERE thread_id = ? ORDER BY created DESC, rowid DESC LIMIT 1"""
+    )
     SQL_APPEND = "INSERT OR IGNORE INTO run_journal (key, seq, line) VALUES (?, ?, ?)"
     SQL_CAP = "SELECT 1 FROM run_journal WHERE key = ? AND seq >= ? LIMIT 1"
     SQL_TAIL = "SELECT line FROM run_journal WHERE key = ? AND seq > ? ORDER BY seq"
@@ -96,19 +99,53 @@ DELETE FROM run_journal WHERE key IN (
     def __init__(self) -> None:
         super().__init__(_db_path(_GEN))
         self._lock = threading.Lock()
+        # the run ORDINAL (B-4): the thread-index replay used to hardcode
+        # run 1 while the journal returns the thread's LATEST run -- a
+        # replayed run 3 of 3 presented itself as run 1.  A lightweight
+        # ALTER keeps every pre-existing shadow (a DB_SCHEMA bump would
+        # unlink 72h of replayable runs for a cosmetic field)
+        try:
+            self.DB.execute(
+                "ALTER TABLE run_index ADD COLUMN run_no INTEGER NOT NULL DEFAULT 1"
+            )
+        except sqlite3.OperationalError:
+            pass  # the column already exists
 
-    def index_run(self, thread_id: str, run_key: str, q: str, mode: str) -> None:
+    def _connect(self) -> sqlite3.Connection:
+        # WAL + synchronous=NORMAL: the journal is a RECOVERY SHADOW
+        # (72h TTL, rebuildable) -- the default FULL paid one fsync per
+        # committed append ON the driver's publish path (every wire line
+        # of every run); NORMAL keeps WAL's crash safety and only
+        # relaxes power-loss durability, which a shadow does not need.
+        conn = super()._connect()
+        conn.execute("PRAGMA synchronous=NORMAL")
+        return conn
+
+    def index_run(self, thread_id: str, run_key: str, query: str, mode: str) -> None:
         """Match a run to its thread uuid (the reload matcher): called
-        once per run at handle registration."""
+        once per run at handle registration.  The run's ORDINAL derives
+        from the indexed count for the thread (the client numbers its
+        runs the same way -- one per registration)."""
         with self._lock, self.DB as conn:
-            conn.execute(self.SQL_INDEX, (thread_id[:64], run_key, q[:300], mode[:16]))
+            row = conn.execute(
+                "SELECT COUNT(*) FROM run_index WHERE thread_id = ?", (thread_id[:64],)
+            ).fetchone()
+            run_no = int(row[0] if row else 0) + 1
+            conn.execute(
+                self.SQL_INDEX,
+                (thread_id[:64], run_key, query[:300], mode[:16], run_no),
+            )
 
-    def latest_for_thread(self, thread_id: str) -> tuple[str, str, str] | None:
-        """The thread's newest journaled run: ``(run_key, q, mode)``, or
-        ``None`` when this thread has no journaled run."""
+    def latest_for_thread(self, thread_id: str) -> tuple[str, str, str, int] | None:
+        """The thread's newest journaled run: ``(run_key, q, mode,
+        run_no)``, or ``None`` when this thread has no journaled run."""
         with self._lock:
-            row = self.DB.execute(self.SQL_LATEST_FOR_THREAD, (thread_id[:64],)).fetchone()
-        return (str(row[0]), str(row[1]), str(row[2])) if row else None
+            row = self.DB.execute(
+                self.SQL_LATEST_FOR_THREAD, (thread_id[:64],)
+            ).fetchone()
+        return (
+            (str(row[0]), str(row[1]), str(row[2]), int(row[3] or 1)) if row else None
+        )
 
     def append(self, key: str, seq: int, line: str) -> None:
         # the documented row cap, actually enforced: one PK-indexed probe
@@ -138,7 +175,10 @@ DELETE FROM run_journal WHERE key IN (
                 conn.execute(self.SQL_SWEEP_AGE, (int(time.time()) - JOURNAL_TTL,))
                 conn.execute(self.SQL_SWEEP_RANK, (_MAX_RUNS,))
             leftover = conn.execute("SELECT count(*) FROM run_journal").fetchone()
-        logger.debug("zjsearch run journal: swept, %s rows remain", leftover[0] if leftover else "?")
+        logger.debug(
+            "zjsearch run journal: swept, %s rows remain",
+            leftover[0] if leftover else "?",
+        )
 
 
 _JOURNAL: RunJournal | None = None
@@ -168,13 +208,17 @@ def _open_or_rebuild() -> RunJournal:
     by its set-first-then-verify flag, ``no such table: run_index``
     forever).  A new path forces every thread to reconnect; the fresh
     file's first connect creates the full schema."""
-    global _GEN
+    # the generation counter IS process-wide state
+    global _GEN  # pylint: disable=global-statement
     candidate = RunJournal()
     try:
         candidate.DB.execute("SELECT 1 FROM run_index LIMIT 1").fetchone()
         return candidate
     except sqlite3.DatabaseError:
-        logger.warning("zjsearch run journal: stale schema -- rebuilding at generation %s", _GEN + 1)
+        logger.warning(
+            "zjsearch run journal: stale schema -- rebuilding at generation %s",
+            _GEN + 1,
+        )
         _unlink_db(_db_path(_GEN))
         _GEN += 1
         return RunJournal()
@@ -184,7 +228,8 @@ def journal() -> RunJournal:
     """The process-wide journal (lazy -- SQLiteAppl connects on first
     use).  The FIRST caller also sweeps the stale rows: one sweep per
     process is all the TTL enforcement a personal deployment needs."""
-    global _JOURNAL, _SWEPT
+    # the process-wide singleton
+    global _JOURNAL, _SWEPT  # pylint: disable=global-statement
     with _JOURNAL_LOCK:
         if _JOURNAL is None:
             _JOURNAL = _open_or_rebuild()
@@ -193,5 +238,7 @@ def journal() -> RunJournal:
             try:
                 _JOURNAL.sweep()
             except sqlite3.Error:
-                logger.warning("zjsearch run journal: initial sweep failed", exc_info=True)
+                logger.warning(
+                    "zjsearch run journal: initial sweep failed", exc_info=True
+                )
         return _JOURNAL

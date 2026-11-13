@@ -495,5 +495,3 @@ def _complete_text(
     finally:
         stream.cancel()
     return "".join(chunks)
-
-

@@ -177,7 +177,9 @@ def parse_record_findings_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
                 entry[key] = int(value)
         tags = fact.get("tags")
         if isinstance(tags, list) and tags:
-            cleaned = [t2 for t2 in (" ".join(str(tag or "").split())[:FACT_TAG_CHARS] for tag in tags[:FACT_TAG_MAX]) if t2]
+            cleaned = [
+                t2 for t2 in (" ".join(str(tag or "").split())[:FACT_TAG_CHARS] for tag in tags[:FACT_TAG_MAX]) if t2
+            ]
             if cleaned:
                 entry["tags"] = cleaned
         facts.append(entry)

@@ -18,6 +18,8 @@ the flask request context.  The services parse THEIR OWN wire usage
 only hand the account along.
 """
 
+import threading
+
 BUCKETS = ("rerank", "decision", "embedding", "gates")
 """The model classes one account tracks.  A new class appends here, folds
 in its service (the service parses its wire usage and calls
@@ -37,6 +39,10 @@ class ModelAccount:
         # each bucket's shape is its model class's own (calls + the spend
         # fields it reports) -- seeded with calls only
         self._buckets: dict[str, dict[str, int]] = {name: {"calls": 0} for name in BUCKETS}
+        # record() is read-modify-write and its callers are no longer all
+        # the driver thread -- the ranking cascade folds its spend from
+        # the round's pool workers -- so the merge takes a lock
+        self._lock = threading.Lock()
 
     def record(self, kind: str, calls: int = 1, **fields: int) -> None:
         """One endpoint settlement: ``calls`` endpoints answered plus any
@@ -44,10 +50,11 @@ class ModelAccount:
         input-only -- ``tokens=``; the LLM gates merge ``input=`` /
         ``output=``).  Fields MERGE numerically, so a bucket's shape is
         whatever its model class reports."""
-        bucket = self._buckets.setdefault(str(kind), {"calls": 0})
-        bucket["calls"] = bucket.get("calls", 0) + int(calls)
-        for field, value in fields.items():
-            bucket[field] = bucket.get(field, 0) + int(value or 0)
+        with self._lock:
+            bucket = self._buckets.setdefault(str(kind), {"calls": 0})
+            bucket["calls"] = bucket.get("calls", 0) + int(calls)
+            for field, value in fields.items():
+                bucket[field] = bucket.get(field, 0) + int(value or 0)
 
     def snapshot(self) -> dict[str, dict[str, int]]:
         """A deep copy of the current totals -- the subagent handle's

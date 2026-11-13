@@ -145,9 +145,7 @@ def _control_view() -> t.Any:
                 # the drained steer event carries shape="direct", which
                 # is what lets the client fold the run's output-shape
                 # state back to the plain depth (replay-stable)
-                handle.control.steer(
-                    _SHAPE_STEER["direct"], preempt=False, meta={"shape": "direct"}
-                )
+                handle.control.steer(_SHAPE_STEER["direct"], preempt=False, meta={"shape": "direct"})
         elif shape not in ("report", "deck"):
             error = "shape must be report / deck / direct"
         elif handle.control.set_shape(shape):
@@ -182,8 +180,10 @@ def _journal_view() -> t.Any:
     (the starting client's reattach handle) OR by ``thread`` -- the uuid
     in the url -- for a reloaded page whose LOCAL store came up empty:
     the thread index resolves the run, and the response's FIRST line is
-    the run's metadata (``{"journal": {run_key, q, mode}}``) so the
-    client can seed the timeline it is about to replay.  An unknown or
+    the run's metadata (``{"journal": {run_key, q, mode, run_no}}``) so
+    the client can seed the timeline it is about to replay (the ordinal
+    labels the replayed run truthfully -- the thread's LATEST run, not
+    always run 1).  An unknown or
     expired journal is the storage question it always was (404 -- the
     client keeps its local interrupted state and the continue path)."""
     payload = http.token_payload(gate=_gate())
@@ -202,8 +202,8 @@ def _journal_view() -> t.Any:
             found = None
         if found is None:
             flask.abort(404)
-        run_key, q, mode = found
-        meta = {"journal": {"run_key": run_key, "thread": thread, "q": q, "mode": mode}}
+        run_key, q, mode, run_no = found
+        meta = {"journal": {"run_key": run_key, "thread": thread, "q": q, "mode": mode, "run_no": run_no}}
     try:
         after_seq = min(abs(int(payload.get("after_seq"))), 1_000_000)
     except (TypeError, ValueError):

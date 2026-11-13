@@ -759,9 +759,7 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         the self-check mirror for the verification bar."""
         active_facts = [fact for fact in self.facts if fact["status"] == "active"]
         open_gaps = [gap for gap in self.gaps if gap["status"] == "open"]
-        open_gaps.sort(
-            key=lambda gap: 0 if str(gap.get("q") or "").startswith("Resolve conflict:") else 1
-        )
+        open_gaps.sort(key=lambda gap: 0 if str(gap.get("q") or "").startswith("Resolve conflict:") else 1)
         lines = [f"LEDGER: {len(active_facts)} active fact(s)."]
         solo = sum(1 for fact in active_facts if len(fact.get("refs") or []) < 2)
         if active_facts and solo:

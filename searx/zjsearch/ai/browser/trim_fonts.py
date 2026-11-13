@@ -56,8 +56,7 @@ def main() -> int:
                 print(f"zjsearch browser: trimmed font group {name}")
     if scanned == 0:
         print(
-            f"error: no browser font bundle found under {INSTALL_DIR}/browsers"
-            " -- run browser.install first",
+            f"error: no browser font bundle found under {INSTALL_DIR}/browsers" " -- run browser.install first",
             file=sys.stderr,
         )
         return 1

@@ -196,9 +196,7 @@ def paid_engines() -> frozenset[str]:
         from searx import settings  # pylint: disable=import-outside-toplevel
 
         _PAID_ENGINES = frozenset(
-            str(entry.get("name") or "")
-            for entry in settings["engines"]
-            if str(entry.get("api_key") or "").strip()
+            str(entry.get("name") or "") for entry in settings["engines"] if str(entry.get("api_key") or "").strip()
         ) - {""}
     return _PAID_ENGINES
 

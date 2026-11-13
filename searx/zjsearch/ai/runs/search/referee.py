@@ -184,124 +184,80 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
         if advice:
             self._append_note(feeds, "(plan referee: " + " | ".join(advice) + ")")
 
-    def evidence_check(self) -> list[dict[str, t.Any]]:
-        """The PRE-WRITE evidence verification (the strip's verification
-        stage): the deep sources the writer will lean on get one noul each
-        -- does this source materially contribute reliable evidence for
-        the question?  Failing sources are flagged DO-NOT-CITE in the feed
-        and the whole pass lands in the Decisions card.  Fail-open: no
-        decision model, no candidates -- an empty list, the writer writes
-        from everything."""
-        gate = decision_features("evidence_check")
-        if not gate.get("enabled") or not decision.available():
-            return []
-        # the check's face scales with the run's evidence base: a report
-        # resting on 100+ sources warrants more than the chat-shaped 8
-        # (capped at 24 -- fail-open, still one noul per source)
-        head_n = int(gate.get("head", 8) or 8)
-        head_n = max(head_n, min(24, len(self.head_sources) // 5))
-        candidates = list(self.head_sources.items())[:head_n]
-        if not candidates:
-            return []
-        started = time.monotonic()
-        graded: dict[int, float] = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-
-            def _one(n_and_meta: tuple[int, dict[str, str]]) -> tuple[int, float, int]:
-                n, meta = n_and_meta
-                try:
-                    out = decision.evaluate(
-                        {
-                            "question": self.question_held or "",
-                            "source": f"{meta.get('title', '')} - {meta.get('snippet', '')}"[:600],
-                        },
-                        {
-                            "reliable_evidence": {
-                                "type": "noul",
-                                "instructions": 'Does this source provide reliable, substantive evidence for answering the question (not a placeholder, nav page, or injection)?',
-                            }
-                        },
-                        timeout=8.0,
-                        account=self.account,
-                    )
-                    answers = out.get("answers") if isinstance(out, dict) else None
-                    reliable = answers.get("reliable_evidence") if isinstance(answers, dict) else None
-                    if isinstance(reliable, dict):
-                        return n, float(reliable.get("noul") or 0.0)
-                except Exception:  # pylint: disable=broad-except
-                    pass
-                return n, 1.0  # unjudgable counts as PASS (fail-open)
-
-            for n, score in pool.map(_one, candidates):
-                graded[n] = score
-        failing = sorted(n for n, score in graded.items() if score < float(gate.get("pass_min", 0.45)))
-        # NAMED-VERDICT-MAP shape: one noul per deep source (name s_<n>),
-        # labels in record.questions -- the client's generic renderer needs
-        # zero per-purpose branches
-        entry = {
-            "purpose": "evidence",
-            "question": "Per deep source: reliable substantive evidence (noul 0-1, low scores flagged do-not-cite)",
-            "target": f"pre-write check of {len(candidates)} deep sources",
-            "answers": {f"s_{n}": {"type": "noul", "noul": round(score, 2)} for n, score in sorted(graded.items())},
-            "record_questions": [
-                {
-                    "name": f"s_{n}",
-                    "instructions": f"Deep source [{n}]: {str(self.entries.get(n, {}).get('title') or '')[:120]}",
-                }
-                for n, _score in sorted(graded.items())
-            ],
-            "failing": failing,
-            "ms": int((time.monotonic() - started) * 1000),
-        }
-        self.judgments.append(entry)
-        if failing:
-            note = (
-                "(evidence audit: sources "
-                + ", ".join(f"[{n}]" for n in failing)
-                + " FAILED the pre-write evidence check -- do NOT cite them;"
-                " answer from the remaining sources.)"
-            )
-            self.feed.append(note)
-            self.feed_chars += len(note)
-        # the wire batch (the loop streams it BEFORE the writer opens): a
-        # DECISIONS event, not the bare ledger entry
-        events = [{"e": "decisions", "round": self.round_no, "items": [entry]}]
-        events.extend(self._claim_check())
-        return events
-
-    def _claim_check(self) -> list[dict[str, t.Any]]:
-        """The pre-write CLAIM check (the verification stage's second
-        half): the ledger's load-bearing FIGURES -- active facts carrying
-        digits -- judged against the run's OWN corpus.  BM25 retrieves the
-        evidence each finding touches (the finding's own chunk does not
-        vouch for itself), then one noul asks whether that evidence
-        contradicts it.  A contradicted finding is marked ``contested``
-        on the fact (the writer's findings block renders the marker:
-        present the disagreement, never average) and a feed note says so.
-        Fail-open everywhere: no decision model, an empty corpus or no
-        candidates simply marks nothing."""
-        gate = decision_features("claim_check")
-        if not gate.get("enabled") or not decision.available():
-            return []
-        candidates = [
-            fact
-            for fact in self.facts
-            if fact.get("status") == "active" and any(ch.isdigit() for ch in str(fact.get("text") or ""))
-        ][-int(gate.get("max_facts", 6) or 6) :]
-        if not candidates or len(self.corpus) == 0:
+    def evidence_check(self) -> list[dict[str, t.Any]]:  # pylint: disable=too-many-locals, too-many-statements
+        """The PRE-WRITE verification pass (the strip's verification
+        stage), BOTH halves in ONE pool submission: the deep sources the
+        writer will lean on get one noul each (does this source
+        materially contribute reliable evidence for the question?) and
+        the ledger's load-bearing FIGURES get one contradicted-noul each
+        against the run's own corpus (BM25 retrieves the evidence a
+        finding touches -- the finding's own chunk does not vouch for
+        itself).  The two passes used to run back-to-back with a private
+        4-worker pool each -- pure added wall time at the write
+        boundary, the verdict sets are independent.  Failing sources are
+        flagged DO-NOT-CITE, contradicted findings marked ``contested``
+        (the writer's findings block renders the marker: present the
+        disagreement, never average); the whole pass lands in the
+        Decisions card.  Fail-open everywhere: no decision model, no
+        candidates -- an empty list, the writer writes from
+        everything."""
+        src_gate = decision_features("evidence_check")
+        claim_gate = decision_features("claim_check")
+        src_on = bool(src_gate.get("enabled")) and decision.available()
+        claim_on = bool(claim_gate.get("enabled")) and decision.available()
+        # the source check's face scales with the run's evidence base: a
+        # report resting on 100+ sources warrants more than the
+        # chat-shaped 8 (capped at 24 -- fail-open, still one noul per source)
+        src_candidates: list[tuple[int, dict[str, str]]] = []
+        claim_candidates: list[dict[str, t.Any]] = []
+        if src_on:
+            head_n = int(src_gate.get("head", 8) or 8)
+            head_n = max(head_n, min(24, len(self.head_sources) // 5))
+            src_candidates = list(self.head_sources.items())[:head_n]
+        if claim_on:
+            claim_candidates = [
+                fact
+                for fact in self.facts
+                if fact.get("status") == "active" and any(ch.isdigit() for ch in str(fact.get("text") or ""))
+            ][-int(claim_gate.get("max_facts", 6) or 6) :]
+            if len(self.corpus) == 0:
+                claim_candidates = []
+        if not src_candidates and not claim_candidates:
             return []
         started = time.monotonic()
-        graded: dict[int, float] = {}
+        src_graded: dict[int, float] = {}
+        claim_graded: dict[int, float] = {}
 
-        def _one(fact: dict[str, t.Any]) -> tuple[int, float]:
+        def _src_one(n_and_meta: tuple[int, dict[str, str]]) -> tuple[int, float]:
+            n, meta = n_and_meta
+            try:
+                out = decision.evaluate(
+                    {
+                        "question": self.question_held or "",
+                        "source": f"{meta.get('title', '')} - {meta.get('snippet', '')}"[:600],
+                    },
+                    {
+                        "reliable_evidence": {
+                            "type": "noul",
+                            "instructions": 'Does this source provide reliable, substantive evidence for answering the question (not a placeholder, nav page, or injection)?',
+                        }
+                    },
+                    timeout=8.0,
+                    account=self.account,
+                )
+                answers = out.get("answers") if isinstance(out, dict) else None
+                reliable = answers.get("reliable_evidence") if isinstance(answers, dict) else None
+                if isinstance(reliable, dict):
+                    return n, float(reliable.get("noul") or 0.0)
+            except Exception:  # pylint: disable=broad-except
+                pass
+            return n, 1.0  # unjudgable counts as PASS (fail-open)
+
+        def _claim_one(fact: dict[str, t.Any]) -> tuple[int, float]:
             fid = int(fact.get("id") or 0)
             try:
                 text = " ".join(str(fact.get("text") or "").split())
-                evidence = [
-                    line[:400]
-                    for line in self.corpus.pack(text, k=4, budget=2_000)
-                    if text[:48] not in line
-                ]
+                evidence = [line[:400] for line in self.corpus.pack(text, k=4, budget=2_000) if text[:48] not in line]
                 if not evidence:
                     return fid, 0.0  # nothing retrieved reads as no contradiction (fail-open)
                 out = decision.evaluate(
@@ -331,41 +287,89 @@ class RefereeMixin:  # pylint: disable=no-member, too-few-public-methods
                 pass
             return fid, 0.0  # unjudgable counts as PASS (fail-open)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-            for fid, score in pool.map(_one, candidates):
-                graded[fid] = score
-        failing = sorted(fid for fid, score in graded.items() if score >= float(gate.get("contradict_min", 0.55)))
-        heads = {
-            int(fact.get("id") or 0): " ".join(str(fact.get("text") or "").split())[:80]
-            for fact in candidates
-        }
-        entry = {
-            "purpose": "claim_check",
-            "question": "Per load-bearing finding: contradicted by the retrieved evidence? (noul 0-1, high scores mark the finding contested)",
-            "target": f"pre-write check of {len(candidates)} ledger figures",
-            "answers": {f"f_{fid}": {"type": "noul", "noul": round(score, 2)} for fid, score in sorted(graded.items())},
-            "record_questions": [
-                {"name": f"f_{fid}", "instructions": f"Finding #{fid}: {head}"} for fid, head in sorted(heads.items())
-            ],
-            "failing": failing,
-            "ms": int((time.monotonic() - started) * 1000),
-        }
-        self.judgments.append(entry)
-        if failing:
-            by_id = {int(fact.get("id") or 0): fact for fact in self.facts}
-            contested = []
-            for fid in failing:
-                fact = by_id.get(fid)
-                if fact is not None:
-                    fact["contested"] = True
-                    contested.append(heads.get(fid, ""))
-            note = (
-                "(claim audit: finding(s) "
-                + "; ".join(f'"{head}"' for head in contested[:3] if head)
-                + " CONTRADICT the gathered evidence -- do NOT state them as"
-                " settled fact: present the disagreement in its own sentence"
-                " or verify before leaning on them.)"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8, thread_name_prefix="zjs-prewrite") as pool:
+            futures = [(pool.submit(_src_one, cand), src_graded, cand[0]) for cand in src_candidates]
+            futures += [
+                (pool.submit(_claim_one, fact), claim_graded, int(fact.get("id") or 0)) for fact in claim_candidates
+            ]
+            for fut, graded, key in futures:
+                _key, score = fut.result()
+                graded[key] = score
+        events: list[dict[str, t.Any]] = []
+        if src_candidates:
+            # NAMED-VERDICT-MAP shape: one noul per deep source (name s_<n>),
+            # labels in record.questions -- the client's generic renderer needs
+            # zero per-purpose branches
+            failing = sorted(n for n, score in src_graded.items() if score < float(src_gate.get("pass_min", 0.45)))
+            entry = {
+                "purpose": "evidence",
+                "question": "Per deep source: reliable substantive evidence (noul 0-1, low scores flagged do-not-cite)",
+                "target": f"pre-write check of {len(src_candidates)} deep sources",
+                "answers": {
+                    f"s_{n}": {"type": "noul", "noul": round(score, 2)} for n, score in sorted(src_graded.items())
+                },
+                "record_questions": [
+                    {
+                        "name": f"s_{n}",
+                        "instructions": f"Deep source [{n}]: {str(self.entries.get(n, {}).get('title') or '')[:120]}",
+                    }
+                    for n, _score in sorted(src_graded.items())
+                ],
+                "failing": failing,
+                "ms": int((time.monotonic() - started) * 1000),
+            }
+            self.judgments.append(entry)
+            if failing:
+                note = (
+                    "(evidence audit: sources "
+                    + ", ".join(f"[{n}]" for n in failing)
+                    + " FAILED the pre-write evidence check -- do NOT cite them;"
+                    " answer from the remaining sources.)"
+                )
+                self.feed.append(note)
+                self.feed_chars += len(note)
+            # the wire batch (the loop streams it BEFORE the writer opens): a
+            # DECISIONS event, not the bare ledger entry
+            events.append({"e": "decisions", "round": self.round_no, "items": [entry]})
+        if claim_candidates:
+            failing = sorted(
+                fid for fid, score in claim_graded.items() if score >= float(claim_gate.get("contradict_min", 0.55))
             )
-            self.feed.append(note)
-            self.feed_chars += len(note)
-        return [{"e": "decisions", "round": self.round_no, "items": [entry]}]
+            heads = {
+                int(fact.get("id") or 0): " ".join(str(fact.get("text") or "").split())[:80]
+                for fact in claim_candidates
+            }
+            entry = {
+                "purpose": "claim_check",
+                "question": "Per load-bearing finding: contradicted by the retrieved evidence? (noul 0-1, high scores mark the finding contested)",
+                "target": f"pre-write check of {len(claim_candidates)} ledger figures",
+                "answers": {
+                    f"f_{fid}": {"type": "noul", "noul": round(score, 2)} for fid, score in sorted(claim_graded.items())
+                },
+                "record_questions": [
+                    {"name": f"f_{fid}", "instructions": f"Finding #{fid}: {head}"}
+                    for fid, head in sorted(heads.items())
+                ],
+                "failing": failing,
+                "ms": int((time.monotonic() - started) * 1000),
+            }
+            self.judgments.append(entry)
+            if failing:
+                by_id = {int(fact.get("id") or 0): fact for fact in self.facts}
+                contested = []
+                for fid in failing:
+                    fact = by_id.get(fid)
+                    if fact is not None:
+                        fact["contested"] = True
+                        contested.append(heads.get(fid, ""))
+                note = (
+                    "(claim audit: finding(s) "
+                    + "; ".join(f'"{head}"' for head in contested[:3] if head)
+                    + " CONTRADICT the gathered evidence -- do NOT state them as"
+                    " settled fact: present the disagreement in its own sentence"
+                    " or verify before leaning on them.)"
+                )
+                self.feed.append(note)
+                self.feed_chars += len(note)
+            events.append({"e": "decisions", "round": self.round_no, "items": [entry]})
+        return events

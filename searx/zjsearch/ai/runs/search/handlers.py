@@ -210,6 +210,16 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
             yield ("browser", frame)
         outcome = browse_tool.wait_user_snapshot(reader.max_chars(), self.browser_session_id)
         feed = str(outcome["feed"])
+        # the window's own downloads join the post-window feed: a file the
+        # USER saved during their operation window used to hold until the
+        # NEXT mutating action spoke it
+        for entry in browse_tool.drain_downloads(self.browser_session_id):
+            state = str(entry.get("state") or "")
+            name = str(entry.get("name") or "file")
+            if state == "saved":
+                feed += f"\ndownload saved: {name} -- read it with read + download=\"{name}\""
+            else:
+                feed += f"\ndownload {state}: {name} ({entry.get('reason', '')})"
         page = {"url": str(outcome["url"]), "title": str(outcome["title"])}
         text = str(outcome.get("text") or "")
         cite = ""
@@ -282,7 +292,11 @@ class DispatchMixin:  # pylint: disable=no-member, too-few-public-methods
                 feed += f"\n\n(this page is {cite})"
                 extra["url"] = result.page["url"]
         elif action == "read" and result.page and result.page["url"]:
-            text = feed.split("\n\n", 1)[-1]
+            # the multi-index read's last section rides last_read (its
+            # clean text) -- splitting the multi-section feed at the first
+            # blank line archived every PREVIOUS tab's body under this
+            # tab's identity; the plain single read keeps the split
+            text = str((result.last_read or {}).get("text") or "") or feed.split("\n\n", 1)[-1]
             cite = yield from self._browser_source(rnd, wire_id, result.page["url"], result.page["title"], True, text)
             gathered = bool(cite)
             if cite:
@@ -496,6 +510,7 @@ action from what is visible."""
         self.round_learned = False
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]] = []
         browse_jobs: list[tuple[int, dict[str, t.Any]]] = []
+        mcp_jobs: list[tuple[int, str, dict[str, t.Any]]] = []
         sub_jobs: list[tuple[int, dict[str, str]]] = []
         followup_jobs: list[tuple[int, dict[str, str]]] = []
         gathered = False
@@ -516,7 +531,6 @@ action from what is visible."""
                     {
                         "call": wire_id,
                         "status": "error",
-                        "q": "",
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
                         "raw": feed_text[:50_000],
@@ -629,7 +643,6 @@ and the referee advises when a subtask's evidence runs thin."""
                     {
                         "call": wire_id,
                         "status": "ok",
-                        "q": summary,
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
                         "raw": feed_text[:50_000],
@@ -657,7 +670,6 @@ and the referee advises when a subtask's evidence runs thin."""
                         {
                             "call": wire_id,
                             "status": "error",
-                            "q": "",
                             "ms": int((time.monotonic() - started) * 1000),
                             "feed": feed_text[:800],
                             "raw": feed_text[:50_000],
@@ -665,9 +677,7 @@ and the referee advises when a subtask's evidence runs thin."""
                     )
                     continue
                 peek_shape = getattr(self.run_control, "peek_shape", None)
-                route_skeleton = self.route_outline is not None and (
-                    peek_shape is None or peek_shape() != "direct"
-                )
+                route_skeleton = self.route_outline is not None and (peek_shape is None or peek_shape() != "direct")
                 if route_skeleton:
                     # the run already carries a route-time skeleton (and
                     # the reader has not taken it back to the direct
@@ -689,7 +699,6 @@ and the referee advises when a subtask's evidence runs thin."""
                         {
                             "call": wire_id,
                             "status": "ok",
-                            "q": shape,
                             "ms": int((time.monotonic() - started) * 1000),
                             "feed": feed_text[:800],
                             "raw": feed_text[:50_000],
@@ -721,7 +730,6 @@ and the referee advises when a subtask's evidence runs thin."""
                         {
                             "call": wire_id,
                             "status": "error",
-                            "q": shape,
                             "ms": int((time.monotonic() - started) * 1000),
                             "feed": feed_text[:800],
                             "raw": feed_text[:50_000],
@@ -742,7 +750,6 @@ and the referee advises when a subtask's evidence runs thin."""
                     {
                         "call": wire_id,
                         "status": "ok",
-                        "q": shape,
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed_text[:800],
                         "raw": feed_text[:50_000],
@@ -905,7 +912,6 @@ section, do not re-type the numbers."""
                         {
                             "call": wire_id,
                             "status": "error",
-                            "q": "",
                             "ms": int((time.monotonic() - started) * 1000),
                             "feed": feed_text[:800],
                             "raw": feed_text[:50_000],
@@ -964,9 +970,6 @@ section, do not re-type the numbers."""
                     {
                         "call": wire_id,
                         "status": "ok" if out else "error",
-                        "q": " / ".join(
-                            str(q.get("instructions") or "").strip() or name for name, q in questions.items()
-                        )[:120],
                         "result": (self._judge_result(out, self.lang) if out is not None else ""),
                         "n": len(questions),
                         "ms": ms,
@@ -1280,29 +1283,12 @@ section, do not re-type the numbers."""
                 )
                 continue
             if tool_name.startswith("mcp_"):
+                # the MCP call rides the round's POOL (each hop is an
+                # independent network round trip on the shared loop --
+                # serializing them on the scan loop froze the driver for
+                # up to 90s PER CALL before the searches even dispatched)
+                mcp_jobs.append((wire_id, tool_name, raw_args(call)))
                 gathered = True
-                feed = mcp.call_mcp_tool_sync(tool_name, raw_args(call))
-                if not feed.startswith("error:"):
-                    # an MCP settlement is material like a page read: it
-                    # counts as the round's fresh progress -- the stall
-                    # detector is web-hit-driven and would otherwise read
-                    # a productive MCP-only round as stalled
-                    self.round_new_hits += 1
-                feeds[wire_id - 1] = feed
-                # progressive disclosure: the row's preview is the head of
-                # what came back (the full text rode the feed to the model)
-                yield (
-                    "call",
-                    {
-                        "call": wire_id,
-                        "status": "ok",
-                        "name": tool_name,
-                        "preview": feed[:600],
-                        "ms": int((time.monotonic() - started) * 1000),
-                        "feed": feed[:800],
-                        "raw": feed[:50_000],
-                    },
-                )
                 continue
             if str(call.get("name") or "") == BROWSE_TOOL:
                 # every browse action is the SESSION lane now (Browser-use
@@ -1310,20 +1296,14 @@ section, do not re-type the numbers."""
                 # url is document-only and the service teaches the recipe
                 # for page urls.  FAST actions ride the pool ALONGSIDE the
                 # round's searches (the session lock serializes them among
-                # themselves); the human-blocking ones (wait_user, close,
-                # a multi that waits) stay INLINE -- their mirror frames
-                # must stream live, not arrive buffered at completion.
+                # themselves); the human-blocking ones (wait_user, close)
+                # stay INLINE -- their mirror frames must stream live, not
+                # arrive buffered at completion.  (A multi containing a
+                # wait_user step is rejected up front by the batch engine
+                # -- it has no actor there; this branch no longer routes
+                # it to a death by "unknown action".)
                 browser_args = browse_tool.parse_browse_call(call)
-                action_name = str(browser_args.get("action") or "")
-                blocks = action_name in ("wait_user", "close") or (
-                    action_name == "multi"
-                    and any(
-                        str(step.get("action") or "") == "wait_user"
-                        for step in (browser_args.get("steps") or [])
-                        if isinstance(step, dict)
-                    )
-                )
-                if blocks:
+                if str(browser_args.get("action") or "") in ("wait_user", "close"):
                     if (yield from self._browser_call(call, wire_id, feeds)):
                         gathered = True
                     continue
@@ -1363,10 +1343,10 @@ section, do not re-type the numbers."""
         # disappears (client disconnect / stop) the generator closes right
         # here -- a with-exit would wait for the still-running work and
         # stall the shutdown
-        total = len(search_jobs) + len(browse_jobs)
+        total = len(search_jobs) + len(browse_jobs) + len(mcp_jobs)
         pool = concurrent.futures.ThreadPoolExecutor(max_workers=min(max(1, total), MAX_PARALLEL))
         try:
-            yield from self._dispatch(pool, rnd, search_jobs, browse_jobs, feeds)
+            yield from self._dispatch(pool, rnd, search_jobs, browse_jobs, feeds, mcp_jobs)
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
         # Jina's failure-becomes-information: an unproductive round tells
@@ -1854,11 +1834,7 @@ section, do not re-type the numbers."""
                 self.pending_results.append({"handle": handle.key, "digest": digest})
 
         settle_pass()
-        while (
-            handle.pending_messages
-            and handle.followups < FOLLOWUP_MAX
-            and not self._lead_pending_interrupt()
-        ):
+        while handle.pending_messages and handle.followups < FOLLOWUP_MAX and not self._lead_pending_interrupt():
             message = handle.pending_messages.pop(0)
             handle.control.reset()
             handle.stopped = False

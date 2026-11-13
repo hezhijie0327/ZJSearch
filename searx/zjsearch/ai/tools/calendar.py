@@ -110,7 +110,17 @@ _LUNAR_MAX_YEAR = 2100
 """The lunar engine's honest coverage window (the library's table
 range) -- outside it the block is omitted, never approximated."""
 
-_LUNAR_FESTIVALS = {(1, 1): "春节", (1, 15): "元宵节", (2, 2): "龙抬头", (5, 5): "端午节", (7, 7): "七夕", (7, 15): "中元节", (8, 15): "中秋节", (9, 9): "重阳节", (12, 8): "腊八节"}  # in _LUNAR_FESTIVALS table data
+_LUNAR_FESTIVALS = {
+    (1, 1): "春节",
+    (1, 15): "元宵节",
+    (2, 2): "龙抬头",
+    (5, 5): "端午节",
+    (7, 7): "七夕",
+    (7, 15): "中元节",
+    (8, 15): "中秋节",
+    (9, 9): "重阳节",
+    (12, 8): "腊八节",
+}  # in _LUNAR_FESTIVALS table data
 """The traditional lunar festivals keyed by (lunar month, lunar day) --
 fixed table data (the CJK audit's functional-data exemption, the
 stock_quote precedent), because the library's own folk-holiday feed
@@ -118,7 +128,7 @@ mixes deity birthdays in and misses festival days.  The year's last
 lunar day is COMPUTED, not tabled (some years have no 30th), and
 festivals never land in a leap month (they follow the first month)."""
 
-_MONTH_SIZE_SUFFIXES = (chr(0x5927), chr(0x5c0f))
+_MONTH_SIZE_SUFFIXES = (chr(0x5927), chr(0x5C0F))
 """The month-size suffixes the library appends to the lunar month
 name -- composed by codepoint so the source stays ASCII outside the
 allowlisted data line."""
@@ -405,7 +415,9 @@ def _parse_date(text: str, today: datetime.date) -> datetime.date:
             return datetime.date(today.year, today.month, int(text))
     except ValueError as exc:
         raise CalendarError(f"date {text!r} is not a real calendar date: {exc}") from exc
-    raise CalendarError(f'date must be "YYYY-MM-DD", "MM-DD" (current year) or a bare day "DD" (current month), got {text!r}')
+    raise CalendarError(
+        f'date must be "YYYY-MM-DD", "MM-DD" (current year) or a bare day "DD" (current month), got {text!r}'
+    )
 
 
 def calendar_payload(
@@ -496,9 +508,7 @@ def calendar_payload(
     payload["time"] = now.strftime("%H:%M:%S")
     payload["datetime"] = now.replace(microsecond=0).isoformat(timespec="seconds")
     payload["utc"] = (
-        now.astimezone(datetime.timezone.utc).replace(microsecond=0).isoformat(timespec="seconds")
-        if zone
-        else None
+        now.astimezone(datetime.timezone.utc).replace(microsecond=0).isoformat(timespec="seconds") if zone else None
     )
     payload["unix"] = int(now.timestamp()) if zone else None
     # the lunar block rides BOTH modes -- a lunar-date chat question is a now lookup

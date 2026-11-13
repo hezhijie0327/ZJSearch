@@ -24,6 +24,11 @@ from searx.zjsearch.ai.llm.embed import embed_texts
 from searx.zjsearch.ai.llm import rerank as rerank_service
 
 _RERANK_ABOVE = 24000
+
+# the writer relevance order's embed fallback budget -- the codebase's
+# standard 8s embed spend (rank/memory/synth); ``None`` used to wait
+# unbounded on a hung endpoint INSIDE the write boundary's bridge
+_WRITE_EMBED_TIMEOUT = 8.0
 """The feed size past which the writer's context overflow is likely (the
 cap sits at 40k/96k by mode): the relevance ranking runs only there -- a
 fitting feed keeps its chronological order and costs no model round
@@ -49,6 +54,26 @@ def writer_context_max(mode: str) -> int:
     return CONTEXT_MAX.get(mode, _WRITER_CONTEXT_DEFAULT)
 
 
+_SINGLE_BLOCK_FLOOR = 24_000
+"""One source block that ALONE exceeds the writer cap gets split at a
+line boundary (head kept) down to this floor -- a single huge page read
+used to ride whole (the eviction loop stops at one block), pushing the
+writer context past its cap by itself.  The corpus and the client's
+reading pane keep the FULL text; only the writer's block slims."""
+
+
+def _split_oversized(block: str) -> str:
+    """The head of one oversized block, cut at the last line boundary
+    that fits the floor (never mid-sentence by intent; a pathological
+    no-newline dump takes the hard cut)."""
+    if len(block) <= _SINGLE_BLOCK_FLOOR:
+        return block
+    cut = block.rfind("\n", 0, _SINGLE_BLOCK_FLOOR)
+    if cut < _SINGLE_BLOCK_FLOOR // 2:
+        cut = _SINGLE_BLOCK_FLOOR
+    return block[:cut] + "\n[... the rest of this source was dropped to fit the context ...]"
+
+
 def _fit_context(feed: list[str], cap: int, relevance: list[int] | None = None) -> list[str]:
     """The writer's source feed under the hard cap: whole blocks are
     evicted, never a mid-block slice -- a silently cut tail could drop
@@ -58,14 +83,24 @@ def _fit_context(feed: list[str], cap: int, relevance: list[int] | None = None) 
     QUESTION-RELEVANT blocks fill first and the least relevant are
     evicted instead.  The eviction notice names the drop so the writer
     does not cite evicted numbers; the renderer still fails soft on any
-    that slip through."""
+    that slip through.  ONE exception to the no-slice rule: a single
+    block that ALONE exceeds the cap is split head-first (a 200k page
+    read cannot be "evicted around" when it is the only block)."""
     blocks = [block for block in feed if block]
     if relevance is not None and len(relevance) == len(blocks) and len(blocks) > 1:
         blocks = [blocks[i] for i in relevance if 0 <= i < len(blocks)]
+    # the single-huge-block split runs FIRST (a block bigger than the
+    # whole cap would defeat the eviction loop's len(blocks) > 1 guard)
+    # and AGAIN after the eviction -- the survivor the loop stops on can
+    # itself be the oversized one
+    if len(blocks) == 1 and len(blocks[0]) > cap:
+        blocks[0] = _split_oversized(blocks[0])
     dropped = 0
     while len(blocks) > 1 and sum(len(block) for block in blocks) > cap:
         blocks.pop(0 if relevance is None else -1)
         dropped += 1
+    if len(blocks) == 1 and len(blocks[0]) > cap:
+        blocks[0] = _split_oversized(blocks[0])
     if dropped:
         blocks.insert(
             0,
@@ -98,7 +133,7 @@ async def _relevance_order(question: str, feed: list[str], account: t.Any = None
             order = None
         if order is not None and len(order) == len(blocks):
             return order
-    result = await embed_texts([question] + heads)
+    result = await embed_texts([question] + heads, timeout=_WRITE_EMBED_TIMEOUT)
     if not result:
         return None
     vectors = result[0]

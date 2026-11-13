@@ -33,6 +33,7 @@ transport-blip recovery (the writer still answers from what was gathered).
 """
 
 import asyncio
+import concurrent.futures
 import inspect
 import json
 import logging
@@ -69,7 +70,9 @@ _WRAP_HALT = "wrap_grace_ended"
 walks into the writer with the material gathered so far -- every run ends
 with a REAL terminal state."""
 
-_WRAP_NOTE = 'The connection was lost past the detach grace window -- the answer is written from the material gathered so far.'
+_WRAP_NOTE = (
+    'The connection was lost past the detach grace window -- the answer is written from the material gathered so far.'
+)
 """The WRITER-facing half of the wrap halt (an honest English research
 note -- the model must never see a machine key)."""
 
@@ -852,8 +855,18 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 # an async writer builds the embedding-ranked context (the
                 # relevance order): the loop executes on the WSGI thread, the
                 # coroutine bridges onto the shared network loop where the
-                # embedding SDK rides
-                built = asyncio.run_coroutine_threadsafe(built, get_loop()).result()
+                # embedding SDK rides.  BOUNDED: the bridge was the one
+                # unbounded .result() in the harness (the relevance order's
+                # legs are individually budgeted -- rerank 20s / embed 8s --
+                # so the bridge only needs their sum as a backstop); on
+                # timeout the chronological eviction stands, silently --
+                # real build errors still propagate (the settle reports
+                # them, a silent degradation would only mask a bug)
+                try:
+                    built = asyncio.run_coroutine_threadsafe(built, get_loop()).result(45.0)
+                except concurrent.futures.TimeoutError:
+                    logger.warning("zjsearch loop: writer build bridge timed out (45s) -- chronological order stands")
+                    built = None
             if built:
                 messages = built
 

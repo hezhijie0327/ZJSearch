@@ -20,6 +20,7 @@ design, no loop bridging.
 """
 
 import base64
+import concurrent.futures
 import importlib.util
 import io
 import logging
@@ -327,21 +328,32 @@ def resolve_images(images: t.Any) -> list[dict[str, str]]:
         return resolved
     import httpx2  # pylint: disable=import-outside-toplevel
 
+    def _fetch(url: str) -> dict[str, str] | None:
+        try:
+            return _resolve_one(url, client)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("zjsearch_decision: image %r dropped: %r", url[:120], exc)
+            return None
+
+    pairs = [(index, url) for index, url in enumerate(candidates, 1) if url]
     with httpx2.Client(timeout=IMAGE_FETCH_TIMEOUT, follow_redirects=True) as client:
-        for index, url in enumerate(candidates, 1):
-            if not url:
-                continue
-            try:
-                entry = _resolve_one(url, client)
-            except Exception as exc:  # pylint: disable=broad-except
-                logger.debug("zjsearch_decision: image %r dropped: %r", url[:120], exc)
-                entry = None
-            if entry is not None:
-                # the ref rides the URL's POSITION, not the survivor count:
-                # a dropped image leaves an ordinal gap so the caller's
-                # "image-2" mention keeps pointing at the same picture
-                entry["ref"] = f"image-{index}"
-                resolved.append(entry)
+        # the fetches run CONCURRENTLY (bounded by MAX_IMAGES): four
+        # serial worst-case fetches held the calling thread -- the
+        # evaluate gate on the executor's scan loop -- for ~32s
+        if len(pairs) == 1:
+            results = [(pairs[0][0], _fetch(pairs[0][1]))]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=min(len(pairs), MAX_IMAGES), thread_name_prefix="zjs-decision-img"
+            ) as pool:
+                results = list(zip((p[0] for p in pairs), pool.map(_fetch, [u for _, u in pairs])))
+    for index, entry in results:
+        if entry is not None:
+            # the ref rides the URL's POSITION, not the survivor count:
+            # a dropped image leaves an ordinal gap so the caller's
+            # "image-2" mention keeps pointing at the same picture
+            entry["ref"] = f"image-{index}"
+            resolved.append(entry)
     return resolved
 
 
@@ -441,10 +453,7 @@ def _chat_judge_schema(trimmed: dict[str, dict[str, t.Any]]) -> dict[str, t.Any]
     property per question name -- string for ``choice``, number for the
     other two (the score's integer rounding and the noul's 0-1 clamp
     happen at normalization)."""
-    props = {
-        name: {"type": "string" if q.get("type") == "choice" else "number"}
-        for name, q in trimmed.items()
-    }
+    props = {name: {"type": "string" if q.get("type") == "choice" else "number"} for name, q in trimmed.items()}
     return {
         "type": "object",
         "properties": {
@@ -541,10 +550,7 @@ def judge_via_chat(
         {"role": "system", "content": _CHAT_JUDGE_SYSTEM},
         {
             "role": "user",
-            "content": (
-                f"STATE:\n{str(state)[:MAX_STATE_CHARS]}\n\nQUESTIONS:\n"
-                + "\n".join(spec_lines)
-            ),
+            "content": (f"STATE:\n{str(state)[:MAX_STATE_CHARS]}\n\nQUESTIONS:\n" + "\n".join(spec_lines)),
         },
     ]
     started = time.monotonic()

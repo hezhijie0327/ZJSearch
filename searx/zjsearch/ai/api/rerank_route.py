@@ -64,8 +64,6 @@ def install(app: flask.Flask) -> None:
     if not llm_config.llm_cfg().get("enabled") or not rerank.enabled():
         return
     if not rerank.configured():
-        logger.warning(
-            "zjsearch.rerank is enabled but base_url/model are missing -- recall reranking stays off"
-        )
+        logger.warning("zjsearch.rerank is enabled but base_url/model are missing -- recall reranking stays off")
         return
     app.add_url_rule("/zjsearch/knowledge/rerank", "zjsearch_knowledge_rerank", _rerank_view, methods=["POST"])

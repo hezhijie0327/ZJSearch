@@ -174,8 +174,7 @@ def main() -> int:
         print(f"zjsearch browser: installed {installed_verstr()}")
     except Exception as exc:  # pylint: disable=broad-except
         print(
-            f"error: no browser bundle is active after the fetch ({exc}) --"
-            " rerun the install",
+            f"error: no browser bundle is active after the fetch ({exc}) --" " rerun the install",
             file=sys.stderr,
         )
         return 1

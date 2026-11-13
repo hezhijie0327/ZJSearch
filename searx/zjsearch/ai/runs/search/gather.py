@@ -17,7 +17,13 @@ from searx.extended_types import sxng_request
 from searx.search import SearchWithPlugins
 from searx.webadapter import get_search_query_from_webapp
 from searx.zjsearch.ai.tools.browse import read as reader
-from searx.zjsearch.ai.runs.search.feed import FEED_DEEP, RESULTS_CAP, build_search_feed, serialize_results
+from searx.zjsearch.ai.tools import mcp
+from searx.zjsearch.ai.runs.search.feed import (
+    FEED_DEEP,
+    RESULTS_CAP,
+    build_search_feed,
+    serialize_results,
+)
 from searx.zjsearch.ai.llm.decision import features as decision_features
 from searx.zjsearch.ai.runs.search.rank import (
     RERANK_HEAD,
@@ -43,7 +49,12 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
     pattern)."""
 
     def _search_one(
-        self, query: str, category: str, time_range: str, include: list[str], exclude: list[str]
+        self,
+        query: str,
+        category: str,
+        time_range: str,
+        include: list[str],
+        exclude: list[str],
     ) -> list[t.Any]:
         """One real instance search -- the webapp path with a synthesized
         form (user preferences apply: safesearch, engines; the page's
@@ -125,7 +136,11 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
                 order = [ranked_head[i] for i in kept] + order[RERANK_HEAD:]
                 for pos, index in enumerate(kept):
                     head_vectors[pos] = vectors[index]
-            return [raw[i] for i in order], head_vectors, {"no_signal": False, "dup_ratio": dup_ratio}
+            return (
+                [raw[i] for i in order],
+                head_vectors,
+                {"no_signal": False, "dup_ratio": dup_ratio},
+            )
         except Exception:  # pylint: disable=broad-except
             # one odd result shape must never take the round's remaining
             # settlements down with it -- the engine order stands
@@ -145,8 +160,7 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
     ) -> t.Iterator[tuple[str, t.Any]]:
         ms = int((time.monotonic() - started) * 1000)
         try:
-            container = fut.result()
-            raw = container.get_ordered_results()[:RESULTS_CAP]
+            container, raw, head_vectors, quality = fut.result()
             plugin_answers = [
                 " ".join(str(answer.answer or "").split())
                 for answer in container.answers
@@ -156,18 +170,28 @@ class GatherMixin:  # pylint: disable=no-member, too-few-public-methods
             logger.warning("zjsearch_ask_search: search %d/%d failed: %r", rnd, idx, exc)
             feed_text = "error: the search failed"
             feeds[idx - 1] = feed_text
-            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
+            yield (
+                "call",
+                {
+                    "call": idx,
+                    "status": "error",
+                    "n": 0,
+                    "ms": ms,
+                    "feed": feed_text[:800],
+                },
+            )
             return
         # the dedup mark lands on COMPLETION, never at plan time: a query
         # whose engines errored stays retryable (an executed query -- empty
         # or not -- is honestly remembered; its outcome is in the feed)
         self.reg.note_query(dedup_key, query)
         try:
-            raw, head_vectors, quality = self._ranked(query, raw)
+            # the ranking cascade already ran on the pool worker (see
+            # _run_in_ctx) -- the drain just serializes the settled feed
+            dup_gate: dict[str, t.Any] | None = None
             # the cross-search semantic dup gate reuses the diversity
             # stage's embeds: a candidate whose vector clears the threshold
             # against an already-fed source never mints a [n]
-            dup_gate: dict[str, t.Any] | None = None
             if head_vectors:
                 dup_gate = {
                     "vectors": head_vectors,
@@ -227,7 +251,16 @@ approach from another angle or change language)"""
             logger.warning("zjsearch_ask_search: search %d/%d settlement failed: %r", rnd, idx, exc)
             feed_text = "error: the search failed"
             feeds[idx - 1] = feed_text
-            yield ("call", {"call": idx, "status": "error", "n": 0, "ms": ms, "feed": feed_text[:800]})
+            yield (
+                "call",
+                {
+                    "call": idx,
+                    "status": "error",
+                    "n": 0,
+                    "ms": ms,
+                    "feed": feed_text[:800],
+                },
+            )
             return
         if items or plugin_answers:
             # an answer-only search ($AAPL) IS productive: without this the
@@ -284,24 +317,55 @@ approach from another angle or change language)"""
                 "n": len(items),
                 "ms": ms,
                 "feed": feed_block[:800],
+                # every settlement carries the debug contract: the search
+                # rows were the one holdout (their bug pane fell back to
+                # the 800-char feed head)
+                "raw": feed_block[:50_000],
                 **({"dupes": dupes} if dupes else {}),
             },
         )
         if entries:
             yield ("sources", {"items": entries})
 
-    def _run_in_ctx(self, query: str, category: str, time_range: str, include: list[str], exclude: list[str]):
+    def _run_in_ctx(
+        self,
+        query: str,
+        category: str,
+        time_range: str,
+        include: list[str],
+        exclude: list[str],
+    ):
         """One search inside a CLONED request context (a fresh
         RequestContext per job -- see ``state._search_ctx`` for why the
-        shared context cannot be pushed concurrently)."""
+        shared context cannot be pushed concurrently).  The RANKING
+        CASCADE rides the job too (bm25 -> rerank -> embed diversity is
+        pure network/work, no flask): one worker's rerank leg overlaps
+        the other searches' engine round-trips instead of serializing
+        the settlement drain -- k same-batch completions used to pay
+        k x ~28s of driver-thread cascade BEFORE the second search's
+        row could even settle."""
         if self._search_ctx is None:
-            return self._search_one(query, category, time_range, include, exclude)
+            container = self._search_one(query, category, time_range, include, exclude)
+            return self._rank_job(query, container)
         # pylint: disable=import-outside-toplevel
         from flask.ctx import RequestContext
 
         app, environ, request_obj = self._search_ctx
         with RequestContext(app, environ, request=request_obj):
-            return self._search_one(query, category, time_range, include, exclude)
+            container = self._search_one(query, category, time_range, include, exclude)
+            return self._rank_job(query, container)
+
+    def _rank_job(
+        self, query: str, container: t.Any
+    ) -> tuple[t.Any, list[t.Any], dict[int, list[float]], dict[str, t.Any]]:
+        """The settlement-time ranking stage on the pool worker:
+        ``get_ordered_results`` + the three-stage cascade.  ``get_ordered_results``
+        is pure python (no flask), and every cascade stage fails open --
+        a failure here raises like the engine round itself would (the
+        settlement's error path)."""
+        raw = container.get_ordered_results()[:RESULTS_CAP]
+        ranked, head_vectors, quality = self._ranked(query, raw)
+        return container, ranked, head_vectors, quality
 
     def _run_browse_job(self, call: dict[str, t.Any], wire_id: int, feeds: list[str | None]):
         """One browse action consumed to its events on a pool worker --
@@ -337,10 +401,12 @@ approach from another angle or change language)"""
             logger.warning("zjsearch_ask_search: browse %d/%d failed: %r", rnd, wire_id, exc)
             feed_text = f"error: {str(exc)[:300] or type(exc).__name__}"
             feeds[wire_id - 1] = feed_text
-            yield ("call", {"call": wire_id, "status": "error", "ms": ms, "feed": feed_text[:800]})
+            yield (
+                "call",
+                {"call": wire_id, "status": "error", "ms": ms, "feed": feed_text[:800]},
+            )
             return False
-        for event in events:
-            yield event
+        yield from events
         return bool(gathered)
 
     def _dispatch(  # pylint: disable=too-many-locals
@@ -350,6 +416,7 @@ approach from another angle or change language)"""
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
         browse_jobs: list[tuple[int, dict[str, t.Any]]],
         feeds: list[str | None],
+        mcp_jobs: list[tuple[int, str]] | None = None,
     ) -> t.Iterator[tuple[str, t.Any]]:
         # the settlements' serialization touches the flask request/app
         # context (favicons, pretty urls, proxified images) -- the driver
@@ -364,9 +431,9 @@ approach from another angle or change language)"""
 
             app, environ, request_obj = self._search_ctx
             with RequestContext(app, environ, request=request_obj):
-                yield from self._dispatch_ctx(pool, rnd, search_jobs, browse_jobs, feeds)
+                yield from self._dispatch_ctx(pool, rnd, search_jobs, browse_jobs, feeds, mcp_jobs)
             return
-        yield from self._dispatch_ctx(pool, rnd, search_jobs, browse_jobs, feeds)
+        yield from self._dispatch_ctx(pool, rnd, search_jobs, browse_jobs, feeds, mcp_jobs)
 
     def _dispatch_ctx(  # pylint: disable=too-many-locals
         self,
@@ -375,9 +442,18 @@ approach from another angle or change language)"""
         search_jobs: list[tuple[int, str, str, str, list[str], list[str], str]],
         browse_jobs: list[tuple[int, dict[str, t.Any]]],
         feeds: list[str | None],
+        mcp_jobs: list[tuple[int, str]] | None = None,
     ) -> t.Iterator[tuple[str, t.Any]]:
         futures: dict[concurrent.futures.Future, tuple[str, int, tuple[t.Any, ...]]] = {}
-        for wire_id, query, category, time_range, include, exclude, dedup_key in search_jobs:
+        for (
+            wire_id,
+            query,
+            category,
+            time_range,
+            include,
+            exclude,
+            dedup_key,
+        ) in search_jobs:
             # each job CLONES a fresh flask RequestContext from the
             # template (same request/environ, PRIVATE token stack): the
             # search path needs a request context per worker, and pushing
@@ -397,6 +473,12 @@ approach from another angle or change language)"""
                 wire_id,
                 (call, time.monotonic()),
             )
+        for wire_id, tool_name, mcp_args in mcp_jobs or []:
+            futures[pool.submit(self._run_mcp_job, tool_name, mcp_args)] = (
+                "mcp",
+                wire_id,
+                (tool_name, time.monotonic()),
+            )
         pending = dict(futures)
         # no batch wall clock: every queued call gets to run and every
         # engine request carries its own per-request timeout, which is
@@ -411,5 +493,52 @@ approach from another angle or change language)"""
                     if gathered:
                         self.round_gathered = True
                     continue
+                if kind == "mcp":
+                    tool_name, started = args
+                    yield from self._finish_mcp(tool_name, wire_id, fut, started, feeds)
+                    continue
                 query, category, dedup_key, started = args
                 yield from self._finish(rnd, wire_id, query, category, dedup_key, fut, started, feeds)
+
+    def _run_mcp_job(self, tool_name: str, mcp_args: dict[str, t.Any]) -> tuple[str, bool]:
+        """One MCP tool call on a pool worker -- each call is an
+        independent network round trip on the shared loop, so the calls
+        run beside this round's searches (and beside each other) instead
+        of serializing the scan loop.  Returns ``(feed, productive)``."""
+        feed = mcp.call_mcp_tool_sync(tool_name, mcp_args)
+        return feed, not feed.startswith("error:")
+
+    def _finish_mcp(
+        self,
+        tool_name: str,
+        wire_id: int,
+        fut: "concurrent.futures.Future[t.Any]",
+        started: float,
+        feeds: list[str | None],
+    ) -> t.Iterator[tuple[str, t.Any]]:
+        """Settle one pooled MCP call: an MCP settlement is material like
+        a page read -- it counts as the round's fresh progress (the stall
+        detector is web-hit-driven and would otherwise read a productive
+        MCP-only round as stalled)."""
+        ms = int((time.monotonic() - started) * 1000)
+        try:
+            feed, productive = fut.result()
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("zjsearch_ask_search: mcp call %d failed: %r", wire_id, exc)
+            feed, productive = f"error: {str(exc)[:300] or type(exc).__name__}", False
+        if productive:
+            self.round_new_hits += 1
+        feeds[wire_id - 1] = feed
+        # progressive disclosure: the row's preview is the head of
+        # what came back (the full text rode the feed to the model)
+        yield (
+            "call",
+            {
+                "call": wire_id,
+                "status": "ok",
+                "preview": feed[:600],
+                "ms": ms,
+                "feed": feed[:800],
+                "raw": feed[:50_000],
+            },
+        )

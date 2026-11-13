@@ -152,7 +152,9 @@ def parse_memories(raw: t.Any) -> list[dict[str, str]]:
                     {
                         "id": str(item.get("id") or "")[:40],
                         "content": str(item["content"])[:MAX_CONTENT],
-                        "kind": item.get("kind") if item.get("kind") in ("fact", "procedure", "lesson", "gap") else "fact",
+                        "kind": (
+                            item.get("kind") if item.get("kind") in ("fact", "procedure", "lesson", "gap") else "fact"
+                        ),
                         "host": str(item.get("host") or "")[:120],
                     }
                 )
@@ -261,7 +263,9 @@ def _judge_relation(cfg: dict[str, t.Any], existing: str, candidate: str, accoun
                 {"role": "system", "content": extractor.MEMORY_JUDGE_SYSTEM},
                 {
                     "role": "user",
-                    "content": spine.block("existing", existing[:300]) + "\n" + spine.block("candidate", candidate[:300]),
+                    "content": spine.block("existing", existing[:300])
+                    + "\n"
+                    + spine.block("candidate", candidate[:300]),
                 },
             ],
             "memory_relation_judge",
@@ -303,8 +307,7 @@ def _save_funnel(
         if cosine >= _dup_gate()[2]:
             if target_id:
                 return (
-                    f'noted again: "{content}" reads as the stored memory "{existing}" -- its'
-                    " weight grows instead.",
+                    f'noted again: "{content}" reads as the stored memory "{existing}" -- its' " weight grows instead.",
                     {"op": "reinforce", "kind": kind, "id": target_id, "content": existing},
                 )
             return (f'duplicate: "{content}" was already noted -- do NOT re-save it.', None)
@@ -320,8 +323,7 @@ def _save_funnel(
         if verdict == "update" and target_id:
             known[index] = content
             return (
-                f'updated: "{existing}" is superseded by "{content}" (the fact changed -- one'
-                " version stays).",
+                f'updated: "{existing}" is superseded by "{content}" (the fact changed -- one' " version stays).",
                 {"op": "update", "kind": kind, "id": target_id, "content": content, "old": existing},
             )
         # distinct -- or an update whose target has no id (this run's own
@@ -371,8 +373,7 @@ def extract_insights(
         gap_lines = "\n".join(f"- [{gid}] {gtext}" for gid, gtext in gap_rows)
         user_text += "\n" + spine.block(
             "open_gaps",
-            "The user's OPEN QUESTIONS (the backlog -- judge whether this"
-            " exchange answered any):\n" + gap_lines,
+            "The user's OPEN QUESTIONS (the backlog -- judge whether this" " exchange answered any):\n" + gap_lines,
         )
     value, _usage = jsongate.json_completion(
         cfg,
@@ -405,8 +406,7 @@ def extract_insights(
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "The ids of the OPEN QUESTIONS this exchange"
-                        " genuinely answered, or an empty array."
+                        "The ids of the OPEN QUESTIONS this exchange" " genuinely answered, or an empty array."
                     ),
                 },
                 "superseded": {
@@ -435,7 +435,11 @@ def extract_insights(
     value = value or {}
     clean_facts = _clean_list(value.get("facts"), 3)
     clean_procedures = _clean_list(value.get("procedures"), 2)
-    clean_tags = [str(tag).strip()[:40] for tag in value.get("tags") or [] if str(tag).strip()] if isinstance(value.get("tags"), list) else []
+    clean_tags = (
+        [str(tag).strip()[:40] for tag in value.get("tags") or [] if str(tag).strip()]
+        if isinstance(value.get("tags"), list)
+        else []
+    )
     forget_raw = value.get("forget_gaps")
     clean_forget = (
         [str(token).strip()[:80] for token in forget_raw if str(token).strip()][:4]
@@ -468,9 +472,7 @@ def extract_insights(
             target_id = known_ids[index] if index < len(known_ids) else None
             if cosine >= _dup_gate()[1] and target_id:
                 known[index] = new
-                events.append(
-                    {"op": "update", "kind": "fact", "id": target_id, "content": new, "old": existing}
-                )
+                events.append({"op": "update", "kind": "fact", "id": target_id, "content": new, "old": existing})
                 continue
         events.append({"op": "save", "kind": "fact", "content": new})
     # the backlog's eraser: a genuinely answered open question leaves it
@@ -491,9 +493,7 @@ def extract_insights(
 
 def _clean_list(raw: t.Any, cap: int) -> list[str]:
     """A schema string-array trimmed to self-contained, capped strings."""
-    return (
-        [str(item).strip()[:MAX_CONTENT] for item in raw if str(item).strip()][:cap] if isinstance(raw, list) else []
-    )
+    return [str(item).strip()[:MAX_CONTENT] for item in raw if str(item).strip()][:cap] if isinstance(raw, list) else []
 
 
 def run_call(
@@ -539,7 +539,12 @@ def run_call(
         if action == "forget":
             return (
                 f'forgot: "{target["content"]}" (it is removed from the memory).',
-                {"op": "forget", "kind": target.get("kind", "fact"), "id": target.get("id"), "content": target["content"]},
+                {
+                    "op": "forget",
+                    "kind": target.get("kind", "fact"),
+                    "id": target.get("id"),
+                    "content": target["content"],
+                },
             )
         content = str(args.get("content") or "").strip()[:MAX_CONTENT]
         if not content:

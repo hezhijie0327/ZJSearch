@@ -176,55 +176,76 @@ trips).  Advisory: a server without instructions simply contributes
 nothing here."""
 
 
+async def _list_one_server(name: str) -> list[dict[str, t.Any]]:
+    """One server's handshake + listing under the PER-SERVER session
+    budget (the aggregate in :func:`mcp_specs` is only the backstop --
+    serial handshakes let one black-holed endpoint consume the whole
+    budget AND erase the healthy servers' tools with it)."""
+    try:
+
+        def _list(session: t.Any, init: t.Any) -> t.Any:
+            text = str(getattr(init, "instructions", "") or "").strip()
+            if text:
+                _instructions[name] = text[:_INSTRUCTIONS_CAP]
+            return session.list_tools()
+
+        response = await asyncio.wait_for(_with_session(name, _list), _SESSION_TIMEOUT)
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.warning("zjsearch_mcp: listing %r failed: %s", name, exc)
+        _instructions.pop(name, None)
+        return []
+    specs: list[dict[str, t.Any]] = []
+    for tool in response.tools or []:
+        tool_name = str(tool.name or "")[:60]
+        if not tool_name:
+            continue
+        raw_schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
+        schema: dict[str, t.Any] = {}
+        if raw_schema and isinstance(raw_schema, dict):
+            schema = {
+                "type": "object",
+                "properties": raw_schema.get("properties") or {},
+                "required": raw_schema.get("required") or [],
+            }
+        # the server's own hints (readOnlyHint & co) ride along -- the
+        # neutral spec is MCP-shaped, so they pass through untouched
+        annotations: dict[str, t.Any] = {}
+        raw_annotations = getattr(tool, "annotations", None)
+        if raw_annotations is not None:
+            try:
+                annotations = raw_annotations.model_dump(exclude_none=True)
+            except AttributeError:
+                annotations = {}
+        spec: dict[str, t.Any] = {
+            "name": f"mcp_{name}_{tool_name}",
+            "description": str(tool.description or f"{tool_name} (MCP: {name})")[:800],
+            "inputSchema": schema,
+        }
+        if annotations:
+            spec["annotations"] = annotations
+        specs.append(spec)
+    return specs
+
+
 async def list_tools() -> list[dict[str, t.Any]]:
     """Every configured server's tools as llm-shape specs, namespaced
-    ``mcp_<server>_<tool>``.  A server that fails to answer logs a
-    warning and contributes nothing (one dead endpoint must not take the
-    run down).  The initialize result's ``instructions`` land in
-    :data:`_instructions` on the same pass."""
+    ``mcp_<server>_<tool>``.  The handshakes run CONCURRENTLY (one
+    gather task per server, each under its own session budget) -- a
+    server that fails to answer logs a warning and contributes nothing
+    (one dead endpoint must not take the run down, and its failure must
+    not zero the healthy servers either).  The initialize result's
+    ``instructions`` land in :data:`_instructions` on the same pass."""
+    servers = mcp_cfg()
+    if not servers:
+        return []
+    results = await asyncio.gather(*(_list_one_server(name) for name, _, _ in servers), return_exceptions=True)
     specs: list[dict[str, t.Any]] = []
-    for name, _, _ in mcp_cfg():
-        try:
-
-            def _list(session: t.Any, init: t.Any) -> t.Any:
-                text = str(getattr(init, "instructions", "") or "").strip()
-                if text:
-                    _instructions[name] = text[:_INSTRUCTIONS_CAP]
-                return session.list_tools()
-
-            response = await _with_session(name, _list)
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.warning("zjsearch_mcp: listing %r failed: %s", name, exc)
+    for (name, _, _), result in zip(servers, results):
+        if isinstance(result, BaseException):
+            logger.warning("zjsearch_mcp: listing %r crashed: %s", name, result)
+            _instructions.pop(name, None)
             continue
-        for tool in response.tools or []:
-            tool_name = str(tool.name or "")[:60]
-            if not tool_name:
-                continue
-            raw_schema = getattr(tool, "input_schema", None) or getattr(tool, "inputSchema", None)
-            schema: dict[str, t.Any] = {}
-            if raw_schema and isinstance(raw_schema, dict):
-                schema = {
-                    "type": "object",
-                    "properties": raw_schema.get("properties") or {},
-                    "required": raw_schema.get("required") or [],
-                }
-            # the server's own hints (readOnlyHint & co) ride along -- the
-            # neutral spec is MCP-shaped, so they pass through untouched
-            annotations: dict[str, t.Any] = {}
-            raw_annotations = getattr(tool, "annotations", None)
-            if raw_annotations is not None:
-                try:
-                    annotations = raw_annotations.model_dump(exclude_none=True)
-                except AttributeError:
-                    annotations = {}
-            spec: dict[str, t.Any] = {
-                "name": f"mcp_{name}_{tool_name}",
-                "description": str(tool.description or f"{tool_name} (MCP: {name})")[:800],
-                "inputSchema": schema,
-            }
-            if annotations:
-                spec["annotations"] = annotations
-            specs.append(spec)
+        specs.extend(result)
     return specs
 
 
@@ -270,9 +291,14 @@ def _specs_future() -> t.Any:
 
 def mcp_specs() -> list[dict[str, t.Any]]:
     """The namespaced tool specs (blocking; the first call pays the
-    handshakes, later calls hit the memoized future).  A FAILED
-    discovery clears the memo -- one network blip at first use must not
-    empty the MCP surface until process restart; the next run retries."""
+    handshakes -- concurrently, one session budget each -- later calls
+    hit the memoized future).  The aggregate wait stays as the BACKSTOP
+    (per-server budgets make the real wall time ~one session budget,
+    not the sum).  A FAILED discovery clears the memo -- one network
+    blip at first use must not empty the MCP surface until process
+    restart; the next run retries.  The per-server ``instructions``
+    clear with it: stale advisory text from a dead handshake must not
+    outlive the specs it rode in with."""
     if not configured() or _sdk() is None:
         return []
     try:
@@ -280,6 +306,7 @@ def mcp_specs() -> list[dict[str, t.Any]]:
     except Exception as exc:  # pylint: disable=broad-except
         logger.warning("zjsearch_mcp: tool discovery failed: %s", exc)
         _specs_future.cache_clear()
+        _instructions.clear()
         return []
 
 
