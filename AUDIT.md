@@ -88,13 +88,13 @@ python — the three AI SDK transports live in requirements.txt as exact
 pins; bump only when the index is actually ahead, then reinstall, restart,
 and re-run the live AI test (their only consumers are the SDK factories in
 `searx/zjsearch/ai/llm/sdk/`).  The theme's other own pins (bm25s =
-the reranker plugin, mcp = the tool-server bridge, html-to-markdown =
-the reader, `markitdown[pdf,docx,pptx,xlsx]` = the ONE document
+the reranker plugin, mcp = the tool-server bridge,
+`markitdown[pdf,docx,pptx,xlsx]` = the ONE document
 converter behind `core/convert` — attachments, native PDF reads and the
 reader's HTML pass all ride it, `camoufox[geoip]` = the render engine)
 follow the same rule, each with its area's regression: the
 §4 plugin matrix for bm25s, one real MCP tool call for mcp, one
-web_crawler read for html-to-markdown, one FILE-attachment upload
+FILE-attachment upload
 (a docx — the conversion receipt must land a 资料 row) for markitdown,
 one browser open+read for camoufox.
 
@@ -104,7 +104,6 @@ local/py3/bin/pip index versions anthropic
 local/py3/bin/pip index versions google-genai
 local/py3/bin/pip index versions bm25s
 local/py3/bin/pip index versions mcp
-local/py3/bin/pip index versions html-to-markdown
 local/py3/bin/pip index versions markitdown
 local/py3/bin/pip index versions camoufox
 ```
@@ -172,7 +171,7 @@ Plugin answers (server-side; test via curl §6, not the browser):
 | `time tokyo` AND `time in tokyo` | time (filler word regression) |
 | `random string` / `random int` | value (+swatch) |
 | `min 2 8` / `max 1 5 3` / `avg 4 6` | stats |
-| `kg to lb`, `usd to cny` | unit_conversion |
+| `1 lb to oz`, `usd to cny` | unit_conversion (UPSTREAM's symbol table has no `kg` — the old `kg to lb` row was stale; mass pairs spell `lb`/`oz`/`g`) |
 | `5 usd to eur in gbp` | unit_conversion → **usd→eur**, never usd→gbp |
 | `$AAPL` (=`%24AAPL`), `AAPL stock` | stock (mind the URL encoding!) |
 | `user-agent`, `ip` | self |
@@ -316,7 +315,19 @@ curl -s -X POST 'http://127.0.0.1:8888/zjsearch/ask/search' -H 'Content-Type: ap
 - The audit instance variant (:8907 + `zjaudit` queries + the mock
   transport on :8909) replays the SAME checks with zero model variance
   and milliseconds of latency — use it when the failure is in the SERVER
-  plumbing rather than the model.
+  plumbing rather than the model.  THE MOCK MUST TRACK THE TOOL
+  VOCABULARY (`scripts/ai-mock.mjs`): the 2026-10 tool rename
+  (web_search→search_web, web_browser→browse, calculator→calculate,
+  task_write→update_plan, learnings→record_findings,
+  past_research→recall_history) left the mock speaking dead names for a
+  full cycle — every audited AI page folded error rows while the
+  Lighthouse gate stayed green.  The replay's ERROR-ROW COUNT is the
+  tripwire: a replay of `zjaudit ai` must settle with ZERO error rows
+  (the reader row with its char count, the update_plan pair, the
+  record_findings row).  The mock is spawned by the audit script; for a
+  manual wire replay boot it alone:
+  `node -e "import('./scripts/ai-mock.mjs').then(m => m.startAiMock())"`
+  from client/zjsearch.
 
 ## 7. Code audit dimensions (the sweep)
 
@@ -1140,3 +1151,145 @@ events.ts/templates.ts/renameThread still bypass the enqueue contract
 searchKnowledge filters pinned/since after the limit cut; the call/
 task inspector shows the 600-char head.  The AI thread page's
 Lighthouse red (§7.1) stands.
+
+## 7.9 Round record — 2026-11 (the dependency + parallelization + UI-parity round)
+
+Scope: the full playbook — dependency refresh (openai 3.50 / anthropic 2.8 /
+google-genai 3.3 / dashscope 2.1; the JS tree already current), FOUR
+parallel read-only sweeps (harness latency / client UI-UX / caching+reconnect
+/ browser-use+tool design) plus the ZJBlog MD-rendering sync, then the fix
+round, then the full regression (mock wire replay, prod-settings live run,
+browser pass). Highlights that must not regress:
+
+- **THE RANKING CASCADE RIDES THE POOL** (`gather.py`): one search's
+  rerank+embed stages ran INLINE in the settlement drain — k same-batch
+  completions paid k×~28s of driver-thread cascade before the second
+  row could settle.  The cascade now runs inside the pool job
+  (`_rank_job`); settlements overlap each other's ranking legs.
+  `ModelAccount.record` takes a lock (workers fold spend concurrently).
+- **MCP CALLS RIDE THE POOL** (`handlers.py`): the scan loop awaited each
+  `mcp_*` call inline (≤90s PER CALL before the searches dispatched);
+  they are pool jobs now (`_run_mcp_job`/`_finish_mcp`), settled by the
+  same drain.  A multi-containing-wait_user batch is rejected UP FRONT
+  by the batch engine (the inline routing branch that "proved intent"
+  and guaranteed "unknown action" is gone — service.py rejects with the
+  run-it-standalone recipe).
+- **MCP DISCOVERY IS PARALLEL + PER-SERVER BUDGETED** (`mcp.py`):
+  `_list_one_server` wraps the handshake in `asyncio.wait_for(15s)`, the
+  gather runs concurrently, the aggregate stays a backstop, and a dead
+  endpoint can no longer erase the healthy servers' tools (nor re-pay
+  the full budget every run); `_instructions` clears with the memo.
+- **evaluate's IMAGE FETCHES RUN CONCURRENTLY** (4-way, decision.py) —
+  four serial 8s fetches held the scan loop ~32s.
+- **The writer build bridge is BOUNDED** (loop.py): the one unbounded
+  `.result()` in the harness now times out at 45s (chronological order
+  stands); the relevance order's embed fallback carries the 8s budget
+  (context.py).
+- **The pre-write verification pass is ONE pool** (referee.py): evidence
+  (per-source) + claim (per-finding) submissions share an 8-worker pool
+  instead of two sequential 4-worker passes.
+- **The journal stopped fsyncing per wire line** (journal.py):
+  `synchronous=NORMAL` on its own connections (WAL crash safety kept;
+  the shadow is rebuildable).  `run_index` carries the run ORDINAL (a
+  lightweight ALTER, no schema bump) — the thread-index replay labels
+  the run truthfully instead of hardcoding run 1.
+- **THE RECONNECT LADDER (client)**: the watchdog's idle clock ARMS at
+  response-header time — the pre-stream gate phase (clarify/outline
+  gates + depth probe ≈ 280s of legal silence) can no longer trip the
+  170s watchdog before the run key reaches the client (B-1, the one
+  place the ceiling sat BELOW a server bound); the wait_user stand-down
+  carries a 10-minute cap (a half-open socket during an interactive
+  window used to stand down FOREVER); the continue path's stop resend
+  rides the resumed run's header time (B-3).
+- **CACHING**: the SDK client caches key on (family, base, api_key)
+  (A-1); the anthropic thinking-retry re-stamps the tail cache marker
+  (A-2); `<research_policy>` moved OUT of the byte-stable system prompt
+  into the user `<run_context>` — its per-run graded values broke the
+  cross-run prefix cache there (A-3, verified live: cached tokens ride
+  the real provider's settle).
+- **THE MD RENDERING DELTAS (DESIGN.md §5.1 canon first)**:
+  `singleDollarTextMath: false` — the theme renders UNAUDITED model
+  output and a currency pair ($3,000 … $5,000) rode straight into KaTeX
+  (ZJBlog's own 0f92d7a had to escape them by hand in human-audited
+  content); inline math is $$..$$ only, exactly what
+  spine.markdown_surface now teaches.  `remarkHtmlFallback` — raw HTML
+  (forbidden grammar) renders as VISIBLE text/code instead of
+  silently vanishing (the deck seam's own doctrine, §5.2).  The math
+  plugin slots after remark-gfm (ZJBlog's order; one tail, two heads).
+- **Tool-row UI parity**: `interruptPending` descends into a sub row's
+  `inner` (a settled page must hold ZERO spinning rows — the
+  `sub-pending` debug scenario is the regression fixture); StepSegment's
+  live-think auto-open takes an explicit `isLast` (the child's own list,
+  not the lead's — the filtered researchSteps list was doubly wrong);
+  build_table's refs column is headed + always-rendered + [n] chips;
+  recall_history rows are real outbound links; the multi batch's
+  StepDetail uses HOVER_CHIP + auto-opens a single-read pane (the row
+  chevron already IS the disclosure) + LocationLine is an outbound
+  anchor; TabStripView's ✓ became the Check icon; the approval row wears
+  Hourglass (a row the user must ACT on, not a skipped row); evaluate's
+  metric carries the verdict value, not the wire's protocol prefix;
+  cap-and-expand tails (list_engines bangs, mcp matches) reveal inside
+  a Collapse; the clarify gate plays its exit via useExitPresence; the
+  think segments + call rows + structure listbox + preview row + mobile
+  wait bar fade in; the icon collisions resolved (BookMarked/Archive for
+  the source badges, Bot for delegation, LayoutGrid on try-classic).
+- **Browser-use**: `upload` action (a captured download → a form's file
+  input by ref or the intercepted filechooser — the ledger-only source
+  keeps the readable-documents gate in reverse); `scroll` gains
+  left/right (carousels); `hover` gains x/y (widget interiors); the
+  snapshot + annotation scans pierce OPEN shadow roots (web-component
+  internals get refs; Playwright's own CSS engine already pierced);
+  the multi-index read's last section rides `last_read` (the feed-split
+  archived tab 1's body under the last tab's identity); the takeover's
+  wheel forwards BOTH axes (a horizontal gesture used to arrive as a
+  vertical -600); the download ledger takes its own lock (a REJECTED
+  line could vanish between the drain's two statements); the wait
+  window drains its downloads into the post-window feed; launches
+  sweep orphaned `zjs-dl-*` files (6h) and register a context-level
+  popup net (`adopt_page`, idempotent `_register_tab`); `open_url`
+  applies the `window.stop()` settle; wait frames ride quality 40.
+- **Tool design**: the browse description slimmed to call semantics
+  (2853→1538 chars; the doctrine lives in INSTRUCTIONS — the two-channel
+  doctrine's own biggest violator fixed); the duplicate x1/y1/x2/y2
+  schema properties and the garbled INSTRUCTIONS fragment are gone;
+  the frame-scan cap (first 3 frames) is documented; search_tools
+  registers MCP tools INLINE at ≤4 (a discovery instrument for one tool
+  is a tax) and caps each matched schema at 4k feed bytes (the
+  structured row keeps the full schema); the dead settle keys (`name`
+  on mcp, `q` on the meta-tool settles) are gone and search_web's
+  settle carries `raw` (the debug contract's last holdout).
+- **The audit mock spoke the RENAMED tool vocabulary** (the fix that
+  the wire replay caught: web_search/web_browser/calculator/task_write/
+  learnings → search_web/browse/calculate/update_plan/record_findings),
+  its read url stopped pointing at a dead port, and its args carry the
+  session-lane multi shape (open+read) — the replay now settles with
+  ZERO error rows (§6 tripwire).
+- **context.py's single-block split**: a source block that ALONE exceeds
+  the writer cap is split head-first at a line boundary (the eviction
+  loop's len>1 guard could never trim it) — the corpus and the reading
+  pane keep the full text.  (AGENTS.md's "long-read feed trim" passage
+  described a rerank-segment machinery that was never in the tree — the
+  doc now describes this split.)
+
+Two CONTRAST-GATE finds the Lighthouse run pulled (both pre-existing
+nodes that sat at the pass boundary and finally tipped): the tool row's
+timing span wore opacity-60 ON TOP of ink-3 (~3.4:1 in dark — the
+token stays whole now), and the sources filter chip's count span forced
+ink-3 onto the ACTIVE chip's accent-soft ground (4.21:1 — the count
+inherits the chip's color).  A11y floors are absolutes: a node at 4.2:1
+is a shipped bug even when the gate's last run passed.
+
+Verification: gates green (black/pylint — touched files 10.00 or their
+pre-existing baseline / tsc / biome / audit-cjk / full build + gzip
+siblings); the mock wire replay 141 events 0 error rows settle done
+(policy in run_context live, settlements parallel, usage buckets ride);
+the prod-settings live speed run settles done with a cited answer and
+prompt-cache hits on the real provider; the browser pass — classic
+results, the debug stage (all scenarios settle through the real fold),
+the sub-pending scenario's interrupted child rows with zero spinners;
+the Lighthouse gate PASSED all 13 pages after the two contrast fixes
+(the ai=1 a11y 96 → 100).  Live in the wild during the gate: the
+browser engine's profile-lock self-heal (a stale process killed, retry
+succeeded) and its error surface — `adopt_page` must await
+`page.opener()` (a Playwright coroutine; the un-awaited call logged
+RuntimeWarnings every popup).

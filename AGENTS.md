@@ -262,16 +262,35 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     covers the target (no 15s actionability timeout), and a spawned
     popup (target=_blank) is pulled into the tab set and activated with
     its own outline.  `history` (op=back / forward / reload) mirrors the
-    takeover's history lane onto the tool surface.  DOWNLOADS are gated
+    takeover's history lane onto the tool surface.  `upload` attaches a
+    CAPTURED DOWNLOAD to the page (a form's file input by ref, or the
+    intercepted filechooser a click just opened) -- the ledger is the
+    ONLY file source, so the readable-documents gate holds in reverse
+    and a model-invented path never resolves (the round trip: page
+    offers a pdf → captured → `upload` puts it into the portal's form).
+    DOWNLOADS are gated
     by the converter: only readable documents (pdf / office / text /
     data, max 20 MB) are ever saved -- anything else is deleted unread
     and the refusal is SPOKEN into the feed (`REJECTED download ...`) --
     a capture is read back with `read` + `download=<filename>`, and the
     read is once-then-destroyed (the bytes leave the disk the moment
-    they are converted).  EVERY action that lands a fresh outline
+    they are converted); the ledger takes its own lock (the capture
+    tasks append from the event loop, the drains advance the cursor
+    from workers -- a two-statement drain could silently drop a
+    REJECTED line), the wait_user window drains its downloads into the
+    post-window feed, and every launch sweeps orphaned `zjs-dl-*` files
+    past 6h.  EVERY action that lands a fresh outline
     registers the page into the [n] registry (open, click-through,
     tab new/switch, popup alike) -- an explored page is citable even
-    when the model never ran an explicit open on it.  The `screenshot`
+    when the model never ran an explicit open on it; a context-level
+    popup net (`adopt_page`) catches pages spawned OUTSIDE a click
+    (window.open during load, redirect scripts) and registers them the
+    same way (`_register_tab` is idempotent -- the net and the click
+    path may both reach a popup).  The snapshot + annotation scans
+    PIERCE OPEN SHADOW ROOTS (web-component internals get refs;
+    Playwright's own CSS engine already pierced them -- only the first
+    3 child FRAMES are scanned, which the spec now states).  The
+    `screenshot`
     action is AIMED:
     without `ref` it is the whole viewport, with `ref` it captures ONE
     element as a close-up (`locator.screenshot`, auto-scrolls; the
@@ -425,15 +444,19 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     settlement drain — one slow rerank gateway stalled the round's
     whole stream): both legs run on a 4-worker dispatch pool under a
     20s budget, the client is cached per (base, key), and the OTHER
-    rerank spenders (the writer's context ordering, the corpus packs,
-    the long-read segment trim) fold their tokens into the same bucket.
-    THE LONG-READ FEED TRIM: a page read past ~6k chars rebuilds its
-    WRITER-FEED block from the rerank-top segments (line-boundary
-    ~1200-char segments, 380-char heads, ONE call) within
-    `zjsearch.reader.max_chars` (default 8k when unset) — the page's
-    relevant middle survives instead of its head; the corpus and the
-    client's reading pane keep the FULL text; fail-open to the whole
-    text.  The cascade has
+    rerank spenders (the writer's context ordering, the corpus packs)
+    fold their tokens into the same bucket.  THE POOL IS THE
+    SETTLEMENT'S SHAPE (2026-11): the ranking cascade runs INSIDE each
+    search's pool job (`gather._rank_job`) — one batch's settlements
+    overlap their rerank/embed legs instead of paying them serially on
+    the driver — and the `mcp_*` calls are pool jobs too (the scan loop
+    used to await each inline, ≤90s per call); `ModelAccount.record`
+    takes a lock (workers fold spend concurrently).  THE LONG-READ
+    SPLIT: a source block that ALONE exceeds the writer's context cap
+    is split head-first at a line boundary (`context._fit_context` —
+    the eviction loop's whole-blocks rule could never trim it); the
+    corpus and the client's reading pane keep the FULL text.  The
+    cascade has
     a CROSS-SEARCH MEMORY: diverse_order's embeds ride out of `_ranked`
     keyed by returned position and `build_search_feed`'s dup_gate spends
     them at the mint point — a fresh url whose vector clears
@@ -1102,11 +1125,19 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   -- all lanes share one fold against the hook-level seq watermark): the
   stream WATCHDOG aborts a silent stream and reattaches — the ceiling
   (170s) sits ABOVE every server-side quiet bound (loop 135s/125s,
-  synthesizer 150s) so a healthy run never trips it, a FRESH keepalive
+  synthesizer 150s) so a healthy run never trips it, the idle clock ARMS
+  AT RESPONSE-HEADER TIME (2026-11: the pre-stream gate phase — clarify/
+  outline gates + the depth probe — can legally sit ~280s silent; the
+  server's own prime deadline is 300s; aborting pre-header killed a
+  healthy run BEFORE its run key reached the client, leaving no reattach
+  path at all), a FRESH keepalive
   beat is the half-open verdict (the beat opens a NEW connection: it
   succeeding while the stream sits silent proves only the stream's TCP
   path died), the watchdog stands down during an open wait_user window
-  (the mirror frame's `wait_left`), and without beat verdicts (worker
+  (the mirror frame's `wait_left`) UNDER A 10-MINUTE CAP (a half-open
+  socket inside the window can never deliver the retiring frame — the
+  stand-down would last forever; past the cap the reattach ladder
+  proves the run), and without beat verdicts (worker
   refused) only the 300s fallback applies.  The REATTACH LADDER covers
   the host's whole detach grace (~5min, 404 breaks immediately) — a
   blip recovers IN PLACE instead of settling locally while the server
