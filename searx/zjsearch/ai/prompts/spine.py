@@ -85,17 +85,17 @@ def language_directive(catalog_tag: str) -> str:
     )
 
 
-def today_text(tz: str | None = None) -> str:
+def today_text(user_tz: str | None = None) -> str:
     """The date + weekday sentence body ("Saturday, 2026-10-17 (Asia/
     Shanghai, UTC+08:00)") -- shared by :func:`today_line` and the
     subagent's opener so every surface speaks the date identically.
-    ``tz`` is the USER'S IANA zone (the browser's
+    ``user_tz`` is the USER'S IANA zone (the browser's
     ``Intl.DateTimeFormat().resolvedOptions().timeZone``): "today" is
     the USER'S today -- a UTC server's Friday night is the CST user's
     Saturday.  An unknown/absent zone falls back to the server's local
     clock and says so, never pretending.  The weekday table and the
     zone resolve live in ``core.dates`` (shared with the clock tool)."""
-    zone, name = resolve_zone(tz)
+    zone, name = resolve_zone(user_tz)
     now = datetime.datetime.now(zone) if zone else datetime.datetime.now()
     day = f"{weekday_name(now.date())}, {now.date().isoformat()}"
     if zone:
@@ -104,21 +104,21 @@ def today_text(tz: str | None = None) -> str:
     return f"{day} (the server's local time)"
 
 
-def today_line(tz: str | None = None) -> str:
+def today_line(user_tz: str | None = None) -> str:
     """The deterministic date block: the model must never guess the date
     -- and the WEEKDAY + USER'S TIMEZONE ground "this week" /
     business-day / market-hours reasoning the bare ISO date cannot."""
-    return block("today", f"Today is {today_text(tz)}.")
+    return block("today", f"Today is {today_text(user_tz)}.")
 
 
-def now_text(tz: str | None = None) -> str:
+def now_text(user_tz: str | None = None) -> str:
     """The date + CLOCK-TIME sentence body ("Friday, 2026-11-13 14:32
     (Asia/Shanghai, UTC+08:00)") -- ``today_text`` with the hour.  The
     research runs keep ``<today>`` date-only (byte-stable across a same
     day's runs, the clock rides the ``clock`` tool); the ZERO-TOOL
     direct lane bakes THIS at write time instead -- a chat question
     ("what time is it now") must not answer with a shrug."""
-    zone, name = resolve_zone(tz)
+    zone, name = resolve_zone(user_tz)
     now = datetime.datetime.now(zone) if zone else datetime.datetime.now()
     stamp = f"{weekday_name(now.date())}, {now.date().isoformat()} {now.strftime('%H:%M')}"
     if zone:
@@ -127,11 +127,11 @@ def now_text(tz: str | None = None) -> str:
     return f"{stamp} (the server's local time)"
 
 
-def now_line(tz: str | None = None) -> str:
+def now_line(user_tz: str | None = None) -> str:
     """The clock-bearing date block -- the direct lane's ``<today>``
     replacement (same anchor doctrine: the USER'S today, the server's
     clock says so)."""
-    return block("now", f"The current moment is {now_text(tz)}.")
+    return block("now", f"The current moment is {now_text(user_tz)}.")
 
 
 def citation_rules() -> str:
@@ -233,12 +233,16 @@ def markdown_surface() -> str:
           quadrantChart take ASCII axis and point names.  treemap is the
           reverse: node names MUST be double-quoted, and Chinese is fine
           inside the quotes ("node name": 40).
-        - Math typesets as real equations -- write LaTeX: inline $E=mc^2$,
-          display $$\\int_0^1 f(x)\\,dx$$ blocks, or a ```math fenced
-          block.  Each formula appears ONCE, in LaTeX only -- never repeat
-          it as plain text beside the equation.  No raw HTML and no
-          markdown images (![alt](url)) -- visual evidence arrives as
-          attachments instead.""",
+        - Math typesets as real equations -- write LaTeX: inline
+          $$E=mc^2$$ (a $$ pair may sit inside a sentence), display
+          $$\\int_0^1 f(x)\\,dx$$ blocks, or a ```math fenced block.
+          NEVER wrap math in single dollars: a lone $...$ pair renders
+          as literal text, and money amounts ($1,000) keep their plain
+          dollar signs -- they are never formulas.  Each formula appears
+          ONCE, in LaTeX only -- never repeat it as plain text beside
+          the equation.  No raw HTML (HTML tags render as visible text)
+          and no markdown images (![alt](url)) -- visual evidence
+          arrives as attachments instead.""",
     )
 
 
@@ -386,7 +390,7 @@ def answer_contract(
     role: str,
     shape: str | None = None,
     sources_note: str | None = None,
-    tz: str | None = None,
+    user_tz: str | None = None,
 ) -> list[str]:
     """The reader-facing answer spine EVERY answer surface speaks, in the
     cache-friendly order: the byte-stable blocks (role, identity, date,
@@ -396,7 +400,7 @@ def answer_contract(
     without a tier omit the shape.  Callers append their feature-specific
     blocks (follow-up fences, gallery contracts, research notes) and the
     conversation around it -- the spine is what must not drift."""
-    lines: list[str] = [role, identity(), today_line(tz), language_directive(lang)]
+    lines: list[str] = [role, identity(), today_line(user_tz), language_directive(lang)]
     if shape:
         lines.append(shape)
     lines.append(citation_rules())

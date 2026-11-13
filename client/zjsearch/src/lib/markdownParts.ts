@@ -16,7 +16,7 @@ import { pandocMark } from "micromark-extension-mark";
 import remarkDeflist from "remark-deflist";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
-import type { Processor } from "unified";
+import type { PluggableList, Processor } from "unified";
 import type { Node } from "unist";
 import { visit } from "unist-util-visit";
 
@@ -134,9 +134,42 @@ export const remarkCallouts = function remarkCallouts() {
   };
 };
 
+/** Raw HTML is FORBIDDEN grammar (DESIGN.md §5.1 -- prompt never teaches
+    it), but react-markdown's remark-rehype pass silently DROPS html nodes:
+    a model that drifts into emitting `<table>` blocks would have its
+    content vanish without a trace.  The deck seam's doctrine (DESIGN.md
+    §5.2: html:false escapes model HTML into visible text) applied to the
+    answer pipeline: inline tags become literal text inside their
+    paragraph, a flow-level html block becomes a code block -- visible,
+    honest, never executed. */
+export const remarkHtmlFallback = function remarkHtmlFallback() {
+  return (tree: Node) => {
+    visit(tree, "html", (node: Node, index: number | null, parent: Node | null) => {
+      if (parent == null || index == null || index < 0) {
+        return;
+      }
+      const value = String((node as { value?: string }).value ?? "");
+      const holder = parent as unknown as { type: string; children: unknown[] };
+      // inline tags become literal text inside their paragraph; a
+      // flow-level html block becomes a code block (the raw source,
+      // mono-bounded -- visible, honest, never executed)
+      holder.children[index] =
+        holder.type === "paragraph"
+          ? ({ type: "text", value } as unknown as Node)
+          : ({ type: "code", value } as unknown as Node);
+    });
+  };
+};
+
 /** The eager chain every AI-markdown surface mounts (order mirrors
-    ZJBlog's content.ts); the math pipeline stays lazy beside it. */
-export const SHARED_REMARK = [remarkGfm, remarkMark, remarkEmoji, remarkCallouts, remarkDeflist];
+    ZJBlog's content.ts); the math pipeline stays lazy beside it --
+    `sharedRemarkWithMath` slots it right after remark-gfm, the blog's
+    own position (one tail, two heads -- the chain cannot drift). */
+const SHARED_TAIL: PluggableList = [remarkMark, remarkEmoji, remarkCallouts, remarkDeflist, remarkHtmlFallback];
+
+export const SHARED_REMARK: PluggableList = [remarkGfm, ...SHARED_TAIL];
+
+export const sharedRemarkWithMath = (math: PluggableList): PluggableList => [remarkGfm, ...math, ...SHARED_TAIL];
 
 /** Model artifacts: a closing `**` preceded by whitespace is NOT
     right-flanking in CommonMark (CJK answers habitually leave a space

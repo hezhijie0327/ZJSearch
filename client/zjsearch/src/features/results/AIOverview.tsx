@@ -32,7 +32,7 @@ import { appendRunEvents } from "@/lib/kb/events.ts";
 import { settleRun, startRun } from "@/lib/kb/projections.ts";
 import { newThreadId, threadUrl } from "@/lib/kb/shared.ts";
 import { hostnameOf } from "@/lib/link.ts";
-import { holdBackTail, MD, normalizeEmphasis, SHARED_REMARK } from "@/lib/markdownParts.ts";
+import { holdBackTail, MD, normalizeEmphasis, SHARED_REMARK, sharedRemarkWithMath } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { CHIP_ACCENT, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -974,12 +974,17 @@ function markdownComponents(
     changing.  Stable props (markdown text, per-result meta, settled) keep
     the subtree untouched by measurement churn.
     The KaTeX math pipeline (the ZJBlog remark-math + rehype-katex pair):
-    a sizable dependency, lazy-loaded only when the
-    answer actually carries $ / $$ delimiters; until it loads the body
-    renders as plain markdown
-    (the delimiters flash raw for a beat -- the mermaid placeholder's own
-    pattern). */
-const MATH_FENCE = /\$\$[\s\S]+?\$\$|\$[^\s$][^$\n]*\$/;
+    a sizable dependency, lazy-loaded only when the answer actually
+    carries math; until it loads the body renders as plain markdown (the
+    delimiters flash raw for a beat -- the mermaid placeholder's own
+    pattern).  DELIBERATE FAMILY DIVERGENCE (DESIGN.md §5.1 分隔符缝):
+    singleDollarTextMath is OFF -- our content is UNAUDITED model output,
+    and a currency pair ($3,000 ... $5,000) would ride straight into
+    KaTeX as garbled formulas (the false-positive class ZJBlog's
+    0f92d7a had to escape by hand in its human-audited content; a model
+    cannot be taught to escape every dollar).  Inline math is therefore
+    $$..$$ only, exactly what spine.markdown_surface teaches. */
+const MATH_FENCE = /\$\$[\s\S]+?\$\$|^```math/m;
 
 export const MarkdownAnswer = memo(function MarkdownAnswer({
   markdown,
@@ -1011,7 +1016,7 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
     let cancelled = false;
     void Promise.all([import("remark-math"), import("rehype-katex")]).then(([rm, rh]) => {
       if (!cancelled) {
-        setMathPlugins([[rm.default], [rh.default]]);
+        setMathPlugins([[rm.default, { singleDollarTextMath: false }] as PluggableList, [rh.default] as PluggableList]);
       }
     });
     return () => {
@@ -1024,7 +1029,7 @@ export const MarkdownAnswer = memo(function MarkdownAnswer({
       components={markdownComponents(meta, onCite, settled, figureLightbox)}
       key={key}
       rehypePlugins={withMath ? mathPlugins[1] : undefined}
-      remarkPlugins={withMath ? [...SHARED_REMARK, ...mathPlugins[0]] : SHARED_REMARK}
+      remarkPlugins={withMath ? sharedRemarkWithMath(mathPlugins[0]) : SHARED_REMARK}
     >
       {text}
     </Markdown>
