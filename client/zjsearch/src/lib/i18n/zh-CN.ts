@@ -596,6 +596,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_browser_act_select: "下拉选择",
   ai_browser_act_drag: "拖拽",
   ai_browser_act_viewport: "切换视口",
+  ai_browser_act_upload: "附件",
   ai_browser_act_wait: "等待你操作",
   ai_browser_act_close: "关闭会话",
   ai_browser_elements: "{n} 个可交互元素",

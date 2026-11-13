@@ -30,7 +30,7 @@ export function SteerChips({ chips, onRetract }: { chips: AiSteerChip[]; onRetra
           {chip.state === "failed" ? <span>{t("ai_steer_failed")}</span> : null}
           <button
             aria-label={t("remove")}
-            className="text-ink-3 transition-colors hover:text-danger"
+            className="-me-1 -my-1 grid size-6 shrink-0 place-items-center text-ink-3 transition-colors hover:text-danger"
             onClick={() => {
               onRetract(chip.text);
             }}

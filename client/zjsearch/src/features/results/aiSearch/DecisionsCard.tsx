@@ -288,40 +288,19 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
       <RailHeader count={decisions.length} icon={Scale} title={t("ai_decisions_card")} />
       <ul className="mt-3 space-y-1 px-1">
         {view.map((decision) => {
-          const label = PURPOSE_LABELS[decision.purpose] ?? "ai_decisions_card";
           // openIdx is the decision's index in the ORIGINAL array: new
           // verdicts append at the end, so an open row keeps its identity
           // while the list streams (the reversed VIEW only changes order)
           const idx = decisions.indexOf(decision);
-          const expandedRow = openIdx === idx;
           return (
-            <li key={idx}>
-              <button
-                aria-expanded={expandedRow}
-                className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1 text-[13px] transition-colors hover:bg-surface-2/50"
-                onClick={() => {
-                  setOpenIdx(expandedRow ? null : idx);
-                }}
-                type="button"
-              >
-                <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs leading-4 text-accent">
-                  {t(label as "ai_dec_judge")}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-start text-[13px] text-ink-2" dir="auto">
-                  {decision.target || decision.question || decision.purpose}
-                </span>
-                {decision.ms ? (
-                  <span className="shrink-0 font-mono tabular-nums text-ink-3">{formatMs(decision.ms)}</span>
-                ) : null}
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`size-3 shrink-0 text-ink-3 transition-transform ${expandedRow ? "rotate-180" : ""}`}
-                />
-              </button>
-              <Collapse className={expandedRow ? "mt-1" : ""} open={expandedRow}>
-                <DecisionBody decision={decision} />
-              </Collapse>
-            </li>
+            <DecisionRow
+              decision={decision}
+              key={idx}
+              onToggle={() => {
+                setOpenIdx(openIdx === idx ? null : idx);
+              }}
+              open={openIdx === idx}
+            />
           );
         })}
       </ul>

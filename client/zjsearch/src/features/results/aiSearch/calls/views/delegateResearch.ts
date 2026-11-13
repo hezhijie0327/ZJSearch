@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Waypoints } from "lucide-react";
+import { Bot } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
 /** The delegate_research view: the delegation row's label is the
@@ -8,7 +8,7 @@ import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
     open kind:"sub" row, so this row stays a one-liner (its settlement
     receipt carries the digest in the debug pane). */
 export const delegateResearchView: ToolView = {
-  Icon: Waypoints,
+  Icon: Bot,
   label: ({ call }) => call.label || call.q,
   metric: () => null,
 };

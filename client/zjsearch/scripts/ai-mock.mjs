@@ -16,8 +16,8 @@
  *   rewrite echoes the question, related_questions returns three canned
  *   questions.
  * - `tools` present is the researcher: the opener streams a one-line intent
- *   plus TWO calls — a web_search carrying the page's own `zjaudit <kind>`
- *   fixture query AND a web_browser read of the fixture page this same
+ *   plus TWO calls — a search_web carrying the page's own `zjaudit <kind>`
+ *   fixture query AND a browse read of the fixture page this same
  *   server serves at `GET /read-fixture` (the built-in browser renders it
  *   for real -- the SSRF gates let the loopback host through per
  *   audit-settings.yml's zjsearch.browser.allow_hosts -- so the
@@ -293,13 +293,19 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
   }
   const args = JSON.stringify({ query: questionOf(messages) || "zjaudit general" });
   const half = Math.ceil(args.length / 2);
-  const pageArgs = JSON.stringify({ url: `http://127.0.0.1:${port}/read-fixture` });
+  // the SESSION lane's rhythm in ONE call (read is a session action now:
+  // bare read(url) is document-only) -- the multi exercises the open ->
+  // read chain, the per-step summaries and the read pane's char count
+  const pageArgs = JSON.stringify({
+    action: "multi",
+    steps: [{ action: "open", url: `http://127.0.0.1:${port}/read-fixture` }, { action: "read" }],
+  });
   const pageHalf = Math.ceil(pageArgs.length / 2);
   // the RAG round only when the server REGISTERED the tool (the client
   // pre-sends the index; a fresh audit browser has an empty corpus) --
   // an unregistered call would land as an error row on the audited page,
   // so the fixture falls back to a plain search with its own query
-  const hasRag = tools.some((tool) => (tool?.function?.name ?? tool?.name) === "past_research");
+  const hasRag = tools.some((tool) => (tool?.function?.name ?? tool?.name) === "recall_history");
   streamChunks(
     res,
     [
@@ -312,7 +318,7 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
       ...textPieces("Reading the request, then opening the fixture page the search will number. "),
       {
         tool_calls: [
-          { index: 0, id: "call-zjaudit-1", type: "function", function: { name: "web_search", arguments: "" } },
+          { index: 0, id: "call-zjaudit-1", type: "function", function: { name: "search_web", arguments: "" } },
         ],
       },
       { tool_calls: [{ index: 0, function: { arguments: args.slice(0, half) } }] },
@@ -323,23 +329,24 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
             index: 1,
             id: "call-zjaudit-2",
             type: "function",
-            function: {
-              name: "web_browser",
-              arguments: '{"action":"read","url":"http://127.0.0.1:8908/read-fixture"}',
-            },
+            function: { name: "browse", arguments: "" },
           },
         ],
       },
+      // the arguments split across TWO continuation chunks (the same
+      // split-assembly the search call exercises -- the name chunk's own
+      // full args + the slices used to concatenate into INVALID json and
+      // the audited read row died as "the browse action is required")
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(0, pageHalf) } }] },
       { tool_calls: [{ index: 1, function: { arguments: pageArgs.slice(pageHalf) } }] },
       // the calculator round: exercises the exact-eval tool offline (spec
       // visibility, executor branch, the calc wire event, the result row)
       {
         tool_calls: [
-          { index: 2, id: "call-zjaudit-3", type: "function", function: { name: "calculator", arguments: "" } },
+          { index: 2, id: "call-zjaudit-3", type: "function", function: { name: "calculate", arguments: "" } },
         ],
       },
-      // the past_research round: exercises the RAG search over the
+      // the recall_history round: exercises the RAG search over the
       // browser's knowledge base offline (the client pre-sends the index;
       // matches become history sources) -- falls back to a plain search
       // when the corpus (and with it the tool) is empty
@@ -349,14 +356,14 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
             index: 3,
             id: "call-zjaudit-4",
             type: "function",
-            function: { name: hasRag ? "past_research" : "web_search", arguments: "" },
+            function: { name: hasRag ? "recall_history" : "search_web", arguments: "" },
           },
         ],
       },
       // the decomposition rounds: the living task card writes then closes
       {
         tool_calls: [
-          { index: 4, id: "call-zjaudit-5", type: "function", function: { name: "task_write", arguments: "" } },
+          { index: 4, id: "call-zjaudit-5", type: "function", function: { name: "update_plan", arguments: "" } },
         ],
       },
       {
@@ -387,7 +394,7 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
         ],
       },
       {
-        // the SECOND task_write (the status update): a proper declaration
+        // the SECOND update_plan (the status update): a proper declaration
         // plus the full done-list args in two chunks -- the previous tail
         // chunks never declared the tool and parsed as garbage, leaving a
         // bogus failed row on the audited timeline
@@ -396,7 +403,7 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
             index: 5,
             id: "call-zjaudit-6",
             type: "function",
-            function: { name: "task_write", arguments: "" },
+            function: { name: "update_plan", arguments: "" },
           },
         ],
       },
@@ -427,11 +434,11 @@ function researcher(answered, messages, res, tools = [], port = PORT) {
           },
         ],
       },
-      // the findings ledger: exercises the learnings tool, the wire
+      // the findings ledger: exercises the record_findings tool, the wire
       // snapshot event and the client's findings card offline
       {
         tool_calls: [
-          { index: 6, id: "call-zjaudit-7", type: "function", function: { name: "learnings", arguments: "" } },
+          { index: 6, id: "call-zjaudit-7", type: "function", function: { name: "record_findings", arguments: "" } },
         ],
       },
       {

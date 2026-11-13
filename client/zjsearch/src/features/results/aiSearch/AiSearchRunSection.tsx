@@ -4,7 +4,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   AlignLeft,
-  BookOpen,
   Brain,
   Check,
   ChevronDown,
@@ -16,6 +15,7 @@ import {
   CornerDownRight,
   FoldVertical,
   Gauge,
+  LayoutGrid,
   Lightbulb,
   ListEnd,
   ListTodo,
@@ -101,6 +101,7 @@ import {
   PAPER_STRIP,
 } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** Collapsed run-title preview: three lines of text-3xl/leading-tight
     (30px × 1.25 ≈ 37.5px).  Matches the boot ghost's `line-clamp-3` and the
@@ -515,7 +516,7 @@ function TaskItem({
         {task.status === "done" && sourceCount > 0 ? (
           <button
             aria-expanded={sourcesOpen}
-            className="shrink-0 text-xs tabular-nums text-ink-3 transition-colors hover:text-accent"
+            className="flex shrink-0 items-center gap-0.5 text-xs tabular-nums text-ink-3 transition-colors hover:text-accent"
             onClick={() => {
               setSourcesOpen(!sourcesOpen);
             }}
@@ -524,11 +525,15 @@ function TaskItem({
             {t(sourceCount === 1 ? "ai_task_source_one" : "ai_task_sources", {
               n: String(sourceCount),
             })}
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-3 transition-transform ${sourcesOpen ? "rotate-180" : ""}`}
+            />
           </button>
         ) : null}
       </div>
-      {sourcesOpen && sourceCount > 0 ? (
-        <div className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 ps-5">
+      <Collapse className={sourcesOpen && sourceCount > 0 ? "mt-1" : ""} open={sourcesOpen && sourceCount > 0}>
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-1 ps-5">
           {(task.sources ?? []).map((n) => (
             <button
               className="rounded-md border border-line bg-surface-2/50 px-1.5 py-px text-xs leading-4 text-ink-2 transition-colors hover:border-accent/50 hover:text-accent"
@@ -542,7 +547,7 @@ function TaskItem({
             </button>
           ))}
         </div>
-      ) : null}
+      </Collapse>
     </li>
   );
 }
@@ -565,7 +570,7 @@ function ThinkSegment({
   const [forced, setForced] = useState<boolean | null>(null);
   const expanded = forced ?? open;
   return (
-    <div>
+    <div className="animate-fade-in">
       <button
         aria-expanded={expanded}
         className={`${META_TOGGLE} text-xs`}
@@ -647,6 +652,7 @@ function SubSegment({
             <StepSegment
               agent={step.agent}
               index={innerIdx}
+              isLast={innerIdx === step.inner.length - 1}
               key={`${inner.kind}-${innerIdx}`}
               run={run}
               step={inner}
@@ -665,27 +671,34 @@ function StepSegment({
   run,
   step,
   streaming,
+  isLast,
   agent,
 }: {
   index: number;
   run: AiSearchRun;
   step: AiSearchStep;
   streaming: boolean;
+  /** the LAST segment of the enclosing list -- the live think pane's
+      auto-open.  Top-level callers compare against run.steps; a sub
+      row's callers MUST compare against the CHILD's inner list (the
+      lead's step count says nothing about the child stream) */
+  isLast?: boolean;
   /** the enclosing sub row's agent key (top-level steps omit it) -- the
       result-strip join resolves the row's OWN agent's registry slice */
   agent?: string;
 }) {
   const t = useT();
   if (step.kind === "think") {
+    const liveThink = streaming && (isLast ?? index === run.steps.length - 1);
     return (
       <div className={index > 0 ? "mt-2" : ""}>
         <ThinkSegment
-          live={streaming && index === run.steps.length - 1}
+          live={liveThink}
           // ONLY the LIVE segment opens by default (the reasoning you are
           // watching); every other segment -- earlier rounds AND the whole
           // run once settled -- stays folded behind its one-click toggle
           // (a dozen open think panes read as a wall of machine voice)
-          open={streaming && index === run.steps.length - 1}
+          open={liveThink}
           step={step}
         />
       </div>
@@ -969,6 +982,40 @@ function AskCard({
   );
 }
 
+/** The clarify gate's MOUNT: the exit-presence wrapper keeps the slip
+    mounted for its -out animation once the answers travel (the dismiss
+    doctrine -- a gate that fades in must not vanish in a pop), with
+    `closing` short-circuiting the submit and inerting the card. */
+function ClarifyGate({
+  ask,
+  onSubmit,
+  open,
+}: {
+  ask: AiSearchRun["ask"];
+  onSubmit?: (text: string | null) => void;
+  open: boolean;
+}) {
+  const { render, closing } = useExitPresence(open);
+  if (!render || !ask) {
+    return null;
+  }
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div
+        aria-hidden="true"
+        className={`absolute inset-0 ${closing ? "animate-fade-out" : "animate-fade-in"} bg-black/30`}
+      />
+      <div
+        className={`relative z-10 flex max-h-full w-full max-w-lg ${closing ? "animate-fade-out" : "animate-fade-up"}`}
+        inert={closing}
+      >
+        <AskCard ask={ask} onSubmit={closing ? () => {} : (onSubmit ?? (() => {}))} />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 /** The clarify round-trip archive (confirmed direction): the confirmed direction
     (or the skip) the research below is built on.  The SAME section
     language as every rail card -- icon + title + count header, one
@@ -1045,6 +1092,9 @@ function RunDeleteButton({ onConfirm }: { onConfirm: () => void }) {
     };
   }, [arming]);
   if (arming) {
+    // the arming swap is a SANCTIONED instant swap (a two-step danger
+    // state machine, not a disclosure -- the armed pill's color IS the
+    // announcement, an exit animation would delay the dangerous action)
     return (
       <span className="flex shrink-0 items-center gap-1">
         <button
@@ -1306,9 +1356,10 @@ function OutputStructureCard({
             className={`size-3.5 shrink-0 text-ink-3 transition-transform ${open ? "rotate-180" : ""}`}
           />
         </button>
-        {/* the ONE send button: visible while a preview is pending */}
+        {/* the ONE send button: visible while a preview is pending (it
+            fades in like every conditional surface) */}
         {previewing ? (
-          <div className="mt-1.5 flex items-center gap-2">
+          <div className="mt-1.5 flex animate-fade-in items-center gap-2">
             <button
               className="inline-flex items-center gap-1 rounded-full bg-accent-strong px-3 py-1.5 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
               onClick={confirm}
@@ -1353,7 +1404,7 @@ function OutputStructureCard({
         {open ? (
           <div
             aria-label={t("ai_output_structure")}
-            className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-72 space-y-1 overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-pop"
+            className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-72 animate-fade-in space-y-1 overflow-y-auto rounded-lg border border-line bg-surface p-1.5 shadow-pop"
             role="listbox"
           >
             {options.map((option) => {
@@ -1889,17 +1940,7 @@ function AiSearchRunSectionImpl({
           )
         : null}
 
-      {awaiting && run.ask
-        ? createPortal(
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/30" />
-              <div className="relative z-10 flex max-h-full w-full max-w-lg animate-fade-up">
-                <AskCard ask={run.ask} onSubmit={onSubmitClarify ?? (() => {})} />
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      <ClarifyGate ask={run.ask} onSubmit={onSubmitClarify} open={awaiting && run.ask !== null} />
 
       {/* answer + sources: TWO-COLUMN from lg (Perplexity's shape) --
               the prose keeps its reading measure on the left, the run's
@@ -1975,6 +2016,7 @@ function AiSearchRunSectionImpl({
                 {researchSteps.map((step, index) => (
                   <StepSegment
                     index={index}
+                    isLast={index === researchSteps.length - 1}
                     key={`${step.kind}-${index}`}
                     run={run}
                     step={step}
@@ -2257,6 +2299,7 @@ function AiSearchRunSectionImpl({
                   </button>
                   {onFallback ? (
                     <button className={`${CHIP_OUTLINE} ${CHIP_OUTLINE_IDLE}`} onClick={onFallback} type="button">
+                      <LayoutGrid aria-hidden="true" className="size-3.5" />
                       {t("ai_search_try_classic")}
                     </button>
                   ) : null}
@@ -2402,13 +2445,11 @@ function AiSearchRunSectionImpl({
                 onToggleExpanded={setSourcesExpanded}
                 sources={run.sources}
               />
-            ) : run.status === "streaming" ? (
-              <AiSearchSourcesSkeleton />
             ) : (
-              <section aria-label={t("ai_search_sources")} className="mb-5">
-                <RailHeader count={0} icon={BookOpen} title={t("ai_search_sources")} />
-                <p className="mt-2 px-1 text-xs text-ink-3">{t("ai_sources_empty")}</p>
-              </section>
+              // the aside only mounts with sources or a live stream, so the
+              // only face here is the streaming skeleton (a settled
+              // no-source run hides the slot entirely)
+              <AiSearchSourcesSkeleton />
             )}
           </aside>
         ) : null}

@@ -3251,6 +3251,12 @@ const BROWSER_OPS_STAGE: DebugScenario = {
       ms: 6480,
       url: "https://cn.bing.com/search?q=安吉云上草原",
       n: 110,
+      // the structured identity + outline the open row's body renders
+      // (LocationLine + BrowserOutline) -- a settle without them renders
+      // the featureless stub the fixtures exist to prevent
+      page: { url: "https://cn.bing.com/search?q=安吉云上草原", title: "安吉云上草原 - Search" },
+      snapshot:
+        "e111\tbutton\tSkip to content\ne114\tinput\t安吉云上草原\ne116\tbutton\t搜索\ne117\tlink\t安吉云上草原门票\ne118\tlink\t云上草原滑雪场",
       feed: "opened https://cn.bing.com/search?q=安吉云上草原 -- 安吉云上草原 - Search\n\ne111\tbutton\tSkip to content\ne114\tinput\t安吉云上草原\ne116\tbutton\t搜索\n(110 refs -- the mirror shows each one's dashed outline + ref badge)",
     },
     { ...base, id: 2, round: 2 },
@@ -3358,6 +3364,24 @@ const BROWSER_OPS_STAGE: DebugScenario = {
       ms: 4120,
       url: "https://cn.bing.com/search?q=安吉云上草原",
       n: 110,
+      // the structured per-step summaries (the StepDetail path: a real
+      // outbound link per landing page) -- the feed is the legacy fallback
+      steps: [
+        {
+          action: "scroll",
+          status: "ok",
+          label: "scrolled to '百度百科'. now: 安吉云上草原 - Search",
+          url: "https://cn.bing.com/search?q=安吉云上草原",
+          title: "安吉云上草原 - Search",
+        },
+        {
+          action: "click",
+          status: "ok",
+          label: "clicked. now: 安吉云上草原_百度百科",
+          url: "https://baike.baidu.com/item/安吉云上草原",
+          title: "安吉云上草原_百度百科",
+        },
+      ],
       feed: "1. scroll: scrolled to '百度百科'. now: 安吉云上草原 - Search (https://cn.bing.com/search?q=安吉云上草原)\n2. click: clicked. now: 安吉云上草原_百度百科 (https://baike.baidu.com/item/安吉云上草原)\n\n-- the action navigated: every old ref is dead, the fresh outline is below --",
       page: { url: "https://baike.baidu.com/item/安吉云上草原", title: "安吉云上草原_百度百科" },
     },
@@ -3423,6 +3447,79 @@ const BROWSER_OPS_STAGE: DebugScenario = {
   ],
 };
 
+/** The SUB-PENDING scenario: a child batch still in flight when the run
+    dies.  The interrupted sweep must descend into a sub row's inner
+    timeline -- a settled page with a spinning child row is the exact
+    contract break this fixture exists to catch. */
+const SUB_PENDING_STAGE: DebugScenario = {
+  id: "sub-pending",
+  name: "子代理中断",
+  label: "sub pending at settle (the inner interrupted sweep)",
+  q: "调研全球动力电池产业:头部厂商产能;固态电池路线;钠离子进展",
+  mode: "deep",
+  events: [
+    { ...base },
+    { e: "phase", name: "research" },
+    {
+      e: "calls",
+      id: 1,
+      items: [
+        {
+          id: 1,
+          tool: "delegate_research",
+          q: "头部厂商产能与市占率",
+          status: "pending",
+          args: { title: "头部厂商产能与市占率", objective: "建立 2024-2025 头部电池厂商的产能与市占率矩阵" },
+        },
+      ],
+    },
+    {
+      e: "call",
+      id: 1,
+      call: 1,
+      status: "ok",
+      ms: 120,
+      label: "S1 · 头部厂商产能与市占率",
+      feed: "建立 2024-2025 头部电池厂商的产能与市占率矩阵",
+    },
+    {
+      e: "open",
+      id: 10000,
+      kind: "sub",
+      round: 1,
+      agent: "S1",
+      title: "S1 · 头部厂商产能与市占率",
+      objective: "建立 2024-2025 头部电池厂商的产能与市占率矩阵(宁德时代/LG/比亚迪为最小集合)",
+    },
+    { e: "think", id: 10000, t: "子代理:先并行三家产能检索。" },
+    {
+      e: "calls",
+      id: 10000,
+      round: 1,
+      turn: 1,
+      items: [
+        {
+          id: 1,
+          tool: "search_web",
+          q: "宁德时代 2025 产能 GWh",
+          status: "pending",
+          args: { query: "宁德时代 2025 产能 GWh" },
+        },
+        {
+          id: 2,
+          tool: "search_web",
+          q: "LG 新能源 产能 2025",
+          status: "pending",
+          args: { query: "LG 新能源 产能 2025" },
+        },
+      ],
+    },
+    // the run DIES here: the settle's interrupted sweep must reach these
+    // two pending child rows (the P0 the sweep's flat walk missed)
+    { e: "settle", status: "error", halt: "time_budget", finish: null, usage: null, model: null },
+  ],
+};
+
 export const DEBUG_SCENARIOS: DebugScenario[] = [
   // the DEFAULT is the comprehensive surface: every tool, every state
   // (success / failed / duplicate / approval) -- the other scenarios are
@@ -3438,6 +3535,7 @@ export const DEBUG_SCENARIOS: DebugScenario[] = [
   PANORAMA_STAGE,
   STEER_STAGE,
   SUB_STAGE,
+  SUB_PENDING_STAGE,
   LONGTEXT_STAGE,
   DONE_STAGE,
   STOPPED_STAGE,

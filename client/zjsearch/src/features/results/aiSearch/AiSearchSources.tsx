@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Award, BookOpen, Bot as BotGlyph, Globe, History, Server } from "lucide-react";
+import { Archive, Award, BookMarked, BookOpen, Bot as BotGlyph, Globe, Server } from "lucide-react";
 import { useState } from "react";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
@@ -102,14 +102,14 @@ function SourceCard({ cited, source }: { cited: boolean; source: AiSearchSource 
               role="img"
               title={t("ai_source_history")}
             >
-              <History aria-hidden="true" className="size-2.5" />
+              <BookMarked aria-hidden="true" className="size-2.5" />
             </span>
           ) : source.pastRefs ? (
             <span
               className="inline-flex items-center gap-0.5"
               title={t("knowledge_source_refs", { n: String(source.pastRefs) })}
             >
-              <History aria-hidden="true" className="size-3" />
+              <Archive aria-hidden="true" className="size-3" />
               {source.pastRefs}×
             </span>
           ) : null}
@@ -249,10 +249,13 @@ export function AiSearchSources({
         {chips.map((chip) => (
           <button
             aria-pressed={effective === chip.id}
-            className={`min-h-6 rounded-full px-2 py-0.5 text-xs transition-colors ${
+            // the bordered 12px filter tier (the meta-toggle sanction:
+            // 12px text on a min-h-6 box) -- CHIP's own bg would fight
+            // the border variants, so the box is typed here once
+            className={`inline-flex min-h-6 items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors ${
               effective === chip.id
-                ? "border border-accent-strong bg-accent-soft font-medium text-accent"
-                : `border border-line text-ink-3 ${CHIP_HOVER}`
+                ? "border-accent-strong bg-accent-soft font-medium text-accent"
+                : `border-line text-ink-3 ${CHIP_HOVER}`
             }`}
             key={chip.id}
             onClick={() => {
@@ -260,7 +263,9 @@ export function AiSearchSources({
             }}
             type="button"
           >
-            {chip.label} <span className="tabular-nums text-ink-3">{chip.count}</span>
+            {/* the count INHERITS the chip's color: a forced ink-3 sat on
+                the active chip's accent-soft ground at 4.21:1 in dark */}
+            {chip.label} <span className="tabular-nums">{chip.count}</span>
           </button>
         ))}
       </div>

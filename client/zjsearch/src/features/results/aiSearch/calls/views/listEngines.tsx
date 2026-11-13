@@ -2,6 +2,7 @@
 
 import { CircleDollarSign, DatabaseSearch } from "lucide-react";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
+import { Collapse } from "@/components/Collapse.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiEngineInventory } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -40,7 +41,8 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
   const t = useT();
   const categories = [...inv.categories].sort((a, b) => b.count - a.count);
   const bangs = useCapExpand(inv.disabled.length, BANG_CELLS_CAP);
-  const shown = bangs.expanded ? inv.disabled : inv.disabled.slice(0, BANG_CELLS_CAP);
+  const shown = inv.disabled.slice(0, BANG_CELLS_CAP);
+  const tail = inv.disabled.slice(BANG_CELLS_CAP);
   return (
     <div className="min-w-0">
       <p className="text-xs text-ink-3">
@@ -68,7 +70,7 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
                 <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
                   <span className="shrink-0 font-mono text-xs text-ink-2">!{engine.bang}</span>
                   {engine.cats.length > 0 ? (
-                    <span className="truncate text-[11px] text-ink-3">{engine.cats.join(", ")}</span>
+                    <span className="truncate text-xs text-ink-3">{engine.cats.join(", ")}</span>
                   ) : null}
                   {engine.paid ? (
                     <CircleDollarSign
@@ -81,6 +83,35 @@ function InventoryBody({ inv }: { inv: AiEngineInventory }) {
               </div>
             ))}
           </div>
+          {/* the +N reveal is a HEIGHT animation (the rail's cap-and-expand
+              contract) -- the tail rides one Collapse over its own grid (a
+              0fr wrapper INSIDE the grid would leave an empty gap row) */}
+          <Collapse className={bangs.expanded && tail.length > 0 ? "mt-1" : ""} open={bangs.expanded}>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-1">
+              {tail.map((engine) => (
+                <div
+                  className={`${CELL} py-1.5`}
+                  key={engine.name}
+                  title={engine.cats.join(", ") + (engine.paid ? ` · ${t("ai_engine_info_paid")}` : "")}
+                >
+                  <div className="truncate text-xs text-ink-2">{engine.name}</div>
+                  <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5">
+                    <span className="shrink-0 font-mono text-xs text-ink-2">!{engine.bang}</span>
+                    {engine.cats.length > 0 ? (
+                      <span className="truncate text-xs text-ink-3">{engine.cats.join(", ")}</span>
+                    ) : null}
+                    {engine.paid ? (
+                      <CircleDollarSign
+                        aria-label={t("ai_engine_info_paid")}
+                        className="size-3 shrink-0 self-center text-accent"
+                        role="img"
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Collapse>
           <CapChip className={CAP_CHIP_CLASS} expanded={bangs.expanded} hidden={bangs.hidden} onToggle={bangs.toggle} />
         </>
       ) : null}

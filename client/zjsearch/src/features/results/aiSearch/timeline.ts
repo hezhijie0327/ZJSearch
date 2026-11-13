@@ -643,26 +643,29 @@ export type EntryIndex = { think?: number; intent?: number; calls?: number };
 export const LATE_KINDS = new Set(["related", "title", "memory", "tags", "usage", "outline", "section"]);
 
 /** Settle every still-pending call row (abort / stream cut / error settle):
-    no timeline row spins forever. */
+    no timeline row spins forever.  SUB ROWS join the sweep: a child
+    batch in flight when the run dies sits one level down (`inner`), and
+    an untouched child row would spin on a settled page forever. */
 export function interruptPending(runs: AiSearchRun[]): AiSearchRun[] {
-  return runs.map((item) => {
-    if (!item.steps.some((step) => step.kind === "calls" && step.calls.some((call) => call.status === "pending"))) {
-      return item;
-    }
-    return {
-      ...item,
-      steps: item.steps.map((step) =>
-        step.kind === "calls"
-          ? {
-              ...step,
-              calls: step.calls.map((call) =>
-                call.status === "pending" ? { ...call, status: "interrupted" as const } : call,
-              ),
-            }
+  const settleCalls = (calls: AiSearchCall[]): AiSearchCall[] =>
+    calls.map((call) => (call.status === "pending" ? { ...call, status: "interrupted" as const } : call));
+  const hasPending = (steps: AiSearchStep[]): boolean =>
+    steps.some((step) =>
+      step.kind === "calls"
+        ? step.calls.some((call) => call.status === "pending")
+        : step.kind === "sub"
+          ? hasPending(step.inner)
+          : false,
+    );
+  const settleSteps = (steps: AiSearchStep[]): AiSearchStep[] =>
+    steps.map((step) =>
+      step.kind === "calls"
+        ? { ...step, calls: settleCalls(step.calls) }
+        : step.kind === "sub"
+          ? { ...step, inner: settleSteps(step.inner) }
           : step,
-      ),
-    };
-  });
+    );
+  return runs.map((item) => (hasPending(item.steps) ? { ...item, steps: settleSteps(item.steps) } : item));
 }
 
 export function settle(core: Core, failed: { error: string } | null, stopped: boolean, now = Date.now()): Core {

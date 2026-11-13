@@ -6,6 +6,7 @@ import {
   ArrowUpRight,
   BookOpenText,
   Camera,
+  Check,
   ChevronDown,
   ChevronsUpDown,
   Copy,
@@ -21,6 +22,7 @@ import {
   type LucideIcon,
   MousePointerClick,
   MoveHorizontal,
+  Paperclip,
   Pointer,
   Smartphone,
 } from "lucide-react";
@@ -30,7 +32,7 @@ import { Collapse } from "@/components/Collapse.tsx";
 import { Lightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
-import { READ_PANE } from "@/lib/styles.ts";
+import { HOVER_CHIP, READ_PANE } from "@/lib/styles.ts";
 
 /** Compact label for a read row: host + trimmed path -- the url is
     what identifies the read (two pages on one site must look different);
@@ -80,6 +82,7 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   history: History,
   tab: Layers,
   multi: ListChecks,
+  upload: Paperclip,
   wait_user: Hourglass,
   close: LogOut,
 };
@@ -91,14 +94,37 @@ function actionOf(call: ToolRowProps["call"]): string {
 /** The location line: the page a settled action left the session on --
     title + host, the browser's own address row in miniature. */
 function LocationLine({ page }: { page: { url: string; title: string } }) {
-  return (
-    <div className="mt-1 flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs">
+  // the standalone open/snapshot row carries the page the model landed
+  // on as a REAL outbound link (the batch step's link row already did --
+  // the same action, the same affordance)
+  const outbound = /^https?:\/\//.test(page.url);
+  const body = (
+    <>
       <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
       <span className="min-w-0 flex-1 truncate font-medium text-ink-2" dir="auto">
         {page.title || pageLabel(page.url)}
       </span>
       <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(page.url)}</span>
-    </div>
+      {outbound ? <ArrowUpRight aria-hidden="true" className="size-3 shrink-0" /> : null}
+    </>
+  );
+  if (!outbound) {
+    return (
+      <div className="mt-1 flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <a
+      className="mt-1 flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs transition-colors hover:text-ink"
+      href={page.url}
+      rel="noreferrer"
+      target="_blank"
+      title={page.url}
+    >
+      {body}
+    </a>
   );
 }
 
@@ -158,7 +184,7 @@ function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tab
         >
           <span className="shrink-0 font-mono leading-none">[{tab.index}]</span>
           <span className="truncate">{tab.title || tab.url}</span>
-          {tab.active ? <span className="shrink-0 font-mono leading-none">✓</span> : null}
+          {tab.active ? <Check aria-hidden="true" className="size-3 shrink-0" /> : null}
         </span>
       ))}
       <span className="sr-only">{t("ai_browser_act_tab")}</span>
@@ -173,8 +199,20 @@ function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tab
     fold doctrine: the pane never sits open in the timeline).  Legacy
     replays without a structured summary render nothing here -- the
     feed-tail lines above stay their body. */
-function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[number]; t: ToolRowProps["t"] }) {
-  const [open, setOpen] = useState(false);
+function StepDetail({
+  d,
+  t,
+  autoOpen = false,
+}: {
+  d: NonNullable<ToolRowProps["call"]["steps"]>[number];
+  t: ToolRowProps["t"];
+  /** the batch's ONLY readable document opens its pane directly -- the
+      row chevron already IS the disclosure, the second toggle would be
+      a redundant depth (a multi-read batch keeps the per-step toggle:
+      choosing WHICH pane to open is real interaction) */
+  autoOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(autoOpen);
   const copyToast = useCopyToast();
   if (!d.url && !d.text) {
     return null;
@@ -226,7 +264,7 @@ function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[nu
               <div className="absolute end-2 top-2 flex gap-0.5">
                 <button
                   aria-label={t("copy")}
-                  className="grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
+                  className={HOVER_CHIP}
                   onClick={() => {
                     copyToast(d.text ?? "");
                   }}
@@ -238,7 +276,7 @@ function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[nu
                 {d.url ? (
                   <a
                     aria-label={t("open_source")}
-                    className="grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
+                    className={HOVER_CHIP}
                     href={d.url}
                     rel="noreferrer"
                     target="_blank"
@@ -282,6 +320,10 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
     const d = call.steps?.[i];
     return d !== undefined && d.status !== "error" && (Boolean(d.url) || Boolean(d.text));
   });
+  // the batch's ONLY readable document opens its pane directly (the row
+  // chevron already is the disclosure -- the standalone read's depth)
+  const textSteps = (call.steps ?? []).filter((s) => s.status !== "error" && s.text).length;
+  const autoOpenPane = textSteps === 1;
   if (!steps.length || (!lines.length && !structuredRenderable && call.status === "ok")) {
     return null;
   }
@@ -349,7 +391,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                   {tail}
                 </div>
               ) : structured ? (
-                <StepDetail d={d} t={t} />
+                <StepDetail autoOpen={autoOpenPane} d={d} t={t} />
               ) : dest ? (
                 <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
                   <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
@@ -479,6 +521,10 @@ export const browseView: ToolView = {
       }
       case "multi":
         return t("ai_browser_act_multi");
+      case "upload": {
+        const name = String(args?.download ?? "").trim();
+        return name ? `${t("ai_browser_act_upload")} ${name}` : t("ai_browser_act_upload");
+      }
       case "screenshot": {
         const ref = String(args?.ref ?? "").trim();
         return ref ? `${t("ai_browser_act_screenshot")} ${ref}` : t("ai_browser_act_screenshot");

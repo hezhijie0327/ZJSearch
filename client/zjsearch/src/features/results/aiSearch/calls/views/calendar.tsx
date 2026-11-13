@@ -45,13 +45,23 @@ function relationChip(payload: AiCalendarPayload, t: Translate): string {
 
 /** One labeled chip row of the almanac block (the label key localized,
     the terms verbatim). */
-function AlmanacRow({ label, terms, tone }: { label: string; terms: string[]; tone: "ok" | "danger" | "muted" }) {
+function AlmanacRow({
+  label,
+  terms,
+  tone,
+  labelClassName,
+}: {
+  label: string;
+  terms: string[];
+  tone: "ok" | "danger" | "muted";
+  labelClassName?: string;
+}) {
   if (!terms.length) {
     return null;
   }
   return (
     <div className="mt-1 flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1 text-xs">
-      <span className="mt-px w-8 shrink-0 text-ink-3">{label}</span>
+      <span className={`mt-px w-8 shrink-0 ${labelClassName ?? "text-ink-3"}`}>{label}</span>
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
         {terms.map((term) => (
           <span
@@ -79,20 +89,31 @@ function AlmanacRow({ label, terms, tone }: { label: string; terms: string[]; to
     the lunar line); empty fields simply drop out. */
 function AlmanacBlock({ lunar, t }: { lunar: AiCalendarLunar; t: ToolRowProps["t"] }) {
   const a = lunar.almanac;
+  const suitedTerms = a.suited;
   const officerBits = [a.officer, a.duty_god, a.ecliptic].filter(Boolean);
   const facts = [a.mansions, a.nayin, a.east_star].filter(Boolean);
+  // an almanac the sanitizer degraded to all-empty fields (a payload
+  // without the traditional block) renders NOTHING here -- a bare
+  // separator with a hanging 宜 label read as a broken card
+  const pengzuTerms = a.pengzu
+    .split(/[,，]/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+  if (
+    !suitedTerms.length &&
+    !a.avoided.length &&
+    !officerBits.length &&
+    !facts.length &&
+    !a.gods.length &&
+    !a.avoid_gods.length &&
+    !a.directions.length &&
+    !pengzuTerms.length
+  ) {
+    return null;
+  }
   return (
     <div className="mt-2 border-t border-line pt-2">
-      <div className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-1 text-xs">
-        <span className="mt-px w-8 shrink-0 font-medium text-ok">{t("ai_calendar_yi")}</span>
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-          {a.suited.map((term) => (
-            <span className="rounded bg-ok/10 px-1.5 py-0.5 text-xs leading-4 text-ok" key={term}>
-              {term}
-            </span>
-          ))}
-        </span>
-      </div>
+      <AlmanacRow label={t("ai_calendar_yi")} labelClassName="font-medium text-ok" terms={suitedTerms} tone="ok" />
       <AlmanacRow label={t("ai_calendar_ji")} terms={a.avoided} tone="danger" />
       {officerBits.length ? (
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
@@ -118,10 +139,7 @@ function AlmanacBlock({ lunar, t }: { lunar: AiCalendarLunar; t: ToolRowProps["t
         label={t("ai_calendar_pengzu")}
         // Pengzu's taboos arrive as comma-joined clauses -- one chip per
         // clause reads as the same labeled row the other fields speak
-        terms={a.pengzu
-          .split(/[,，]/)
-          .map((clause) => clause.trim())
-          .filter(Boolean)}
+        terms={pengzuTerms}
         tone="muted"
       />
     </div>

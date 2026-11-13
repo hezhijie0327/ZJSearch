@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { BookMarked } from "lucide-react";
+import { ArrowUpRight, BookMarked } from "lucide-react";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 
 /** host of a match url (the identity row's right slot; a malformed url
@@ -39,18 +39,40 @@ export const recallHistoryView: ToolView = {
           const cut = line.lastIndexOf(" -- ");
           const title = cut > 0 ? line.slice(0, cut) : line;
           const url = cut > 0 ? line.slice(cut + 4) : "";
-          return (
-            <div
-              className="flex min-w-0 items-center gap-1.5 rounded-md bg-surface-2/50 px-1.5 py-1 text-xs"
-              key={`${i}-${line.slice(0, 24)}`}
-            >
+          // a real outbound row when the line carries its url -- the
+          // source card's vocabulary means the past page OPENS (a dead
+          // identity row hid the very thing the recall dug up)
+          const body = (
+            <>
               <BookMarked aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
               <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
                 {title}
               </span>
               {url ? (
-                <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{hostOf(url)}</span>
+                <>
+                  <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">
+                    {hostOf(url)}
+                  </span>
+                  <ArrowUpRight aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
+                </>
               ) : null}
+            </>
+          );
+          const rowClass =
+            "flex min-w-0 items-center gap-1.5 rounded-md bg-surface-2/50 px-1.5 py-1 text-xs transition-colors";
+          return url ? (
+            <a
+              className={`${rowClass} hover:text-ink`}
+              href={url}
+              key={`${i}-${line.slice(0, 24)}`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {body}
+            </a>
+          ) : (
+            <div className={rowClass} key={`${i}-${line.slice(0, 24)}`}>
+              {body}
             </div>
           );
         })}

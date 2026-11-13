@@ -10,7 +10,7 @@ import { fetchJson } from "@/lib/http.ts";
 export type BrowserInputPayload =
   | { type: "click"; x: number; y: number }
   | { type: "drag"; x1: number; y1: number; x2: number; y2: number }
-  | { type: "wheel"; deltaY: number }
+  | { type: "wheel"; deltaX: number; deltaY: number }
   | { type: "type"; text: string }
   | { type: "key"; key: string }
   | { type: "back" }

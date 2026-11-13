@@ -12,8 +12,25 @@ import { AnswerValue } from "@/features/results/aiSearch/DecisionsCard.tsx";
 export const evaluateView: ToolView = {
   Icon: Scale,
   label: ({ call, t }) => call.q || t("ai_decision_row"),
-  metric: ({ call, t }) =>
-    call.status === "pending" ? t("ai_decision_running") : call.status === "ok" ? (call.result ?? null) : null,
+  metric: ({ call, t }) => {
+    if (call.status === "pending") {
+      return t("ai_decision_running");
+    }
+    if (call.status !== "ok") {
+      return null;
+    }
+    // the metric carries the VERDICT VALUE only -- the wire's protocol
+    // prefix ("choice: X (p=0.72)") is machine vocabulary; the expansion
+    // below renders the full answer map
+    const first = call.answers ? Object.values(call.answers)[0] : undefined;
+    if (first && typeof first === "object") {
+      const v = first as { choice?: unknown };
+      if (typeof v.choice === "string" && v.choice) {
+        return v.choice;
+      }
+    }
+    return call.result ?? null;
+  },
   Content: ({ call }) => {
     const questions = (Array.isArray(call.args?.questions) ? call.args.questions : []) as Array<{
       name?: unknown;

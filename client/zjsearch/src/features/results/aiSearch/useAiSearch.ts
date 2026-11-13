@@ -253,6 +253,14 @@ const KICK_DELAY_MS = 1_500;
     proves the network is up, so a silent stream is a dead stream. */
 const BEAT_FRESH_MS = 100_000;
 
+const WAIT_WINDOW_CAP_MS = 600_000;
+/** The wait_user stand-down's ceiling (B-2): frames are the heartbeats
+    inside an interactive window, but a HALF-OPEN socket during it can
+    never deliver the retiring frame -- the stand-down would last
+    forever.  The takeover's own wait clock is bounded server-side (the
+    window ends at the frame budget), so ten minutes covers any legal
+    window with margin; past it the reattach ladder proves the run. */
+
 /** The CONTINUE replay payload: the dead attempt's ctx checkpoints (its
     exact conversation), its [n] sources (the server's registry reseeds so
     repeat urls reuse their numbers), the entry/round bases (the resumed
@@ -312,6 +320,17 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   const beatOkAtRef = useRef(0);
   const waitWindowRef = useRef(false);
   const settledRef = useRef(false);
+  // B-3: a continue-path stop that raced a dead network -- the resumed
+  // run's header time re-sends it once (the network that delivered the
+  // headers evidently works)
+  const pendingStopRef = useRef<string | null>(null);
+  // the in-flight POST has not returned its headers yet -- the watchdog
+  // stands down (the PRE-STREAM gate phase can legitimately sit ~280s
+  // silent: clarify/outline gates + the depth probe each carry their own
+  // server-side bound, and the server's own prime deadline is 300s --
+  // aborting pre-header would kill a healthy run BEFORE its run key
+  // reached the client, leaving no reattach path at all)
+  const awaitingHeadersRef = useRef(false);
   const heartbeatRef = useRef<RunKeepalive | null>(null);
 
   useEffect(() => {
@@ -554,9 +573,17 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       const controller = new AbortController();
       current = controller;
       lastEventAtRef.current = Date.now();
+      awaitingHeadersRef.current = true;
       const onAbort = () => controller.abort();
       outer?.signal.addEventListener("abort", onAbort);
-      return fetchEventStream(url, body, apply, controller.signal, onResponse).finally(() => {
+      // the idle clock re-arms at HEADER time: everything before it is
+      // the server's gate phase, not a dead stream
+      return fetchEventStream(url, body, apply, controller.signal, (response) => {
+        awaitingHeadersRef.current = false;
+        lastEventAtRef.current = Date.now();
+        onResponse?.(response);
+      }).finally(() => {
+        awaitingHeadersRef.current = false;
         outer?.signal.removeEventListener("abort", onAbort);
         if (current === controller) {
           current = null;
@@ -601,14 +628,22 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
       if (settledRef.current || !current || outer?.signal.aborted) {
         return;
       }
+      if (awaitingHeadersRef.current) {
+        return;
+      }
       const idle = Date.now() - lastEventAtRef.current;
       // a fresh successful beat proves the network is up (every beat
       // opens a NEW connection) -- a silent stream then is a dead
       // stream; without the beat verdict only the long fallback
       // ceiling applies
       const beatsFresh = beatOkAtRef.current > 0 && Date.now() - beatOkAtRef.current < BEAT_FRESH_MS;
+      // a wait_user window stands the watchdog down (frames ARE the
+      // heartbeats) -- but a HALF-OPEN socket during the window would
+      // otherwise stand down FOREVER (no retiring frame can arrive), so
+      // the stand-down carries a ceiling: past it the reattach ladder
+      // takes over and proves the run one way or the other
       const threshold = waitWindowRef.current
-        ? Number.POSITIVE_INFINITY
+        ? WAIT_WINDOW_CAP_MS
         : beatsFresh
           ? STREAM_IDLE_MS
           : STREAM_IDLE_FALLBACK_MS;
@@ -856,6 +891,17 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
             // the reload recovery's probe address (the journal fetch and
             // the live-host attach both key on it) -- out-of-log metadata
             saveRunHost(`${threadId}:${runNo}`, threadId, runKeyRef.current).catch(() => {});
+          }
+          // B-3: the continue path's pre-POST stop raced a dead network?
+          // these headers prove the network is back -- re-send once
+          if (pendingStopRef.current && capability) {
+            const stale = pendingStopRef.current;
+            pendingStopRef.current = null;
+            void fetchJson("/zjsearch/ask/run/control", {
+              body: JSON.stringify({ tk: capability.tk, run_key: stale, action: "stop" }),
+              headers: { "Content-Type": "application/json" },
+              method: "POST",
+            }).catch(() => {});
           }
         });
         if (signal.aborted) {
@@ -1148,7 +1194,10 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
         if (!handleGone) {
           // the probe failed on the network (or its ladder ran out): the
           // handle may still be alive -- stop it BEFORE the resumed run
-          // starts (two researchers on one question is pure waste)
+          // starts (two researchers on one question is pure waste).  The
+          // stop itself rides the same dead network: the RESUMED run's
+          // header time re-sends it once (pendingStopRef).
+          pendingStopRef.current = staleKey;
           void fetchJson("/zjsearch/ask/run/control", {
             body: JSON.stringify({ tk: capability.tk, run_key: staleKey, action: "stop" }),
             headers: { "Content-Type": "application/json" },
@@ -1399,23 +1448,33 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     threadIdRef.current = threadId;
     let seeded = false;
     let runKey = "";
-    const apply = makeApply(threadId, 1, new Map());
+    // the replayed run's TRUE ordinal rides the meta line (the journal's
+    // thread index returns the thread's LATEST run -- hardcoding 1
+    // presented a replayed run 3 of 3 as run 1); pre-meta replays keep
+    // the fallback
+    let runNo = 1;
+    let apply = makeApply(threadId, runNo, new Map());
     const wrapped = (raw: Record<string, unknown>) => {
       if (!seeded && raw.journal) {
-        const meta = raw.journal as { run_key?: unknown; q?: unknown; mode?: unknown };
+        const meta = raw.journal as { run_key?: unknown; q?: unknown; mode?: unknown; run_no?: unknown };
         runKey = String(meta.run_key ?? "");
         const q = String(meta.q ?? "");
         const mode = parseDepthMode(meta.mode == null ? null : String(meta.mode));
+        const metaRunNo = Number(meta.run_no);
+        if (Number.isInteger(metaRunNo) && metaRunNo > 0) {
+          runNo = metaRunNo;
+        }
+        apply = makeApply(threadId, runNo, new Map());
         runKeyRef.current = runKey;
-        seqWatermarkRef.current.set(`${threadId}:1`, 0);
+        seqWatermarkRef.current.set(`${threadId}:${runNo}`, 0);
         entryIndexRef.current = new Map();
         settledRef.current = false;
-        void saveRunHost(`${threadId}:1`, threadId, runKey).catch(() => {});
-        appendRunEvents(`${threadId}:1`, [{ e: "client.start", q, runNo: 1, mode, startedAt: Date.now() }]);
+        void saveRunHost(`${threadId}:${runNo}`, threadId, runKey).catch(() => {});
+        appendRunEvents(`${threadId}:${runNo}`, [{ e: "client.start", q, runNo, mode, startedAt: Date.now() }]);
         setCore((prev) => {
           const next = applyEvent(
             { ...prev, threadId },
-            { e: "client.start", q, runNo: 1, mode, startedAt: Date.now() },
+            { e: "client.start", q, runNo, mode, startedAt: Date.now() },
             LIVE_FX,
           );
           return { ...next, phase: "streaming", threadId };

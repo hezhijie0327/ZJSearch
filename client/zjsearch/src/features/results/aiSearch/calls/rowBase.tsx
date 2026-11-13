@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ArrowUpRight, Bug, Check, ChevronDown, CircleAlert, Copy, Globe, LoaderCircle, Minus } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bug,
+  Check,
+  ChevronDown,
+  CircleAlert,
+  Copy,
+  Globe,
+  Hourglass,
+  LoaderCircle,
+  Minus,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import type { AiSearchCall, AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
@@ -22,13 +33,17 @@ export function rawArgsOf(call: AiSearchCall): string | null {
 }
 
 /** The row-leading status mark: the pending spinner, the settled check,
-    the interrupted/duplicate minus, the error alert. */
+    the interrupted/duplicate minus, the held-for-approval hourglass (the
+    paid gate's parked state is a row the user must ACT on -- it does not
+    read as a skipped row), the error alert. */
 export function CallStatusIcon({ call }: { call: AiSearchCall }) {
   return call.status === "pending" ? (
     <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin" />
   ) : call.status === "ok" ? (
     <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
-  ) : call.status === "interrupted" || call.status === "duplicate" || call.status === "approval" ? (
+  ) : call.status === "approval" ? (
+    <Hourglass aria-hidden="true" className="size-3 shrink-0" />
+  ) : call.status === "interrupted" || call.status === "duplicate" ? (
     <Minus aria-hidden="true" className="size-3 shrink-0" />
   ) : (
     <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
@@ -80,7 +95,7 @@ export function CallRowShell({
   const t = useT();
   return (
     <div
-      className={`flex min-h-6 w-full items-center gap-1 px-1 text-xs ${
+      className={`flex min-h-6 w-full animate-fade-in items-center gap-1 px-1 text-xs ${
         call.status === "error" ? "text-danger" : "text-ink-3"
       }`}
     >
@@ -114,7 +129,11 @@ export function CallRowShell({
                   ·
                 </span>
               ) : null}
-              <span className="opacity-60">{formatMs(call.ms)}</span>
+              {/* the parent cluster already paints ink-3 (AA-audited on
+                  every surface) -- a 60% opacity cut on top dropped the
+                  12px timing to ~3.4:1 in dark mode and failed the
+                  contrast gate; the token stays whole */}
+              <span>{formatMs(call.ms)}</span>
             </>
           ) : null}
         </span>

@@ -333,7 +333,20 @@ function BrowserLightbox({
         return;
       }
       wheelLock.current = now;
-      sendRef.current({ type: "wheel", deltaY: event.deltaY > 0 ? 600 : -600 });
+      // the gesture's own axis rides: a pure horizontal wheel (shift+wheel,
+      // sideways trackpad swipe, carousels) maps to deltaX -- mapping it
+      // to a vertical -600 scrolled the page the wrong way
+      if (event.deltaY === 0) {
+        if (event.deltaX !== 0) {
+          sendRef.current({ type: "wheel", deltaX: event.deltaX > 0 ? 600 : -600, deltaY: 0 });
+        }
+        return;
+      }
+      sendRef.current({
+        type: "wheel",
+        deltaX: 0,
+        deltaY: event.deltaY > 0 ? 600 : -600,
+      });
     };
     stage.addEventListener("wheel", onWheel, { passive: false });
     return () => stage.removeEventListener("wheel", onWheel);
@@ -830,7 +843,7 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
       </div>
       {waiting
         ? createPortal(
-            <div className="fixed inset-x-4 bottom-4 z-40 flex justify-center lg:hidden">
+            <div className="fixed inset-x-4 bottom-4 z-40 flex animate-fade-up justify-center lg:hidden">
               <button
                 className="flex w-full max-w-md items-center gap-2.5 rounded-2xl border border-accent-strong/40 bg-surface px-4 py-3 text-start shadow-card transition-colors hover:border-accent"
                 onClick={() => setFull(true)}
