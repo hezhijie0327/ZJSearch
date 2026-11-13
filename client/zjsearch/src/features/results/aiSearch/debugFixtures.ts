@@ -553,6 +553,20 @@ const FULL_STAGE: DebugScenario = {
           },
         },
         {
+          id: 16,
+          tool: "clock",
+          q: "",
+          status: "pending",
+          args: {},
+        },
+        {
+          id: 17,
+          tool: "clock",
+          q: "11-13",
+          status: "pending",
+          args: { date: "11-13" },
+        },
+        {
           id: 12,
           tool: "ask_user",
           q: "",
@@ -627,6 +641,9 @@ const FULL_STAGE: DebugScenario = {
           label: "[tab 2] Siemens WinCC | Siemens",
           url: "https://www.siemens.com/wincc",
           chars: 4820,
+          // the WIRE-ONLY per-step document (title + body) -- the step row
+          // opens the same reading pane a standalone read does
+          text: "Siemens WinCC\n\nWinCC 是西门子的过程可视化与数据采集系统（SCADA）。本页面向集成开发者，覆盖 WinCC Runtime 的开放接口：ODK（Open Development Kit）、OLE-DB/UDA 数据访问与 REST 方向的 Unified Comfort HMI 读写通道。\n\n典型集成路径：上位 MES 通过 OLE-DB 读取报警与归档变量；脚本侧用 VBS/ApLua 触发画面切换与变量写入；跨网段部署时经 Industrial Edge 边右网关转发。",
         },
         {
           action: "read",
@@ -634,8 +651,52 @@ const FULL_STAGE: DebugScenario = {
           label: "[tab 3] WinCC API 参考",
           url: "https://docs.example.com/wincc-api",
           chars: 3105,
+          text: "WinCC API 参考\n\n## 认证\n\n所有写操作要求 Bearer token（本地会话通过 /tokens 签发，有效期 3600s）。\n\n## 变量读取\n\nGET /api/v2/tags?filter=area%3Dline1 返回分页变量表；时间序列走 /api/v2/tags/{id}/archive?from=…&to=…，粒度最小 1s。\n\n## 报警应答\n\nPOST /api/v2/alarms/{id}/ack 需要携带操作员身份；批量应答上限 100 条/次。",
         },
       ],
+    },
+    {
+      e: "call",
+      id: 2,
+      call: 16,
+      status: "ok",
+      ms: 2,
+      // the composite clock's NOW shape: the instant fields (the weekday
+      // stays the fixed English name -- the answer language directive
+      // localizes the prose around it)
+      clock: {
+        mode: "now",
+        timezone: "Asia/Shanghai",
+        today: "2026-11-13",
+        weekday: "Friday",
+        utc_offset: "UTC+08:00",
+        time: "14:32:05",
+        datetime: "2026-11-13T14:32:05+08:00",
+        utc: "2026-11-13T06:32:05+00:00",
+        unix: 1763008325,
+      },
+      feed: '{"clock": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"now","time":"14:32:05","datetime":"2026-11-13T14:32:05+08:00","utc":"2026-11-13T06:32:05+00:00","unix":1763008325}}',
+    },
+    {
+      e: "call",
+      id: 2,
+      call: 17,
+      status: "ok",
+      ms: 2,
+      // the DATE shape ("11/13 是周几" -> 11-13): the loose MM-DD form
+      // resolves in the current year; relation "today" is the truth tell
+      clock: {
+        mode: "date",
+        timezone: "Asia/Shanghai",
+        today: "2026-11-13",
+        weekday: "Friday",
+        utc_offset: "UTC+08:00",
+        target: "2026-11-13",
+        iso_week: 46,
+        days_from_today: 0,
+        relation: "today",
+      },
+      feed: '{"clock": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"date","target":"2026-11-13","iso_week":46,"days_from_today":0,"relation":"today"}}',
     },
     {
       e: "call",

@@ -494,7 +494,13 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
             summary["url"] = str(result.page["url"])[:200]
             summary["title"] = str(result.page.get("title") or "")[:120]
         if summary["action"] == "read":
+            # the WIRE-ONLY document text (title + body, the standalone
+            # read settlement's archive shape) -- the timeline's step row
+            # opens the same reading pane a standalone read does; the
+            # model's feed carries the text inline regardless
             summary["chars"] = len(str(result.feed))
+            if not first.startswith("error:"):
+                summary["text"] = str(result.feed)
         step_rows.append(summary)
         if str(step.get("action") or "") == "read" and not first.startswith("error:"):
             feeds.append(f"{i}. read: {str(result.feed)}")

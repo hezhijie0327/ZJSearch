@@ -122,7 +122,11 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
                 'This request needs NO web research -- it is a greeting, a chat or a writing task.  Answer directly and naturally in prose; ignore every source and citation rule (no [n] marks, no [*]); do not invent sources.',
             ),
             shared.identity(),
-            shared.today_line(tz),
+            # the ZERO-TOOL lane's clock: this lane has no clock tool, so
+            # the current moment bakes into the prompt at write time (the
+            # researched tiers keep <today> date-only -- their clock is
+            # the clock tool's call-time answer)
+            shared.now_line(tz),
             shared.language_directive(lang),
             shared.markdown_surface(),
             shared.reader_voice(),

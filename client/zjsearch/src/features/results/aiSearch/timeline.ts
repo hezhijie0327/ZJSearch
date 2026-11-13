@@ -78,6 +78,29 @@ export interface AiEngineInventory {
   disabled: Array<{ name: string; bang: string; cats: string[]; paid?: boolean }>;
 }
 
+/** clock rows: the composite time/date payload (the settlement's
+    structured answer) -- `mode` discriminates the two shapes: `now`
+    carries the instant fields, `date` the calendar lookup's.  The
+    weekday is the fixed English name from the server; the row renders
+    it localized off the ISO date. */
+export interface AiClockPayload {
+  mode: "now" | "date";
+  timezone: string | null;
+  today: string;
+  weekday: string;
+  utc_offset: string | null;
+  /** now mode */
+  time?: string;
+  datetime?: string;
+  utc?: string | null;
+  unix?: number | null;
+  /** date mode */
+  target?: string;
+  iso_week?: number;
+  days_from_today?: number;
+  relation?: "past" | "today" | "future";
+}
+
 export interface AiSearchCall {
   /** 1-based position of the call within its round */
   id: number;
@@ -85,6 +108,7 @@ export interface AiSearchCall {
   tool:
     | "search_web"
     | "calculate"
+    | "clock"
     | "mcp"
     | "memory"
     | "recall_history"
@@ -131,7 +155,9 @@ export interface AiSearchCall {
   tabs?: Array<{ index: number; url: string; title: string; active: boolean }>;
   /** browse multi rows: the batch's per-step summaries (action / status /
       label / url / chars) -- the expansion renders each step's DETAIL,
-      not the feed's bare first lines */
+      not the feed's bare first lines.  A read step carries `text` (the
+      clean title+body document): its step row opens the same reading
+      pane a standalone read does. */
   steps?: Array<{
     action: string;
     status: string;
@@ -139,7 +165,12 @@ export interface AiSearchCall {
     url?: string;
     title?: string;
     chars?: number;
+    text?: string;
   }>;
+  /** clock: the composite time/date payload -- the row's expansion
+      renders the instant (time / weekday / zone / UTC / unix) or the
+      calendar lookup (target / weekday / ISO week / relation) */
+  clock?: AiClockPayload;
   /** calculate: the exact evaluated result (the row shows expr = result) */
   result?: string;
   /** evaluate: the STRUCTURED verdict (question name -> choice/score/noul
@@ -1091,9 +1122,11 @@ export function applyEvent(
                       url: s.url ? String(s.url) : undefined,
                       title: s.title ? String(s.title) : undefined,
                       chars: typeof s.chars === "number" ? s.chars : undefined,
+                      text: typeof s.text === "string" && s.text ? s.text : undefined,
                     })),
                   }
                 : {}),
+              ...(event.clock !== undefined && event.clock !== null ? { clock: normalizeClock(event.clock) } : {}),
             }
           : call;
       // a page read's extracted text persists as a document row (the
@@ -1103,6 +1136,21 @@ export function applyEvent(
         if (text) {
           const url = String(event.url ?? "");
           fx.archive(url, run.sources.find((source) => source.url === url)?.title ?? "", text);
+        }
+        // a multi batch's read steps carry their OWN document (the
+        // wire-only per-step text): the same url-identity archive a
+        // standalone read joins -- the recall pages from the batch's
+        // reads exactly like it pages from a single read
+        for (const step of Array.isArray(event.steps) ? (event.steps as Array<Record<string, unknown>>) : []) {
+          const stepText = typeof step.text === "string" ? step.text : "";
+          const stepUrl = String(step.url ?? "");
+          if (stepText && stepUrl.startsWith("http")) {
+            fx.archive(
+              stepUrl,
+              run.sources.find((source) => source.url === stepUrl)?.title ?? String(step.title ?? ""),
+              stepText,
+            );
+          }
         }
       };
       if (inSub) {
@@ -1538,6 +1586,7 @@ export function applyEvent(
 const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "search_web",
   "calculate",
+  "clock",
   "mcp",
   "memory",
   "recall_history",
@@ -1553,6 +1602,30 @@ const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "message_subtask",
   "set_deliverable",
 ]);
+
+/** One settled clock payload, sanitized: the mode resolves to its two
+    legal values, the strings survive only as strings, the numerics only
+    as numbers (a legacy/garbage field degrades to undefined, never a
+    runtime surprise in the row). */
+function normalizeClock(value: unknown): AiClockPayload {
+  const c = (value ?? {}) as Record<string, unknown>;
+  return {
+    mode: c.mode === "date" ? "date" : "now",
+    timezone: typeof c.timezone === "string" && c.timezone ? c.timezone : null,
+    today: String(c.today ?? ""),
+    weekday: String(c.weekday ?? ""),
+    utc_offset: typeof c.utc_offset === "string" && c.utc_offset ? c.utc_offset : null,
+    time: typeof c.time === "string" ? c.time : undefined,
+    datetime: typeof c.datetime === "string" ? c.datetime : undefined,
+    utc: typeof c.utc === "string" ? c.utc : null,
+    unix: typeof c.unix === "number" ? c.unix : null,
+    target: typeof c.target === "string" ? c.target : undefined,
+    iso_week: typeof c.iso_week === "number" ? c.iso_week : undefined,
+    days_from_today: typeof c.days_from_today === "number" ? c.days_from_today : undefined,
+    relation:
+      c.relation === "past" || c.relation === "future" ? c.relation : c.today === c.target ? "today" : undefined,
+  };
+}
 
 function normalizeCall(item: Record<string, unknown>): AiSearchCall {
   const tool = String(item.tool ?? "");

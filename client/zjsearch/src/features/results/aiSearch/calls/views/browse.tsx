@@ -3,9 +3,12 @@
 import {
   AppWindow,
   ArrowUpDown,
+  ArrowUpRight,
   BookOpenText,
   Camera,
+  ChevronDown,
   ChevronsUpDown,
+  Copy,
   CornerDownRight,
   Globe,
   History,
@@ -23,8 +26,10 @@ import {
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
+import { Collapse } from "@/components/Collapse.tsx";
 import { Lightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
+import { useCopyToast } from "@/lib/clipboard.ts";
 import { READ_PANE } from "@/lib/styles.ts";
 
 /** Compact label for a read row: host + trimmed path -- the url is
@@ -161,12 +166,101 @@ function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tab
   );
 }
 
+/** One multi step's DETAIL, rendered like its standalone row's body --
+    the equal-treatment rule: a real outbound link for the page the step
+    landed on (the location line's vocabulary at step scale), and a read
+    step's document as a click-open reading pane (the standalone read's
+    fold doctrine: the pane never sits open in the timeline).  Legacy
+    replays without a structured summary render nothing here -- the
+    feed-tail lines above stay their body. */
+function StepDetail({ d, t }: { d: NonNullable<ToolRowProps["call"]["steps"]>[number]; t: ToolRowProps["t"] }) {
+  const [open, setOpen] = useState(false);
+  const copyToast = useCopyToast();
+  if (!d.url && !d.text) {
+    return null;
+  }
+  return (
+    <div className="mt-0.5 min-w-0 ps-[18px]">
+      {d.url ? (
+        <a
+          className="flex min-w-0 items-center gap-1.5 rounded-lg bg-surface-2/50 px-2 py-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
+          dir="auto"
+          href={d.url}
+          rel="noreferrer"
+          target="_blank"
+          title={d.url}
+        >
+          <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
+          <span className="min-w-0 flex-1 truncate font-medium">{d.title || pageLabel(d.url)}</span>
+          <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(d.url)}</span>
+          <ArrowUpRight aria-hidden="true" className="size-3 shrink-0" />
+        </a>
+      ) : null}
+      {d.text ? (
+        <>
+          <button
+            aria-expanded={open}
+            className="mt-0.5 flex min-w-0 items-center gap-1 rounded-lg px-1 py-1 text-xs text-ink-3 transition-colors hover:text-ink"
+            onClick={() => {
+              setOpen(!open);
+            }}
+            type="button"
+          >
+            <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
+            <span className="min-w-0 flex-1 truncate text-start">
+              {t("ai_page_chars", { n: String(d.chars ?? 0) })}
+            </span>
+            <ChevronDown
+              aria-hidden="true"
+              className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+          <Collapse className={open ? "mt-1" : ""} open={open}>
+            <div className="group relative">
+              <div className={`relative ${READ_PANE} max-h-56 overflow-y-auto overscroll-contain`} dir="auto">
+                {d.text}
+              </div>
+              <div className="absolute end-2 top-2 flex gap-0.5">
+                <button
+                  aria-label={t("copy")}
+                  className="grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
+                  onClick={() => {
+                    copyToast(d.text ?? "");
+                  }}
+                  title={t("copy")}
+                  type="button"
+                >
+                  <Copy aria-hidden="true" className="size-3.5" />
+                </button>
+                {d.url ? (
+                  <a
+                    aria-label={t("open_source")}
+                    className="grid size-7 place-items-center rounded-lg bg-surface/80 text-ink-3 backdrop-blur transition-colors hover:text-ink"
+                    href={d.url}
+                    rel="noreferrer"
+                    target="_blank"
+                    title={t("open_source")}
+                  >
+                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </Collapse>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /** The multi action's rendered result: one row per STEP -- the step's own
     icon + localized verb (the label() vocabulary, driven off the step's
     action args) + the settled tail (the observation, urls decoded for
     display), failed steps in danger red.  The service composes the feed
     lines the tails read from; the batch's shape (which steps ran, which
-    failed, where it stopped) is the args/steps x feed pairing. */
+    failed, where it stopped) is the args/steps x feed pairing.  A step
+    with a structured summary renders its DETAIL through StepDetail -- the
+    link + reading pane treatment its standalone row gets. */
 function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["t"] }) {
   const readable = (line: string) =>
     line.replace(/https?:\/\/[^\s)]+/g, (url) => {
@@ -187,6 +281,9 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
       {steps.map((step, i) => {
         const action = String(step.action ?? "");
         const Icon = ACTION_ICONS[action] ?? AppWindow;
+        // the structured summary (when the settlement carries one) drives
+        // the detail below; the feed line stays the observation source
+        const d = call.steps?.[i];
         const line = readable(lines[i] ?? "");
         const cut = line.indexOf(". ");
         let tail = cut > 0 ? line.slice(cut + 2) : line;
@@ -198,6 +295,12 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         // the service's tail leads with the ENGLISH action name ("scroll:")
         // -- the localized verb is rendered on the step's own line
         tail = tail.replace(/^[a-z_]+: /, "");
+        // a read step's feed line carries the WHOLE document -- the head
+        // is all the verb line needs (the full text lives in StepDetail's
+        // reading pane; the raw megabyte never joins the DOM twice)
+        if (d?.text && tail.length > 200) {
+          tail = `${tail.slice(0, 200).trimEnd()}…`;
+        }
         const failed = tail.includes("error:");
         const verb = browseView.label({
           call: { args: step, tool: "browse", id: 0, q: "", category: "", status: "ok" } as ToolRowProps["call"],
@@ -231,7 +334,10 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                   </span>
                 ) : null}
               </div>
-              {dest ? (
+              {dest && !d?.url ? (
+                // the feed's observation line -- suppressed when the
+                // structured link row below carries the same page (the
+                // link is the destination, clickable)
                 <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
                   <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
                   <span className="min-w-0 flex-1 truncate" dir="auto">
@@ -243,20 +349,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                   {tail}
                 </div>
               ) : null}
-              {(() => {
-                const d = call.steps?.[i];
-                if (!d || (!d.url && !d.chars)) {
-                  return null;
-                }
-                return (
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
-                    <span className="min-w-0 flex-1 truncate" dir="auto">
-                      {d.url ? readable(d.url) : ""}
-                      {d.chars ? `${d.url ? " · " : ""}${d.chars} chars` : ""}
-                    </span>
-                  </div>
-                );
-              })()}
+              {d && d.status !== "error" ? <StepDetail d={d} t={t} /> : null}
             </div>
           </li>
         );

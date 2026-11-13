@@ -3,10 +3,11 @@
 import { MapPin } from "lucide-react";
 import { CapChip } from "@/components/CapChip.tsx";
 import { cap } from "@/lib/format.ts";
-import { type StringKey, translateFor, useLocale, useT } from "@/lib/i18n.ts";
+import { type StringKey, type Translate, translateFor, useLocale, useT } from "@/lib/i18n.ts";
 import { CHIP, CHIP_HOVER, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import type { AnswerData, WeatherItem } from "@/lib/types.ts";
 import { useCapExpand } from "@/lib/useCapExpand.ts";
+import { weekdayKey } from "@/lib/weekdays.ts";
 
 const MAX_SOURCES_SHOWN = 3;
 
@@ -34,21 +35,17 @@ function formatSlotTime(item: WeatherItem): string {
   return item.datetime_iso.slice(11, 16);
 }
 
-function formatWeekday(item: WeatherItem, locale: string): string {
+function formatWeekday(item: WeatherItem, t: Translate): string {
+  /** The daily strip's weekday rides the shared catalog table
+      (lib/weekdays.ts, the same doctrine as conditionLabel): the theme
+      owns the language, not Intl.  A malformed date falls back to the
+      ISO form. */
   const fallback = item.date_iso ?? "";
   if (!item.datetime_iso) {
     return fallback;
   }
-  const [y = NaN, m = NaN, d = NaN] = item.datetime_iso.slice(0, 10).split("-").map(Number);
-  if (![y, m, d].every(Number.isFinite)) {
-    return fallback;
-  }
-  const formatter = new Intl.DateTimeFormat(locale === "zh-CN" ? "zh-CN" : "en-US", { weekday: "short" });
-  try {
-    return formatter.format(new Date(y, m - 1, d));
-  } catch {
-    return fallback;
-  }
+  const key = weekdayKey(item.datetime_iso);
+  return (key ? t(key) : "") || fallback;
 }
 
 /** SVG temperature trend over the next hourly slots (accent area line with
@@ -105,7 +102,7 @@ function WeatherTrend({ forecasts }: { forecasts: WeatherItem[] }) {
 /** Daily strip grouped from the hourly slots: weekday, mid-day symbol and
     the day's high/low temperature (Google weather style). */
 function WeatherDaily({ forecasts }: { forecasts: WeatherItem[] }) {
-  const locale = useLocale();
+  const t = useT();
   const days: Array<{
     date: string;
     weekday: string;
@@ -123,7 +120,7 @@ function WeatherDaily({ forecasts }: { forecasts: WeatherItem[] }) {
     if (!day) {
       day = {
         date: f.date_iso,
-        weekday: formatWeekday(f, locale),
+        weekday: formatWeekday(f, t),
         symbol: f.symbol,
         hi: f.temp_c,
         lo: f.temp_c,

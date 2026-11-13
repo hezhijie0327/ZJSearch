@@ -57,6 +57,11 @@ from searx.zjsearch.ai.tools.calculate import (
     calculate_spec,
     parse_calculate_call,
 )
+from searx.zjsearch.ai.tools.clock import (
+    CLOCK_TOOL,
+    INSTRUCTIONS as CLOCK_INSTRUCTIONS,
+    clock_spec,
+)
 from searx.zjsearch.ai.tools.delegate_research import (
     DELEGATE_RESEARCH_TOOL,
     INSTRUCTIONS as DELEGATE_INSTRUCTIONS,
@@ -134,6 +139,7 @@ TOOL_INSTRUCTIONS: dict[str, str] = {
     SEARCH_WEB_TOOL: SEARCH_WEB_INSTRUCTIONS,
     BROWSE_TOOL: BROWSE_INSTRUCTIONS,
     CALCULATE_TOOL: CALCULATE_INSTRUCTIONS,
+    CLOCK_TOOL: CLOCK_INSTRUCTIONS,
     UPDATE_PLAN_TOOL: UPDATE_PLAN_INSTRUCTIONS,
     RECORD_FINDINGS_TOOL: RECORD_FINDINGS_INSTRUCTIONS,
     DELEGATE_RESEARCH_TOOL: DELEGATE_INSTRUCTIONS,
@@ -163,6 +169,7 @@ __all__ = [
     "BROWSE_TOOL",
     "BUILD_TABLE_TOOL",
     "CALCULATE_TOOL",
+    "CLOCK_TOOL",
     "DELEGATE_RESEARCH_TOOL",
     "EVALUATE_TOOL",
     "INSPECT_IMAGE_TOOL",
@@ -182,6 +189,7 @@ __all__ = [
     "browse_spec",
     "build_table_spec",
     "calculate_spec",
+    "clock_spec",
     "decision_row",
     "delegate_research_spec",
     "display_item",

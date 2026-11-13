@@ -30,6 +30,7 @@ from searx.zjsearch.ai.tools import (
     ask_user_spec,
     build_table_spec,
     calculate_spec,
+    clock_spec,
     delegate_research_spec,
     evaluate_spec,
     inspect_image_spec,
@@ -85,7 +86,7 @@ def build_tool_surface(
         # dead weight here: calculate for the arithmetic and the browse
         # read for a source the answer must see in full.  NO search_web,
         # no ledger, no ask/deliverable/plan tools.
-        specs: list[dict[str, t.Any]] = [calculate_spec()]
+        specs: list[dict[str, t.Any]] = [calculate_spec(), clock_spec()]
         if browser_on:
             specs.append(browse_tool.browse_spec())
         specs += search_tools.tools_surface()
@@ -103,6 +104,10 @@ def build_tool_surface(
         # inventory exists (inline) -- Search has neither
         search_web_spec(browser_on, with_info=research_tier),
         calculate_spec(),
+        # the composite clock (now / date lookup / relative offset):
+        # <today> grounds the DATE only -- the hour and the calendar
+        # arithmetic are the model's to ask for, on every tier
+        clock_spec(),
         memory_spec(),
         # the LEDGER on every tier (the owner's call): the findings' concept
         # tags are the tag namespace's SOURCE OF TRUTH -- a speed run that

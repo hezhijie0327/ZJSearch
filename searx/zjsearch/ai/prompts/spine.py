@@ -28,7 +28,8 @@ English, for the AI reply as much as for the interface.
 import datetime
 import textwrap
 import typing as t
-from zoneinfo import ZoneInfo
+
+from searx.zjsearch.ai.core.dates import resolve_zone, weekday_name
 
 # One row per SHIPPED i18n catalog (mirror of the client's CATALOGS
 # registry in client/zjsearch/src/lib/i18n.ts): catalog tag -> reply
@@ -84,12 +85,6 @@ def language_directive(catalog_tag: str) -> str:
     )
 
 
-_WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
-"""Fixed English weekday names -- ``strftime('%A')`` is locale-dependent,
-and a CJK-locale deployment would leak non-English weekdays into the
-English-only prompt layer."""
-
-
 def today_text(tz: str | None = None) -> str:
     """The date + weekday sentence body ("Saturday, 2026-10-17 (Asia/
     Shanghai, UTC+08:00)") -- shared by :func:`today_line` and the
@@ -98,16 +93,11 @@ def today_text(tz: str | None = None) -> str:
     ``Intl.DateTimeFormat().resolvedOptions().timeZone``): "today" is
     the USER'S today -- a UTC server's Friday night is the CST user's
     Saturday.  An unknown/absent zone falls back to the server's local
-    clock and says so, never pretending."""
-    zone = None
-    name = (tz or "").strip()[:64]
-    if name:
-        try:
-            zone = ZoneInfo(name)
-        except Exception:  # pylint: disable=broad-except
-            zone = None
+    clock and says so, never pretending.  The weekday table and the
+    zone resolve live in ``core.dates`` (shared with the clock tool)."""
+    zone, name = resolve_zone(tz)
     now = datetime.datetime.now(zone) if zone else datetime.datetime.now()
-    day = f"{_WEEKDAYS[now.weekday()]}, {now.date().isoformat()}"
+    day = f"{weekday_name(now.date())}, {now.date().isoformat()}"
     if zone:
         offset = now.strftime("%z")
         return f"{day} ({name}, UTC{offset[:3]}:{offset[3:]})"
@@ -119,6 +109,29 @@ def today_line(tz: str | None = None) -> str:
     -- and the WEEKDAY + USER'S TIMEZONE ground "this week" /
     business-day / market-hours reasoning the bare ISO date cannot."""
     return block("today", f"Today is {today_text(tz)}.")
+
+
+def now_text(tz: str | None = None) -> str:
+    """The date + CLOCK-TIME sentence body ("Friday, 2026-11-13 14:32
+    (Asia/Shanghai, UTC+08:00)") -- ``today_text`` with the hour.  The
+    research runs keep ``<today>`` date-only (byte-stable across a same
+    day's runs, the clock rides the ``clock`` tool); the ZERO-TOOL
+    direct lane bakes THIS at write time instead -- a chat question
+    ("what time is it now") must not answer with a shrug."""
+    zone, name = resolve_zone(tz)
+    now = datetime.datetime.now(zone) if zone else datetime.datetime.now()
+    stamp = f"{weekday_name(now.date())}, {now.date().isoformat()} {now.strftime('%H:%M')}"
+    if zone:
+        offset = now.strftime("%z")
+        return f"{stamp} ({name}, UTC{offset[:3]}:{offset[3:]})"
+    return f"{stamp} (the server's local time)"
+
+
+def now_line(tz: str | None = None) -> str:
+    """The clock-bearing date block -- the direct lane's ``<today>``
+    replacement (same anchor doctrine: the USER'S today, the server's
+    clock says so)."""
+    return block("now", f"The current moment is {now_text(tz)}.")
 
 
 def citation_rules() -> str:

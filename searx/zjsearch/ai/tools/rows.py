@@ -17,6 +17,7 @@ from searx.zjsearch.ai.core.text import raw_args
 from searx.zjsearch.ai.tools.ask_user import ASK_USER_TOOL
 from searx.zjsearch.ai.tools.build_table import BUILD_TABLE_TOOL
 from searx.zjsearch.ai.tools.calculate import CALCULATE_TOOL
+from searx.zjsearch.ai.tools.clock import CLOCK_TOOL
 from searx.zjsearch.ai.tools.evaluate import EVALUATE_TOOL, decision_row
 from searx.zjsearch.ai.tools.message_subtask import MESSAGE_SUBTASK_TOOL
 from searx.zjsearch.ai.tools.memory import MEMORY_TOOL
@@ -186,6 +187,23 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "expression": expression,
             "precision": precision if precision != 10 else None,
             "args": raw_args(call),
+        }
+    if call_name == CLOCK_TOOL:
+        try:
+            clock_args = raw_args(call)
+        except Exception:  # pylint: disable=broad-except
+            clock_args = {}
+        target = str(clock_args.get("date") or "").strip()
+        offset = clock_args.get("offset_days")
+        if not target and offset is not None:
+            target = f"today {int(offset):+d}d" if isinstance(offset, (int, float)) else "today ±Nd"
+        return {
+            "id": idx,
+            "tool": CLOCK_TOOL,
+            # the target date (or the offset shorthand) IS the row's
+            # label; the answered clock/calendar rides the right side
+            "q": target,
+            "args": clock_args,
         }
     if call_name == BUILD_TABLE_TOOL:
         try:
