@@ -9,7 +9,7 @@ export const EN = {
   preferences: "Preferences",
   install_app: "Install app",
   install_app_done: "App installed",
-  search_placeholder: "Search for...",
+  search_placeholder: "Search for…",
   clear: "Clear",
   search: "Search",
   search_suggestions: "Search suggestions",
@@ -332,7 +332,7 @@ export const EN = {
   ai_decision_running: "Judging…",
   knowledge_title: "Knowledge",
   knowledge_page_subtitle: "Past research, sources and documents -- browser-local.",
-  knowledge_search_placeholder: "Search all knowledge...",
+  knowledge_search_placeholder: "Search all knowledge…",
   knowledge_kind_run: "Research",
   knowledge_tab_reading: "Library",
   knowledge_reading_empty_line:

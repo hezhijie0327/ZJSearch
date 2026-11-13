@@ -1302,6 +1302,68 @@ If a stopped thread ever appears missing on a deployment: check
 and evaporates), then the image's source commit (the path predates no
 recent change).
 
+## 7.10 Round record — 2026-11-14 (the whole-surface audit: classic + drawers + i18n + componentization)
+
+The owner's directive: audit EVERY surface (AI mode and classic alike),
+enforce 模块化/高可复用/界面统一.  A drawer-shell read-only sweep (the
+only agent to survive the concurrency limit — the others' ground was
+re-covered by hand/script) + a scripted i18n audit + a component-mining
+pass, then the fix round:
+
+- **THE SCRIPTED i18n AUDIT** (the catalogs hold 864 keys each): key
+  parity EXACT, placeholder parity EXACT; the fixes: en's two `...`
+  placeholder literals became `…`, zh's TWELVE half-width punctuation
+  strings (试试更换关键词, → ，/ 注意: → ：/ 搜索? → ？…) went
+  full-width.  The parity/punct sweep is a reusable python recipe —
+  re-run it after every catalog change.
+- **THE P1: the tag-graph search suggestions dropdown anchored to the
+  whole PANEL** (the component root was unpositioned; `top-full`
+  resolved to 100% of the panel height — the dropdown was effectively
+  unreachable).  Fixed: the root carries `relative`.  Verified by
+  geometry: the panel now sits directly under the input.
+- **THE INSPECTOR'S lone ellipsis** (the run branch): a run answer's
+  evt-log replay (the panel's HEAVIEST load) rendered `…` — it joins
+  the document branch's prose ghosts + `knowledge_inspector_not_read`.
+- **Bare-text empty/loading states joined the paper language**:
+  StatsPage no-data, TemplateManager no-match (+ its loading face now
+  the drawer's BootRowsCard ghost), CookieTab no-cookies, TagGraphView
+  locate panel.
+- **KindItemRows joined the archive tier** (px-5 py-5, serif
+  text-base titles — it was the one kind listing off the row anatomy).
+- **`SectionLabel` grew the optional `actions` slot** (the template
+  band + the graph band re-typed the shared band to add a control —
+  both compose now); the memory capture bar's edges aligned to the
+  band padding.
+- **The chip/pill ladders**: `CHIP_SOLID` (the solid-accent pill —
+  ThreadRows' two duplicates + the graph filter's opacity-hover drift
+  unified to transition-colors) and `CHIP_DANGER` (the destructive
+  confirm pill) joined lib/styles.ts; the confirm dialog's cancel is
+  CHIP_GHOST; memory row actions + the inspector header actions +
+  the graph locate close moved to the CHIP_BTN 28px tier; the reports
+  filter + template shape filters + the new-template chip moved to the
+  CHIP_OUTLINE 13px pair; the template report|deck segment joined
+  SEGMENT_SM.
+- **CapList** (components/CapList.tsx): the cap-and-expand list as ONE
+  component (head + Collapse tail + CapChip, caller-or-owned state,
+  `reverse` for newest-first, original-index renderItem) — mcp
+  matches, DecisionsCard, the AI sources rail and the list_engines
+  state form migrated; verified in the browser (+3 → 7 rows → 收起).
+- **Dialog contracts**: the confirm dialog's cancel pill tokened, the
+  Escape race closed (a nested dialog in its exit window owns the next
+  Escape — the drawer no longer tears down around an exiting confirm),
+  and PanelFallback's escape anchor became a real navigation button
+  (the in-panel click-capture looped a "/" anchor into
+  fallback-of-fallback).
+- **InfoPage**: the tablist gained the ARIA keyboard pattern (arrows
+  walk + select, roving tabIndex), the panel remounts per pagename
+  (cached switches replay the fade), and the switching face is the
+  drawer's doc ghost (not a lone spinner).
+- **KnowledgePage**: the reading pager's page swaps fade.
+- **i18n**: the preferences' hardcoded `!bang:` label went through
+  `t("bang")`; PanelSearch's clear button reached the 24px floor.
+- **AdminHeader**: the two admin blocks' hand-copied in-card headers
+  became one local fragment (admin's own anatomy stays sanctioned).
+
 THE PER-TOOL VISUAL WALKTHROUGH (2026-11-14, same day): every tool
 row's EXPANDED body inspected against its payload shape in the debug
 stage — search_web=result cards, evaluate=probability bars,

@@ -125,6 +125,14 @@ export const CHIP_GHOST =
 
 /** Accent action chip on the 13px control tier (in-flow continue /
     regenerate-style actions): the soft accent fill with a hairline ring. */
+export const CHIP_SOLID =
+  "inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover";
+
+/** The destructive confirm pill (the delete confirm's one send button):
+    the solid-danger sibling of CHIP_SOLID. */
+export const CHIP_DANGER =
+  "inline-flex items-center gap-1.5 rounded-full bg-danger px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-danger/85";
+
 export const CHIP_ACCENT =
   "inline-flex items-center gap-1.5 rounded-full border border-accent-strong/40 bg-accent-soft px-3 py-1.5 text-[13px] font-medium text-accent transition-colors hover:text-accent-hover";
 

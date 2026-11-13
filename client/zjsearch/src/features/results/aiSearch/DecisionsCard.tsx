@@ -2,13 +2,12 @@
 
 import { ChevronDown, CircleHelp, CornerDownRight, Scale } from "lucide-react";
 import { useState } from "react";
-import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
+import { CapList } from "@/components/CapList.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiDecision } from "@/features/results/aiSearch/timeline.ts";
 import { formatMs, formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 const PURPOSE_LABELS: Record<string, string> = {
   read_gate: "ai_dec_read_gate",
@@ -275,22 +274,20 @@ function DecisionRow({ decision, open, onToggle }: { decision: AiDecision; open:
 export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
   const t = useT();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
-  const { expanded, toggle, hidden } = useCapExpand(decisions.length, 4);
   if (decisions.length === 0) {
     return null;
   }
-  // the newest four lead; the OLDER tail sits inside a Collapse so the
-  // +N reveal (and the show-less) plays as a height animation
-  const view = [...decisions.slice(-4)].reverse();
-  const extraView = [...decisions.slice(0, Math.max(0, decisions.length - 4))].reverse();
   return (
     <div className="mb-5">
       <RailHeader count={decisions.length} icon={Scale} title={t("ai_decisions_card")} />
-      <ul className="mt-3 space-y-1 px-1">
-        {view.map((decision) => {
-          // openIdx is the decision's index in the ORIGINAL array: new
-          // verdicts append at the end, so an open row keeps its identity
-          // while the list streams (the reversed VIEW only changes order)
+      {/* the cap-and-expand is CapList's (newest-first): openIdx keys on
+          the ORIGINAL index, so an open row keeps its identity while the
+          list streams (the reversed VIEW only changes order) */}
+      <CapList
+        cap={4}
+        headClassName="mt-3 space-y-1 px-1"
+        items={decisions}
+        renderItem={(decision) => {
           const idx = decisions.indexOf(decision);
           return (
             <DecisionRow
@@ -302,24 +299,10 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
               open={openIdx === idx}
             />
           );
-        })}
-      </ul>
-      <Collapse className={expanded && extraView.length > 0 ? "mt-1" : ""} open={expanded && extraView.length > 0}>
-        <ul className="space-y-1">
-          {extraView.map((decision) => {
-            const idx = decisions.indexOf(decision);
-            return (
-              <DecisionRow
-                decision={decision}
-                key={idx}
-                onToggle={() => setOpenIdx(openIdx === idx ? null : idx)}
-                open={openIdx === idx}
-              />
-            );
-          })}
-        </ul>
-      </Collapse>
-      <CapChip className={CAP_CHIP_CLASS} expanded={expanded} hidden={hidden} onToggle={toggle} />
+        }}
+        reverse
+        tailClassName="space-y-1"
+      />
     </div>
   );
 }

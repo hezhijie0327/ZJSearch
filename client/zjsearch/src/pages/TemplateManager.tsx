@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Check, FileText, LoaderCircle, Pencil, Plus, Presentation, Trash2 } from "lucide-react";
+import { Check, FileText, Pencil, Plus, Presentation, Search, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
-import { Card } from "@/components/SettingParts.tsx";
+import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/sections.tsx";
 import {
   type ReportTemplate,
@@ -13,6 +14,14 @@ import {
 } from "@/features/results/aiSearch/reportTemplates.ts";
 import { useT } from "@/lib/i18n.ts";
 import { deleteTemplate, listTemplates, saveTemplate } from "@/lib/kb/templates.ts";
+import {
+  CHIP_OUTLINE,
+  CHIP_OUTLINE_ACTIVE,
+  CHIP_OUTLINE_IDLE,
+  SEGMENT_ACTIVE,
+  SEGMENT_IDLE,
+  SEGMENT_SM,
+} from "@/lib/styles.ts";
 
 interface EditingTemplate {
   id: string | null;
@@ -163,11 +172,7 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
                   return (
                     <button
                       aria-checked={active}
-                      className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[13px] transition-colors ${
-                        active
-                          ? "border border-accent-strong bg-accent-soft font-medium text-accent"
-                          : "border border-transparent text-ink-3 hover:text-ink"
-                      }`}
+                      className={`flex items-center gap-1.5 ${SEGMENT_SM} ${active ? SEGMENT_ACTIVE : SEGMENT_IDLE}`}
                       key={shape}
                       onClick={() => {
                         setEditing({ ...editing, shape });
@@ -294,19 +299,15 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
         {/* the ONE band language: a "templates · N" label band with the
             action at its right edge -- same anatomy as the memory tab's
             band */}
-        <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
-          <p className="text-xs font-medium text-ink-3">
-            {t("knowledge_tab_templates")} · {shown.length}
-          </p>
-          <button
-            className="ms-auto flex items-center gap-1 rounded-full border border-line px-3 py-1 text-xs text-ink-3 transition-colors hover:bg-surface hover:text-ink"
-            onClick={startNew}
-            type="button"
-          >
-            <Plus aria-hidden="true" className="size-3.5" />
-            {t("template_new")}
-          </button>
-        </div>
+        <SectionLabel
+          actions={
+            <button className={`${CHIP_OUTLINE} ${CHIP_OUTLINE_IDLE} ms-auto`} onClick={startNew} type="button">
+              <Plus aria-hidden="true" className="size-3.5" />
+              {t("template_new")}
+            </button>
+          }
+          label={`${t("knowledge_tab_templates")} · ${shown.length}`}
+        />
         {!loading && templates.length > 0 ? (
           <div className="flex flex-wrap items-center gap-1.5 px-5 pt-4 sm:px-6">
             {filters.map((filter) => {
@@ -314,11 +315,7 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
               return (
                 <button
                   aria-pressed={active}
-                  className={`inline-flex min-h-6 items-center gap-1 rounded-full px-2.5 py-0.5 text-xs transition-colors ${
-                    active
-                      ? "border border-accent-strong bg-accent-soft font-medium text-accent"
-                      : "border border-line text-ink-3 hover:text-ink"
-                  }`}
+                  className={`inline-flex items-center gap-1 ${active ? CHIP_OUTLINE_ACTIVE : CHIP_OUTLINE_IDLE}`}
                   key={filter.value}
                   onClick={() => {
                     setShapeFilter(filter.value);
@@ -333,9 +330,8 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
           </div>
         ) : null}
         {loading ? (
-          <p className="flex items-center gap-2 px-5 py-4 text-[13px] text-ink-3 sm:px-6">
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-          </p>
+          // the drawer's own boot ghost (BootRowsCard), not a lone spinner
+          <BootRowsCard rows={3} />
         ) : shown.length === 0 ? (
           templates.length === 0 ? (
             // the ONE empty-state language: the torn note with icon + title
@@ -347,7 +343,7 @@ export function TemplateManagerPanel({ onChanged, search }: { onChanged?: () => 
               title={t("knowledge_kind_empty")}
             />
           ) : (
-            <p className="px-5 py-10 text-center text-[13px] text-ink-3">{t("no_results_found")}</p>
+            <PaperEmpty className="py-4" icon={Search} line={t("no_results_found")} title={t("no_results_found")} />
           )
         ) : (
           shown.map((template) => {

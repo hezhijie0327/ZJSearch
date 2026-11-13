@@ -2,8 +2,8 @@
 
 import { Archive, Award, BookMarked, BookOpen, Bot as BotGlyph, Globe, Server } from "lucide-react";
 import { useState } from "react";
-import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
-import { Collapse } from "@/components/Collapse.tsx";
+import { CapChip } from "@/components/CapChip.tsx";
+import { CapList } from "@/components/CapList.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
 import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
@@ -229,12 +229,10 @@ export function AiSearchSources({
   );
   const effective: SourceFilter = filter !== "all" && filtered.length === 0 ? "all" : filter;
   const list = effective === "all" ? sources : filtered;
-  const hidden = Math.max(0, list.length - RAIL_CAP);
   // numbering order: the evidence list reads [1] -> [N] (the [n] chips in
   // the answer index into this exact order); the older tail folds in a
-  // Collapse (the +N reveal plays as a height animation)
-  const view = list.slice(0, RAIL_CAP);
-  const extra = list.slice(RAIL_CAP);
+  // the cap-and-expand is CapList's (the run section owns the open
+  // state -- a citation click forces the list)
   const chips: Array<{ id: SourceFilter; label: string; count: number }> = [
     { id: "cited", label: t("ai_sources_filter_cited"), count: citedCount },
     { id: "crawled", label: t("ai_sources_filter_crawled"), count: crawledCount },
@@ -269,25 +267,16 @@ export function AiSearchSources({
           </button>
         ))}
       </div>
-      <div className="mt-2 flex flex-col gap-2 px-1">
-        {view.map((source) => (
-          <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
-        ))}
-      </div>
-      <Collapse className={expanded && extra.length > 0 ? "mt-2" : ""} open={expanded && extra.length > 0}>
-        <div className="flex flex-col gap-2 px-1">
-          {extra.map((source) => (
-            <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
-          ))}
-        </div>
-      </Collapse>
-      <CapChip
-        className={CAP_CHIP_CLASS}
+      <CapList
+        cap={RAIL_CAP}
         expanded={expanded}
-        hidden={hidden}
-        onToggle={() => {
-          onToggleExpanded(!expanded);
-        }}
+        headClassName="mt-2 flex flex-col gap-2 px-1"
+        items={list}
+        onToggle={onToggleExpanded}
+        renderItem={(source: AiSearchSource) => (
+          <SourceCard cited={cited.has(source.n)} key={source.n} source={source} />
+        )}
+        tailClassName="flex flex-col gap-2 px-1"
       />
     </section>
   );

@@ -649,18 +649,20 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   <BootRowsCard rows={5} />
                 ) : (
                   <>
-                    <KindItemRows
-                      emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
-                      emptyLine={t("knowledge_reading_empty_line")}
-                      items={kindItems.slice(
-                        readingPageSafe * READING_PAGE_SIZE,
-                        readingPageSafe * READING_PAGE_SIZE + READING_PAGE_SIZE,
-                      )}
-                      onOpenInspector={setView}
-                      onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
-                      onPin={pinItem}
-                      onRemove={removeItem}
-                    />
+                    <div className="animate-fade-in" key={readingPageSafe}>
+                      <KindItemRows
+                        emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
+                        emptyLine={t("knowledge_reading_empty_line")}
+                        items={kindItems.slice(
+                          readingPageSafe * READING_PAGE_SIZE,
+                          readingPageSafe * READING_PAGE_SIZE + READING_PAGE_SIZE,
+                        )}
+                        onOpenInspector={setView}
+                        onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
+                        onPin={pinItem}
+                        onRemove={removeItem}
+                      />
+                    </div>
                     <div className="mt-4">
                       <CompactPager onPage={(p) => setReadingPage(p)} page={readingPageSafe} pages={readingPages} />
                     </div>

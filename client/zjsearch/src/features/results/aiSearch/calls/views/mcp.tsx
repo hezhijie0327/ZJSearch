@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Plug } from "lucide-react";
-import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
-import { Collapse } from "@/components/Collapse.tsx";
+import { CapList } from "@/components/CapList.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiToolMatch } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
-import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 /** The MCP view: the server-scoped tool name (the discovery call shows
     the keyword it searched the inventory for -- the inventory covers the
@@ -38,80 +36,44 @@ const CELL = "min-w-0 rounded-md bg-surface-2/60 px-2 py-1.5";
 function ToolMatches({ tools }: { tools: AiToolMatch[] }) {
   const t = useT();
   const CAP = 3;
-  const { expanded, toggle, hidden } = useCapExpand(tools.length, CAP);
-  const shown = tools.slice(0, CAP);
-  const tail = tools.slice(CAP);
-  return (
-    <div className="flex flex-col gap-1.5">
-      {shown.map((tool) => (
-        <div className={CELL} key={tool.name}>
-          <div className="flex items-center gap-2">
-            <span className="min-w-0 truncate font-mono text-xs font-medium text-ink-2">{tool.name}</span>
-            <span
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs ${
-                tool.server ? "bg-accent-soft text-accent" : "bg-surface text-ink-3"
-              }`}
-            >
-              {tool.server || t("ai_toolmatch_builtin")}
-            </span>
-          </div>
-          {tool.description ? <p className="mt-1 text-[13px] leading-snug text-ink-2">{tool.description}</p> : null}
-          {tool.params.length > 0 ? (
-            <p className="mt-1 text-xs text-ink-3">
-              {t("ai_toolmatch_params", { params: tool.params.join(", ") })}
-              {tool.required.length > 0 ? (
-                <>
-                  {" · "}
-                  {t("ai_toolmatch_required", { names: tool.required.join(", ") })}
-                </>
-              ) : null}
-            </p>
+  const matchCard = (tool: AiToolMatch) => (
+    <div className={CELL} key={tool.name}>
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 truncate font-mono text-xs font-medium text-ink-2">{tool.name}</span>
+        <span
+          className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs ${
+            tool.server ? "bg-accent-soft text-accent" : "bg-surface text-ink-3"
+          }`}
+        >
+          {tool.server || t("ai_toolmatch_builtin")}
+        </span>
+      </div>
+      {tool.description ? <p className="mt-1 text-[13px] leading-snug text-ink-2">{tool.description}</p> : null}
+      {tool.params.length > 0 ? (
+        <p className="mt-1 text-xs text-ink-3">
+          {t("ai_toolmatch_params", { params: tool.params.join(", ") })}
+          {tool.required.length > 0 ? (
+            <>
+              {" · "}
+              {t("ai_toolmatch_required", { names: tool.required.join(", ") })}
+            </>
           ) : null}
-          {tool.instructions ? (
-            <p className="mt-1 whitespace-pre-wrap rounded-md bg-surface-2/50 p-2 text-xs leading-relaxed text-ink-3">
-              {tool.instructions}
-            </p>
-          ) : null}
-        </div>
-      ))}
-      {/* the +N reveal is a height animation (the rail's cap-and-expand
-          contract): the tail cards ride one Collapse */}
-      <Collapse open={expanded} unmountAfterHide>
-        <div className="flex flex-col gap-1.5">
-          {tail.map((tool) => (
-            <div className={CELL} key={tool.name}>
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 truncate font-mono text-xs font-medium text-ink-2">{tool.name}</span>
-                <span
-                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-xs ${
-                    tool.server ? "bg-accent-soft text-accent" : "bg-surface text-ink-3"
-                  }`}
-                >
-                  {tool.server || t("ai_toolmatch_builtin")}
-                </span>
-              </div>
-              {tool.description ? <p className="mt-1 text-[13px] leading-snug text-ink-2">{tool.description}</p> : null}
-              {tool.params.length > 0 ? (
-                <p className="mt-1 text-xs text-ink-3">
-                  {t("ai_toolmatch_params", { params: tool.params.join(", ") })}
-                  {tool.required.length > 0 ? (
-                    <>
-                      {" · "}
-                      {t("ai_toolmatch_required", { names: tool.required.join(", ") })}
-                    </>
-                  ) : null}
-                </p>
-              ) : null}
-              {tool.instructions ? (
-                <p className="mt-1 whitespace-pre-wrap rounded-md bg-surface-2/50 p-2 text-xs leading-relaxed text-ink-3">
-                  {tool.instructions}
-                </p>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </Collapse>
-      {hidden > 0 ? <CapChip className={CAP_CHIP_CLASS} expanded={expanded} hidden={hidden} onToggle={toggle} /> : null}
+        </p>
+      ) : null}
+      {tool.instructions ? (
+        <p className="mt-1 whitespace-pre-wrap rounded-md bg-surface-2/50 p-2 text-xs leading-relaxed text-ink-3">
+          {tool.instructions}
+        </p>
+      ) : null}
     </div>
+  );
+  return (
+    <CapList
+      cap={CAP}
+      headClassName="flex flex-col gap-1.5"
+      items={tools}
+      renderItem={matchCard}
+      tailClassName="flex flex-col gap-1.5"
+    />
   );
 }

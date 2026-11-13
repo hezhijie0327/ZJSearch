@@ -213,7 +213,7 @@ export function EngineTooltip({ engine, pinned = false }: { engine: EngineEntry;
         </p>
       ) : null}
       <p className="mt-1.5 flex flex-wrap gap-1">
-        <span className="text-ink-3">!bang:</span>
+        <span className="text-ink-3">{t("bang")}:</span>
         {[engine.name, engine.shortcut].map((bang) => (
           <code className={CODE_CHIP} key={bang}>
             !{bang.replaceAll(" ", "_")}

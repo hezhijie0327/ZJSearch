@@ -9,7 +9,6 @@ import {
   Heart,
   Info,
   Link2,
-  LoaderCircle,
   Mail,
   Network,
   Scale,
@@ -18,6 +17,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import { BootDocTitle, BootProse } from "@/components/BootGhosts.tsx";
 import { Shell } from "@/components/Shell.tsx";
 import { fetchJson, fetchText } from "@/lib/http.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
@@ -347,7 +347,28 @@ export function InfoPage({
                 onClick={() => {
                   openPage(entry);
                 }}
+                onKeyDown={(event) => {
+                  // the ARIA tabs keyboard pattern: arrows walk the tabs
+                  // and select (roving focus), Home/End jump to the ends
+                  const dir =
+                    event.key === "ArrowRight" || event.key === "ArrowDown"
+                      ? 1
+                      : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                        ? -1
+                        : 0;
+                  if (!dir) {
+                    return;
+                  }
+                  event.preventDefault();
+                  const target = nav[(nav.indexOf(entry) + dir + nav.length) % nav.length];
+                  if (!target) {
+                    return;
+                  }
+                  openPage(target);
+                  document.getElementById(`info-tab-${target.pagename}`)?.focus();
+                }}
                 role="tab"
+                tabIndex={isActive ? 0 : -1}
                 type="button"
               >
                 <Icon className="size-3.5" />
@@ -356,14 +377,17 @@ export function InfoPage({
             );
           })}
         </nav>
-        <div aria-labelledby={`info-tab-${active.pagename}`} id={panelId} role="tabpanel">
+        <div aria-labelledby={`info-tab-${active.pagename}`} id={panelId} key={active.pagename} role="tabpanel">
           {switching ? (
-            <div className="flex justify-center py-20 text-ink-3">
-              <LoaderCircle className="size-5 animate-spin-slow" />
+            // the drawer's own doc ghost (title + prose bars), not a lone
+            // spinner -- shape parity with the panel skeleton
+            <div aria-busy="true" className="space-y-4 py-14">
+              <BootDocTitle />
+              <BootProse />
             </div>
           ) : active.html !== null ? (
             <article
-              className="prose-basic animate-fade-up"
+              className="prose-basic animate-fade-in"
               dangerouslySetInnerHTML={{ __html: active.html }}
               dir="auto"
             />

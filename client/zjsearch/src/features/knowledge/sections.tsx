@@ -77,7 +77,16 @@ export const KNOWLEDGE_KIND_ICONS = {
 } as const;
 
 import { type RerankUsageTotals, readRerankUsage } from "@/lib/rerank.ts";
-import { CHIP_OUTLINE, CHIP_OUTLINE_IDLE, READ_PANE } from "@/lib/styles.ts";
+import {
+  CHIP_BTN,
+  CHIP_DANGER,
+  CHIP_GHOST,
+  CHIP_OUTLINE,
+  CHIP_OUTLINE_ACTIVE,
+  CHIP_OUTLINE_IDLE,
+  CHIP_SOLID,
+  READ_PANE,
+} from "@/lib/styles.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 /** The knowledge META chip: a 12px bordered chip for row meta and hero
@@ -206,18 +215,11 @@ export function ThreadRows({
     return (
       <PaperEmpty icon={KNOWLEDGE_KIND_ICONS.run} line={t("knowledge_empty_hint")} title={t("knowledge_empty")}>
         {onHome ? (
-          <button
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
-            onClick={onHome}
-            type="button"
-          >
+          <button className={CHIP_SOLID} onClick={onHome} type="button">
             {t("back_to_search")}
           </button>
         ) : (
-          <Link
-            className="inline-flex items-center gap-1.5 rounded-full bg-accent-strong px-4 py-2 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
-            href="/"
-          >
+          <Link className={CHIP_SOLID} href="/">
             {t("back_to_search")}
           </Link>
         )}
@@ -229,11 +231,7 @@ export function ThreadRows({
       {threads.some((thread) => thread.reports > 0) ? (
         <div className="flex items-center gap-2 px-5 pt-4 sm:px-6">
           <button
-            className={`inline-flex min-h-6 items-center rounded-full px-2 py-0.5 text-xs transition-colors ${
-              reportsOnly
-                ? "border border-accent-strong bg-accent-soft font-medium text-accent"
-                : "border border-line text-ink-3 hover:text-ink"
-            }`}
+            className={`inline-flex items-center ${reportsOnly ? CHIP_OUTLINE_ACTIVE : CHIP_OUTLINE_IDLE}`}
             onClick={() => {
               setReportsOnly((on) => !on);
             }}
@@ -388,6 +386,18 @@ function RowFavicon({ item }: { item: KnowledgeItem }) {
     delete; the parent owns the confirm dialog).  Hover-revealed in list
     rows, always visible in the inspector (reveal={false}).  Clicks stop
     propagation: the whole row around them is a click target. */
+/** The admin cards' in-card section header (the two admin blocks were a
+    hand-copy of each other -- one local fragment owns the anatomy;
+    AGENTS.md sanctions admin's own anatomy vs SectionLabel). */
+function AdminHeader({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon aria-hidden="true" className="size-4.5 text-ink-3" />
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
+    </div>
+  );
+}
+
 function RowActions({
   onPin,
   onRemove,
@@ -581,7 +591,7 @@ export function MemorySection({
   };
   return (
     <Card>
-      <div className="flex items-center gap-2 border-b border-line px-4 py-2.5">
+      <div className="flex items-center gap-2 border-b border-line px-5 py-2.5 sm:px-6">
         <Plus aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
         <input
           className="h-6 min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3"
@@ -733,7 +743,7 @@ function MemoryCard({
           <>
             <button
               aria-label={t("knowledge_mem_confirm")}
-              className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent"
+              className={`${CHIP_BTN} text-accent`}
               onClick={() => onConfirm(memory.id)}
               title={t("knowledge_mem_confirm")}
               type="button"
@@ -742,7 +752,7 @@ function MemoryCard({
             </button>
             <button
               aria-label={t("knowledge_mem_dismiss")}
-              className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              className={CHIP_BTN}
               onClick={() => onDismiss(memory.id)}
               title={t("knowledge_mem_dismiss")}
               type="button"
@@ -753,7 +763,7 @@ function MemoryCard({
         ) : null}
         <button
           aria-label={t("knowledge_memory_edit")}
-          className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+          className={CHIP_BTN}
           onClick={() => {
             setDraft(memory.content);
             setEditing(true);
@@ -765,7 +775,7 @@ function MemoryCard({
         </button>
         <button
           aria-label={t("knowledge_memory_forget")}
-          className="rounded-md p-1 text-ink-3 transition-colors hover:bg-surface-2 hover:text-danger"
+          className={`${CHIP_BTN} hover:text-danger`}
           onClick={() => onForget(memory.id)}
           title={t("knowledge_memory_forget")}
           type="button"
@@ -980,7 +990,7 @@ export function InspectorView({
             <>
               <button
                 aria-label={t("copy_md")}
-                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:pointer-events-none disabled:opacity-40"
+                className={`${CHIP_BTN} disabled:pointer-events-none disabled:opacity-40`}
                 disabled={copied}
                 onClick={copyMd}
                 title={t("copy_md")}
@@ -992,13 +1002,7 @@ export function InspectorView({
                   <Copy aria-hidden="true" className="size-3.5" />
                 )}
               </button>
-              <button
-                aria-label={t("print")}
-                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-                onClick={printCard}
-                title={t("print")}
-                type="button"
-              >
+              <button aria-label={t("print")} className={CHIP_BTN} onClick={printCard} title={t("print")} type="button">
                 <Printer aria-hidden="true" className="size-3.5" />
               </button>
             </>
@@ -1012,7 +1016,7 @@ export function InspectorView({
           {item.url ? (
             <a
               aria-label={t("open_in_new_tab")}
-              className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+              className={CHIP_BTN}
               href={item.url}
               rel="noreferrer"
               target="_blank"
@@ -1033,7 +1037,7 @@ export function InspectorView({
             ) : (
               <button
                 aria-label={t("knowledge_open_research")}
-                className="rounded-md p-1.5 text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                className={CHIP_BTN}
                 onClick={() => onOpenThread(item.threadId ?? "")}
                 title={t("knowledge_open_research")}
                 type="button"
@@ -1101,7 +1105,17 @@ export function InspectorView({
                 />
               </div>
             ) : item.kind === "run" ? (
-              body ? (
+              body === null ? (
+                // the run's answer is still loading off the evt log -- the
+                // document branch's prose ghosts, not a lone ellipsis
+                <div aria-busy="true" className="space-y-3">
+                  <span className="zjs-skeleton block h-4 w-full" />
+                  <span className="zjs-skeleton block h-4 w-[93%]" />
+                  <span className="zjs-skeleton block h-4 w-[70%]" />
+                </div>
+              ) : body === "" ? (
+                <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
+              ) : (
                 <>
                   {reportToc ? (
                     <nav aria-label={t("ai_report_toc")} className="mb-4 rounded-xl bg-surface-2/40 px-3 py-2.5">
@@ -1127,8 +1141,6 @@ export function InspectorView({
                   ) : null}
                   <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={body} />
                 </>
-              ) : (
-                <p className="text-[13px] text-ink-3">…</p>
               )
             ) : isCrawledSource ? (
               <>
@@ -1294,7 +1306,7 @@ export function KindItemRows({
         const isSource = item.kind === "source";
         return (
           <div
-            className="group flex items-start gap-3 px-5 py-4 transition-colors hover:bg-surface-2/40 sm:px-6"
+            className="group flex items-start gap-3 px-5 py-5 transition-colors hover:bg-surface-2/40 sm:px-6"
             key={item.id}
           >
             <div className="min-w-0 flex-1">
@@ -1328,7 +1340,9 @@ export function KindItemRows({
                 }}
                 type="button"
               >
-                <span className="line-clamp-1 text-sm font-medium leading-snug text-ink">{item.title || item.url}</span>
+                <span className="line-clamp-1 font-serif text-base font-semibold leading-snug text-ink">
+                  {item.title || item.url}
+                </span>
                 {item.body ? (
                   <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">
                     {listingExcerpt(item.body)}
@@ -1431,10 +1445,7 @@ export function AdminView({
         return (
           <Card>
             <div className="px-5 py-5 sm:px-6">
-              <div className="flex items-center gap-2">
-                <Gauge aria-hidden="true" className="size-4.5 text-ink-3" />
-                <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_usage_title")}</h2>
-              </div>
+              <AdminHeader icon={Gauge} title={t("knowledge_admin_usage_title")} />
               {llmTiles.length > 0 ? (
                 <>
                   <p className="mt-4 text-xs font-medium text-ink-3">{t("knowledge_usage_group_llm")}</p>
@@ -1532,10 +1543,7 @@ export function AdminView({
       })()}
       <Card>
         <div className="px-5 py-5 sm:px-6">
-          <div className="flex items-center gap-2">
-            <Database aria-hidden="true" className="size-4.5 text-ink-3" />
-            <h2 className="text-sm font-semibold text-ink">{t("knowledge_admin_title")}</h2>
-          </div>
+          <AdminHeader icon={Database} title={t("knowledge_admin_title")} />
           <dl className="mt-4 grid grid-cols-2 gap-2">
             {rows.map((row) => (
               <div className="rounded-xl border border-line bg-surface px-3 py-2.5" key={row.label}>
@@ -1659,19 +1667,10 @@ export function ConfirmDialog({
         <h3 className="text-base font-semibold text-ink">{title}</h3>
         <p className="mt-2 break-words text-sm leading-relaxed text-ink-2">{message}</p>
         <div className="mt-4 flex items-center justify-end gap-2">
-          <button
-            className="rounded-full px-4 py-1.5 text-[13px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
-            data-dialog-close=""
-            onClick={cancel}
-            type="button"
-          >
+          <button className={CHIP_GHOST} data-dialog-close="" onClick={cancel} type="button">
             {t("ai_delete_cancel")}
           </button>
-          <button
-            className="rounded-full bg-danger px-4 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-danger/85"
-            onClick={onConfirm}
-            type="button"
-          >
+          <button className={CHIP_DANGER} onClick={onConfirm} type="button">
             {t("ai_delete_ok")}
           </button>
         </div>

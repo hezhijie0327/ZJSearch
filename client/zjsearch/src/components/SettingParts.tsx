@@ -103,6 +103,11 @@ export function CompactPager({ onPage, page, pages }: { onPage: (page: number) =
 
 /** Section header inside a Card/** Section header inside a Card — Card's divide-y draws the separators, so a
     Fragment of header + rows works as one group. */
-export function SectionLabel({ label }: { label: string }) {
-  return <p className="bg-surface-2/60 px-5 py-2.5 text-xs font-medium text-ink-3 sm:px-6">{label}</p>;
+export function SectionLabel({ actions, label }: { actions?: ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
+      <p className="min-w-0 flex-1 text-xs font-medium text-ink-3">{label}</p>
+      {actions}
+    </div>
+  );
 }

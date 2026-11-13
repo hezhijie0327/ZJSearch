@@ -167,6 +167,12 @@ export function OverlayProvider({ panels, children }: { panels: OverlayPanels; c
           return;
         }
       }
+      // a nested dialog in its EXIT window (inert, focus already handed
+      // back) still owns the next Escape -- closing the drawer here would
+      // tear it down around the exiting confirm
+      if (document.querySelector('[role="dialog"][inert]')) {
+        return;
+      }
       setState(null);
     },
     [dialogRef],
@@ -339,9 +345,18 @@ function PanelFallback({ data }: { data: AnyPageData }) {
   return (
     <p className="p-6 text-sm text-ink-2">
       {t("panel_unavailable")}{" "}
-      <a className="text-accent" href={data.globals.about_url || "/"}>
+      {/* a BUTTON doing a full load: the scroll container's click-capture
+          would loop a "/" anchor into openPanel -> renderPage null ->
+          this fallback again */}
+      <button
+        className="text-accent underline decoration-1 underline-offset-4"
+        onClick={() => {
+          window.location.assign(data.globals.about_url || "/");
+        }}
+        type="button"
+      >
         {t("open_here")}
-      </a>
+      </button>
       .
     </p>
   );

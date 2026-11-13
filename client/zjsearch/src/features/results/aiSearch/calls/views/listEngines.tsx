@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { CircleDollarSign, DatabaseSearch } from "lucide-react";
+import { useState } from "react";
 import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { DirectoryGrid } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiEngineInventory } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
-import { useCapExpand } from "@/lib/useCapExpand.ts";
 
 const BANG_CELLS_CAP = 8;
 
@@ -40,8 +40,15 @@ const CELL = "min-w-0 rounded-md bg-surface-2/60 px-2 py-1";
 
 function InventoryBody({ inv }: { inv: AiEngineInventory }) {
   const t = useT();
+  const [bangsOpen, setBangsOpen] = useState(false);
   const categories = [...inv.categories].sort((a, b) => b.count - a.count);
-  const bangs = useCapExpand(inv.disabled.length, BANG_CELLS_CAP);
+  const bangs = {
+    expanded: bangsOpen,
+    toggle: () => {
+      setBangsOpen(!bangsOpen);
+    },
+    hidden: Math.max(0, inv.disabled.length - BANG_CELLS_CAP),
+  };
   const shown = inv.disabled.slice(0, BANG_CELLS_CAP);
   const tail = inv.disabled.slice(BANG_CELLS_CAP);
   return (

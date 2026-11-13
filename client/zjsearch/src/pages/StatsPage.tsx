@@ -3,7 +3,8 @@
 import { ChartColumn, ChevronLeft } from "lucide-react";
 import { useMemo } from "react";
 import { Meter } from "@/components/Meter.tsx";
-import { SectionLabel } from "@/components/SettingParts.tsx";
+import { PaperEmpty } from "@/components/PaperEmpty.tsx";
+import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link, Shell } from "@/components/Shell.tsx";
 import { SortHeader } from "@/components/SortHeader.tsx";
 import { round1 } from "@/lib/format.ts";
@@ -161,9 +162,9 @@ export function StatsPage({ data, embedded = false }: { data: StatsPageData; emb
         ) : null}
 
         {engines.length === 0 ? (
-          <p className="text-sm text-ink-2">{t("no_data_available")}</p>
+          <PaperEmpty icon={ChartColumn} line={t("no_data_available")} title={t("no_results_found")} />
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-line bg-surface animate-fade-up">
+          <Card>
             <SectionLabel label={t("stats_engines_n", { n: String(engines.length) })} />
             <div className="overflow-x-auto">
               <table className="w-full min-w-[680px] text-left text-sm">
@@ -236,7 +237,7 @@ export function StatsPage({ data, embedded = false }: { data: StatsPageData; emb
                 </tbody>
               </table>
             </div>
-          </div>
+          </Card>
         )}
 
         {data.selected_engine_name ? (

@@ -2,8 +2,10 @@
 
 import { Cookie, ExternalLink, Key, Link as LinkIcon, RefreshCw, Trash2 } from "lucide-react";
 import { ClickToCopy } from "@/components/CopyButton.tsx";
+import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Link } from "@/components/Shell.tsx";
 import { useT } from "@/lib/i18n.ts";
+import { OUTLINE_PILL } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
 import { Card, SectionLabel, SettingRow } from "@/pages/preferences/parts.tsx";
 import type { PreferencesForm } from "@/pages/preferences/usePreferencesForm.ts";
@@ -40,10 +42,7 @@ export function CookieTab({ data, form }: { data: PreferencesPageData; form: Pre
           </table>
         </div>
       ) : (
-        <p className="flex items-center gap-3 px-5 py-4 text-xs text-ink-3 sm:px-6">
-          <Cookie className="size-4" />
-          {t("no_cookies")}
-        </p>
+        <PaperEmpty className="py-4" icon={Cookie} line={t("no_cookies")} title={t("no_cookies")} />
       )}
 
       <SectionLabel label={t("cookie_group_share")} />
@@ -111,10 +110,7 @@ export function CookieTab({ data, form }: { data: PreferencesPageData; form: Pre
         stacked
         title={t("reset_defaults")}
       >
-        <Link
-          className="inline-flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:border-danger hover:text-danger"
-          href="/clear_cookies"
-        >
+        <Link className={`${OUTLINE_PILL} hover:border-danger hover:text-danger`} href="/clear_cookies">
           <RefreshCw className="size-3.5" />
           {t("reset_defaults")}
         </Link>

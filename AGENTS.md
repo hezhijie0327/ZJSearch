@@ -1431,6 +1431,16 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
 Weights: `font-extrabold` brand only, `font-semibold` headings,
 `font-medium` emphasis/selected states; body stays regular.
 
+i18n CASING LADDER (judged BY ROLE, never uniformly): interactive
+controls (buttons, toggles, segment options) are Capitalized in en;
+meta/status vocabulary (statuses, relations, counts, gerund running…
+states) is deliberately lowercase sentence-fragments; body TITLE lines
+are sentences.  zh punctuation is full-width (，。：；？！), ellipsis
+is `…` (never `...`), the interpunct separator is `·` everywhere.
+Key parity + placeholder parity between en.ts and zh-CN.ts are exact
+(a scripted sweep is the audit; the catalogs currently hold 864 keys
+each, zero mismatches).
+
 THINK vs CONTENT (the AI timeline's one visual rule): machine-produced
 material — reasoning streams, web_reader reading panes, MCP payloads,
 raw-args debug — sits on the boxed machine-voice ground (`READ_PANE` /
@@ -1519,6 +1529,13 @@ Shared style & logic tokens (import, never re-type):
   divide-y sectioned card), `SectionLabel` (the gray band header inside a
   Card) and `SettingRow`/`IconTile` (icon-square + title/description +
   right control) -- tune panel styling THERE, never per page.
+- `components/CapList.tsx` is the CAP-AND-EXPAND LIST: head items + the
+  older tail inside a Collapse (the +N reveal is a height animation) +
+  the CapChip -- eight views hand-wired the slice+Collapse+CapChip trio
+  before this.  The cap STATE stays the caller's where a citation click
+  must force the list open (pass `expanded`+`onToggle`), `reverse`
+  renders newest-first without the caller slicing, and `renderItem`
+  receives the item's ORIGINAL index (a keyed/open-state identity).
 - `features/results/aiSearch/calls/bodyParts.tsx` is the TOOL-ROW BODY
   furniture (the search_web result-card standard at body scale) --
   REUSE-FIRST: a new list-shaped tool body composes these instead of

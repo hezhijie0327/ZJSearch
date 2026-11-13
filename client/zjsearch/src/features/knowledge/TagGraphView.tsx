@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { graphSnapshot, itemsByTag, type TagGraph } from "@/lib/kb/recall.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
+import { CHIP, CHIP_BTN, CHIP_HOVER } from "@/lib/styles.ts";
 
 /**
  * The knowledge page's TAG GRAPH (the GraphRAG view): nodes are concept
@@ -668,7 +669,7 @@ export function TagGraphView({
   }, [graph, tagAt, toLayout, select]);
 
   return (
-    <div>
+    <div className="relative">
       <PanelSearch
         ariaLabel={t("knowledge_graph_search")}
         onChange={(value) => setSearch(value)}
@@ -737,7 +738,7 @@ export function TagGraphView({
           title={t("knowledge_graph_empty")}
         />
       ) : (
-        <div className="relative mt-3 overflow-hidden rounded-2xl border border-line bg-surface">
+        <div className="relative mt-3 animate-fade-up overflow-hidden rounded-2xl border border-line bg-surface">
           {/* the ONE band language: a "graph · N" label band over the canvas
               (the tabs' bodies all open with a labeled band) */}
           <div className="flex items-center gap-2 bg-surface-2/60 px-5 py-2.5 sm:px-6">
@@ -756,18 +757,13 @@ export function TagGraphView({
               <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-2">
                 <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-accent">{selected}</span>
                 <button
-                  className="shrink-0 rounded-full bg-accent-strong px-2.5 py-1 text-[13px] font-medium text-accent-contrast transition-opacity hover:opacity-90"
+                  className="shrink-0 rounded-full bg-accent-strong px-2.5 py-1 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong-hover"
                   onClick={() => onSelectTag(selected)}
                   type="button"
                 >
                   {t("knowledge_graph_filter")}
                 </button>
-                <button
-                  aria-label={t("close")}
-                  className="shrink-0 rounded-md p-1 text-ink-3 transition-colors hover:text-ink"
-                  onClick={() => select(null)}
-                  type="button"
-                >
+                <button aria-label={t("close")} className={CHIP_BTN} onClick={() => select(null)} type="button">
                   <X aria-hidden="true" className="size-4" />
                 </button>
               </div>
@@ -779,7 +775,7 @@ export function TagGraphView({
                     const neighbor = edge.a === selected ? edge.b : edge.a;
                     return (
                       <button
-                        className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink"
+                        className={`${CHIP} ${CHIP_HOVER}`}
                         key={neighbor}
                         onClick={() => select(neighbor)}
                         type="button"

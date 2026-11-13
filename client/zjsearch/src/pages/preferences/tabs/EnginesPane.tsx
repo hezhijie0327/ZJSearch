@@ -3,6 +3,7 @@
 import { Check, Key, LayoutGrid, X } from "lucide-react";
 import { categoryLabel } from "@/lib/categories.ts";
 import { useT } from "@/lib/i18n.ts";
+import { OUTLINE_PILL } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
 import { Card, CategoryTab, SectionLabel, SettingRow } from "@/pages/preferences/parts.tsx";
 import { EngineTable } from "@/pages/preferences/tabs/EngineTable.tsx";
@@ -55,7 +56,7 @@ export function EnginesPane({
         {currentEngineTab ? (
           <div className="flex items-center gap-1.5">
             <button
-              className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:border-ok hover:text-ok"
+              className={`${OUTLINE_PILL} hover:border-ok hover:text-ok`}
               onClick={() => {
                 form.setAllEngines(tabEngineKeys, true);
               }}
@@ -65,7 +66,7 @@ export function EnginesPane({
               {t("enable_all")}
             </button>
             <button
-              className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:border-danger hover:text-danger"
+              className={`${OUTLINE_PILL} hover:border-danger hover:text-danger`}
               onClick={() => {
                 form.setAllEngines(tabEngineKeys, false);
               }}
