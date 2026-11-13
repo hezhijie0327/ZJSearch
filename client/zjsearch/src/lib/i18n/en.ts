@@ -273,6 +273,7 @@ export const EN = {
   ai_calendar_find_title: "days suited for {activity} within {n} days:",
   ai_calendar_find_metric: "{n} suited days",
   ai_calendar_find_empty: "no day suited for {activity} within {n} days",
+  ai_calendar_terms_row: "Almanac terms",
   ai_calendar_terms_title: "Almanac activity vocabulary ({n})",
   ai_calendar_terms_metric: "{n} activities",
   weekday_mon: "Monday",

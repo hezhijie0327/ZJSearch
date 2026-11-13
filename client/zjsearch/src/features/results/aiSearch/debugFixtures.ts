@@ -567,6 +567,20 @@ const FULL_STAGE: DebugScenario = {
           args: { date: "11-13" },
         },
         {
+          id: 18,
+          tool: "calendar",
+          q: "开市",
+          status: "pending",
+          args: { find_suited: "开市" },
+        },
+        {
+          id: 19,
+          tool: "calendar",
+          q: "",
+          status: "pending",
+          args: { list_terms: true },
+        },
+        {
           id: 12,
           tool: "ask_user",
           q: "",
@@ -690,7 +704,7 @@ const FULL_STAGE: DebugScenario = {
           festivals: [],
           solar_holidays: [],
           folk: ["达摩祖师诞"],
-          workday: { status: "workday", name: null },
+          workday: { status: "workday", name: null, coverage_until: "2027-10-07" },
           almanac: {
             suited: ["结婚姻", "宴会", "开市"],
             avoided: ["出行", "安葬"],

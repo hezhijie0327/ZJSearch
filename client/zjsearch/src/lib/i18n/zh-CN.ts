@@ -274,6 +274,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_calendar_find_title: "宜 {activity} · 未来 {n} 天:",
   ai_calendar_find_metric: "{n} 个吉日",
   ai_calendar_find_empty: "未来 {n} 天没有宜 {activity} 的日子",
+  ai_calendar_terms_row: "黄历词表",
   ai_calendar_terms_title: "黄历活动词表（{n} 项）",
   ai_calendar_terms_metric: "{n} 项活动",
   weekday_mon: "星期一",

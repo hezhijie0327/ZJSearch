@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Clock, Copy, SearchCheck } from "lucide-react";
+import { BookOpenText, Clock, Copy, SearchCheck } from "lucide-react";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiCalendarLunar, AiCalendarPayload } from "@/features/results/aiSearch/timeline.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
@@ -114,11 +114,16 @@ function AlmanacBlock({ lunar, t }: { lunar: AiCalendarLunar; t: ToolRowProps["t
       <AlmanacRow label={t("ai_calendar_gods")} terms={a.gods} tone="muted" />
       <AlmanacRow label={t("ai_calendar_avoid_gods")} terms={a.avoid_gods} tone="muted" />
       <AlmanacRow label={t("ai_calendar_directions")} terms={a.directions} tone="muted" />
-      {a.pengzu ? (
-        <p className="mt-1 text-xs text-ink-3" dir="auto">
-          {t("ai_calendar_pengzu")} {a.pengzu}
-        </p>
-      ) : null}
+      <AlmanacRow
+        label={t("ai_calendar_pengzu")}
+        // Pengzu's taboos arrive as comma-joined clauses -- one chip per
+        // clause reads as the same labeled row the other fields speak
+        terms={a.pengzu
+          .split(/[,，]/)
+          .map((clause) => clause.trim())
+          .filter(Boolean)}
+        tone="muted"
+      />
     </div>
   );
 }
@@ -250,12 +255,20 @@ function TermsBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps
   const terms = payload.terms ?? [];
   return (
     <div className="mt-1 rounded-xl bg-surface-2/50 px-3 py-2.5">
+      {/* the vocabulary as a DIRECTORY GRID (the list_engines
+          inventory's cell vocabulary): 83 terms laid out multi-column
+          -- a chip wall read as noise, one flat paragraph as
+          unrendered text; the grid scans */}
       <p className="text-xs font-medium text-ink-2" dir="auto">
         {t("ai_calendar_terms_title", { n: String(terms.length) })}
       </p>
-      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-1">
         {terms.map((term) => (
-          <span className="rounded bg-surface px-1.5 py-0.5 text-xs leading-4 text-ink-2" dir="auto" key={term}>
+          <span
+            className="truncate rounded-md bg-surface px-2 py-1 text-center text-xs text-ink-2"
+            dir="auto"
+            key={term}
+          >
             {term}
           </span>
         ))}
@@ -285,12 +298,16 @@ function FindBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps[
       <div className="mt-1.5 space-y-1">
         {findings.map((finding) => {
           const weekday = weekdayLabel(finding.date, t) || finding.weekday;
+          // the matched terms that merely ECHO the scanned activity are
+          // noise (the row exists because the day suits it) -- only the
+          // ADDITIONAL terms deserve chips
+          const extraSuited = finding.suited.filter((term) => term !== payload.activity);
           return (
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs" key={finding.date}>
               <span className="font-mono tabular-nums text-ink">{finding.date}</span>
               <span className="text-ink-3">{weekday}</span>
               <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                {finding.suited.map((term) => (
+                {extraSuited.map((term) => (
                   <span className="rounded bg-ok/10 px-1.5 py-0.5 text-xs leading-4 text-ok" key={term}>
                     {term}
                   </span>
@@ -315,7 +332,27 @@ function FindBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps[
 
 export const calendarView: ToolView = {
   Icon: Clock,
-  label: ({ call, t }) => call.q || t("ai_calendar_row"),
+  // the mode carries its own icon + label: the clock icon names the
+  // instant/lookup shapes, the scan reads as a search and the
+  // vocabulary as a reference list (a terms row wearing the clock
+  // icon + the generic clock label read as a rendering bug)
+  iconFor: ({ call }) => {
+    const args = call.args as Record<string, unknown> | undefined;
+    const mode = call.calendar?.mode ?? (args?.list_terms ? "terms" : args?.find_suited ? "find" : "");
+    const Icon = mode === "find" ? SearchCheck : mode === "terms" ? BookOpenText : Clock;
+    return <Icon aria-hidden="true" className="size-3 shrink-0" />;
+  },
+  label: ({ call, t }) => {
+    const args = call.args as Record<string, unknown> | undefined;
+    const mode = call.calendar?.mode ?? (args?.list_terms ? "terms" : "");
+    if (mode === "terms") {
+      return t("ai_calendar_terms_row");
+    }
+    if (mode === "find") {
+      return call.calendar?.activity || call.q || t("ai_calendar_row");
+    }
+    return call.q || t("ai_calendar_row");
+  },
   metric: ({ call, t }) => {
     if (call.status === "pending") {
       return t("ai_calendar_running");
