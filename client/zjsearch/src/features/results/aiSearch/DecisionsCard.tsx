@@ -287,6 +287,7 @@ export function DecisionsCard({ decisions }: { decisions: AiDecision[] }) {
         cap={4}
         headClassName="mt-3 space-y-1 px-1"
         items={decisions}
+        listRole
         renderItem={(decision) => {
           const idx = decisions.indexOf(decision);
           return (

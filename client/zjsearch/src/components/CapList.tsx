@@ -27,6 +27,7 @@ export function CapList<T>({
   headClassName = "",
   tailClassName = "",
   chipClassName = CAP_CHIP_CLASS,
+  listRole = false,
 }: {
   items: T[];
   /** the second arg is the item's index in the ORIGINAL array */
@@ -39,6 +40,10 @@ export function CapList<T>({
   headClassName?: string;
   tailClassName?: string;
   chipClassName?: string;
+  /** the items are `<li>` rows: the head/tail containers carry
+      role="list" (a plain div parent reads as an invalid listitem in
+      the a11y tree -- the audit's listitem rule) */
+  listRole?: boolean;
 }) {
   const [ownOpen, setOwnOpen] = useState(false);
   const isControlled = onToggle !== undefined;
@@ -51,11 +56,16 @@ export function CapList<T>({
   // the ORIGINAL index (the keyed/open-state consumers' identity -- a
   // reversed VIEW must not renumber the items)
   const origin = (item: T) => items.indexOf(item);
+  const role = listRole ? "list" : undefined;
   return (
     <>
-      <div className={headClassName}>{shown.map((item) => renderItem(item, origin(item)))}</div>
+      <div className={headClassName} role={role}>
+        {shown.map((item) => renderItem(item, origin(item)))}
+      </div>
       <Collapse className={open && tail.length > 0 ? tailClassName : ""} open={open} unmountAfterHide>
-        <div className={tailClassName}>{tail.map((item) => renderItem(item, origin(item)))}</div>
+        <div className={tailClassName} role={role}>
+          {tail.map((item) => renderItem(item, origin(item)))}
+        </div>
       </Collapse>
       {hidden > 0 ? (
         <CapChip className={chipClassName} expanded={open} hidden={hidden} onToggle={() => setOpen(!open)} />

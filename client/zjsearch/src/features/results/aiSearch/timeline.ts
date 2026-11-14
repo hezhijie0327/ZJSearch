@@ -151,7 +151,6 @@ export interface AiCalendarPayload {
   utc_offset: string | null;
   /** now mode */
   time?: string;
-  datetime?: string;
   utc?: string | null;
   unix?: number | null;
   /** date mode */
@@ -1735,7 +1734,6 @@ function normalizeCalendar(value: unknown): AiCalendarPayload {
     weekday: String(c.weekday ?? ""),
     utc_offset: typeof c.utc_offset === "string" && c.utc_offset ? c.utc_offset : null,
     time: typeof c.time === "string" ? c.time : undefined,
-    datetime: typeof c.datetime === "string" ? c.datetime : undefined,
     utc: typeof c.utc === "string" ? c.utc : null,
     unix: typeof c.unix === "number" ? c.unix : null,
     target: typeof c.target === "string" ? c.target : undefined,
