@@ -546,10 +546,14 @@ rules and the shared-token inventory from AGENTS.md, covering:
    debug contract (`raw`).  NAME-FITNESS: every tool name is a verb
    (+ object) naming its dominant facet, judged against what the
    executor actually does — a composite tool whose name covers one
-   facet must have its description LEAD with the others (the clock in
-   the date tool), and an ACCEPTED mismatch is recorded in the spec
-   itself so a later round neither silently renames (prompt caches,
-   stored threads, the mock, the docs all pay) nor re-litigates; verb
+   facet must have its description LEAD with the others — or be SPLIT
+   when the mismatched facet has its own call rhythm (the
+   calendar/clock split 2026-11: a bare "what time is it" paid the
+   whole lunar/almanac block; the clock is the lean instant, the
+   calendar keeps every date facet); an ACCEPTED mismatch is recorded
+   in the spec itself so a later round neither silently renames
+   (prompt caches, stored threads, the mock, the docs all pay) nor
+   re-litigates; verb
    consistency holds across the surface (read = content extraction,
    search = retrieval with distinct objects disambiguated in each
    spec, list = inventory, set/update = authoritative snapshot
