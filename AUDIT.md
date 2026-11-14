@@ -543,7 +543,19 @@ rules and the shared-token inventory from AGENTS.md, covering:
    PER-SERVER budget (one dead endpoint must not erase the healthy
    servers nor re-pay the aggregate every run); settlement payload keys
    all consumed (dead bytes are drift) and every settlement carries the
-   debug contract (`raw`).
+   debug contract (`raw`).  NAME-FITNESS: every tool name is a verb
+   (+ object) naming its dominant facet, judged against what the
+   executor actually does — a composite tool whose name covers one
+   facet must have its description LEAD with the others (the clock in
+   the date tool), and an ACCEPTED mismatch is recorded in the spec
+   itself so a later round neither silently renames (prompt caches,
+   stored threads, the mock, the docs all pay) nor re-litigates; verb
+   consistency holds across the surface (read = content extraction,
+   search = retrieval with distinct objects disambiguated in each
+   spec, list = inventory, set/update = authoritative snapshot
+   writes, record = ledger append, delegate/message = the subagent
+   lifecycle); browse's actions follow one verb vocabulary (noun
+   actions produce a noun artifact deliberately — snapshot).
 19. **i18n catalogs** — the scripted sweep (extract both catalogs):
    key parity EXACT, placeholder parity EXACT, dead keys deleted,
    hardcoded literals outside the catalogs flagged, zh punctuation

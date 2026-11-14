@@ -164,7 +164,9 @@ def _almanac_terms() -> list[str]:
         for off in range(0, 730, 3):
             day = start + datetime.timedelta(days=off)
             try:
-                d = cnlunar.Lunar(datetime.datetime(day.year, day.month, day.day), godType="8char")
+                d = cnlunar.Lunar(
+                    datetime.datetime(day.year, day.month, day.day), godType="8char"
+                )
                 suited |= {str(term) for term in d.goodThing if term}
                 avoided |= {str(term) for term in d.badThing if term}
             except Exception:  # pylint: disable=broad-except
@@ -209,8 +211,16 @@ def _workday_block(day: datetime.date) -> dict[str, t.Any] | None:
         return None
     name = str(name).strip() if name else None
     covered = day <= boundary
-    status = ("off" if is_holiday else ("makeup" if name else "workday")) if covered else None
-    return {"status": status, "name": name if covered else None, "coverage_until": boundary.isoformat()}
+    status = (
+        ("off" if is_holiday else ("makeup" if name else "workday"))
+        if covered
+        else None
+    )
+    return {
+        "status": status,
+        "name": name if covered else None,
+        "coverage_until": boundary.isoformat(),
+    }
 
 
 def _lunar_block(day: datetime.date) -> dict[str, t.Any] | None:
@@ -228,7 +238,9 @@ def _lunar_block(day: datetime.date) -> dict[str, t.Any] | None:
     if cnlunar is None or not (_LUNAR_MIN_YEAR <= day.year <= _LUNAR_MAX_YEAR):
         return None
     try:
-        d = cnlunar.Lunar(datetime.datetime(day.year, day.month, day.day), godType="8char")
+        d = cnlunar.Lunar(
+            datetime.datetime(day.year, day.month, day.day), godType="8char"
+        )
         month = str(d.lunarMonthCn or "")
         if month and month[-1] in _MONTH_SIZE_SUFFIXES:
             month = month[:-1]
@@ -241,7 +253,9 @@ def _lunar_block(day: datetime.date) -> dict[str, t.Any] | None:
             # (computed against the library, never assumed -- some years
             # end on the 29th)
             eve = cnlunar.Lunar(
-                datetime.datetime.combine(day + datetime.timedelta(days=1), datetime.time()),
+                datetime.datetime.combine(
+                    day + datetime.timedelta(days=1), datetime.time()
+                ),
                 godType="8char",
             )
             if eve.lunarMonth == 1 and eve.lunarDay == 1 and not eve.isLunarLeapMonth:
@@ -308,7 +322,14 @@ class CalendarError(ValueError):
 def calendar_spec() -> dict[str, t.Any]:
     """The ``calendar`` tool spec -- the three semantics live on one api:
     no args = now; ``date`` = absolute lookup (wins over ``offset_days``
-    when both are passed); ``offset_days`` = relative to today."""
+    when both are passed); ``offset_days`` = relative to today.
+
+    NAME-FITNESS (accepted mismatch): the name names the dominant facet
+    (the date table), NOT the wall clock -- the description LEADS with
+    the current time so a "what time is it" question still lands here.
+    A rename (clock/time) was judged not worth the cost (prompt caches,
+    the mock, the docs, the wire surface); do not re-litigate without a
+    new reason."""
     return {
         "name": CALENDAR_TOOL,
         "description": """\
@@ -363,7 +384,9 @@ of the user's.""",
     }
 
 
-def parse_calendar_call(call: dict[str, t.Any]) -> tuple[str, str, int | None, str, bool]:
+def parse_calendar_call(
+    call: dict[str, t.Any],
+) -> tuple[str, str, int | None, str, bool]:
     """(tz, date, offset_days, find_suited, list_terms) of one
     ``calendar`` call -- sanitized: the tz/date/find strings capped, the
     offset clamped to the legal range (None when absent)."""
@@ -373,14 +396,18 @@ def parse_calendar_call(call: dict[str, t.Any]) -> tuple[str, str, int | None, s
     tz = str(args.get("tz") or "").strip()
     date = str(args.get("date") or "").strip()[:10]
     find_suited = str(args.get("find_suited") or "").strip()[:40]
-    list_terms = args.get("list_terms") is True or str(args.get("list_terms") or "").lower() in ("1", "true")
+    list_terms = args.get("list_terms") is True or str(
+        args.get("list_terms") or ""
+    ).lower() in ("1", "true")
     offset_raw = args.get("offset_days")
     if offset_raw is None or (isinstance(offset_raw, str) and not offset_raw.strip()):
         return tz, date, None, find_suited, list_terms
     try:
         offset = max(-_MAX_OFFSET_DAYS, min(int(float(offset_raw)), _MAX_OFFSET_DAYS))
     except (TypeError, ValueError):
-        raise CalendarError(f"offset_days must be an integer ({-_MAX_OFFSET_DAYS}..{_MAX_OFFSET_DAYS})") from None
+        raise CalendarError(
+            f"offset_days must be an integer ({-_MAX_OFFSET_DAYS}..{_MAX_OFFSET_DAYS})"
+        ) from None
     return tz, date, offset, find_suited, list_terms
 
 
@@ -392,7 +419,9 @@ def _resolve_zone(tz: str) -> tuple[ZoneInfo | None, str]:
     adds the tool's raising contract."""
     zone, name = resolve_zone(tz)
     if zone is None and name:
-        raise CalendarError(f"unknown timezone {name!r} -- pass an IANA name like 'Asia/Shanghai'")
+        raise CalendarError(
+            f"unknown timezone {name!r} -- pass an IANA name like 'Asia/Shanghai'"
+        )
     return zone, name
 
 
@@ -414,7 +443,9 @@ def _parse_date(text: str, today: datetime.date) -> datetime.date:
         if len(parts) == 1 and text.isdigit():
             return datetime.date(today.year, today.month, int(text))
     except ValueError as exc:
-        raise CalendarError(f"date {text!r} is not a real calendar date: {exc}") from exc
+        raise CalendarError(
+            f"date {text!r} is not a real calendar date: {exc}"
+        ) from exc
     raise CalendarError(
         f'date must be "YYYY-MM-DD", "MM-DD" (current year) or a bare day "DD" (current month), got {text!r}'
     )
@@ -499,7 +530,9 @@ def calendar_payload(
         payload["weekday"] = weekday_name(target)
         payload["iso_week"] = target.isocalendar()[1]
         payload["days_from_today"] = days
-        payload["relation"] = "today" if days == 0 else ("future" if days > 0 else "past")
+        payload["relation"] = (
+            "today" if days == 0 else ("future" if days > 0 else "past")
+        )
         # the TARGET's lunar fields -- "which lunar day is Mid-Autumn" is
         # a date-mode lookup
         payload["lunar"] = _lunar_block(target)
@@ -508,7 +541,11 @@ def calendar_payload(
     payload["time"] = now.strftime("%H:%M:%S")
     payload["datetime"] = now.replace(microsecond=0).isoformat(timespec="seconds")
     payload["utc"] = (
-        now.astimezone(datetime.timezone.utc).replace(microsecond=0).isoformat(timespec="seconds") if zone else None
+        now.astimezone(datetime.timezone.utc)
+        .replace(microsecond=0)
+        .isoformat(timespec="seconds")
+        if zone
+        else None
     )
     payload["unix"] = int(now.timestamp()) if zone else None
     # the lunar block rides BOTH modes -- a lunar-date chat question is a now lookup
@@ -524,7 +561,9 @@ def run_call(
     the client's row renders the real value."""
     try:
         tz_arg, date_arg, offset_arg, find_arg, terms_arg = parse_calendar_call(call)
-        payload = calendar_payload(tz_arg, date_arg, offset_arg, find_arg, terms_arg, default_tz)
+        payload = calendar_payload(
+            tz_arg, date_arg, offset_arg, find_arg, terms_arg, default_tz
+        )
     except CalendarError as exc:
         return f"error: {exc}", {"round": rnd, "id": wire_id, "status": "error"}
     return (
