@@ -428,16 +428,50 @@ rules and the shared-token inventory from AGENTS.md, covering:
    panel/viewport — the unreachable-dropdown class); an in-panel
    fallback's escape is a real navigation, never an anchor the
    click-capture can loop.
-10. **Prompts (agentic)** — the spine fragments COMPOSED, never
+10. **Prompts & tool instructions (BOTH channels, structure AND
+   content)** — STRUCTURE: the spine fragments COMPOSED, never
    hand-copied; round policy lives ONLY in the depth branches of
    `runs/profile.py`; the reply language is a DATA TABLE from catalog
    tag → language name; the search tool exposes the parameters the
    deployment supports + the precision operators + the bang escape
-   hatch + the empty-result fallback.  Per-run material
+   hatch + the empty-result fallback; per-run material
    (`<research_policy>`'s graded values) rides the USER message's
    `<run_context>` — per-run blocks in the system prompt break the
-   cross-run prefix cache.  Verify with composition asserts over
-   `spine.build_messages` / `initial_messages` / the tool specs.
+   cross-run prefix cache; tool-conditional blocks key off the
+   registered `toolset` frozenset (composition asserts over
+   `spine.build_messages` / `initial_messages` with a minimal AND a
+   maximal toolset — the prompt can never promise a tool the model does
+   not have).  CONTENT (the drift sweep — the mock-spoke-dead-names
+   class hits prompts and INSTRUCTIONS exactly the same way):
+   (a) VOCABULARY: every tool name / action / parameter / surface term
+   quoted in ANY prompt module (`prompts/*.py`) and in every tool's
+   description + INSTRUCTIONS must exist in the CURRENT spec — script
+   it: collect the registered tool names + the browse action enum +
+   each spec's parameter names, then flag quoted identifiers in prompt
+   text that match none (a rename leaves prose stale silently).
+   Triage the hits — four benign classes recur: URL paths inside
+   example links, the module's own function-name docstring references,
+   each tool's OWN parameter names, and historical notes in module
+   docstrings (which never ship to the model); everything else is real
+   drift;
+   (b) TWO-CHANNEL PARITY: description and INSTRUCTIONS must not
+   contradict (the same action taught two behaviors), doctrine lives in
+   INSTRUCTIONS only, semantics only in the description;
+   (c) WEIGHT: flag the heavyweight (spec description + INSTRUCTIONS
+   character counts per tool — they ride EVERY run and the overview;
+   the top offender once carried ~2.2k tokens of which half was
+   doctrine leaked into the description);
+   (d) BYTE-STABILITY: two same-day builds with different round budgets
+   / depth grades must produce an IDENTICAL system prefix (script the
+   diff — a clock or graded value in a cached block breaks the prompt
+   cache for every run);
+   (e) STALE DOCTRINE: prompts teaching a RETIRED behavior (the pooled
+   one-shot read lane, the removed write-audit phase, retired payload
+   keys) must read as dead — grep the prompt text against the removed
+   feature's vocabulary;
+   (f) LANGUAGE RULES: the directive table, the memory locale rule, and
+   the honesty notes (`notes.py`) speak the run's UI locale; halt notes
+   cover every `halt_reason` value in the closed set (i18n keys too).
 11. **Knowledge store & the RAG archive lane** — the ONE-ROW-PER-PAGE
    doctrine; the retrieval head-bias contract (first-8k serves both
    legs, body keeps 60k — recall is head-biased BY DESIGN); the
