@@ -261,7 +261,9 @@ function NowBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps["
 
 function DateBody({ payload, t }: { payload: AiCalendarPayload; t: ToolRowProps["t"] }) {
   const target = payload.target ?? payload.today;
-  const weekday = weekdayLabel(target, t) || payload.weekday;
+  // computed client-side off the ISO date; the payload's target_weekday
+  // (then the legacy ground weekday) only covers a malformed date
+  const weekday = weekdayLabel(target, t) || payload.target_weekday || payload.weekday;
   const days = payload.days_from_today ?? 0;
   const relation = relationChip(payload, t);
   return (

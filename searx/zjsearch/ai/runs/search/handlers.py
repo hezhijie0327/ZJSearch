@@ -21,7 +21,6 @@ from urllib.parse import urlsplit
 from searx.zjsearch.ai.browser import config as browser_config
 from searx.zjsearch.ai.core.config import zj_block
 from searx.zjsearch.ai.runs import attachments as uploads_fetch
-from searx.zjsearch.ai.tools import mcp
 from searx.zjsearch.ai.tools import search_tools
 from searx.zjsearch.ai.tools import browse as browse_tool
 from searx.zjsearch.ai.tools.browse import read as reader
@@ -118,7 +117,10 @@ def _time_tool_feed_line(tool_name: str, payload: dict[str, t.Any]) -> str:
         )[:_TIME_FEED_CAP]
     if mode == "date":
         target = str(payload.get("target") or "")
-        weekday = str(payload.get("weekday") or "")
+        # the TARGET's weekday (the payload's `weekday` is the zone ground,
+        # TODAY's -- the target rides `target_weekday` since the collision
+        # fix, the old key kept as the pre-fix payload's fallback)
+        weekday = str(payload.get("target_weekday") or payload.get("weekday") or "")
         days = payload.get("days_from_today")
         relation = str(payload.get("relation") or "")
         lunar = payload.get("lunar") or {}

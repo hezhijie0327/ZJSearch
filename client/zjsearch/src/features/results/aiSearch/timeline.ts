@@ -140,9 +140,10 @@ export interface AiCalendarLunar {
 
 /** calendar rows: the composite time/date payload (the settlement's
     structured answer) -- `mode` discriminates the two shapes: `now`
-    carries the instant fields, `date` the calendar lookup's.  The
-    weekday is the fixed English name from the server; the row renders
-    it localized off the ISO date. */
+    carries the instant fields, `date` the calendar lookup's.  `weekday`
+    is the zone ground (TODAY's fixed English name) in every mode; the
+    date mode's TARGET weekday rides `target_weekday`.  The row renders
+    weekdays localized off the ISO date, so both are fallbacks only. */
 export interface AiCalendarPayload {
   mode: "now" | "date" | "find" | "terms";
   timezone: string | null;
@@ -155,6 +156,8 @@ export interface AiCalendarPayload {
   unix?: number | null;
   /** date mode */
   target?: string;
+  /** the target's fixed English weekday (date mode only) */
+  target_weekday?: string;
   iso_week?: number;
   days_from_today?: number;
   relation?: "past" | "today" | "future";
@@ -1737,6 +1740,7 @@ function normalizeCalendar(value: unknown): AiCalendarPayload {
     utc: typeof c.utc === "string" ? c.utc : null,
     unix: typeof c.unix === "number" ? c.unix : null,
     target: typeof c.target === "string" ? c.target : undefined,
+    target_weekday: typeof c.target_weekday === "string" && c.target_weekday ? c.target_weekday : undefined,
     iso_week: typeof c.iso_week === "number" ? c.iso_week : undefined,
     days_from_today: typeof c.days_from_today === "number" ? c.days_from_today : undefined,
     relation:

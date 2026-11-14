@@ -702,7 +702,10 @@ const FULL_STAGE: DebugScenario = {
       ms: 2,
       // the DATE shape ("11/13 是周几" -> 11-13): the loose MM-DD form
       // resolves in the current year; relation "today" is the truth tell;
-      // the lunar block is the TARGET's (a festival day shows its name)
+      // the lunar block is the TARGET's (a festival day shows its name).
+      // `weekday` is the zone ground (today's), the TARGET's weekday rides
+      // `target_weekday` (the collision fix: the old overwrite made the
+      // ground read "today is <target's weekday>")
       calendar: {
         mode: "date",
         timezone: "Asia/Shanghai",
@@ -710,6 +713,7 @@ const FULL_STAGE: DebugScenario = {
         weekday: "Friday",
         utc_offset: "UTC+08:00",
         target: "2026-11-13",
+        target_weekday: "Friday",
         iso_week: 46,
         days_from_today: 0,
         relation: "today",
@@ -731,7 +735,7 @@ const FULL_STAGE: DebugScenario = {
           almanac: {},
         },
       },
-      feed: '{"calendar": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"date","target":"2026-11-13","iso_week":46,"days_from_today":0,"relation":"today"}}',
+      feed: '{"calendar": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"date","target":"2026-11-13","target_weekday":"Friday","iso_week":46,"days_from_today":0,"relation":"today"}}',
     },
     {
       e: "call",
