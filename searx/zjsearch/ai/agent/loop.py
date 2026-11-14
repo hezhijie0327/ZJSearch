@@ -896,12 +896,18 @@ def _write_turn(  # pylint: disable=too-many-branches, too-many-statements, too-
         if outcome == "content":
             answered = True
             break
-        if outcome == "failed" or outcome == "reasoning":
-            # the transport errored, or the model misrouted everything into
-            # its reasoning channel -- the identical request would repeat
-            # it (the settle below surfaces both)
+        if outcome == "failed":
+            # the transport errored -- the identical request would repeat
+            # it (the settle below surfaces it)
             break
-        reasoning = True
+        if outcome == "reasoning":
+            # the model misrouted everything into its reasoning channel --
+            # the identical request would repeat it
+            reasoning = True
+            break
+        # an "empty" attempt (no events at all) retries ONCE; the halt
+        # reason must still name it honestly -- a twice-empty stream is NOT
+        # a reasoning misroute (found by the audit round, 2026-11)
         logger.warning("zjsearch loop: the writer produced no events (attempt %d/2)", attempt)
     prose, closed = splitter.finish()
     if prose:

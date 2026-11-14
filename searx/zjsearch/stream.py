@@ -19,6 +19,7 @@ the context building part of ``webapp.render`` (:py:func:`_render_context`)
 
 import base64
 import json
+import typing as t
 
 import flask
 from flask_babel import gettext
@@ -380,7 +381,18 @@ def _search_stream_response(search_query, raw_text_query, selected_locale, strea
                 recovery = flask.current_app.jinja_env.from_string(_late_chunk_recovery)
                 yield recovery.render(context, message=str(exc) or 'internal error')
 
-    response = flask.Response(flask.stream_with_context(generate()), mimetype='text/html')
+    def _utf8_safe(iterator: t.Iterator[str]) -> t.Iterator[bytes]:
+        """Yield UTF-8 bytes with lone surrogates scrubbed ('?'): a live
+        engine's broken title (an unpaired ``\\ud835`` in the source JSON)
+        must not kill the whole streamed page at the WSGI encode step --
+        werkzeug raises UnicodeEncodeError and the response dies mid-flight
+        past every recovery this module owns (found by the audit round,
+        2026-11; the same guard rides the AI NDJSON lanes,
+        ``ai.api.http._utf8_safe``)."""
+        for chunk in iterator:
+            yield chunk.encode("utf-8", "replace")
+
+    response = flask.Response(flask.stream_with_context(_utf8_safe(generate())), mimetype='text/html')
     # ask reverse proxies to pass the early shell through unbuffered
     response.headers['X-Accel-Buffering'] = 'no'
     return response

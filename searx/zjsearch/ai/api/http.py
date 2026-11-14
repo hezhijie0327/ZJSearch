@@ -56,11 +56,24 @@ def answer_lang(payload: dict[str, t.Any]) -> str:
     return "en" if lang in ("", "all", "auto") else lang
 
 
+def _utf8_safe(iterator: t.Iterator[str]) -> t.Iterator[bytes]:
+    """Yield UTF-8 bytes with lone surrogates scrubbed ('?'): a broken
+    upstream string (an engine title, an LLM JSON escape decoded to an
+    unpaired ``\\ud835``) would otherwise kill the response at the WSGI
+    encode step -- werkzeug raises UnicodeEncodeError and the whole
+    stream dies mid-flight (found by the audit round, 2026-11).  Encoding
+    here also skips werkzeug's own per-item ``str.encode``."""
+    for chunk in iterator:
+        yield chunk.encode("utf-8", "replace")
+
+
 def streaming_response(iterator: t.Iterator[str], mimetype: str) -> flask.Response:
     """A streamed response with the proxy/cache headers the AI endpoints
     need: ``X-Accel-Buffering: no`` keeps nginx from coalescing the
-    stream, ``Cache-Control: no-cache`` keeps whiteNoise / browsers out."""
-    resp = flask.Response(flask.stream_with_context(iterator), mimetype=mimetype)
+    stream, ``Cache-Control: no-cache`` keeps whiteNoise / browsers out.
+    The body crosses the WSGI boundary as pre-encoded bytes (the lone
+    surrogate scrub, ``_utf8_safe``)."""
+    resp = flask.Response(flask.stream_with_context(_utf8_safe(iterator)), mimetype=mimetype)
     resp.headers["X-Accel-Buffering"] = "no"
     resp.headers["Cache-Control"] = "no-cache"
     return resp
