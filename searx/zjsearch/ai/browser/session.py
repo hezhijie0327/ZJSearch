@@ -152,9 +152,13 @@ _ANNOTATE_JS = """
   root.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
   let n = 0;
   // the same shadow-root piercing the scan uses (a ref inside an open
-  // shadow root must get its mirror badge too)
-  const deep = (root) => {
-  for (const el of root.querySelectorAll('[data-zjs-ref]')) {
+  // shadow root must get its mirror badge too) -- the parameter is the
+  // QUERY scope, the annotation layer is the outer `root` (a parameter
+  // named `root` shadows it: the boxes then land on `document.append`,
+  // which throws "cannot have more than one Element child" on every
+  // page with a scanned element)
+  const deep = (scope) => {
+  for (const el of scope.querySelectorAll('[data-zjs-ref]')) {
     const r = el.getBoundingClientRect();
     if (r.width < 4 || r.height < 4) continue;
     if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
