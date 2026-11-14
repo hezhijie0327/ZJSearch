@@ -55,12 +55,14 @@ searx/zjsearch/ai/
                persona)· notes(run 级诚实注释)· report · deck ·
                extractor;工具教条走各包 INSTRUCTIONS → <tool_notes>
   tools/       一工具一自包含模块(spec + run + settle + 行语义):
-               search_web · browse/(read 并行读道 + session 服务)·
+               search_web · clock(瞬时)· calendar(日期/农历/黄历/吉日)·
+               browse/(session 服务;read=会话页,fetch=文档直取/捕获下载)·
                calculate · build_table(表格/数据点产物)· record_findings ·
                update_plan · ask_user · evaluate · memory · recall_history ·
                inspect_image ·
-               list_engines · delegate_research · mcp(纯桥接器)·
-               search_tools(发现工具:MCP 外部索引)
+               list_engines · set_deliverable(交付翻转)·
+               delegate_research · message_subtask(子代理续聊)·
+               mcp(纯桥接器)· search_tools(发现工具:MCP 外部索引)
   runs/        profile(档位/预算)· host(Run Host)· journal(run 日志)·
                overview(AI Overview)· attachments(多模态附件)
     search/    state · gather(并发执行)· registry([n] 注册表/dedup)·

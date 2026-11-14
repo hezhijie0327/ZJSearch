@@ -487,10 +487,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     round policy, few-shot recipes).  The tool implementations are
     self-contained packages under `ai/tools/` (one package per tool:
     spec + sanitizer + service; `core/`, `prompts/`, `runs/`, `api/`
-    complete the layout — see NEXTGEN-DESIGN.md).  THE COMPOSITE CALENDAR
-    (tools/calendar.py, EVERY tier + the overview surface): the wall clock
-    (no args — date, HH:MM:SS, weekday, UTC offset, UTC, unix) and a
-    calendar lookup table in one call — `date` accepts the full
+    complete the layout — see NEXTGEN-DESIGN.md).  THE CLOCK AND THE
+    CALENDAR (tools/clock.py + tools/calendar.py, EVERY tier + the
+    overview surface): the CLOCK is the instant only (no args — date,
+    HH:MM:SS, weekday, UTC offset, UTC, unix — split from the composite
+    calendar 2026-11 so a bare "what time is it" stops paying the
+    lunar/almanac block) and the CALENDAR is the lookup table — `date`
+    accepts the full
     `YYYY-MM-DD`, loose `MM-DD` (current year) or a bare `DD`
     (current month; the "25号是周几" shape), `offset_days` covers the
     relative forms ("next Wednesday" = read today's weekday, add N);
@@ -529,8 +532,9 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
     workday.  THE DATE/TIME DIVISION OF LABOR:
     `<today>` stays DATE-ONLY on the researched tiers — byte-stable
     across a same day's runs so the prompt-cache prefix survives — and
-    the calendar TOOL is the freshness channel (call-time answer, market
-    hours, mid-run re-checks); the ZERO-TOOL direct lane bakes the
+    the CLOCK TOOL is the freshness channel for the instant (call-time
+    answer, market hours, mid-run re-checks) and the CALENDAR TOOL for
+    the date facets; the ZERO-TOOL direct lane bakes the
     hour in instead (`spine.now_line` at write time), keeping its
     zero-tool shape.  Weekday tables and the zone resolve live in ONE
     place (`core/dates.py`), consumed by `spine` and the tool alike.

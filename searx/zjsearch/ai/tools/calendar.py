@@ -1,34 +1,34 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The ``calendar`` tool: the ONE composite time/date surface -- the wall
-clock AND a calendar lookup table in a single call.  Three semantics,
-one deterministic core (``datetime`` + ``ZoneInfo``, zero network):
+"""The ``calendar`` tool: date lookups, the auspicious-day scan and
+the almanac vocabulary -- the date facets of time (the INSTANT is the
+``clock`` tool, split 2026-11).  Deterministic to the core (``datetime``
++ ``ZoneInfo``, zero network):
 
-- no args -- the current instant in the USER'S zone: date, clock time,
-  weekday, UTC offset, UTC, unix;
 - ``date`` -- a calendar lookup: ``YYYY-MM-DD`` full form, ``MM-DD``
   (current year) or a bare ``DD`` (the "the 25th" shape, current
   month); answers the weekday, ISO week, days from today,
-  past/today/future;
+  past/today/future -- plus the LUNAR block (ganzhi year, zodiac,
+  lunar month/day, the day's solar term, the festivals hitting the day)
+  computed through ``cnlunar``: a lunar-calendar question is a lookup,
+  never something the model composes;
 - ``offset_days=N`` -- the date N days from today (tomorrow=1,
   yesterday=-1), same payload ("what date is next Wednesday": the model
-  reads today's weekday off the payload or ``<today>``, adds the day
+  reads today's weekday off ``<today>`` or a clock call, adds the day
   count, calls with the offset -- every step deterministic, nothing
-  guessed).
+  guessed); ``offset_days=0`` answers TODAY's lunar/almanac in one call;
+- ``find_suited`` / ``list_terms`` -- the auspicious-day scan and the
+  almanac's term vocabulary.
 
-``tz`` (an IANA name) re-anchors all three semantics to another zone;
-the default is the run's user zone, and a zoneless run falls back to
-the server's local clock SAYING SO (the ``<today>`` doctrine: never
-pretend).  Every payload also carries a LUNAR block (ganzhi year,
-zodiac, lunar month/day, the day's solar term, the festivals hitting
-the day) computed through ``cnlunar`` -- a lunar-calendar question is a
-lookup, never something the model composes.  The tool is registered for
-EVERY research run and the overview: the ``<today>`` block only grounds
-the DATE -- the clock time is never guessable, calendar arithmetic must
-not ride mental math, and a long run's start-of-run date goes stale (a
-re-read mid-run is one free call).
+``tz`` (an IANA name) re-anchors the semantics to another zone; the
+default is the run's user zone, and a zoneless run falls back to the
+server's local clock SAYING SO (the ``<today>`` doctrine: never
+pretend).  The tool is registered for EVERY research run and the
+overview: the ``<today>`` block only grounds the DATE -- calendar
+arithmetic must not ride mental math, and a long run's start-of-run
+date goes stale (a re-read mid-run is one free call).
 
-The instant the payload answers is the moment of the CALL, not of the
-run -- that freshness is the point."""
+Every payload answers at the moment of the CALL, not of the run --
+that freshness is the point."""
 
 import datetime
 import json
