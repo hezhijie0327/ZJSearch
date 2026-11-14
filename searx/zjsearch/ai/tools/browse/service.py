@@ -361,32 +361,60 @@ def _act_viewport(args: dict[str, t.Any], session_id: str) -> ActionResult:
     )
 
 
-def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
+_FETCH_RECIPE = (
+    "read extracts SESSION pages (the active page or background tabs by"
+    " index) -- a DOCUMENT url (pdf / office / data) is fetch(url), and"
+    " a captured download is fetch download=<filename>"
+)
+"""The one-verb teaching: a page url (or a download name) on read
+points the model at the fetch action instead of guessing."""
+
+
+def _act_fetch(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """DOCUMENT content OUTSIDE the session: a pdf / office / data url
+    fetched and converted directly (the browser never opens it), or a
+    captured download converted by name.  The lane shares the read
+    settlement (chars + the reading pane) but is not a session action."""
+    # pylint: disable=import-outside-toplevel
+    from searx.zjsearch.ai.tools.browse.read import PageReadError, read_document
+
     name = str(args.get("download") or "").strip()
     if name:
-        # a CAPTURED download instead of the live page (pdf / office /
-        # text -- the security gate only ever saved readable kinds)
+        # a CAPTURED download instead of a url (the security gate only
+        # ever saved readable kinds)
         doc = session.read_download(session_id, name)
         return ActionResult(
             feed=f"{name}\n\n{doc['text']}",
             frames=[{**session.frame(session_id), "agent": session_id}],
         )
     url = str(args.get("url") or "").strip()
-    if url:
-        # DOCUMENT urls read direct (bytes -> markdown -- the browser
-        # renders pdfs as viewer chrome, never content); a PAGE url is
-        # the open -> read rhythm, taught with the error
-        # pylint: disable=import-outside-toplevel
-        from searx.zjsearch.ai.tools.browse.read import PageReadError, read_document
+    if not url:
+        raise SessionError(
+            "fetch takes a DOCUMENT url (pdf / office / data) or"
+            " download=<the captured file's name> -- a PAGE url is"
+            " open -> read"
+        )
+    try:
+        title, text = read_document(url)
+    except PageReadError as exc:
+        raise SessionError(str(exc)) from exc
+    return ActionResult(
+        feed=f"{title}\n\n{text}",
+        frames=[{**session.frame(session_id), "agent": session_id}],
+        page={"url": url, "title": title},
+    )
 
-        try:
-            title, text = read_document(url)
-        except PageReadError as exc:
-            raise SessionError(str(exc)) from exc
-        return ActionResult(
-            feed=f"{title}\n\n{text}",
-            frames=[{**session.frame(session_id), "agent": session_id}],
-            page={"url": url, "title": title},
+
+def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    # the SESSION lane's extraction: the active page or background tabs
+    # by index -- a DOCUMENT url or a captured download is the fetch
+    # action (split 2026-11: one verb, one semantics)
+    if str(args.get("url") or "").strip():
+        raise SessionError(_FETCH_RECIPE)
+    if str(args.get("download") or "").strip():
+        raise SessionError(
+            "read converts session pages only -- a CAPTURED download is"
+            " fetch download=<filename>"
         )
     # the read lane's cap is the shared extraction budget (lazy import:
     # the read module pulls nothing heavy now, but the pattern stands)
@@ -589,8 +617,8 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
             if not first.startswith("error:"):
                 summary["text"] = str(result.feed)
         step_rows.append(summary)
-        if str(step.get("action") or "") == "read" and not first.startswith("error:"):
-            feeds.append(f"{i}. read: {str(result.feed)}")
+        if str(step.get("action") or "") in ("read", "fetch") and not first.startswith("error:"):
+            feeds.append(f"{i}. {step.get('action')}: {str(result.feed)}")
             page = result.page or {}
             reads.append(
                 {
@@ -637,6 +665,7 @@ _ACTORS = {
     "history": _act_history,
     "tab": _act_tab,
     "multi": _act_multi,
+    "fetch": _act_fetch,
     "upload": _act_upload,
     "close": _act_close,
 }

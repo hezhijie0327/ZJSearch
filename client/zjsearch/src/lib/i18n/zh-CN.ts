@@ -584,6 +584,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_browser_row_pending: "浏览器已打开——等待你的操作…",
   ai_browser_row_running: "正在操作页面…",
   ai_browser_act_open: "打开页面",
+  ai_browser_act_fetch: "拉取文档",
   ai_browser_act_read: "读取页面",
   ai_browser_row_waited: "已交回模型",
   ai_browser_act_snapshot: "页面快照",

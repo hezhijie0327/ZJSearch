@@ -42,8 +42,9 @@ always cheap.  SLOW HEAVY PAGES: open
 and tab new accept timeout (seconds, 5-40) -- more patience before the
 stop lands, less for snappy ones.
 DOCUMENT urls (pdf / office /
-data) skip the rhythm entirely: read(url) fetches and converts them
-directly -- the browser never opens them.  If the question contains an
+data) skip the rhythm entirely: fetch(url) pulls and converts them
+directly -- the browser never opens them -- and fetch(download=<name>)
+converts a captured download.  If the question contains an
 explicit URL and asks about that page (summarize it, read it, extract
 from it), open it FIRST -- do not search for what the page itself
 contains.  Do not drown either: skip obviously
@@ -127,6 +128,7 @@ _ACTIONS = (
     "drag",
     "viewport",
     "read",
+    "fetch",
     "history",
     "tab",
     "multi",
@@ -146,10 +148,11 @@ def browse_spec() -> dict[str, t.Any]:
 Drive ONE interactive browser session, page by page -- the reader for
 pages a plain fetch cannot see through (JS walls, sign-ins, apps) and
 the human handoff when only a person can proceed.  Actions: open(url)
-navigates and returns the interactive-element outline; read (NO url)
-extracts the active page as markdown -- documents (pdf / office / data
-types) are the exception where read takes a url and converts the bytes
-directly.  snapshot re-lists the current page's refs; click / type /
+navigates and returns the interactive-element outline; read (no url)
+extracts the active page as markdown; fetch(url) pulls a DOCUMENT (pdf
+/ office / data types) and converts the bytes directly -- the browser
+never opens it -- and fetch(download=<name>) converts a captured
+download instead.  snapshot re-lists the current page's refs; click / type /
 press / scroll (direction or text=) / hover (ref or x/y) / select /
 drag act by ref or viewport coordinates; screenshot shoots the
 viewport, an element close-up (ref), or a region (x/y/w/h); tab
@@ -179,7 +182,7 @@ patterns and the session craft live in the tool notes.""",
                 },
                 "url": {
                     "type": "string",
-                    "description": 'open / tab new: the absolute http(s) URL.  read: a DOCUMENT url only (pdf / office / data -- fetched and converted directly); omit it to read the page the session is currently on.',
+                    "description": 'open / tab new: the absolute http(s) URL.  fetch: a DOCUMENT url only (pdf / office / data -- fetched and converted directly, the browser never opens it).',
                 },
                 "ref": {
                     "type": "string",
@@ -205,7 +208,7 @@ patterns and the session craft live in the tool notes.""",
                 },
                 "download": {
                     "type": "string",
-                    "description": 'read: the captured download\'s filename (from the feed\'s download lines) to read INSTEAD of the live page.  upload: the captured file\'s name to attach to the page\'s file input.',
+                    "description": 'fetch: the captured download\'s filename (from the feed\'s download lines) to convert INSTEAD of fetching a url.  upload: the captured file\'s name to attach to the page\'s file input.',
                 },
                 "index": {
                     "type": "integer",
@@ -279,7 +282,7 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
     if action not in _ACTIONS:
         return {"action": ""}
     out: dict[str, t.Any] = {"action": action}
-    if action in ("open", "read") or (action == "tab" and str(args.get("op") or "") == "new"):
+    if action in ("open", "fetch") or (action == "tab" and str(args.get("op") or "") == "new"):
         out["url"] = str(args.get("url") or "").strip()[:2000]
     if action == "open" or (action == "tab" and str(args.get("op") or "") == "new"):
         # the model's own load patience for THIS page (seconds)
@@ -333,9 +336,11 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
         out["direction"] = direction if direction in ("up", "down", "left", "right") else "down"
         # the TARGETED scroll: the first page region matching this text
         out["text"] = str(args.get("text") or "").strip()[:200]
-    if action == "read":
-        # a CAPTURED download's read-back instead of the live page
+    if action == "fetch":
+        # a CAPTURED download's conversion instead of a url fetch
         out["download"] = str(args.get("download") or "").strip()[:200]
+    if action == "read":
+        # background tabs: the active page by default, or by strip index
         try:
             out["index"] = int(args.get("index"))
         except (TypeError, ValueError):

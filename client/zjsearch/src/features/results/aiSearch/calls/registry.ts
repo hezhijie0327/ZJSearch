@@ -31,6 +31,7 @@ export const TOOL_VIEWS: Record<AiSearchCall["tool"], ToolView> = {
   browse: browseView,
   calculate: calculateView,
   calendar: calendarView,
+  clock: calendarView,
   update_plan: updatePlanView,
   record_findings: recordFindingsView,
   ask_user: askUserView,

@@ -588,6 +588,7 @@ export const EN = {
   ai_browser_row_pending: "browser open -- waiting for you…",
   ai_browser_row_running: "working the page…",
   ai_browser_act_open: "Open page",
+  ai_browser_act_fetch: "Fetch document",
   ai_browser_act_read: "read page",
   ai_browser_row_waited: "handed back to the model",
   ai_browser_act_snapshot: "Snapshot",

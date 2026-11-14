@@ -554,7 +554,7 @@ const FULL_STAGE: DebugScenario = {
         },
         {
           id: 16,
-          tool: "calendar",
+          tool: "clock",
           q: "",
           status: "pending",
           args: {},
@@ -678,10 +678,9 @@ const FULL_STAGE: DebugScenario = {
       call: 16,
       status: "ok",
       ms: 2,
-      // the composite clock's NOW shape: the instant fields (the weekday
-      // stays the fixed English name -- the answer language directive
-      // localizes the prose around it) + the lunar block (the almanac
-      // fields ride the payload for the model; the row shows the line)
+      // the CLOCK tool's lean NOW shape (the split: the instant only --
+      // no lunar/almanac; today's lunar + almanac is the calendar tool
+      // with date=today, which call 17 below settles)
       calendar: {
         mode: "now",
         timezone: "Asia/Shanghai",
@@ -692,38 +691,6 @@ const FULL_STAGE: DebugScenario = {
         datetime: "2026-11-13T14:32:05+08:00",
         utc: "2026-11-13T06:32:05+00:00",
         unix: 1763008325,
-        lunar: {
-          year: "丙午",
-          year_cn: "二零二六",
-          zodiac: "马",
-          month: "十月",
-          day: "初五",
-          leap: false,
-          season: "孟冬",
-          ganzhi: { year: "丙午", month: "己亥", day: "辛卯" },
-          term: "",
-          next_term: { name: "小雪", date: "2026-11-22" },
-          festivals: [],
-          solar_holidays: [],
-          folk: ["达摩祖师诞"],
-          workday: { status: "workday", name: null, coverage_until: "2027-10-07" },
-          almanac: {
-            suited: ["结婚姻", "宴会", "开市"],
-            avoided: ["出行", "安葬"],
-            gods: ["岁德合"],
-            avoid_gods: ["死气"],
-            officer: "定",
-            ecliptic: "黑道日",
-            duty_god: "玄武",
-            mansions: "亢金龙",
-            east_star: "析木",
-            nayin: "松柏木",
-            pengzu: "辛不合酱 主人不尝,卯不穿井 水泉不香",
-            directions: ["喜神西南", "财神正东"],
-            fetus_god: "厨灶门外正南",
-            moon: "",
-          },
-        },
       },
       feed: '{"clock": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"now","time":"14:32:05","datetime":"2026-11-13T14:32:05+08:00","utc":"2026-11-13T06:32:05+00:00","unix":1763008325}}',
     },
@@ -764,7 +731,7 @@ const FULL_STAGE: DebugScenario = {
           almanac: {},
         },
       },
-      feed: '{"clock": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"date","target":"2026-11-13","iso_week":46,"days_from_today":0,"relation":"today"}}',
+      feed: '{"calendar": {"timezone":"Asia/Shanghai","today":"2026-11-13","weekday":"Friday","utc_offset":"UTC+08:00","mode":"date","target":"2026-11-13","iso_week":46,"days_from_today":0,"relation":"today"}}',
     },
     {
       e: "call",
@@ -3337,6 +3304,33 @@ const BROWSER_OPS_STAGE: DebugScenario = {
       url: "https://cn.bing.com/search?q=安吉云上草原",
       feed: "scrolled to '百度百科'. now: 安吉云上草原 - Search (https://cn.bing.com/search?q=安吉云上草原)",
       page: { url: "https://cn.bing.com/search?q=安吉云上草原", title: "安吉云上草原 - Search" },
+    },
+    {
+      e: "calls",
+      id: 2,
+      round: 2,
+      items: [
+        {
+          id: 3,
+          tool: "browse",
+          q: "",
+          status: "pending",
+          args: { action: "fetch", url: "https://example.com/云上草原-票价单.pdf" },
+        },
+      ],
+    },
+    {
+      e: "call",
+      id: 2,
+      call: 3,
+      status: "ok",
+      ms: 3410,
+      chars: 2140,
+      // the FETCH lane's settlement: the same reading-pane payload a
+      // read carries (chars + the wire-only document) -- its OWN verb
+      text: "云上草原景区票价单\n\n成人票 128 元;儿童票(1.2m 以下)免票;索道往返 80 元。\n\n(表格:旺季/淡季票价与开放时间)",
+      feed: "云上草原景区票价单\n\n成人票 128 元;儿童票(1.2m 以下)免票;索道往返 80 元。\n\n(表格:旺季/淡季票价与开放时间)",
+      page: { url: "https://example.com/云上草原-票价单.pdf", title: "云上草原景区票价单" },
     },
     { ...base, id: 3, round: 3 },
     { e: "say", id: 3, t: "一组机械动作打包成一次调用:滚动、点进百科、回列表。" },

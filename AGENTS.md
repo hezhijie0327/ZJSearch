@@ -317,10 +317,12 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     SERVICE: knobs, guard, and the document conversion path — READING
     IS BROWSER-USE (user decision): `read` is a session action over the
     ACTIVE page (`open`/`tab new` first, then `read`; a multi chains
-    `[tab new A, read, tab new B, read]`), and `read(url)` is
-    DOCUMENT-ONLY (pdf/office/data fetched direct and converted — the
-    browser renders those as viewer chrome); a page url on read errors
-    with the open->read recipe.  The old pooled one-shot `read(url)`
+    `[tab new A, read, tab new B, read]`), and DOCUMENT content is the
+    SEPARATE `fetch` action (pdf/office/data fetched direct and
+    converted — the browser never opens them — or
+    `fetch download=<name>` converts a captured download; a page url on
+    read errors with the fetch recipe — one verb, one semantics, split
+    2026-11).  The old pooled one-shot `read(url)`
     lane (page_jobs, read cache, the read_gate injection decision, the
     rerank feed trim) was REMOVED with it).
   - **llm/** — the providers. `sdk/` holds ONE factory per SDK family

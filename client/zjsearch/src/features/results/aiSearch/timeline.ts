@@ -176,6 +176,7 @@ export interface AiSearchCall {
   tool:
     | "search_web"
     | "calculate"
+    | "clock"
     | "calendar"
     | "mcp"
     | "memory"
@@ -1659,6 +1660,7 @@ export function applyEvent(
 const KNOWN_TOOLS: ReadonlySet<string> = new Set([
   "search_web",
   "calculate",
+  "clock",
   "calendar",
   "mcp",
   "memory",

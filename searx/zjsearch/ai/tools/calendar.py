@@ -58,17 +58,18 @@ boundary honestly."""
 CALENDAR_TOOL = "calendar"
 
 INSTRUCTIONS = """\
-The <today> block grounds the DATE only -- the clock time is NEVER
-guessable, and calendar arithmetic must not happen in your head.  Call
-this tool whenever time-of-day matters (is the market open, business
-hours, "how long until X"), for ANY calendar lookup ("what weekday is
-2026-05-01", "what date is next Wednesday" -- read today's weekday,
-add the day count, call with offset_days), and to RE-CHECK the current
-time after a long stretch of research (the run's date goes stale across
-hours).  A bare day-of-month ("the 25th") resolves in the CURRENT
-month -- pass a full date when the user means another month or year.
-Every payload carries a lunar block (ganzhi year, zodiac, lunar
-month/day, solar term, festivals, the statutory workday verdict) --
+The <today> block grounds the DATE only -- calendar arithmetic must not
+happen in your head.  Call this tool for ANY calendar lookup ("what
+weekday is 2026-05-01", "what date is next Wednesday" -- read today's
+weekday, add the day count, call with offset_days), for lunar-calendar,
+festival and workday questions (date=today answers today's), and to
+RE-CHECK the date after a long stretch of research.  A bare
+day-of-month ("the 25th") resolves in the CURRENT month -- pass a full
+date when the user means another month or year.  THE CURRENT CLOCK
+TIME is the clock tool (call it whenever time-of-day matters: is the
+market open, business hours, "how long until X" -- the hour is never
+guessable).  Every payload carries a lunar block (ganzhi year, zodiac,
+lunar month/day, solar term, festivals, the statutory workday verdict) --
 quote it for lunar-calendar, festival and workday questions, never
 compose a lunar date yourself.
 THE LUNAR BLOCK IS ALSO A FULL ALMANAC (the traditional huangli):
@@ -320,27 +321,24 @@ class CalendarError(ValueError):
 
 
 def calendar_spec() -> dict[str, t.Any]:
-    """The ``calendar`` tool spec -- the three semantics live on one api:
-    no args = now; ``date`` = absolute lookup (wins over ``offset_days``
-    when both are passed); ``offset_days`` = relative to today.
-
-    NAME-FITNESS (accepted mismatch): the name names the dominant facet
-    (the date table), NOT the wall clock -- the description LEADS with
-    the current time so a "what time is it" question still lands here.
-    A rename (clock/time) was judged not worth the cost (prompt caches,
-    the mock, the docs, the wire surface); do not re-litigate without a
-    new reason."""
+    """The ``calendar`` tool spec -- date lookups, the relative offset,
+    the auspicious-day scan and the almanac vocabulary.  The CURRENT
+    INSTANT is the ``clock`` tool (split 2026-11: a bare "what time is
+    it" paid the whole lunar/almanac block here)."""
     return {
         "name": CALENDAR_TOOL,
         "description": """\
-The current time and date, plus a calendar lookup table.  No arguments: \
-the current instant in the user's timezone (date, clock time, weekday, \
-UTC offset, unix).  date: that date's weekday, ISO week number and days \
-from today -- "YYYY-MM-DD" full form, "MM-DD" (current year) or a bare \
-day "DD" (current month; "25" asks about the 25th of THIS month).  \
-offset_days=N (integer): the date N days from today (tomorrow=1, \
-yesterday=-1).  tz (IANA name, optional): answer in that zone instead \
-of the user's.""",
+Calendar lookups against a real calendar table.  date: that date's \
+weekday, ISO week number and days from today -- "YYYY-MM-DD" full \
+form, "MM-DD" (current year) or a bare day "DD" (current month; "25" \
+asks about the 25th of THIS month) -- plus its lunar block (ganzhi \
+year, zodiac, lunar month/day, solar term, festivals) and the full \
+traditional almanac (what the day suits/avoids, the statutory workday \
+verdict).  offset_days=N (integer): the date N days from today \
+(tomorrow=1, yesterday=-1).  find_suited: the auspicious-day scan.  \
+list_terms: the almanac vocabulary.  tz (IANA name, optional): answer \
+in that zone instead of the user's.  For the CURRENT clock time call \
+clock instead.""",
         "annotations": {"readOnlyHint": True},
         "inputSchema": {
             "type": "object",
@@ -534,31 +532,22 @@ def calendar_payload(
             "today" if days == 0 else ("future" if days > 0 else "past")
         )
         # the TARGET's lunar fields -- "which lunar day is Mid-Autumn" is
-        # a date-mode lookup
+        # a date-mode lookup (date=today answers today's)
         payload["lunar"] = _lunar_block(target)
         return payload
-    payload["mode"] = "now"
-    payload["time"] = now.strftime("%H:%M:%S")
-    payload["datetime"] = now.replace(microsecond=0).isoformat(timespec="seconds")
-    payload["utc"] = (
-        now.astimezone(datetime.timezone.utc)
-        .replace(microsecond=0)
-        .isoformat(timespec="seconds")
-        if zone
-        else None
+    raise CalendarError(
+        "one of date / offset_days / find_suited / list_terms is required"
+        " -- for the current clock time call the clock tool"
     )
-    payload["unix"] = int(now.timestamp()) if zone else None
-    # the lunar block rides BOTH modes -- a lunar-date chat question is a now lookup
-    payload["lunar"] = _lunar_block(today)
-    return payload
 
 
 def run_call(
     call: dict[str, t.Any], rnd: int, wire_id: int, default_tz: str | None = None
 ) -> tuple[str, dict[str, t.Any]]:
-    """One tool call -> (model feed, wire event): the clock is read HERE
-    (instant, no pool slot) and the ``calendar`` payload rides the event so
-    the client's row renders the real value."""
+    """One tool call -> (model feed, wire event): the calendar is read
+    HERE (no pool slot) and the payload rides the event so the client's
+    row renders the real value.  A bare call (no date facet) is an
+    error teaching the clock tool."""
     try:
         tz_arg, date_arg, offset_arg, find_arg, terms_arg = parse_calendar_call(call)
         payload = calendar_payload(

@@ -11,6 +11,7 @@ import {
   ChevronsUpDown,
   Copy,
   CornerDownRight,
+  FileDown,
   Globe,
   History,
   Hourglass,
@@ -80,6 +81,7 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   drag: MoveHorizontal,
   viewport: Smartphone,
   read: BookOpenText,
+  fetch: FileDown,
   history: History,
   tab: Layers,
   multi: ListChecks,
@@ -607,6 +609,8 @@ export const browseView: ToolView = {
           ? `${t("ai_browser_act_viewport")} ${String(w)}×${String(h)}`
           : t("ai_browser_act_viewport");
       }
+      case "fetch":
+        return t("ai_browser_act_fetch");
       case "read": {
         const target = call.url || call.page?.url;
         if (target) {

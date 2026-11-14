@@ -18,6 +18,7 @@ from searx.zjsearch.ai.tools.ask_user import ASK_USER_TOOL
 from searx.zjsearch.ai.tools.build_table import BUILD_TABLE_TOOL
 from searx.zjsearch.ai.tools.calculate import CALCULATE_TOOL
 from searx.zjsearch.ai.tools.calendar import CALENDAR_TOOL
+from searx.zjsearch.ai.tools.clock import CLOCK_TOOL
 from searx.zjsearch.ai.tools.evaluate import EVALUATE_TOOL, decision_row
 from searx.zjsearch.ai.tools.message_subtask import MESSAGE_SUBTASK_TOOL
 from searx.zjsearch.ai.tools.memory import MEMORY_TOOL
@@ -186,6 +187,13 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": expression,
             "expression": expression,
             "precision": precision if precision != 10 else None,
+            "args": raw_args(call),
+        }
+    if call_name == CLOCK_TOOL:
+        return {
+            "id": idx,
+            "tool": CLOCK_TOOL,
+            "q": "",
             "args": raw_args(call),
         }
     if call_name == CALENDAR_TOOL:
