@@ -27,6 +27,7 @@ from searx.zjsearch.ai.tools import browse as browse_tool
 from searx.zjsearch.ai.tools.browse import read as reader
 from searx.zjsearch.ai.tools import calculate
 from searx.zjsearch.ai.tools import calendar as calendar_tool
+from searx.zjsearch.ai.tools import clock as clock_tool
 from searx.zjsearch.ai.tools import recall_history as recall_history_cap
 from searx.zjsearch.ai.tools import memory as memory_cap
 from searx.zjsearch.ai.tools import list_engines as list_engines_tool
@@ -90,6 +91,70 @@ def _sub_display_rows(calls: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
     ``_noop_display`` mints ``q: ""`` stubs -- a child's rows rendered as
     bare tool icons (no query, no url, no raw-args pane)."""
     return [display_item(idx, call) for idx, call in enumerate(calls, 1)]
+
+
+_TIME_FEED_CAP = 600
+"""One time-tool digest line's ceiling -- the almanac's full block rides
+the client card, the writer needs only the answer-bearing fields."""
+
+
+def _time_tool_feed_line(tool_name: str, payload: dict[str, t.Any]) -> str:
+    """One writer-feed digest line for a settled ``clock`` / ``calendar``
+    payload -- the fields the FINAL ANSWER may quote (the instant, the
+    target date's weekday/relation, the lunar line, the workday verdict,
+    the scan's hits), English frame with the payload's own proper nouns
+    verbatim.  The writer reads ``state.feed`` alone on researched tiers,
+    so an instant-tool run loses its answer without this line."""
+    zone = str(payload.get("timezone") or "the server's local clock")
+    today = str(payload.get("today") or "")
+    mode = str(payload.get("mode") or "")
+    if tool_name == CLOCK_TOOL or mode == "now":
+        moment = str(payload.get("time") or "")
+        weekday = str(payload.get("weekday") or "")
+        offset = str(payload.get("utc_offset") or "")
+        return (
+            f"From the run's clock tool (call-time answer, zone {zone}):"
+            f" {weekday} {today} {moment} {offset}".strip()
+        )[:_TIME_FEED_CAP]
+    if mode == "date":
+        target = str(payload.get("target") or "")
+        weekday = str(payload.get("weekday") or "")
+        days = payload.get("days_from_today")
+        relation = str(payload.get("relation") or "")
+        lunar = payload.get("lunar") or {}
+        lunar_line = ""
+        if isinstance(lunar, dict) and lunar.get("month"):
+            lunar_line = f"; lunar {lunar.get('year')}/{lunar.get('zodiac')} {lunar.get('month')}{lunar.get('day')}"
+            workday = lunar.get("workday") or {}
+            if isinstance(workday, dict) and workday.get("status"):
+                lunar_line += f", statutory verdict {workday.get('status')}"
+            if lunar.get("term"):
+                lunar_line += f", solar term {lunar.get('term')}"
+        return (
+            f"From the run's calendar tool (zone {zone}): target {target}"
+            f" is {weekday} ({relation}, {'+' if isinstance(days, int) and days >= 0 else ''}{days}d from today"
+            f" {today}){lunar_line}".strip()
+        )[:_TIME_FEED_CAP]
+    if mode == "find":
+        findings = payload.get("findings") or []
+        hits = (
+            "; ".join(f"{f.get('date')} ({', '.join(f.get('suited') or [])})" for f in findings[:10])
+            if isinstance(findings, list)
+            else ""
+        )
+        return (
+            f"From the run's calendar tool (zone {zone}): auspicious scan for"
+            f" {payload.get('activity')} over {payload.get('scanned_days')} days"
+            f" -- {len(findings)} hit(s): {hits}".strip()
+        )[:_TIME_FEED_CAP]
+    if mode == "terms":
+        terms = payload.get("terms") or []
+        return (
+            f"From the run's calendar tool (zone {zone}): the almanac's"
+            f" activity vocabulary ({len(terms)} terms):"
+            f" {', '.join(str(term) for term in terms[:40])}".strip()
+        )[:_TIME_FEED_CAP]
+    return f"From the run's {tool_name} tool (zone {zone}): today {today}".strip()[:_TIME_FEED_CAP]
 
 
 PLAN_REMINDER_EVERY = 6
@@ -559,13 +624,20 @@ action from what is visible."""
                 # pool slot), anchored to the USER'S zone -- the payload
                 # rides the event (key `calendar` for BOTH: the client's
                 # row fold reads it) so the row renders the real value
-                run = (
-                    calendar_tool.clock_run_call
-                    if tool_name == CLOCK_TOOL
-                    else calendar_tool.run_call
-                )
+                run = clock_tool.clock_run_call if tool_name == CLOCK_TOOL else calendar_tool.run_call
                 feed, event = run(call, rnd, wire_id, self.tz)
                 feeds[wire_id - 1] = feed
+                # THE WRITER FEEDS TOO (the user_file precedent): a settled
+                # payload also lands ONE digest line in the writer's
+                # <context> -- an instant-tool run (a bare "what time is
+                # it" whose only result is the clock, no sources) must not
+                # lose the answer between the researcher and the writer,
+                # which reads state.feed alone (<today> is date-only there
+                # by design).  The digest is per-run turn content, so the
+                # system prefix stays byte-stable.
+                payload = event.get("calendar")
+                if event.get("status") == "ok" and isinstance(payload, dict):
+                    self.feed.append(_time_tool_feed_line(tool_name, payload))
                 yield (
                     "call",
                     {
