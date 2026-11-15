@@ -221,9 +221,10 @@ def _how_to_search(mode: str) -> str:
           sentence BEFORE the tool calls -- a call inserted mid-sentence
           shreds your step notes.  Then call {SEARCH_WEB_TOOL} -- several
           calls in the same turn are encouraged: they run in parallel.
-        - ALWAYS run at least one search per question facet -- even for
-          topics you already know: the user expects live, cited sources, not
-          your memory.
+        - ALWAYS run at least one search per question facet the
+          deterministic tools do not settle -- even for topics you already
+          know: the user expects live, cited sources, not your memory
+          (tool payloads are evidence, not memory -- <tool_grounding>).
         - A load-bearing figure or claim only ONE snippet carries is
           UNVERIFIED: confirm it in a second INDEPENDENT source (search the
           claim's own wording) or read the first source -- one source is a
@@ -310,11 +311,7 @@ def _episodes_block(episodes: list[dict[str, str]] | None) -> str:
         return ""
     lines = "\n".join(
         f"- {e['title']}"
-        + (
-            f" -- {str(e.get('preview') or '').strip()}"
-            if str(e.get("preview") or "").strip()
-            else ""
-        )
+        + (f" -- {str(e.get('preview') or '').strip()}" if str(e.get("preview") or "").strip() else "")
         for e in rows
     )
     return shared.block(
@@ -425,14 +422,13 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
             f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",
         ),
         _how_to_search(mode),
+        shared.tool_grounding(),
         _examples(toolset, mode),
     ]
     tool_notes_block = _tool_notes(tool_notes)
     if tool_notes_block:
         lines.append(tool_notes_block)
-    lines.append(
-        shared.block("depth", _DEPTH_RESEARCH.get(mode, _DEPTH_RESEARCH["balanced"]))
-    )
+    lines.append(shared.block("depth", _DEPTH_RESEARCH.get(mode, _DEPTH_RESEARCH["balanced"])))
     if steerable:
         lines.append(_user_steering())
 
@@ -484,20 +480,11 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     follow_up = _follow_up(sources_base)
     if follow_up:
         run_context += f"{follow_up}\n"
-    facts = [
-        str(x).strip()
-        for x in ((thread_ledger or {}).get("facts") or [])
-        if str(x).strip()
-    ]
-    gaps = [
-        str(x).strip()
-        for x in ((thread_ledger or {}).get("gaps") or [])
-        if str(x).strip()
-    ]
+    facts = [str(x).strip() for x in ((thread_ledger or {}).get("facts") or []) if str(x).strip()]
+    gaps = [str(x).strip() for x in ((thread_ledger or {}).get("gaps") or []) if str(x).strip()]
     if facts or gaps:
         ledger_note = (
-            " Re-affirm the ones you build on into your own findings ledger"
-            f" ({RECORD_FINDINGS_TOOL})."
+            " Re-affirm the ones you build on into your own findings ledger" f" ({RECORD_FINDINGS_TOOL})."
             if RECORD_FINDINGS_TOOL in toolset
             else ""
         )
@@ -526,9 +513,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # with the rest of <run_context>, never the cached system prompt.
         # (The internal tools' instructions are registry constants --
         # they live in the system prompt's <tool_notes> instead.)
-        listed = "\n".join(
-            f"- {name}: {text}" for name, text in mcp_servers.items() if text
-        )
+        listed = "\n".join(f"- {name}: {text}" for name, text in mcp_servers.items() if text)
         if listed:
             run_context += (
                 shared.block(
@@ -579,11 +564,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
         # arrive WHOLE -- the old 30K re-cap cut the 57KB BP framework in
         # half and the run could never cite the rules it never saw)
         text = str(file.get("text") or "")[:60_000]
-        trunc = (
-            "\n[... the file was truncated ...]"
-            if len(str(file.get("text") or "")) > 60_000
-            else ""
-        )
+        trunc = "\n[... the file was truncated ...]" if len(str(file.get("text") or "")) > 60_000 else ""
         name = file.get("name") or "attachment.md"
         run_context += (
             shared.block(
@@ -601,6 +582,4 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     if run_context:
         run_context = f"<run_context>\n{run_context}</run_context>\n"
     user_text = f"{run_context}{shared.block('q', question)}"
-    return shared.build_messages(
-        "\n".join(lines), shared.user_message(user_text, image_parts), history
-    )
+    return shared.build_messages("\n".join(lines), shared.user_message(user_text, image_parts), history)

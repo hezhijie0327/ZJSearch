@@ -487,6 +487,8 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_dec_plan_review: "计划审题",
   ai_dec_judge: "模型判定",
   ai_dec_depth_probe: "深度探针",
+  ai_dec_downgrade: "降档至 {mode}",
+  ai_dec_upgrade: "升档至 {mode}",
   ai_dec_entity_coverage: "交付物实体",
   ai_dec_outline: "报告大纲",
   ai_dec_clarify_gate: "方向预筛",

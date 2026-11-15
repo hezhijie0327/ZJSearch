@@ -633,44 +633,67 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         "balanced": [12, 24, 36, 48, 60],
         "deep": [15, 35, 60, 90, 120],
     }
-    if probe.get("enabled") and mode in ("balanced", "deep") and decision.available():
+    if probe.get("enabled") and mode in ("speed", "balanced", "deep") and decision.available():
         try:
-            ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])] or _LADDER_DEFAULTS.get(mode, [])
-            if ladder:
-                started = time.monotonic()
-                out = decision.evaluate(
-                    (research_q if research_q else q) + gate_note,
-                    {
-                        "depth": {
-                            "type": "score",
-                            "instructions": 'How deep and broad does the research for this question need to be (0 = a quick lookup, 4 = an exhaustive multi-facet investigation)?',
-                            "criteria": [
-                                "A quick lookup: one or two searches settle it",
-                                "A facet overview: a handful of searches",
-                                "Multi-facet research: definitions, mechanics, context",
-                                "A full research project: cross-verification, multiple angles, page reads",
-                                "An exhaustive investigation: many facets, comparisons, recent dynamics",
-                            ],
-                        }
-                    },
-                    timeout=8.0,
-                    account=account,
-                )
-                answers = out.get("answers") if isinstance(out, dict) else None
-                depth = answers.get("depth") if isinstance(answers, dict) else None
-                if isinstance(depth, dict) and depth.get("score") is not None:
-                    rung = max(0, min(int(round(float(depth["score"]))), len(ladder) - 1))
-                    max_rounds = ladder[rung]
-                    depth_rung = rung
-                    depth_probe_entry = {
-                        "purpose": "depth_probe",
-                        "question": "How deep and broad does the research need to be (score 0-4)?",
-                        "target": (research_q or q)[:200],
-                        "answer": depth,
-                        "ms": int((time.monotonic() - started) * 1000),
+            started = time.monotonic()
+            out = decision.evaluate(
+                (research_q if research_q else q) + gate_note,
+                {
+                    "depth": {
+                        "type": "score",
+                        "instructions": 'How deep and broad does the research for this question need to be (0 = a quick lookup, 4 = an exhaustive multi-facet investigation)?',
+                        "criteria": [
+                            "A quick lookup: one or two searches settle it, or a built-in tool (calendar, clock, calculate) answers it outright",
+                            "A facet overview: a handful of searches",
+                            "Multi-facet research: definitions, mechanics, context",
+                            "A full research project: cross-verification, multiple angles, page reads",
+                            "An exhaustive investigation: many facets, comparisons, recent dynamics",
+                        ],
                     }
+                },
+                timeout=8.0,
+                account=account,
+            )
+            answers = out.get("answers") if isinstance(out, dict) else None
+            depth = answers.get("depth") if isinstance(answers, dict) else None
+            if isinstance(depth, dict) and depth.get("score") is not None:
+                rung = max(0, min(int(round(float(depth["score"]))), 4))
+                depth_rung = rung
+                depth_probe_entry = {
+                    "purpose": "depth_probe",
+                    "question": "How deep and broad does the research need to be (score 0-4)?",
+                    "target": (research_q or q)[:200],
+                    "answer": depth,
+                    "ms": int((time.monotonic() - started) * 1000),
+                }
+                # the round LADDER scales WITHIN the tier; speed keeps its
+                # one-round policy (its budget is the runaway guard only)
+                ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])] or _LADDER_DEFAULTS.get(mode, [])
+                if ladder:
+                    max_rounds = ladder[min(rung, len(ladder) - 1)]
         except Exception:  # pylint: disable=broad-except
             pass
+    # TIER AUTO-SIZING: the probe's extreme grades move the run ONE step
+    # across the product ladder.  Down: a quick lookup (0) on the default
+    # tier is the speed product's job (one round, no plan machinery,
+    # compact answer).  Up: a research-project grade (3+) earns one step
+    # up (speed -> balanced -> deep -- the delegation tools and the
+    # THOROUGH writer budget are the full project's).  Middle grades keep
+    # the chosen tier; deep is the ceiling and never moves.  An explicit
+    # deliverable (report/deck) is never a lookup, so it skips the
+    # downgrade but earns the upgrade; a CONTINUE never switches product
+    # mid-thread; a failed probe keeps the chosen tier (fail-open).  The
+    # verdict rides the probe's Decisions row so the move is visible.
+    if depth_probe_entry and resume is None:
+        if mode == "balanced" and depth_rung == 0 and not outline_requested:
+            mode = "speed"
+            max_rounds = budget("max_rounds", mode, 2)
+            depth_probe_entry["downgrade"] = mode
+        elif mode in ("speed", "balanced") and depth_rung >= 3:
+            mode = "balanced" if mode == "speed" else "deep"
+            ladder = [int(x) for x in (probe.get(f"ladder_{mode}") or [])] or _LADDER_DEFAULTS[mode]
+            max_rounds = ladder[min(depth_rung, len(ladder) - 1)]
+            depth_probe_entry["upgrade"] = mode
     outline: dict[str, t.Any] | None = None
     # the output TEMPLATE rides the request body (presets AND user-defined
     # ones -- the server stays stateless): a valid template switches the

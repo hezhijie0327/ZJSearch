@@ -249,10 +249,38 @@ def markdown_surface() -> str:
 def grounding_fallback(what: str) -> str:
     """The never-hallucinate escape hatch: say the gap, then answer from
     common knowledge flagged with [*].  ``what`` names what failed
-    ("sources" for the Overview and AI Search's writer alike)."""
+    ("sources" for the Overview and AI Search's writer alike).  A
+    tool-grounded finding IS an answer -- an empty web feed must not
+    trigger the disclaimer over a ledger the tools already settled."""
     return block(
         "grounding",
-        f"If the {what} do not answer the question, say so in one short line and answer from common knowledge marked with [*].",
+        f"If the {what} do not answer the question, say so in one short line and answer from common knowledge marked with [*] (a tool-grounded finding is an answer, not a gap).",
+    )
+
+
+def tool_grounding() -> str:
+    """The deterministic-tool evidence class -- the ONE home of the
+    doctrine that calendar/clock/calculate payloads are authoritative
+    table work, not the model's memory.  The researcher's method block
+    and the writer's answer contract both consume it verbatim, so the
+    two halves never disagree about what a tool-settled fact owes (no
+    web search, no second-source confirmation, no [n]).  Without it the
+    cross-tool rules ("ALWAYS one search per facet", "every load-bearing
+    claim carries [n]") outrank the calendar tool's own "no source to
+    cite" note and send the model cross-checking the almanac online."""
+    return block(
+        "tool_grounding",
+        """\
+        The deterministic tools (calendar, clock, calculate) return
+        authoritative table work -- their payloads are EVIDENCE, not
+        memory.  A facet they settle owes no web search, no second-source
+        confirmation and no [n] citation: it rides the findings ledger as
+        a fact naming the tool ("calendar: ..."), and the answer states it
+        as plain fact.  The search-per-facet rule and the verification bar
+        bind only what the tools do NOT answer; research a tool-settled
+        facet externally only when the question goes beyond the payload
+        (the tradition behind a judgement, another school's table, a
+        detail the payload lacks).""",
     )
 
 
@@ -316,7 +344,8 @@ _OUTPUT_GRAMMAR = """\
 - Enumerations become flat lists (never a single bullet); genuine
   comparisons become markdown tables; the one verdict that must not be
   missed may be a callout.
-- Every load-bearing claim carries its [n] citation.
+- Every load-bearing claim carries its [n] citation -- a tool-grounded
+  finding (calendar/clock/calculate table work) stands on its tool instead.
 - Cut anything that merely restates the question or pads the length."""
 """The ONE output grammar every research tier speaks -- the product's
 answers must read as one product.  Tiers differ ONLY by the budget below
@@ -406,6 +435,7 @@ def answer_contract(
     lines.append(citation_rules())
     lines.append(figures_rule())
     lines.append(grounding_fallback("sources"))
+    lines.append(tool_grounding())
     if sources_note:
         lines.append(sources_note)
     lines.append(markdown_surface())

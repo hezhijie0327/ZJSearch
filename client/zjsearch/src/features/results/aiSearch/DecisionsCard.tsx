@@ -242,6 +242,16 @@ function DecisionBody({ decision }: { decision: AiDecision }) {
 function DecisionRow({ decision, open, onToggle }: { decision: AiDecision; open: boolean; onToggle: () => void }) {
   const t = useT();
   const label = PURPOSE_LABELS[decision.purpose] ?? "ai_decisions_card";
+  // the depth probe's tier auto-sizing verdict (the wire entry rides
+  // verbatim in `record`): a lookup graded 0 downgrades to the speed
+  // product, a research-project grade upgrades one step -- the row says
+  // so beside the purpose chip
+  const shift =
+    typeof decision.record?.downgrade === "string"
+      ? { label: "ai_dec_downgrade" as const, mode: decision.record.downgrade }
+      : typeof decision.record?.upgrade === "string"
+        ? { label: "ai_dec_upgrade" as const, mode: decision.record.upgrade }
+        : null;
   return (
     <li>
       <button
@@ -253,6 +263,11 @@ function DecisionRow({ decision, open, onToggle }: { decision: AiDecision; open:
         <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs leading-4 text-accent">
           {t(label as "ai_dec_judge")}
         </span>
+        {shift && (shift.mode === "speed" || shift.mode === "balanced" || shift.mode === "deep") ? (
+          <span className="shrink-0 rounded-md bg-accent-soft px-1.5 text-xs leading-4 text-accent">
+            {t(shift.label, { mode: t(`mode_${shift.mode}` as "mode_speed") })}
+          </span>
+        ) : null}
         <span className="min-w-0 flex-1 truncate text-start text-[13px] text-ink-2" dir="auto">
           {decision.target || decision.question || decision.purpose}
         </span>

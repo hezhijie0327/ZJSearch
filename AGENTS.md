@@ -1,8 +1,124 @@
 # AGENTS.md
 
-Guidance for AI agents working in this repository.
+ZJSearch is a fork of SearXNG carrying a from-scratch React + TypeScript theme and an AI research agent. Read this file before modifying code.
 
-## Repository
+## Behavioral Guidelines
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+**Additional rules:**
+- Be concise in output but thorough in reasoning.
+- Do not re-read files you have already read.
+- User instructions always override this file.
+- Don't wrestle with indentation in the Edit tool — focus on logic, let the project's formatter fix formatting. Use `sed` or `python3` freely when the Edit tool struggles with whitespace.
+
+## Git commit convention
+
+**Every commit we author** — features, fixes, docs, and the periodic upstream
+force-pull alike — follows the same style; only commits that arrive *from*
+upstream keep the upstream `[fix] ...` format, and history is never rewritten.
+
+- Format: `type(scope): subject` — types are `feat` / `fix` / `chore` / `docs` / `revert` / `refactor` / `perf` / `test` / `build`; subject is imperative, lowercase start, no trailing period, aim ≤ 72 chars; detail goes in the body after a blank line (why, not what); breaking changes take `!` before the colon.
+- **Scope is required whenever the change lands in one identifiable area** of the fork; omit it only for repo-wide or cross-cutting changes (e.g. a lockfile-wide security bump stays `chore(deps)`).
+
+| scope | covers |
+|---|---|
+| `theme` | `searx/static/themes/zjsearch` (templates + static assets) |
+| `client` | `client/zjsearch` (frontend source) |
+| `engine/<name>` | a specific engine, e.g. `fix(engine/boardreader): refresh session ID after it expires` |
+| `brand` | favicons / app icons / naming |
+| `deps` | dependency overrides and lockfile bumps |
+| *(none)* | repo-wide or cross-cutting changes |
+
+Sync commits follow the same style and name the upstream range in the subject:
+`chore: force-pull upstream master into zjsearch (theme delta rides as one commit)`.
+
+A force-pull re-lands the whole accumulated fork delta as EXACTLY ONE commit on
+the new upstream master: the previous landing AND every fork commit authored
+since it squash into that single landing, so after every sync the branch reads
+as upstream history + one theme commit. Between syncs, ordinary feat/fix/docs
+commits may accumulate on top of the landing; the next force-pull folds them
+all in.
+
+Examples:
+
+- `feat(theme): dark brand ground for the zjsearch tiles`
+- `fix(engine/boardreader): refresh session ID after it expires`
+- `fix(client): keep the upload format when saving settings`
+- `chore(deps): override glob ^13.0.6 → ^14.0.2 (CVE-2026-118773)`
+- `docs(agents): conventional prefixes for our commits, upstream format untouched`
+- `chore: force-pull upstream master into zjsearch (theme delta rides as one commit)`
+- ✗ `[mod] theme zjsearch: forcepull onto upstream master` — upstream bracket format, no type prefix: fine in history, not going forward
+
+## Documentation format
+
+Family-wide Markdown rules, shared verbatim across all ZJ projects:
+
+- **Language**: AGENTS.md and agent-facing docs are English; README.md is Chinese (human-facing). Keep literal UI strings and code identifiers verbatim.
+- **AGENTS.md skeleton** — generic sections first, then project; omit sections that don't apply, keep the order:
+  `# AGENTS.md` → 1–2 sentence intro (what the project is + key doc links) → Behavioral Guidelines → Git commit convention → Documentation format → Project → Commands → Architecture → Conventions (Gotchas as a subsection) → project-specific sections → Key Docs.
+- **README.md skeleton**: `# <project>` → one-line positioning + stack + key links → 特性 → 快速开始 → 配置 / 用法 → 文档 → License (omit as needed).
+- **Formatting**: ATX headings (`#`), never skip a level; code fences always carry a language tag (`bash`, `go`, `json`, `text` for trees); tables for structured reference; no decorative emoji in headings or bullets; bold for key terms only.
+
+## Project
 
 Fork of [SearXNG](https://github.com/searxng/searxng) (metasearch engine, Python/Flask + Jinja2).
 Current working branch: `zjsearch`. The purpose of this fork is the custom theme
@@ -96,7 +212,7 @@ lockfile, untouched).
   and push ONCE per unit of work (a push per commit rebuilds the
   image N times for one change and races the layer cache).
 
-## zjsearch architecture (Page-Data pattern)
+## Architecture
 
 The server renders **no UI**. Every zjsearch Jinja template is a thin shell that
 serializes the render context into `<script id="page-data" type="application/json">`
@@ -390,7 +506,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     tool's minted skeleton → defer to the single write (`loop.run`'s
     synthesizer may return None, the one defer verdict; a raised
     exception still settles error); THE DIRECT-ANSWER PICK runs the lane
-    backwards: the rail picker's pinned 直接回答 row rides the same
+    backwards: the rail picker's pinned 直接回答 (direct answer) row rides the same
     `action=shape` channel with `shape: "direct"` -- the endpoint
     withdraws the pending template and shape and the boundary's direct
     intent OUTRANKS the model's minted flip AND the route outline alike
@@ -425,7 +541,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     picker's 直接回答 row is the card's birth face and its CURRENT
     SELECTION display (the model's flip adopts the face only while the
     reader picked nothing -- an explicit direct pick is sticky, a failed
-    confirm reverts with the 未送达 toast); the AI
+    confirm reverts with the 未送达 (not delivered) toast); the AI
     Overview itself stays the loop's zero-tool single-write task (no
     Searches state, nothing to hang the machinery on -- its speed rung
     of shape_ladder is untouched); the executor splits into `registry` ([n]/dedup/gallery
@@ -495,10 +611,10 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     lunar/almanac block) and the CALENDAR is the lookup table — `date`
     accepts the full
     `YYYY-MM-DD`, loose `MM-DD` (current year) or a bare `DD`
-    (current month; the "25号是周几" shape), `offset_days` covers the
+    (current month; the "25号是周几" (what weekday is the 25th) shape), `offset_days` covers the
     relative forms ("next Wednesday" = read today's weekday, add N);
-    `find_suited` is the AUSPICIOUS-DAY SCAN (挑吉日 in one call: the
-    next 60 days whose 宜 lists name the activity, hit-capped at 10,
+    `find_suited` is the AUSPICIOUS-DAY SCAN (挑吉日 — pick an auspicious day — in one call: the
+    next 60 days whose 宜 (auspicious) lists name the activity, hit-capped at 10,
     the row labels itself with the activity) — a per-day probe cannot
     answer that shape; `list_terms` returns the almanac's full EMITTED
     vocabulary (the union of the terms the per-day lists actually
@@ -513,12 +629,16 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     the leap-aware lunar month/day, the day's solar term + the next
     one, the traditional lunar festivals (a fixed (month, day) table —
     the CJK audit's functional-data exemption — plus the statutory
-    feed; 除夕 is computed as the eve of 正月初一, never assumed from
+    feed; 除夕 (Lunar New Year's Eve) is computed as the eve of 正月初一 (lunar New Year's Day), never assumed from
     the month length, and festivals never land in a leap month), the
-    folk observances, the traditional almanac (宜/忌, 吉凶神, 建除十二
-    神 + 黄黑道, 二十八宿, 纳音, 彭祖百忌, 吉神方位, 胎神, 月相 — the
+    folk observances, the traditional almanac (宜/忌 (auspicious/inauspicious),
+    吉凶神 (auspicious/inauspicious deities), 建除十二神 (the twelve Jianchu
+    officers) + 黄黑道 (yellow/black path days), 二十八宿 (the twenty-eight
+    lunar mansions), 纳音 (nayin, the sexagenary sound tones), 彭祖百忌
+    (Pengzu's hundred taboos), 吉神方位 (auspicious deity directions), 胎神
+    (the fetal deity), 月相 (moon phase) — the
     row renders the almanac as LABELED CHIP ROWS (宜 ok-toned, 忌
-danger-toned, the officer/mansions/nayin as mono chips) beside the
+    danger-toned, the officer/mansions/nayin as mono chips) beside the
     lunar line, AND the model quotes it for almanac questions — the
     INSTRUCTIONS forbid researching external huangli APIs for fields
     the payload already holds) and the STATUTORY WORKDAY verdict
@@ -564,9 +684,9 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
   per-engine `api_key` — the universal marker of the commercial engines
   (64 on prod) — and `_search_plan` HOLDS a !bang naming one of them
   until the user approves: the search settles as status `approval`
-  (the row reads 待用户确认, the minus icon family) with a feed that
+  (the row reads 待用户确认 (awaiting user confirmation), the minus icon family) with a feed that
   teaches the ONE ask_user confirmation ("bocha 按调用计费,是否允许?
-  "), the run parks `awaiting` on the ask, and the user's yes comes
+  " — bocha bills per call; allow?), the run parks `awaiting` on the ask, and the user's yes comes
   back through the normal clarify round-trip; the model then re-runs
   with `paid_ok: true` (a sanctioned search_web argument), which sets
   the STICKY `state.paid_ok` — one confirmation covers the whole run.
@@ -574,9 +694,9 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
   re-asks; children inherit the lead's flag (they have no ask tool);
   enabled-by-default paid engines ride ordinary category fan-out and
   are NOT gated (only the bang is an explicit paid choice).  The
-  debug stage ships the whole loop as the 计费引擎确认 scenario
+  debug stage ships the whole loop as the 计费引擎确认 (paid-engine confirmation) scenario
   (hold → ask → awaiting → clarifyTail paid_ok re-run), and the
-  长文提问 scenario replays a full pasted research brief through the
+  长文提问 (long-text question) scenario replays a full pasted research brief through the
   real fold — the QA surface for the clamped run title.
 
 - The wire protocol v2 (NDJSON, one JSON object per line, NEVER ends
@@ -639,7 +759,7 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
   the research early: `stalled | time_budget | round_budget |
   loop_detected`; the client's halts.ts renders it through i18n beside
   the run footer).  `decisions` batches the run's DECISION RESULTS (framework gates
-  + the model's own evaluate tool) once per round — the rail's 决策结果 card
+  + the model's own evaluate tool) once per round — the rail's 决策结果 (decision results) card
   renders them click-through; every decision speaks the ONE
   NAMED-VERDICT-MAP protocol (`answers: {name: choice|score|noul}` +
   `record_questions: [{name, instructions}]` — the evaluate tool's entry
@@ -647,7 +767,7 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
   renderer covers every present and future purpose with zero
   per-purpose branches, and the in-card question line only appears when
   a row's label fell back to its raw key; `phase` moves the
-  规划→检索→撰写 spine (the closed stage set has no `audit` — the
+  规划→检索→撰写 (plan→search→write) spine (the closed stage set has no `audit` — the
   post-write citation audit was REMOVED: the pre-write evidence check
   already gates what the writer leans on, and a verdict that arrives
   after the answer can only badge, never fix).  After the settle only
@@ -661,7 +781,7 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
   (a research entry = its think segment + intent line + call rows), the
   answer buffer is its own field, and `settle` IS the terminal state
   (the old answerFrom/pending/thinkOpen reconstruction heuristics died
-  with the old protocol).  提交即 POST: the two pre-send store reads
+  with the old protocol).  提交即 POST (submit-is-POST): the two pre-send store reads
   (the attachment inheritance and the metadata recall) race
   `RECALL_BUDGET_MS` (1.2s, `withBudget`) — a cold store's boot degrades
   to a metadata-less POST (every field's absence is tolerated) instead
@@ -688,12 +808,12 @@ danger-toned, the officer/mansions/nayin as mono chips) beside the
   otherwise), a plain run wears the direct-answer face — the section is
   never a hole,
   one section language — icon+title+count header, 13px body rows, cap-
-  and-expand): 浏览器实况 (the browse mirror — live frames, the
+  and-expand): 浏览器实况 (browser live — the browse mirror: live frames, the
   takeover entry, the mobile wait bar; unmounts at the settle) →
-  已确认方向 (the clarify archive) → 调研计划 (task card,
-  plan order, never capped) → 研究发现 (findings + 未决缺口: open gaps
+  已确认方向 (confirmed directions — the clarify archive) → 调研计划 (research plan — task card,
+  plan order, never capped) → 研究发现 (research findings — findings + 未决缺口 (open gaps)
   read as colored DOTS, closed ones as checks; facts render inline [n]
-  marks as accent chip BUTTONS; the gaps card's 继续调研 chip launches a
+  marks as accent chip BUTTONS; the gaps card's 继续调研 (continue research) chip launches a
   follow-up run on the open gaps -- `composeGapsFollowup` in ledger.ts
   builds the message, both hosts thread `onGapsFollowup`, the follow-up
   POST's thread_ledger handoff carries the questions) → 来源 (source cards) → 决策结果
@@ -845,7 +965,7 @@ Naming: components PascalCase (one primary export per file), hooks
 BCP-47 tag. Export only what other modules need. Full rationale and the
 "add a language" recipe: `client/zjsearch/README.md`.
 
-## Conventions & gotchas
+## Conventions
 
 - **Commit messages follow Conventional Commits** — `feat:`, `fix:`,
   `chore:`, `docs:` (an optional scope is fine: `feat(zjsearch): …`).
@@ -873,7 +993,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   never resolves, and boot() falls back to the MAIN-THREAD engine — the
   live run's 1.5s evt flush then runs WASM Postgres + the IndexedDB fsync
   on the main thread and the research page locks up (~1s freezes — the
-  「页面没有响应」jam; LoAF names it `IDBRequest.onsuccess`; the failed
+  「页面没有响应」 (page unresponsive) jam; LoAF names it `IDBRequest.onsuccess`; the failed
   script case now rejects fast via the Worker's error event, `lib/pg.ts`).
   Vite emits extra root-level CSS chunks (zjsearch2/3.min.css) whose
   preload helpers resolve them as SIBLINGS of the JS bundles — a missing
@@ -957,7 +1077,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   auto-saves (debounced) with these semantics — no save button, and the
   initial mount must NOT post (it would flip engines/plugins).  Saves go
   through `fetchText` (`lib/http.ts`), so a failed POST shows the red
-  "save failed" toast instead of a false 「已保存」, and the next change
+  "save failed" toast instead of a false 「已保存」 (Saved), and the next change
   re-fires the debounced save.
 - Results hotkeys (default / vim, see `src/features/hotkeys.ts`) must not fire
   while focus is in text inputs; hash-only changes (`#image-viewer`) are ignored
@@ -1057,7 +1177,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   through `flashToast()` in `lib/toast.ts` (tone: accent/ok/danger) — never
   render such confirmations in flow (layout shift); from React use
   `useCopyToast()` (`lib/clipboard.ts`) which pairs the clipboard write with
-  the green 「已复制」 toast.
+  the green 「已复制」 (Copied) toast.
 - Jinja inline-`if` output is AUTOESCAPED: `{{ ' class="centered"' if cond }}`
   emitted `class=&#34;centered&#34;` (a broken literal-quote class token that
   silently disabled centered alignment). Conditional HTML fragments in
@@ -1124,7 +1244,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
 
 - A page that "stopped updating" in an occluded/backgrounded pane may be
   perfectly healthy: the browser throttles the tab's timers (the run's
-  已调研 clock freezes), the keepalive WORKER keeps holding the server
+  已调研 (researched) clock freezes), the keepalive WORKER keeps holding the server
   run, and the visibility-attach replays the missed tail on return.
   Trust the DOM truth and the run host, not the frozen paint.  THE
   CLIENT-SIDE RECOVERY LADDER (2026-10-13, `useAiSearch.consumeRunStream`
@@ -1147,7 +1267,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   refused) only the 300s fallback applies.  The REATTACH LADDER covers
   the host's whole detach grace (~5min, 404 breaks immediately) — a
   blip recovers IN PLACE instead of settling locally while the server
-  is still writing.  The failed box's 继续 ATTACH-PROBES FIRST
+  is still writing.  The failed box's 继续 (Continue) ATTACH-PROBES FIRST
   (`client.reattach` fold: failure marks revert, stage spine STAYS —
   no phase events re-fire on an attach): the handle replays its buffer
   and the run finishes in place (a mid-write death completes the very
@@ -1156,7 +1276,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   COMPLETION DEFAULT + THE JOURNAL (2026-10-14): EVERY research run
   registers its host handle as `linger` — the detach grace NEVER wraps
   a run (a closed tab means "collect later", not "wrap up"; the
-  stall/runaway guards still bound it, and only the explicit stop/收尾
+  stall/runaway guards still bound it, and only the explicit stop/收尾 (wrap up)
   directives end it early).  EVERY research run also journals:
   `RunHandle.publish` shadows each slimmed replay line into a local
   SQLite table (`searx/zjsearch/ai/runs/journal.py`,
@@ -1232,7 +1352,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   keeps running: `requestAnimationFrame` never fires, transitions don't
   run (they snap), timers clamp to ~1s, screenshots serve stale frames.
   Symptoms look exactly like product bugs — rAF-driven animations "missing"
-  (the user-reported 「0 结果消息无动画」 was this), Collapse panels stuck at
+  (the user-reported 「0 结果消息无动画」 (zero-results message has no animation) was this), Collapse panels stuck at
   0fr, mid-transition screenshots. Probe before concluding:
   `await new Promise(r => requestAnimationFrame(r))` with a 1.5s timeout —
   if rAF loses, recover with a fresh tab and re-measure; measurements taken
@@ -1269,7 +1389,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   in-app browser): `window.print()` is a SYNCHRONOUS API — it blocks the
   calling renderer until the dialog is dismissed, and the print
   contract's flow (paper mounts → print() rides right after) is
-  human-centric by design. In an automation/无人 webview nobody dismisses
+  human-centric by design. In an automation/unattended webview nobody dismisses
   the dialog, so the tab freezes forever — and the freeze propagates:
   the page's pglite WORKER is a separate thread that print does NOT
   block, so it keeps running, keeps the `pglite-election-lock:*` Web
@@ -1379,7 +1499,7 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
   titles.
 - 16px `text-base`: result titles (list/news/product/video grids all share
   the `Title`/h3 token) and ALL search inputs (hero included).
-- **The FLUID long-form reading scale** (DESIGN.md §4 — 中文衬线长文, the
+- **The FLUID long-form reading scale** (DESIGN.md §4 — 中文衬线长文 (Chinese serif long-form), the
   2026-10 family revision of the blog's `.prose` prescription): the root
   classes `.zjs-prose` / `.prose-basic` carry
   `clamp(1rem, 0.97rem + 0.14vw, 1.0625rem)` at leading 1.8 — **16px @320
@@ -1408,7 +1528,7 @@ Type scale — one size per text role (synced to ZJBlog DESIGN.md §4, the
   size); kind/search filtered rows stay on the archive tier (`text-base`).
 - Brand marks: hero `text-6xl/7xl font-black`, header/results wordmark
   `text-xl sm:text-2xl font-semibold` (responsive — mobile drops a tier
-  for nav-bar density, §4 品牌字标), both `font-serif` (registered
+  for nav-bar density, §4 品牌字标 (brand wordmark)), both `font-serif` (registered
   DESIGN.md §4 variant: result titles and UI section headings stay sans
   for scan density). The wordmark period is a geometric gold dot
   (`bg-accent-strong` fill, `size-[0.25em]` so it scales with the
@@ -1466,7 +1586,7 @@ ask spec / recorded facts), the BUG chip beside it reveals the debug
 panes (raw arguments + the model's receipt — the timing lives ON the row
 in a fixed-width column so all rows align); every fold plays through
 `Collapse`, and the rail's cap-and-expand lists reveal their older tail
-inside one too (the +N/收起 is a height animation, not a swap).
+inside one too (the +N/收起 (collapse) is a height animation, not a swap).
 In-card action ghosts are the 28px/14px `CHIP_BTN` tier (`ICON_BTN`'s
 36px stays chrome-level); hover-revealed corner chips must ALSO reveal
 on `focus-within` (keyboard users tab to invisible controls otherwise).
@@ -1724,8 +1844,8 @@ its content, all sharing one visual language:
   images, videos, news, map, music, it, science, files, social media,
   other — pure relevance order inside each block, in tab order by
   default; apps and products blocks render their grids too.  Blocks are
-  titled with the bare category name (综合 / 图片 / ... via
-  `category_labels`), never with a 结果 suffix.  Each block
+  titled with the bare category name (综合 (General) / 图片 (Images) / ... via
+  `category_labels`), never with a 结果 (results) suffix.  Each block
   header (category icon + label + count + chevron) toggles collapse —
   folding is the quick-locate mechanism and it works on mobile.  Blocks
   default to expanded; do not reintroduce compact strip previews or
@@ -1761,14 +1881,14 @@ empty rail automatically widens the grids. Never convert these back to
 `sm:`/`xl:` viewport breakpoints (that is what broke centered mode's
 density). Diagnostics (`DebugPanels`) live in the
 results meta line on both desktop and mobile: the line reads 「找到 N 条
-相关结果 · 耗时 X.X 秒 ▾」 and clicking it expands a single engine-timing
+相关结果 · 耗时 X.X 秒 ▾」 (Found N results · took X.X seconds ▾) and clicking it expands a single engine-timing
 table (`table-fixed` so the `w-24` name truncation works) through the
 shared `Collapse` (both strips animate) — unresponsive
 engines share the same grid (AlertTriangle + red error label + empty
 bar, seconds column aligned).  With ZERO results the page is
 empty-state-FIRST: the NoResults hero leads the column and the meta line
 + engine-messages panel follow as supporting detail; the engines toggle
-reads 「来自搜索引擎的消息」 (never 「耗时 0 秒」 when nothing was
+reads 「来自搜索引擎的消息」 (Messages from search engines) (never 「耗时 0 秒」 (took 0 seconds) when nothing was
 found) and starts expanded with `animateOnMount`.  Infinite scroll never engages on a zero-result page (the
 empty state is final — no phantom loader hunting page 2), and the
 sentinel renders its spinner only while a page is actually loading
@@ -1792,7 +1912,7 @@ answers: `parsed_url` is null there).  MARKDOWN is the one client-only
 export (no server format endpoint): an MD chip after the server formats.
 EXPORTS ARE COPY + PDF, NOTHING DOWNLOADS: the AI Overview card and the
 AI Search thread/actions rows carry regenerate + copy and NOTHING else —
-复制为 Markdown and 📄 (PDF) live on the knowledge page's records (the
+复制为 Markdown (Copy as Markdown) and 📄 (PDF) live on the knowledge page's records (the
 inspector's header), ZJBlog's action pair VERBATIM (the CopyMarkdownButton
 pattern: `Copy` glyph swapping to `Check` for 1.6s as the feedback — no
 toast — and the `Printer` glyph; there is NO markdown FILE download
@@ -1819,7 +1939,7 @@ stays with the SELF-CONTAINED surfaces -- the knowledge inspector's
 stored answers, the markdown exports, and the run page's paper --
 where the reader has no rail to match against.  The exported markdown
 LINKS its cites: `renumberCitations(text, map, anchor)` emits
-`[n](#引用来源)`-style jumps to the tail's `## ` heading (every renderer
+`[n](#引用来源)`-style jumps (引用来源 = "cited sources") to the tail's `## ` heading (every renderer
 that slugs headings follows; thread exports keep plain per-run
 renumbering -- repeated headings would slug unpredictably).  THE GROUP PILL: a multi-number citation `[1,2]` rewrites to ONE
 `#refs-a.b` link (citations.ts) and the renderer's `a` branch mounts
@@ -1991,7 +2111,7 @@ the model its grade.  THE CHILD IS A WHOLE RESEARCHER: its toolset
 carries `record_findings_spec()` (THE LEDGER IS ITS DIGEST — the delegation
 contract promises facts + gaps, and `_sub_digest` builds exactly those
 from `child.facts`/`child.gaps`; a child without the tool returned a
-bare 「来源 N 条已入册」 and its report was discarded) and `evaluate` under
+bare 「来源 N 条已入册」 (N sources registered) and its report was discarded) and `evaluate` under
 the lead's decision gate; its SPEND joins the run's account
 (`_promote_child` merges the child's spend-ledger deltas — rerank /
 decision / embedding / gates — its judgments tagged `sub:` —
@@ -2010,7 +2130,7 @@ overflow is the reactive compact's job.
 SUBAGENTS ARE ADDRESSABLE, not one-shot (the compression stays — the
 lead still receives digests only): every delegation mints a
 `SubagentHandle` in `state.subagents` — stable key `S1, S2, …` (the
-digest's 【子任务 Sn】 tag) and a PERMANENT wire id slot (`gid =
+digest's 【子任务 Sn】 (Subtask Sn) tag) and a PERMANENT wire id slot (`gid =
 SUB_ENTRY_BASE + (seq-1)*64`; the old per-batch `job_idx` ids reused the
 space every delegation round, merging two different children into one
 UI row).  `message_subtask(id, message)` resumes a settled child: the
@@ -2030,7 +2150,7 @@ RunHandle-shaped duck type); the event pump (`_interleave`) polls the
 LEAD's ControlBox through `peek_interrupt()` (NON-destructive — the
 preempt slot must survive for the lead's loop to consume) every drain,
 so the user's stop/preempt lands in every running child within ~1s —
-the batch settles honestly (「已被提前终止」 digest note) instead of
+the batch settles honestly (「已被提前终止」 (terminated early) digest note) instead of
 holding the run's stop hostage until every child burnt its own budget.
 Delegation rows address settlements by `call:` (the in-round position)
 — the old `id: wire_id` payloads hijacked `_stamp`'s entry address and
@@ -2223,7 +2343,7 @@ snapshot, the writer receives the same list as a `<findings>` block
 beside the raw sources (support, never substitute — the citation
 contract still binds), and the client renders a findings card under the
 research-plan card (plan above, evidence below; each fact expands
-through the source cards' measured 查看更多 clamp).  Plans/next steps
+through the source cards' measured 查看更多 (view more) clamp).  Plans/next steps
 belong to `update_plan`, narration to the step notes — the prompt says
 so.  THE FACT TAGS (2026-10-13, the tag graph's evidence layer): each
 fact optionally carries 1-3 SHORT concept tags the model names at write
@@ -2251,7 +2371,7 @@ Ranking (rank.py) is deliberately NOT a tool: ranking fixes the
 order of things about to be SHOWN (before the reveal, mechanical,
 Bocha/Jina-style); tools give access to things the model cannot see.
 
-CONTINUE (断点继续): an interrupted research is a STORAGE question, not
+CONTINUE (checkpoint resume): an interrupted research is a STORAGE question, not
 a server session — `startRun` persists the run row from run start, the
 1.5s evt flush keeps the log current, and the failed box's 继续 button
 (`useAiSearch.continue`) RESUMES THE SAME RUN in place: the loop emits a
@@ -2330,7 +2450,7 @@ for a TTL (1h) then the sweep drops it.  Stopping is an INSTRUCTION:
 button fires it before aborting) — the loop sees the flag mid-turn
 (1s-sliced event waits; an interrupted turn is an `interrupted` outcome,
 never `died`) or at the boundary, skips the writer, settles
-`error/halt=研究已按用户要求停止`.  The research run's settle usage
+`error/halt=研究已按用户要求停止` (research stopped at the user's request).  The research run's settle usage
 merges AT GENERATION on the driver (`_SettleTail`, shared with the
 request-thread `_Ndjson` the clarify/no-research paths still use), and
 the late work (related fallback / memory extraction) runs there too —
@@ -2444,11 +2564,11 @@ what `gates.sanitize_questions` passes (single/multi + 2-4 options; the
 client's free-text line covers yes/no and open answers — a type the
 sanitizer would downgrade must not be offered to the model).
 
-## The DECK output shape (演示文稿 -- the report machinery on a slide contract)
+## The DECK output shape (the report machinery on a slide contract)
 
 The deck IS deep research's slide-shaped OUTPUT FORMAT, never a depth of
 its own: the dropdown shows THREE tiers and the deep tier carries a
-报告|演示文稿 format pair beside it (`DepthControls` in depth.tsx; the
+报告|演示文稿 (report|presentation) format pair beside it (`DepthControls` in depth.tsx; the
 wire stays `mode: "deep"` + `deck: true` — `report` and `deck` are
 mutually exclusive, the report flag wins the ambiguity; legacy
 `?mode=deck` URLs still parse).  Everything
@@ -2458,7 +2578,7 @@ outline-driven is SHARED with the report shape: the outline gate
 (`synth.py` takes `deck=True`), the section citation gate (the claim
 regex drops to 12 chars — slides speak in bullets, not sentences), the
 `extract` tool, CONTINUE's `resume.outline` restore, and the rail's
-输出结构 template re-mint (`take_template`).  THE SECTION RESET
+输出结构 (output structure) template re-mint (`take_template`).  THE SECTION RESET
 CONTRACT: every section stream's FIRST delta carries `reset: true` —
 the wire promise that this stream REPLACES what the client already
 buffers for the section id.  Three consumers, one rule: the citation
@@ -2508,7 +2628,7 @@ settled sections never recompile, the streaming tail recompiles at
 (b) citation chips via `citeToLinks` + one delegated click on the canvas
 — no second citation tokenizer; (c) NO in-canvas page numbers (marpit's
 pagination counters would restart per part) — the control bar's N/total
-is the pager.  Paged and stacked (连续) modes, dual-track fullscreen,
+is the pager.  Paged and stacked (连续 — continuous) modes, dual-track fullscreen,
 speaker-notes panel and the print path are the blog viewer's mechanics
 verbatim; deck print switches to stacked first and defers
 `printDocument` one tick so every page is measured before the clone.
@@ -2533,7 +2653,7 @@ through the same DeckView, and its 复制为 Markdown emits
 `buildDeckMarkdown` (gray-matter head + `deck: true`: a drop-in ZJBlog
 deck post the blog re-renders with the SAME kernel).
 
-## Knowledge base (知识库 -- the event-sourced browser-local research memory)
+## Knowledge base (the event-sourced browser-local research memory)
 
 The PGlite store IS the theme's research memory; schema v5 (v4's
 split plus `run_summary`/`stats`/`attachment` + the bytes/head triggers,
@@ -2568,11 +2688,11 @@ pre-existing empty/host-tagged rows so old corpora join the graph.
 `answer` is the AI OVERVIEW archive: the classic search page's overview
 saves itself at settle (`saveOverview` from ResultsPage's settle effect
 -- the knowledge base's bridge to the classic page; id = query hash,
-re-asking refreshes) and the 答案 tab reads it.  The sources the
+re-asking refreshes) and the 答案 (Answer) tab reads it.  The sources the
 overview actually CITES join the 来源 corpus (`ref:ovw:*` source_ref per
 (query, source) + the canonical source row, the settleRun identity
 pattern -- only cited [n], never the whole context).  Run answers are
-deliberately NOT projected -- they only duplicated the thread's 研究
+deliberately NOT projected -- they only duplicated the thread's 研究 (research)
 row; they replay from the event log like every other wire event.
 Answer-kind rows open the inspector (there is no thread page behind an
 overview).  Replay
@@ -2612,7 +2732,7 @@ loses the event -- shipped bug).
   (query matched against the tag vocabulary, shared-tag rows ranked)
   at 0.6, and the HIT-TAG ONE-HOP EXPANSION (`expandByHitTags`: the
   hybrid hits' OWN tags seed one more `tags ?|` GIN query -- a related
-  tag the query never named still recalls its rows; the 感冒→退烧药
+  tag the query never named still recalls its rows; the 感冒→退烧药 (cold→fever medicine)
   effect in tag space) at 0.4 -- then the RERANK TIER re-scores the
   fused head (16, ≥4 candidates) through `POST /zjsearch/knowledge/rerank`:
   the expansion widens recall, the cross-encoder restores precision,
@@ -2622,7 +2742,7 @@ loses the event -- shipped bug).
   rides the same fusion rerank-free (the drawer's debounce budget stays
   model-free).  The recall
   rerank's input tokens land in the knowledge table's `usage:rerank`
-  row; the model-stats card's 重排 tile sums BOTH pools (the runs'
+  row; the model-stats card's 重排 (rerank) tile sums BOTH pools (the runs'
   cascade spend from run meta + this row).  THE RED LINE stands: recall
   reaches the writer phase or the UI only, never the researcher's
   feed.  `answer` rows are corpus too ("you researched this before").
@@ -2715,8 +2835,8 @@ loses the event -- shipped bug).
   `meta.usage` (input/output/thoughts/cached) from the knowledge table;
   the inspector shows the same per card.  `usage.rerank` (the ranking
   cascade's endpoint spend: calls + prompt tokens — score endpoints are
-  input-only, so prompt_tokens IS the total; shown as 重排输入/重排调用)
-  shares ONE row with the embedding totals (嵌入 first) on the 模型统计
+  input-only, so prompt_tokens IS the total; shown as 重排输入/重排调用 (rerank input/rerank calls))
+  shares ONE row with the embedding totals (嵌入 (embedding) first) on the 模型统计 (model stats)
   card and rides AiRunFooter per run.  The EMBEDDING calls never land
   in the table -- the route passes the SDK's usage through (openai:
   `prompt_tokens`; gemini has NO token usage for embed_content, only the
@@ -2758,10 +2878,10 @@ POST; the server stays stateless):
   (nothing can re-fetch a local file), they mint no [n] (not web
   sources — they join the researcher's feed as named
   `<user_file>` blocks AND the WRITER's `<context>` via `state.feed`,
-  without which the writer answers "取不到" over material the run just
+  without which the writer answers "取不到" (cannot retrieve it) over material the run just
   recalled), and their titles join `history_topics` so the
   outline gate sees the user's standing material.  The RESEARCH GATE
-  routes recall-intent questions ("从我上传的框架里找 X") into the
+  routes recall-intent questions ("从我上传的框架里找 X" — find X in the framework I uploaded) into the
   loop — the recall tools live there; and the NO-RESEARCH write path
   passes recalled file heads to the writer as `<attached_file>`
   material (request attachments win when present), so a mis-gated
@@ -2789,7 +2909,7 @@ POST; the server stays stateless):
   never colliding with the url hashes `deleteSource` cascades by,
   `meta.origin: "attachment"`): searchable, embedded by the regular
   embed pass, tagged into the graph vocabulary from the file name,
-  listed in the 全文 directory, and recalled by every later run —
+  listed in the 全文 (full text) directory, and recalled by every later run —
   re-attaching the same file is no longer the only way a framework
   reaches a new research.
 - `user_memories` — the full snapshot (see the next section).
@@ -2907,9 +3027,9 @@ redundant, both fused into ONE post-run extractor:
   OPEN -- `wrappingUp`, not the phase event: the wire can deliver either
   first and the direct/wrap paths skip the phase spine): expanded while
   the think streams, folded once the answer takes over, and it STAYS
-  above the answer/document after the settle as a re-openable 思考过程
+  above the answer/document after the settle as a re-openable 思考过程 (thinking process)
   header -- it never folds back into the research record (a settled
-  think readable only inside the folded 研究过程 box read as content
+  think readable only inside the folded 研究过程 (research process) box read as content
   loss).  The outline shapes surface it at the document's top once
   SETTLED only -- while a report/deck writes, the document itself is
   the progress surface and an expanded think pane above it would fight
@@ -2919,9 +3039,9 @@ redundant, both fused into ONE post-run extractor:
   决策结果 card opens before the loop's first event (purposes
   `outline`/`clarify_gate` labeled client-side).
 - **REPORT/DECK TEMPLATES**: presets live CLIENT-side
-  (`aiSearch/reportTemplates.ts` -- REPORT shape: 商业情报/尽调/竞品对比/
-  行业综述; DECK shape (sections = presentation chapters, each chapter's
-  1-4 slides the model's): 项目汇报/方案介绍/行业分享); every template
+  (`aiSearch/reportTemplates.ts` -- REPORT shape: 商业情报 (business intelligence)/尽调 (due diligence)/竞品对比 (competitive comparison)/
+  行业综述 (industry overview); DECK shape (sections = presentation chapters, each chapter's
+  1-4 slides the model's): 项目汇报 (project report)/方案介绍 (proposal introduction)/行业分享 (industry sharing)); every template
   carries `shape` (aicontracts `TemplateShape`), the locked
   FileText|Presentation icon split lives in
   `TEMPLATE_SHAPE_ICONS`; the server stays STATELESS (`parse_template`
@@ -2933,13 +3053,13 @@ redundant, both fused into ONE post-run extractor:
   `?template=` URL param is gone) -- the choice lives in the run rail's
   输出结构 card after the research starts (see the vNext finishers
   below); the card is SHAPE-AWARE (templatesForShape: the run's shape
-  filters presets AND user rows; the free option reads 智能报告 /
-  智能PPT per shape).
+  filters presets AND user rows; the free option reads 智能报告 (smart report) /
+  智能PPT (smart PPT) per shape).
 - **PGlite**: `RunSnapshot.outline` settles into `run.meta.report`
   (title/subtitle/section statuses) -- the knowledge base knows the
   document's shape without replaying the event log.
 - **OVERVIEW → DEEP REPORT**: the AI Overview card's done-state cluster
-  carries a 生成深度报告 action (SPA navigate to `ai=1&mode=report` with
+  carries a 生成深度报告 (generate deep report) action (SPA navigate to `ai=1&mode=report` with
   the page query).  DocumentView's TOC scroll-spies (IntersectionObserver,
   upper-third band).
 - **CROSS-SECTION DEDUP**: `corpus.pack(avoid=...)` demotes chunks whose
@@ -2972,7 +3092,7 @@ redundant, both fused into ONE post-run extractor:
   (lib/kb/templates.ts -- the same store as the research memory, the
   owner's call over a localStorage sketch; the body JSON is
   `{shape, sections}` -- a legacy BARE array reads as "report").
-  MANAGEMENT lives in the knowledge drawer's 模板 tab
+  MANAGEMENT lives in the knowledge drawer's 模板 (templates) tab
   (`TemplateManagerPanel` -- a STRUCTURED editor: name + the
   报告|演示文稿 shape pair + section rows: title / brief / key-questions /
   optional (deck rows title CHAPTERS), add+remove, 2-10; new, edit and
@@ -2989,7 +3109,7 @@ redundant, both fused into ONE post-run extractor:
   has none); the list is ONE MERGED LIST (the free 智能报告/智能PPT pair
   pinned top, then presets and user templates report and deck side by
   side, the locked shape icons the only shape signal), everything
-  TWO-STEP (a click only PREVIEWS, the 确认切换 pill submits).  From the
+  TWO-STEP (a click only PREVIEWS, the 确认切换 (confirm switch) pill submits).  From the
   write boundary on the card is READ-ONLY and NEVER hides: the outline
   landed → `ActiveStructureCard` (the StructureFace identity -- the
   template's own name or the free shape's label + description -- over
@@ -3005,7 +3125,7 @@ redundant, both fused into ONE post-run extractor:
   CONTINUE's `resume.outline` round-trips it (`restored_outline`
   preserves it) -- so a resumed report keeps its identity face.  The
   picker card is the rail's row language: the PICKED template's
-  own section list as numbered rows (可选 markers on droppable sections,
+  own section list as numbered rows (可选 (optional) markers on droppable sections,
   the section count in the header; free outline = one muted state line
   `ai_output_structure_free` / the deck's `template_deck_hint`).  Picking POSTs `run/control
   {action:"template"}`; ControlBox holds ONE pending template and the
@@ -3019,7 +3139,7 @@ redundant, both fused into ONE post-run extractor:
   when no outline will ever land).
 - **THE KNOWLEDGE BASE'S REPORT FACE**: `thread_head.reports` (idempotent
   ALTER + recompute from `meta->'report'` at both upserts) drives the
-  directory's 报告 ×N badge, a 报告 filter chip, and the run inspector's
+  directory's 报告 (report) ×N badge, a 报告 filter chip, and the run inspector's
   reading TOC (the settled outline above the glued answer).
 - **METADATA RECALL** (batch 3.3): the client's pre-run recall distills
   to `history_topics` (titles only, ≤8) and BOTH outline gates receive a
@@ -3051,7 +3171,7 @@ redundant, both fused into ONE post-run extractor:
 
 ## Deck becomes a FORMAT, not a depth (2026-10-11): the three-tier recomposition
 
-- **THE DEPTH DROPDOWN IS THREE TIERS AGAIN** (极速/均衡/深度调研),
+- **THE DEPTH DROPDOWN IS THREE TIERS AGAIN** (极速/均衡/深度调研 — speed/balanced/deep research),
   and the composer carries NOTHING BUT depth: the output format is
   decided INSIDE the run at the rail's 输出结构 picker (智能报告 /
   智能PPT free options + deck templates flip the shape with the
@@ -3070,7 +3190,7 @@ redundant, both fused into ONE post-run extractor:
   editor (报告|演示文稿 pair; a legacy bare-array body reads as
   "report").  `templatesForShape()` filters the rail's 输出结构 list per
   run shape; the free option reads 智能报告 (report) / 智能PPT (deck,
-  sub = `template_deck_hint` 大纲定章节，每章 1-4 页由模型撰写); the
+  sub = `template_deck_hint` 大纲定章节，每章 1-4 页由模型撰写 (the outline sets the chapters; the model writes each chapter's 1-4 slides)); the
   THREE deck presets (项目汇报/方案介绍/行业分享) write presentation-
   cadence chapters.  THE ICON SPLIT IS LOCKED:
   `TEMPLATE_SHAPE_ICONS` (report=FileText, deck=Presentation) is the one
@@ -3181,7 +3301,7 @@ each wearing its shape icon) and then every preset + user template side
 by side (the locked FileText|Presentation icons are the only shape
 signal).  EVERY pick is TWO-STEP: clicking an option only PREVIEWS (the
 trigger + section rows mirror it, nothing is sent — users clicking
-around to look must never fire a control); the explicit 确认切换到{name}
+around to look must never fire a control); the explicit 确认切换到{name} (confirm switch to {name})
 pill (with an explicit cancel) submits.  Submitting an option whose
 shape differs from the run's ALSO posts `run/control
 {action:"shape", shape, lang}` —
@@ -3200,14 +3320,14 @@ pick (the free outline stands) plus the shape flip when needed.  The
 outline itself is NOT re-minted (its section titles work as either
 shape's chapters; the pre-flight deliverable entities stand); the pick
 window closes when the outline lands (the card swaps to the active-
-structure view).  Fixture: the 形状切换 scenario (steer row + the
+structure view).  Fixture: the 形状切换 (shape switch) scenario (steer row + the
 flipped outline rendering DeckView on a report-mode run).
 
 ## OPS RULE: never restart an instance while runs are streaming
 
 The run host decouples runs from CLIENT connections, but the run's
 driver thread lives ON the server process -- a restart kills every
-in-flight run (the client shows 搜索失败; the stored checkpoint makes it
+in-flight run (the client shows 搜索失败 (search failed); the stored checkpoint makes it
 resumable via 继续, but the in-flight work is lost).  Before ANY
 instance restart: check the thread pages for streaming runs (or ask the
 user); defer the restart until they settle.  Discovered live when a
@@ -3231,7 +3351,7 @@ real-config deck run at 74 calls died to a routine restart.
   receive, then enforces every constraint authoritatively in `on_result`
   regardless of engine support.  Word terms use `\b` boundaries for ASCII
   but SUBSTRING for CJK: word boundaries never fire inside unspaced CJK
-  text, so `\b教程\b` would make `+教程`/`intitle:教程` drop every result
+  text, so `\b教程\b` ("tutorial") would make `+教程`/`intitle:教程` drop every result
   and `-教程` exclude nothing (see `_word_matcher`).  A domain-shaped bare
   `-word` ("test -wikipedia.org") is ALSO promoted into the site-exclude
   set — the plain -word matcher runs against title+content only, so the
@@ -3265,11 +3385,14 @@ real-config deck run at 74 calls died to a routine restart.
   the spine's `<figures>` rule does the honest second half: derive only
   from cited inputs, keep the derivation visible, never present a
   computed number as if a source stated it.
-- `inspect_image`(AI 工具,`searx/zjsearch/ai/tools/inspect_image.py`):
-  研究者的眼睛——feed 来源行带 `img=` 标记,该工具抓取该图并作为下一轮
-  user 消息回灌(user turn 全方言接受图片 parts)。SSRF 门校验;图片传输
-  遵循 `zjsearch.llm.images` 设置(`base64` 服务端抓取内联,默认;
-  `url` 直传公开引用给端点自取)。
+- `inspect_image` (AI tool, `searx/zjsearch/ai/tools/inspect_image.py`):
+  the researcher's eyes — a feed source line carrying an `img=` mark:
+  the tool fetches that image and feeds it back as the next round's
+  user message (user turns accept image parts in every dialect).
+  SSRF-gated; image transport follows the `zjsearch.llm.images`
+  setting (`base64`: server-side fetch inlined, the default; `url`:
+  the public reference passed straight through for the endpoint to
+  fetch itself).
 - `stock_quote`: `$AAPL`, `AAPL stock` render the `Stock.tsx` DDG-style
   card: price hero, change with the locale's red/green convention (zh-CN:
   red up), range pills (1D/5D/1M/YTD/1Y/5Y/MAX, all series pre-fetched in
@@ -3651,7 +3774,7 @@ Python edits — the repo policy forbids them):
   but the page serves stale ones". Before starting an instance, check
   `netstat -ano | grep :8888` and `taskkill //PID <pid> //F` every listener.
 
-## Docs worth reading first
+## Key Docs
 
 - `AUDIT.md` (repo root) — the full-theme audit playbook: environment
   bootstrap, gates, test matrix, browser measurement recipes and the
@@ -3661,41 +3784,3 @@ Python edits — the repo policy forbids them):
 - `client/zjsearch/README.md` — theme architecture and workflow.
 - `docs/dev/templates.rst` — result field reference (the upstream render contract).
 - `docs/dev/plugins/` — server plugin registry used by the preferences UI.
-
-## Git commit convention
-
-**Every commit we author** — features, fixes, docs, and the periodic upstream
-force-pull alike — follows the same style; only commits that arrive *from*
-upstream keep the upstream `[fix] ...` format, and history is never rewritten.
-
-- Format: `type(scope): subject` — types are `feat` / `fix` / `chore` / `docs` / `revert` / `refactor` / `perf` / `test` / `build`; subject is imperative, lowercase start, no trailing period, aim ≤ 72 chars; detail goes in the body after a blank line (why, not what); breaking changes take `!` before the colon.
-- **Scope is required whenever the change lands in one identifiable area** of the fork; omit it only for repo-wide or cross-cutting changes (e.g. a lockfile-wide security bump stays `chore(deps)`).
-
-| scope | covers |
-|---|---|
-| `theme` | `searx/static/themes/zjsearch` (templates + static assets) |
-| `client` | `client/zjsearch` (frontend source) |
-| `engine/<name>` | a specific engine, e.g. `fix(engine/boardreader): refresh session ID after it expires` |
-| `brand` | favicons / app icons / naming |
-| `deps` | dependency overrides and lockfile bumps |
-| *(none)* | repo-wide or cross-cutting changes |
-
-Sync commits follow the same style and name the upstream range in the subject:
-`chore: force-pull upstream master into zjsearch (theme delta rides as one commit)`.
-
-A force-pull re-lands the whole accumulated fork delta as EXACTLY ONE commit on
-the new upstream master: the previous landing AND every fork commit authored
-since it squash into that single landing, so after every sync the branch reads
-as upstream history + one theme commit. Between syncs, ordinary feat/fix/docs
-commits may accumulate on top of the landing; the next force-pull folds them
-all in.
-
-Examples:
-
-- `feat(theme): dark brand ground for the zjsearch tiles`
-- `fix(engine/boardreader): refresh session ID after it expires`
-- `fix(client): keep the upload format when saving settings`
-- `chore(deps): override glob ^13.0.6 → ^14.0.2 (CVE-2026-118773)`
-- `docs(agents): conventional prefixes for our commits, upstream format untouched`
-- `chore: force-pull upstream master into zjsearch (theme delta rides as one commit)`
-- ✗ `[mod] theme zjsearch: forcepull onto upstream master` — upstream bracket format, no type prefix: fine in history, not going forward

@@ -27,14 +27,18 @@ ESTABLISH (figures, definitions, verdicts, disagreements) as ONE
 self-contained sentence with its [n] citations -- "DeepSeek-V4 ships a
 256k context window [4]" -- never your plans or next steps (the task
 list owns those), never a restatement of the question, never a fact no
-source supports.  Give EVERY fact its tags: 1-3 SHORT concept words
+source or deterministic tool supports.  A fact a deterministic tool
+settled (calendar/clock/calculate) names the tool instead of carrying
+[n] -- "calendar: 2026-11-15, lunar tenth month day 7, suits demolition"
+-- and owes no dispute-check gap: the table is the authority.  Give
+EVERY fact its tags: 1-3 SHORT concept words
 naming its topics ("DeepSeek-V4", "context window"), reusing the exact
 words earlier facts used over inventing new ones -- the tags are not
 decoration, they place the fact in the knowledge graph and decide which
 topic searches resurface it.  Revise honestly: supersede or retract a
-fact the moment better evidence overturns it.  A load-bearing number
+fact the moment better evidence overturns it.  A load-bearing WEB number
 you confirmed but never dispute-checked owes a gap ("is <claim>
-contested anywhere?").  When the ledger flags two facts as conflicting
+contested anywhere?") -- tool-grounded facts owe none.  When the ledger flags two facts as conflicting
 it opens a Resolve gap: settle it with a search or a read, then close
 it with the VERDICT -- which side wins and why, or "sources disagree,
 present both" (an honest split IS a resolution; an unresolved conflict
@@ -70,7 +74,9 @@ Maintain the research BELIEF LEDGER -- what the sources ESTABLISHED,
 and what the question still OWES.  Two partitions, one call, roughly
 once per round:
 (1) facts -- self-contained [n]-cited sentences ("DeepSeek-V4 ships a
-256k context window [4]").  Revise the ledger as evidence moves:
+256k context window [4]") or tool-grounded table work naming the tool
+("calendar: ..." -- no [n], no dispute gap).  Revise the ledger as
+evidence moves:
 {"text": ..., "supersedes": <fact id>} replaces an earlier fact the new
 evidence corrects; {"text": ..., "retracts": <fact id>} withdraws one a
 source contradicted.
@@ -79,8 +85,8 @@ answer: open_gaps adds {"q": ..., "why": ...} (what is missing and why
 it matters); close_gaps settles one {"q": ..., "close_as": "answered by
 [7]" | "no public data exists"} -- closing a gap with an honest reason
 IS progress.  Never record plans (the task list owns those) and never a
-fact no source supports.  The writer reads the facts; your next rounds
-chase the gaps; the run ends when the ledger closes.""",
+fact no source or tool supports.  The writer reads the facts; your next
+rounds chase the gaps; the run ends when the ledger closes.""",
         "annotations": {"readOnlyHint": False, "destructiveHint": False},
         "inputSchema": {
             "type": "object",
@@ -92,7 +98,7 @@ chase the gaps; the run ends when the ledger closes.""",
                         "properties": {
                             "text": {
                                 "type": "string",
-                                "description": "One self-contained finding, [n]-cited.",
+                                "description": "One self-contained finding, [n]-cited (or naming the deterministic tool that settled it).",
                             },
                             "refs": {
                                 "type": "array",

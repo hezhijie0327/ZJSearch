@@ -47,11 +47,7 @@ def _answer_images_block(proxied: bool) -> str:
     model taught the wrong shape copies the wrong shape (the whitelist
     compares verbatim: a hallucinated proxy prefix on a raw-url
     deployment is a silently dropped group)."""
-    sample = (
-        "img=/image?url=...&h=..."
-        if proxied
-        else "img=https://upload.wikimedia.org/wikipedia/commons/...jpg"
-    )
+    sample = "img=/image?url=...&h=..." if proxied else "img=https://upload.wikimedia.org/wikipedia/commons/...jpg"
     return f"""\
 <answer_images>
 Some source lines below carry image URLs as img=... .  An image earns
@@ -148,9 +144,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # question asked to "follow the attachment" must produce an answer
         # that actually does (the framework case: META-01 demanded rule-ID
         # citations and the bare writer never delivered them)
-        names = ", ".join(
-            f'"{str(f.get("name") or "attachment")}"' for f in attached_files[:3]
-        )
+        names = ", ".join(f'"{str(f.get("name") or "attachment")}"' for f in attached_files[:3])
         lines.append(
             shared.block(
                 "attached_files_note",
@@ -217,12 +211,14 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
                 its distillation of what the sources below established,
                 revised as evidence moved (superseded and retracted facts
                 are already filtered out).  Use them as your map of the
-                material: they carry the agent's [n] labels and every claim
-                still cites its numbered source; when a finding and a source
-                disagree, the source wins.  A finding marked CONTESTED
-                carries an unresolved contradiction -- present the
-                disagreement in its own sentence or drop the claim; never
-                average contested figures into one.
+                material: a finding naming a deterministic tool
+                (calendar/clock/calculate) instead of [n] is tool-grounded
+                table work -- state it as fact without a citation; every
+                other claim still cites its numbered source, and when a
+                finding and a source disagree, the source wins.  A finding
+                marked CONTESTED carries an unresolved contradiction --
+                present the disagreement in its own sentence or drop the
+                claim; never average contested figures into one.
                 {findings_text}""",
             )
         )
@@ -247,8 +243,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         # researcher never sees ready-made sources): pre-numbered after
         # the live feed, clearly marked as unverified this run
         recalled = "\n".join(
-            f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}"
-            for item in past_sources
+            f"[{item['n']}] {item.get('title') or '(untitled)'} -- {item['url']}" for item in past_sources
         )
         lines.append(
             shared.block(
@@ -267,9 +262,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     # the attachment rides the SAME single turn -- its bulk comes off the
     # feed's budget so the turn always fits the window (report mode never
     # lands here: the synthesizer packs per-section instead)
-    attach_chars = sum(
-        min(len(str(f.get("text") or "")), 60_000) for f in attached_files or []
-    )
+    attach_chars = sum(min(len(str(f.get("text") or "")), 60_000) for f in attached_files or [])
     if attach_chars:
         cap = max(20_000, cap - attach_chars)
     context = "\n\n".join(_fit_context(feed, cap, relevance))
@@ -287,9 +280,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     )
     for file in attached_files or []:
         text = str(file.get("text") or "")[:60_000]
-        user += "\n" + shared.block(
-            "attached_file", text, name=file.get("name") or "attachment.md"
-        )
+        user += "\n" + shared.block("attached_file", text, name=file.get("name") or "attachment.md")
     if image_parts:
         user = shared.user_message(user, image_parts)
     return shared.build_messages("\n".join(lines), user, history)

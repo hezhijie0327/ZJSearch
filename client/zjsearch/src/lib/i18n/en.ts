@@ -490,6 +490,8 @@ export const EN = {
   ai_dec_plan_review: "Plan review",
   ai_dec_judge: "Judge",
   ai_dec_depth_probe: "Depth probe",
+  ai_dec_downgrade: "downgraded to {mode}",
+  ai_dec_upgrade: "upgraded to {mode}",
   ai_dec_entity_coverage: "Deliverable entities",
   ai_dec_outline: "Report outline",
   ai_dec_clarify_gate: "Direction pre-screen",
