@@ -36,7 +36,9 @@ RUN \
     && cd "${WORKDIR}/BUILDTMP/SEARXNG" \
     && git apply --reject ${WORKDIR}/BUILDTMP/ZJSEARCH/client/zjsearch/patch/*.patch \
     && git apply --reject "${WORKDIR}/BUILDTMP/ZJSEARCH/zjsearch-theme.patch" \
-    && sed -i "s|ultrasecretkey|$(openssl rand -hex 32)|g;s|127.0.0.1|0.0.0.0|g;s|default_theme: simple|default_theme: zjsearch|g" searx/settings.yml \
+    && sed -i \
+        "s|ultrasecretkey|$(openssl rand -hex 32)|g;s|127.0.0.1|0.0.0.0|g;s|default_theme: simple|default_theme: zjsearch|g" \
+        searx/settings.yml \
     && sed -i "s|+0000\"|+${ZJSEARCH_SHA}\"|" searx/version_frozen.py \
     && grep -q "+${ZJSEARCH_SHA}\"" searx/version_frozen.py \
     && wget "https://curl.se/ca/cacert.pem"
