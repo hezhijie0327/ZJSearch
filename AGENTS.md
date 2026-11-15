@@ -2,6 +2,10 @@
 
 ZJSearch is a fork of SearXNG carrying a from-scratch React + TypeScript theme and an AI research agent. Read this file before modifying code.
 
+## HANDOVER.md
+
+When a multi-step task is interrupted, write progress to `HANDOVER.md` so the next session can pick up where you left off. Include: what was done, what remains, key decisions made, and the next concrete step. Delete the file when the task is complete.
+
 ## Behavioral Guidelines
 
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
@@ -72,6 +76,24 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Git commit convention
 
+Every commit subject starts with a type prefix — `feat` / `fix` / `chore` / `docs` / `revert` / `refactor` / `perf` / `test` / `build` — optionally scoped: `fix(toolbar): ...`. Subject: imperative, lowercase start, no trailing period, aim ≤ 72 chars; detail goes in the body after a blank line (why, not what); breaking changes take `!` before the colon or a `BREAKING CHANGE:` body footer. Never rewrite pushed history.
+
+- Commit incrementally — one logical change per commit, after lint and tests pass. Present changes for review before committing.
+- PRs: link the issue, summarize the change and verification (tests/benchmarks), and include config/log/pprof evidence for bug fixes.
+
+### Co-Author Format
+
+- Always add co-author information. If closing an issue in commit text, verify against `main` first: `gh issue view <issue-id>`.
+- Only ONE co-author line is allowed. If multiple agents contributed, aggregate into ONE entry.
+
+Format: `Co-authored-by: <AgentName> <Email>`
+
+Valid examples (choose EXACTLY ONE):
+
+```
+Co-authored-by: ZCode <noreply@z.ai>
+```
+
 **Every commit we author** — features, fixes, docs, and the periodic upstream
 force-pull alike — follows the same style; only commits that arrive *from*
 upstream keep the upstream `[fix] ...` format, and history is never rewritten.
@@ -112,7 +134,7 @@ Examples:
 
 Family-wide Markdown rules, shared verbatim across all ZJ projects:
 
-- **Language**: AGENTS.md and agent-facing docs are English; README.md is Chinese (human-facing). Keep literal UI strings and code identifiers verbatim.
+- **Language**: AGENTS.md, AUDIT.md, DESIGN.md and other agent-facing docs are English; README.md is Chinese (human-facing). Keep literal UI strings and code identifiers verbatim.
 - **AGENTS.md skeleton** — generic sections first, then project; omit sections that don't apply, keep the order:
   `# AGENTS.md` → 1–2 sentence intro (what the project is + key doc links) → Behavioral Guidelines → Git commit convention → Documentation format → Project → Commands → Architecture → Conventions (Gotchas as a subsection) → project-specific sections → Key Docs.
 - **README.md skeleton**: `# <project>` → one-line positioning + stack + key links → 特性 → 快速开始 → 配置 / 用法 → 文档 → License (omit as needed).
