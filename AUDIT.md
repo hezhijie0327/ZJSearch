@@ -418,7 +418,11 @@ rules and the shared-token inventory from AGENTS.md, covering:
    the run's OWN mode and revalidates the stored outline; dedup keys
    describe the search AS EXECUTED (an unfiltered retry must re-run);
    reader launch parameters ride the QUERY string; subagent rows never
-   duplicate on re-open and the digest lists ACTIVE facts only.
+   duplicate on re-open and the digest lists ACTIVE facts only; the
+   STREAM BOUNDARY yields pre-encoded BYTES (the lone-surrogate scrub:
+   `stream.py`'s shell + `ai.api.http.streaming_response` — a broken
+   upstream title must not raise UnicodeEncodeError at the WSGI encode
+   step, where no page_error recovery can reach).
 9. **A11y** — icon-only buttons labelled, dialogs named + focus-trapped
    (`useDialogFocus` with the open flag as `active`), `alt` on images,
    keyboard reachability (ARIA tablists walk with arrows; Escape
@@ -559,7 +563,12 @@ rules and the shared-token inventory from AGENTS.md, covering:
    spec, list = inventory, set/update = authoritative snapshot
    writes, record = ledger append, delegate/message = the subagent
    lifecycle); browse's actions follow one verb vocabulary (noun
-   actions produce a noun artifact deliberately — snapshot).
+   actions produce a noun artifact deliberately — snapshot); GROUND
+   keys keep one meaning across modes (the settlement payload's
+   today/weekday pair says the same thing in every mode — a mode's
+   subject-specific value rides its OWN key: the calendar date mode's
+   `target_weekday` precedent, where overwriting the ground `weekday`
+   made the model read "today is <target's weekday>").
 19. **i18n catalogs** — the scripted sweep (extract both catalogs):
    key parity EXACT, placeholder parity EXACT, dead keys deleted,
    hardcoded literals outside the catalogs flagged, zh punctuation
