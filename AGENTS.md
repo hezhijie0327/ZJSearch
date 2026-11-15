@@ -122,7 +122,7 @@ all in.
 
 Examples:
 
-- `feat(theme): dark brand ground for the zjsearch tiles`
+- `feat(theme): dark brand ground for the ZJSearch tiles`
 - `fix(engine/boardreader): refresh session ID after it expires`
 - `fix(client): keep the upload format when saving settings`
 - `chore(deps): override glob ^13.0.6 → ^14.0.2 (CVE-2026-118773)`
@@ -145,7 +145,7 @@ Family-wide Markdown rules, shared verbatim across all ZJ projects:
 
 Fork of [SearXNG](https://github.com/searxng/searxng) (metasearch engine, Python/Flask + Jinja2).
 Current working branch: `zjsearch`. The purpose of this fork is the custom theme
-**zjsearch** — a from-scratch React + TypeScript UI — alongside the upstream
+**ZJSearch** — a from-scratch React + TypeScript UI — alongside the upstream
 `simple` theme. The theme follows the family design contract **DESIGN.md**
 (ZJBlog repository): palette tokens and shared fragments are family-wide,
 so token retunes and new fragments update DESIGN.md first and both
@@ -175,13 +175,13 @@ Key directories:
 
 - `searx/` — SearXNG core (webapp.py, search, engines). Avoid editing unless
   the user directs it; templates under `searx/templates/zjsearch/` are fair game.
-- `searx/templates/zjsearch/` — zjsearch theme templates ("data shells").
+- `searx/templates/zjsearch/` — ZJSearch theme templates ("data shells").
 - `searx/templates/zjsearch/data/macros.html` — the server → client data contract.
-- `client/zjsearch/` — React 19 + TS + Vite 8 + Tailwind v4 workspace for zjsearch.
+- `client/zjsearch/` — React 19 + TS + Vite 8 + Tailwind v4 workspace for ZJSearch.
 - `client/simple/`, `searx/templates/simple/` — upstream theme, do not refactor.
 - `searx/static/themes/simple/` — built assets of the upstream theme (committed
   to git, like upstream). `searx/static/themes/zjsearch/` is **git-ignored**
-  (`.gitignore`) — never commit zjsearch build output.
+  (`.gitignore`) — never commit ZJSearch build output.
 - `utils/lib_sxng_themes.sh`, `utils/lib_sxng_vite.sh` — make targets for themes.
 
 ## Commands
@@ -194,7 +194,7 @@ make run                    # dev instance on http://127.0.0.1:8888 (granian, re
 pnpm run audit              # Lighthouse gate (inside client/zjsearch): boots its own instance
                             # on :8907 with audit-settings.yml and thresholds per category/page
 
-Package manager: the zjsearch client is a PNPM workspace (`pnpm-lock.yaml`,
+Package manager: the ZJSearch client is a PNPM workspace (`pnpm-lock.yaml`,
 `packageManager` field in package.json) — use pnpm for every install/run
 inside client/zjsearch; the upstream simple theme stays on npm (its own
 lockfile, untouched).
@@ -224,7 +224,7 @@ lockfile, untouched).
   `searx/templates/zjsearch/**` changes only show after the instance restarts.
 - Deployment to another host: `client/zjsearch/make-patch.sh` (PowerShell twin
   `make-patch.ps1`, keep both in sync) exports the whole theme delta vs master —
-  client sources, zjsearch templates AND every `searx/` python change except
+  client sources, ZJSearch templates AND every `searx/` python change except
   `searx/static` — as an ignored `zjsearch-theme.patch` for `git apply` + `pnpm run
   build` on the target. Templates and python must ship together: new templates
   reading `answer.data` against old python only log jinja2 Undefined warnings and
@@ -237,7 +237,7 @@ lockfile, untouched).
 
 ## Architecture
 
-The server renders **no UI**. Every zjsearch Jinja template is a thin shell that
+The server renders **no UI**. Every ZJSearch Jinja template is a thin shell that
 serializes the render context into `<script id="page-data" type="application/json">`
 and boots `zjsearch.min.js`; React renders 100% of the interface.
 
@@ -925,7 +925,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   infinite-scroll pager all derive from one entry list).
 - Client settings come from the base64 `client_settings` attribute on the module
   script tag (`get_client_settings()` in webapp.py). Note: its `theme_static_path`
-  is hardcoded to the simple theme; zjsearch resolves its own assets from the
+  is hardcoded to the simple theme; ZJSearch resolves its own assets from the
   theme root and does not use that field.
 - i18n is theme-owned: `client/zjsearch/src/lib/i18n.ts` is the runtime (context,
   `useT()`, locale fallback) and `src/lib/i18n/` holds one catalog file per

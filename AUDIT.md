@@ -1,4 +1,4 @@
-# AUDIT.md — zjsearch audit playbook
+# AUDIT.md — ZJSearch audit playbook
 
 The reusable methodology for a full-theme audit. The next audit is:
 bootstrap → gates → test matrix → measurements → fixes → regress → docs.
@@ -54,7 +54,7 @@ pnpm run audit                              # Lighthouse gate — home + every r
                                             # mock LLM transport; Edge fallback built in)
 ```
 
-The zjsearch client is a pnpm workspace (`pnpm-lock.yaml` + `packageManager`);
+The ZJSearch client is a pnpm workspace (`pnpm-lock.yaml` + `packageManager`);
 `pnpm install --frozen-lockfile` is the only install path in scripts. The
 upstream simple theme stays on npm — never let the two lockfiles mix.
 
