@@ -18,7 +18,7 @@ interface Suggestion {
 
 /** The accent-filled circular submit (36px, the search glyph; the AI
     ask variant swaps in the paper plane at 40px — distinct from
-    BackToTop's ArrowUp) — one definition so the disabled treatment and
+    the results page's back-to-top chip's ArrowUp) — one definition so the disabled treatment and
     hover stay identical everywhere. */
 export function SubmitCircle({
   label,

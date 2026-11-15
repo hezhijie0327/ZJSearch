@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { TOOL_VIEWS } from "@/features/results/aiSearch/calls/registry.ts";
 import {
@@ -22,7 +22,11 @@ import { useT } from "@/lib/i18n.ts";
  * entry, and an unknown tool falls back to the search view's shape.
  */
 
-export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
+/** Memoized: during the write turn every answer delta replaces the run
+    object, and the timeline folds re-map the steps array -- the settled
+    rows' `call` and `results` identities hold, so a memo row skips the
+    per-token re-render (the audit round's hot-tree finding, 2026-11). */
+export const ToolRow = memo(function ToolRow({ call, results }: { call: AiSearchCall; results: AiSearchSource[] }) {
   const t = useT();
   // MUTUALLY EXCLUSIVE expansions: the rendered result and the debug panes
   // never open together -- opening one collapses the other (the row speaks
@@ -87,4 +91,4 @@ export function ToolRow({ call, results }: { call: AiSearchCall; results: AiSear
       {always}
     </div>
   );
-}
+});

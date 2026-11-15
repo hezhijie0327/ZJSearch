@@ -15,11 +15,25 @@ import { useT } from "@/lib/i18n.ts";
  * Escape/backdrop close, focus in and out.
  */
 
-export function AttachmentPreview({ attachment, onClose }: { attachment: AiSearchAttachment; onClose: () => void }) {
+export function AttachmentPreview({
+  attachment,
+  closing = false,
+  onClose,
+}: {
+  attachment: AiSearchAttachment;
+  /** the exit-presence phase — the overlay plays its fade-out and turns
+      inert, focus has already returned (the lightbox contract) */
+  closing?: boolean;
+  onClose: () => void;
+}) {
   const t = useT();
-  const dialogRef = useDialogFocus<HTMLDivElement>();
+  // focus hands back the moment closing starts, not at unmount
+  const dialogRef = useDialogFocus<HTMLDivElement>(!closing);
 
   useEffect(() => {
+    if (closing) {
+      return;
+    }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -30,10 +44,13 @@ export function AttachmentPreview({ attachment, onClose }: { attachment: AiSearc
     return () => {
       document.removeEventListener("keydown", onKey);
     };
-  }, [onClose]);
+  }, [onClose, closing]);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${closing ? "animate-fade-out" : ""}`}
+      inert={closing || undefined}
+    >
       <div aria-hidden="true" className="absolute inset-0 animate-fade-in bg-black/70" onClick={onClose} />
       <div
         aria-modal="true"

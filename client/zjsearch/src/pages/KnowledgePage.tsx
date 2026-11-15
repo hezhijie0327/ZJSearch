@@ -5,9 +5,9 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
-import { PanelSearch } from "@/components/PanelSearch.tsx";
 import { CompactPager } from "@/components/SettingParts.tsx";
 import { Shell } from "@/components/Shell.tsx";
+import { PanelSearch } from "@/features/knowledge/PanelSearch.tsx";
 import {
   AdminView,
   ConfirmDialog,
@@ -538,7 +538,28 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   id={`knowledge-tab-${tab.id}`}
                   key={tab.id}
                   onClick={() => setKind(tab.id)}
+                  onKeyDown={(event) => {
+                    // the ARIA tabs keyboard pattern: arrows walk + select
+                    // (roving focus), matching the info page's tablist
+                    const dir =
+                      event.key === "ArrowRight" || event.key === "ArrowDown"
+                        ? 1
+                        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                          ? -1
+                          : 0;
+                    if (!dir) {
+                      return;
+                    }
+                    event.preventDefault();
+                    const target = viewTabs[(viewTabs.indexOf(tab) + dir + viewTabs.length) % viewTabs.length];
+                    if (!target) {
+                      return;
+                    }
+                    setKind(target.id);
+                    document.getElementById(`knowledge-tab-${target.id}`)?.focus();
+                  }}
                   role="tab"
+                  tabIndex={kind === tab.id ? 0 : -1}
                   type="button"
                 >
                   {tab.icon}

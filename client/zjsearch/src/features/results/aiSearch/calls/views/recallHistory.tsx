@@ -3,16 +3,7 @@
 import { ArrowUpRight, BookMarked } from "lucide-react";
 import { BODY_ROW } from "@/features/results/aiSearch/calls/rowBase.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
-
-/** host of a match url (the identity row's right slot; a malformed url
-    shows the raw tail). */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url.slice(0, 30);
-  }
-}
+import { resultHost } from "@/lib/link.ts";
 
 /** The recall_history view: the query + its match count, and the matches
     themselves as identity rows (title + host) -- the past research this
@@ -52,7 +43,7 @@ export const recallHistoryView: ToolView = {
               {url ? (
                 <>
                   <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">
-                    {hostOf(url)}
+                    {resultHost(url, undefined, true)}
                   </span>
                   <ArrowUpRight aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
                 </>

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { AlertTriangle, LoaderCircle, RefreshCw } from "lucide-react";
+import { CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Tape } from "@/components/Tape.tsx";
 import { MarkdownAnswer } from "@/features/results/AIOverview.tsx";
@@ -183,7 +183,7 @@ export function DocumentView({
                   {section.status === "writing" ? (
                     <LoaderCircle aria-hidden="true" className="size-3 shrink-0 animate-spin text-accent" />
                   ) : section.status === "failed" ? (
-                    <AlertTriangle aria-hidden="true" className="size-3 shrink-0 text-warning" />
+                    <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-warning" />
                   ) : section.status === "pending" ? (
                     <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full border border-ink-3/50" />
                   ) : null}
@@ -223,7 +223,7 @@ export function DocumentView({
               {section.status === "writing" || busy ? (
                 <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-accent" />
               ) : section.status === "failed" ? (
-                <AlertTriangle aria-hidden="true" className="size-3.5 shrink-0 text-warning" />
+                <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning" />
               ) : null}
               {section.title}
               {section.status === "failed" && onRewrite ? (

@@ -2,7 +2,6 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  AlertTriangle,
   AlignLeft,
   Brain,
   Check,
@@ -129,24 +128,51 @@ const RUN_TITLE_PREVIEW_PX = 113;
     passed) plus its result cards, a page read reveals the READING PANE
     (the crawled content itself).  The per-tool rows live in `calls/`;
     this is only the tool → row dispatch (an unknown tool falls through to
-    the search-shaped row). */
-function CallRow({
+    the search-shaped row).  Memoized with the per-call merge INSIDE: the
+    per-delta re-render of the steps tree re-invokes this map for every
+    row, and the merge must not hand ToolRow a fresh array each time (a
+    fresh `results` would defeat ToolRow's memo -- the write turn's
+    per-token deltas would re-render every settled row, the audit
+    round's hot-tree finding, 2026-11). */
+const CallRow = memo(function CallRow({
   call,
-  results,
-  allSources,
+  sources,
+  stepEntry,
+  stepRound,
+  agent,
 }: {
   call: AiSearchCall;
-  results: AiSearchSource[];
-  allSources: AiSearchSource[];
+  sources: AiSearchSource[];
+  stepEntry: number | undefined;
+  stepRound: number;
+  agent: string | undefined;
 }) {
   // a re-search whose hits were all already-numbered emits no new
   // sources -- the call's dupes ARE its results (their existing [n]s)
-  const dupes = (call.dupes ?? [])
-    .map((n) => allSources.find((source) => source.n === n))
-    .filter((source): source is AiSearchSource => Boolean(source));
-  const merged = [...results, ...dupes.filter((dup) => !results.some((result) => result.n === dup.n))];
+  const results = useMemo(
+    () =>
+      sources.filter((source) =>
+        // PRIMARY: the producing batch's turn -- but the first
+        // delegation pass's child turns share the lead's entry-id
+        // numbers, so the agent key discriminates alongside (this
+        // step's agent: undefined = lead).  FALLBACK: the
+        // (agent, round, callId) triple for replays whose sources
+        // predate the turn stamp
+        source.turn !== undefined
+          ? source.turn === stepEntry && (source.agent ?? "lead") === (agent ?? "lead")
+          : (source.agent ?? "lead") === (agent ?? "lead") && source.round === stepRound && source.callId === call.id,
+      ),
+    [sources, stepEntry, stepRound, agent, call.id],
+  );
+  const merged = useMemo(() => {
+    const dupes = (call.dupes ?? [])
+      .map((n) => sources.find((source) => source.n === n))
+      .filter((source): source is AiSearchSource => Boolean(source))
+      .filter((dup) => !results.some((result) => result.n === dup.n));
+    return [...results, ...dupes];
+  }, [call.dupes, sources, results]);
   return <ToolRow call={call} results={merged} />;
-}
+});
 
 /** The living task list (the update_plan tool maintains it): a STATUS-ONLY
     card -- one colored mark per state (pending dot, active ping, done
@@ -792,22 +818,12 @@ function StepSegment({
     <div className={`flex flex-col gap-0.5 ${index > 0 ? "mt-1.5" : ""}`}>
       {step.calls.map((call) => (
         <CallRow
-          allSources={run.sources}
+          agent={agent}
           call={call}
           key={`${step.round}-${call.id}`}
-          results={run.sources.filter((source) =>
-            // PRIMARY: the producing batch's turn -- but the first
-            // delegation pass's child turns share the lead's entry-id
-            // numbers, so the agent key discriminates alongside (this
-            // step's agent: undefined = lead).  FALLBACK: the
-            // (agent, round, callId) triple for replays whose sources
-            // predate the turn stamp
-            source.turn !== undefined
-              ? source.turn === step.entry && (source.agent ?? "lead") === (agent ?? "lead")
-              : (source.agent ?? "lead") === (agent ?? "lead") &&
-                source.round === step.round &&
-                source.callId === call.id,
-          )}
+          sources={run.sources}
+          stepEntry={step.entry}
+          stepRound={step.round}
         />
       ))}
     </div>
@@ -1534,7 +1550,7 @@ function ActiveStructureCard({
                 ) : section.status === "writing" || busy ? (
                   <LoaderCircle aria-hidden="true" className="size-3 animate-spin text-accent" />
                 ) : section.status === "failed" ? (
-                  <AlertTriangle aria-hidden="true" className="size-3 text-warning" />
+                  <CircleAlert aria-hidden="true" className="size-3 text-warning" />
                 ) : (
                   <span aria-hidden="true" className="size-1.5 rounded-full bg-line" />
                 )}
@@ -1670,6 +1686,9 @@ function AiSearchRunSectionImpl({
   const [viewAttachment, setViewAttachment] = useState<number | null>(null);
   /** the attached DOCUMENT being previewed (index into run.attachments) */
   const [viewFile, setViewFile] = useState<number | null>(null);
+  // the exit-presence window: a dismissal plays the preview's fade-out
+  // instead of snapping it out of the DOM (the lightbox contract)
+  const { render: previewMounted, closing: previewClosing } = useExitPresence(viewFile !== null, 160);
   /** the rendered answer document (the 🖨 print action's clone source) */
   const answerBodyRef = useRef<HTMLDivElement | null>(null);
   // THE RUN PAGE SPEAKS GLOBAL: the rail's #n source cards sit right
@@ -1933,9 +1952,13 @@ function AiSearchRunSectionImpl({
             document.body,
           )
         : null}
-      {viewFile !== null && run.attachments?.[viewFile]
+      {previewMounted && viewFile !== null && run.attachments?.[viewFile]
         ? createPortal(
-            <AttachmentPreview attachment={run.attachments[viewFile]} onClose={() => setViewFile(null)} />,
+            <AttachmentPreview
+              attachment={run.attachments[viewFile]}
+              closing={previewClosing}
+              onClose={() => setViewFile(null)}
+            />,
             document.body,
           )
         : null}

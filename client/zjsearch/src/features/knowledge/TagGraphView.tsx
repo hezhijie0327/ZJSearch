@@ -2,8 +2,8 @@
 
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PanelSearch } from "@/components/PanelSearch.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
+import { PanelSearch } from "@/features/knowledge/PanelSearch.tsx";
 import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/sections.tsx";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";

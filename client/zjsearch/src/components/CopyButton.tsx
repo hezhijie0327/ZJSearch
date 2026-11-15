@@ -3,9 +3,12 @@
 import type { ReactNode } from "react";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { useT } from "@/lib/i18n.ts";
+import { CHIP_OUTLINE } from "@/lib/styles.ts";
 
-const ACTION_PILL =
-  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors";
+// the shared outline-pill shape + this button's own medium weight; the
+// idle variant keeps CopyButton's accent-hover voice (a deliberate
+// divergence from CHIP_OUTLINE_IDLE's surface hover)
+const ACTION_PILL = `${CHIP_OUTLINE} font-medium`;
 const ACTION_IDLE = "border-line text-ink-2 hover:border-accent hover:text-accent";
 
 /** Copy-to-clipboard action pill (share card, map coordinates).  The

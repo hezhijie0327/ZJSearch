@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ChevronDown, Zap } from "lucide-react";
+import { ArrowUp, ChevronDown, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AutoGrowTextarea } from "@/components/AutoGrowTextarea.tsx";
-import { BackToTop } from "@/components/BackToTop.tsx";
 import { Brand } from "@/components/Brand.tsx";
 import { HelpModal } from "@/components/HelpModal.tsx";
 import { SearchBox, SubmitCircle } from "@/components/SearchBox.tsx";
@@ -99,6 +98,43 @@ function AiBootGhost({ q, t }: { q: string; t: Translate }) {
         </aside>
       </div>
     </div>
+  );
+}
+
+/** The floating back-to-top chip -- PAGE-PRIVATE (this page is the only
+    consumer; DESIGN.md §12 folds single-consumer components into their
+    page).  The scroll watcher, the exit-presence fade and the animated
+    scroll all ride the shared lib pieces. */
+function BackToTop() {
+  const t = useT();
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const onScroll = () => {
+      setShown(window.scrollY > 400);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
+  // the floating chip plays its -out animation instead of vanishing
+  const { render: renderChip, closing } = useExitPresence(shown);
+  if (!renderChip) {
+    return null;
+  }
+  return (
+    <button
+      aria-label={t("back_to_top")}
+      className={`zjs-print-hide fixed bottom-6 right-6 z-40 grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-pop transition-colors hover:text-accent ${
+        closing ? "animate-fade-out" : "animate-fade-in"
+      }`}
+      onClick={() => {
+        animateScroll(window, { top: 0 });
+      }}
+      type="button"
+    >
+      <ArrowUp className="size-5" />
+    </button>
   );
 }
 

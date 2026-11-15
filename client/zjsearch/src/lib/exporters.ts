@@ -401,8 +401,8 @@ export function buildAnswerMarkdown(
 /** One REPORT document as Markdown: the outline's section titles become
     `## ` headings in order (the same document the research page rendered)
     with each section's body verbatim -- the knowledge inspector's copy-as-
-    Markdown for a report run, mirroring buildThreadMarkdown's source-list
-    footing.  The whole document shares ONE citation map (sections in
+    Markdown for a report run, with the same source-list footing the run
+    export answers wear.  The whole document shares ONE citation map (sections in
     reading order): bodies and the source tail read the same local
     numbers. */
 export function buildReportMarkdown(
@@ -468,64 +468,6 @@ export function buildDeckMarkdown(input: {
     const text = section.text.trim();
     if (text) {
       lines.push("---", "", renumberCitations(text, map), "");
-    }
-  }
-  return lines.join("\n");
-}
-
-/** The structural run shape the AI-thread export reads (lib stays free of
-    the feature's types). */
-export interface MarkdownRun {
-  q: string;
-  answer: string;
-  mode?: string;
-  sources?: Array<{ n: number; title: string; url: string }>;
-  /** the answer's inline image groups (the {{zjs-gallery:i}} placeholders
-      index into this array) */
-  galleries?: Array<Array<{ url: string; title?: string }>>;
-}
-
-/** One AI conversation as a readable Markdown document: title header, one
-    `## ` section per question with the settled answer renumbered to the
-    run's own citation sequence (the tail grounds exactly those numbers)
-    and the cited sources at its foot.  The gallery
-    placeholders never appear on paper: each becomes its group's images
-    as markdown figures (an empty group just vanishes). */
-export function buildThreadMarkdown(
-  threadId: string,
-  title: string,
-  runs: MarkdownRun[],
-  instance: string,
-  labels?: ExportLabels,
-): string {
-  const lines: string[] = [`# ${title}`, "", `_${instance} · ${threadId} · ${new Date().toLocaleString()}_`];
-  for (const run of runs) {
-    // a run whose question IS the document title skips its section
-    // heading -- the injected document heading would read twice (the
-    // preview shows the title once)
-    const ownSection = run.q.trim() !== title.trim();
-    if (ownSection) {
-      lines.push("", `## ${run.q}`, "");
-    } else {
-      lines.push("");
-    }
-    const answer = run.answer.replaceAll(/\{\{zjs-gallery:(\d+)\}\}/g, (_, index: string) => {
-      const group = run.galleries?.[Number.parseInt(index, 10)] ?? [];
-      return group.map((image) => `![${image.title ?? ""}](${image.url})`).join("\n");
-    });
-    // the run's own document-local numbering: the body and its tail agree
-    const sources = run.sources ?? [];
-    const map = buildCitationMap([answer], new Set(sources.map((source) => source.n)));
-    if (answer.trim()) {
-      lines.push(renumberCitations(answer, map).trim(), "");
-    } else {
-      lines.push(`_(no answer${run.mode ? ` · ${run.mode}` : ""})_`, "");
-    }
-    if (map.size > 0) {
-      lines.push(`**${labels?.sources || "Sources"}**`, "");
-      for (const source of citedSourceRows(map, sources)) {
-        lines.push(`- [${source.local}] [${source.title || source.url}](${source.url})`);
-      }
     }
   }
   return lines.join("\n");

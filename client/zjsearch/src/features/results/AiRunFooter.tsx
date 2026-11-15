@@ -167,7 +167,11 @@ export function AiRunFooter({
           })()
         : null}
       {note ? (
-        <span className={`ms-auto inline-flex min-h-6 items-center gap-1 ${note.cls}`} title={note.text}>
+        // ms-auto from sm up only: at 390px the pushed-right badge sat
+        // ~130px past the viewport (the swipe row hid the STATUS — the one
+        // segment the user is there for); in the flow it is visible, the
+        // right alignment stays a wide-screen nicety (audit round 2026-11)
+        <span className={`inline-flex min-h-6 items-center gap-1 sm:ms-auto ${note.cls}`} title={note.text}>
           <note.icon aria-hidden="true" className="size-3 shrink-0" />
           <span>{note.text}</span>
         </span>

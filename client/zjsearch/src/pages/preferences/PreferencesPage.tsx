@@ -82,7 +82,28 @@ export function PreferencesPage({ data, embedded = false }: { data: PreferencesP
               onClick={() => {
                 setTab(item.id);
               }}
+              onKeyDown={(event) => {
+                // the ARIA tabs keyboard pattern: arrows walk + select
+                // (roving focus), matching the info page's tablist
+                const dir =
+                  event.key === "ArrowRight" || event.key === "ArrowDown"
+                    ? 1
+                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                      ? -1
+                      : 0;
+                if (!dir) {
+                  return;
+                }
+                event.preventDefault();
+                const target = tabs[(tabs.indexOf(item) + dir + tabs.length) % tabs.length];
+                if (!target) {
+                  return;
+                }
+                setTab(target.id);
+                document.getElementById(`prefs-tab-${target.id}`)?.focus();
+              }}
               role="tab"
+              tabIndex={tab === item.id ? 0 : -1}
               type="button"
             >
               {item.icon}
