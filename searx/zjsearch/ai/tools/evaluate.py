@@ -145,6 +145,13 @@ def parse_evaluate_call(
             question["instructions"] = instructions
         criteria = raw.get("criteria")
         if isinstance(criteria, (dict, list)) and criteria:
+            # score criteria must be the ordered legend ARRAY (the vendor's
+            # positional scoring: a dict legend cannot carry the level
+            # values -- the gateway 400s and the model retries the same
+            # dead shape); an unusable score question drops into the parse
+            # error whose feed teaches the shapes
+            if qtype == "score" and not isinstance(criteria, list):
+                continue
             question["criteria"] = criteria
         questions[name] = question
     if not questions:

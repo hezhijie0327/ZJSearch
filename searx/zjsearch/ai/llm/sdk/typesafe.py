@@ -107,6 +107,13 @@ class TypesafeSdk:  # pylint: disable=too-few-public-methods
             model=str(self.cfg.get("model")),
             timeout=timeout or sdk_timeout(),
             headers=extra_headers(self.cfg) or None,
+            # bodies >=1KiB go out zstd-compressed by default
+            # (Content-Encoding: zstd, magic 0x28 = '(') -- a gateway
+            # without zstd support parses the compressed bytes as JSON and
+            # answers 400 "invalid character '('" (the token-plan maas
+            # host, found by the live wire test 2026-11); the uncompressed
+            # body is a few KiB, no gateway in the family needs the save
+            compression=False,
         )
         try:
             response = client.system_one(

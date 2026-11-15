@@ -92,6 +92,19 @@ def _sub_display_rows(calls: list[dict[str, t.Any]]) -> list[dict[str, t.Any]]:
     return [display_item(idx, call) for idx, call in enumerate(calls, 1)]
 
 
+def _score_level(answer: dict[str, t.Any]) -> str | None:
+    """The score answer's nearest legend level: the wire's legend rides
+    string keys, the typesafe family's own parse rides ints -- the
+    lookup takes both (the round of the score names the level)."""
+    try:
+        key = int(round(float(answer.get("score") or 0)))
+    except (TypeError, ValueError):
+        return None
+    legend = answer.get("legend") or {}
+    level = legend.get(str(key))
+    return level if level is not None else legend.get(key)
+
+
 _TIME_FEED_CAP = 600
 """One time-tool digest line's ceiling -- the almanac's full block rides
 the client card, the writer needs only the answer-bearing fields."""
@@ -2299,10 +2312,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
             if kind == "choice":
                 lines.append(f"{name}: {answer.get('choice')} (confidence {answer.get('confidence')})")
             elif kind == "score":
-                try:
-                    level = (answer.get("legend") or {}).get(str(int(round(float(answer.get("score") or 0)))))
-                except (TypeError, ValueError):
-                    level = None
+                level = _score_level(answer)
                 lines.append(f"{name}: {answer.get('score')} ({level})" if level else f"{name}: {answer.get('score')}")
             else:
                 try:
@@ -2325,10 +2335,7 @@ score, a just-published release -- re-run it with refresh: true.)"""
             if kind == "choice":
                 values.append(str(answer.get("choice") or ""))
             elif kind == "score":
-                try:
-                    level = (answer.get("legend") or {}).get(str(int(round(float(answer.get("score") or 0)))))
-                except (TypeError, ValueError):
-                    level = None
+                level = _score_level(answer)
                 values.append(str(level or answer.get("score") or ""))
             else:
                 try:

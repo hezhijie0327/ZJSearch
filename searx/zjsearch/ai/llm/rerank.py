@@ -63,6 +63,26 @@ _clients_lock = threading.Lock()
 same pool-reuse discipline as ``sdk.clients`` (a fresh client per call
 paid a new connection handshake on EVERY search of EVERY round)."""
 
+_WARNED: set[str] = set()
+_WARNED_LOCK = threading.Lock()
+"""The legs whose failure already warned once -- a misconfigured rerank
+gateway (a 404 path, a rejected model) failed open SILENTLY at DEBUG
+level for its whole life, and the only symptom was a ranking that quietly
+stopped improving; the first failure per leg speaks at WARNING, the rest
+stay DEBUG (a flapping gateway must not spam the log every round)."""
+
+
+def _warn_once(key: str, message: str) -> None:
+    """WARNING on the first failure of a leg, DEBUG afterwards."""
+    with _WARNED_LOCK:
+        first = key not in _WARNED
+        _WARNED.add(key)
+    if first:
+        logger.warning(message)
+    else:
+        logger.debug("%s", message)
+
+
 DEFAULT_PATH = "/rerank"
 """The openai leg's default request path -- the industry convention
 (Cohere, Jina, bigmodel, SiliconFlow all serve it); the dashscope
@@ -178,7 +198,12 @@ def _openai(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tuple[l
             cast_to=object,
         )
     except Exception as exc:  # pylint: disable=broad-except
-        logger.debug("zjsearch rerank: openai leg failed, keeping the previous order: %r", exc)
+        _warn_once(
+            f"openai:{path}:{cfg_block.get('base_url')}",
+            f"zjsearch rerank: the openai leg failed ({path} on {cfg_block.get('base_url')}),"
+            " keeping the previous order -- rerank adds nothing until this endpoint answers:"
+            f" {exc!r}",
+        )
         return None, 0
     results = response.get("results") if isinstance(response, dict) else None
     if not isinstance(results, list) or not results:
@@ -219,5 +244,9 @@ def _dashscope(cfg_block: dict[str, t.Any], query: str, docs: list[str]) -> tupl
     try:
         return dashscope_factory(bound, bound["base_url"], "dashscope", "rerank").rerank(query, docs)
     except Exception as exc:  # pylint: disable=broad-except
-        logger.debug("zjsearch rerank: dashscope failed, keeping the previous order: %r", exc)
+        _warn_once(
+            f"dashscope:{bound['base_url']}",
+            f"zjsearch rerank: the dashscope leg failed ({bound['base_url']}), keeping the"
+            f" previous order -- rerank adds nothing until this endpoint answers: {exc!r}",
+        )
         return None, 0
