@@ -138,6 +138,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
                 f"The numbered sources gathered for this question follow the question below.  [n] labels are global and contiguous; sources [1]..[{sources_base}] predate this thread's question; cite only sources visible in the context.",
             ),
         )
+        lines.append(shared.writing_guidelines())
     if attached_files:
         # the user's attached files may carry BINDING output conventions
         # (a report framework, terminology, rule IDs, a structure) -- the

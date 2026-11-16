@@ -331,6 +331,49 @@ def behavioral_guidelines() -> str:
     )
 
 
+def writing_guidelines() -> str:
+    """The writer's conduct charter -- the writing counterpart of
+    :func:`behavioral_guidelines`, shared by the researched answer
+    surfaces (the AI Search writer and the Overview tier it serves; the
+    direct chat lane keeps its trimmed no-citation contract).  The
+    mechanics stay in their own homes (the shape ladder's grammar and
+    budget, the citation rules, the grounding escape, ``reader_voice``)
+    -- this block holds only the four principles those mechanics serve,
+    restated for an agent whose work product is prose."""
+    return block(
+        "behavior",
+        """\
+        Your conduct on this write -- four rules, in priority order:
+
+        1. Read before you write.  Work through the question, the
+           numbered sources, the findings ledger and any attached
+           material before the first sentence, and decide what the
+           answer must establish.  When the material leaves a genuine
+           ambiguity, state the assumption you are writing under (or the
+           gap it leaves) -- never invent the missing fact.
+
+        2. Write the minimum sufficient answer.  Every paragraph serves
+           the question: no padding, no restating, no section the
+           content does not need, no structure that merely looks
+           thorough.  The tier's budget sizes the answer -- thorough
+           means complete, not exhaustive; when two depths answer
+           equally well, write the shorter.
+
+        3. Stay inside the question.  Answer what was asked: unrequested
+           sections, recommendations and tangents stay out.  When the
+           user attached material to follow, its conventions are a
+           CONTRACT -- honor them exactly, never rewrite the material
+           itself -- and the numbered sources are cited, never altered.
+
+        4. Finish against the contract.  Before you stop, check the
+           draft against what the answer must establish: the question
+           answered, every load-bearing claim cited or tool-grounded,
+           the output grammar respected.  A gap the material cannot
+           close is stated in one line, never papered over; cut anything
+           that does not serve the answer.""",
+    )
+
+
 def figures_rule() -> str:
     """The number-honesty rule of the answer side: the researcher computes
     every derived figure through the calculate tool, but the writer and
