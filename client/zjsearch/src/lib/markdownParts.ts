@@ -14,6 +14,7 @@ import type { Blockquote, Paragraph } from "mdast";
 import { pandocMarkFromMarkdown } from "mdast-util-mark";
 import { pandocMark } from "micromark-extension-mark";
 import remarkCjkFriendly from "remark-cjk-friendly";
+import remarkCjkFriendlyGfmStrikethrough from "remark-cjk-friendly-gfm-strikethrough";
 import remarkDeflist from "remark-deflist";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
@@ -173,8 +174,12 @@ const SHARED_TAIL: PluggableList = [
   // right-flanking rule rejects, so the whole span renders literally.
   // The plugin re-resolves attention runs with CJK-aware flanking -- the
   // same taught grammar, parsed correctly (normalizeEmphasis's sibling
-  // fix, at the parser level so every emphasis character benefits).
+  // fix, at the parser level so every emphasis character benefits). The
+  // gfm-strikethrough companion covers the ~~ tilde syntax: the base
+  // plugin only patches CommonMark's emphasis, gfm strikethrough carries
+  // its own delimiter machinery.
   remarkCjkFriendly,
+  remarkCjkFriendlyGfmStrikethrough,
   remarkMark,
   remarkEmoji,
   remarkCallouts,

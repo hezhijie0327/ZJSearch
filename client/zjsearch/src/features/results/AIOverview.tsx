@@ -255,7 +255,12 @@ export function useOverview(capability: AiCapability | undefined, lang: string):
         if (!controller.signal.aborted) {
           setText(accumulated);
           setPhase("done");
-          const { answer } = splitAnswerStream(accumulated);
+          // the recorded answer must NOT carry the wire sentinel: every
+          // downstream surface (thread page, knowledge inspector,
+          // listings) reads this field raw, and only the live card ever
+          // ran extractRunMeta
+          const { text: bare } = extractRunMeta(accumulated);
+          const { answer } = splitAnswerStream(bare);
           settleRun(tid, {
             runNo: 1,
             q,
@@ -277,7 +282,8 @@ export function useOverview(capability: AiCapability | undefined, lang: string):
           const message = err instanceof Error ? err.message : String(err);
           setError(message);
           setPhase(accumulated ? "done" : "error");
-          const { answer } = splitAnswerStream(accumulated);
+          const { text: bare } = extractRunMeta(accumulated);
+          const { answer } = splitAnswerStream(bare);
           settleRun(tid, {
             runNo: 1,
             q,

@@ -43,7 +43,7 @@ import { Card, SectionLabel } from "@/components/SettingParts.tsx";
 import { Link } from "@/components/Shell.tsx";
 import { InspectorMarkdown } from "@/features/knowledge/InspectorMarkdown.tsx";
 import { AiRunFooter, type AiUsage } from "@/features/results/AiRunFooter.tsx";
-import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
+import { type AiSourceMeta, extractRunMeta } from "@/features/results/aiOverview.ts";
 import { DeckView } from "@/features/results/aiSearch/deck/DeckView.tsx";
 import { DocumentView } from "@/features/results/aiSearch/report/DocumentView.tsx";
 import { buildCitationMap, citedSourceRows } from "@/lib/citations.ts";
@@ -532,7 +532,7 @@ export function SearchResults({
                   type="button"
                 >
                   <span className="line-clamp-2 font-serif text-base font-semibold leading-snug text-ink">
-                    {item.title || item.body.slice(0, 80) || item.url}
+                    {item.title || (item.body ? listingExcerpt(item.body).slice(0, 80) : "") || item.url}
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                     <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
@@ -541,7 +541,10 @@ export function SearchResults({
                       <span className={META_CHIP}>{t("knowledge_source_cited", { n: String(item.cited) })}</span>
                     ) : null}
                     {item.body && item.kind !== "source" ? (
-                      <span className="min-w-0 flex-1 truncate">{item.body.slice(0, 90)}</span>
+                      // the body is markdown: the listing line reads the
+                      // stripped plain text (same contract as the main
+                      // listing's excerpt line)
+                      <span className="min-w-0 flex-1 truncate">{listingExcerpt(item.body).slice(0, 90)}</span>
                     ) : null}
                   </span>
                 </button>
@@ -886,7 +889,12 @@ export function InspectorView({
   // sources card below and the print tail share this one map; the
   // report/deck
   // renderers build their own from the same texts.
-  const answerBody = body ?? item.body;
+  // OLD overview rows recorded the wire's trailing meta sentinel inside
+  // the stored answer (splitAnswerStream never stripped it) -- the
+  // render-side strip heals pre-fix records; new records are clean at
+  // the recording boundary.  null (still loading) passes through.
+  const bodyText = body === null ? null : extractRunMeta(body).text;
+  const answerBody = bodyText ?? item.body;
   const docTexts = reportDoc ? reportDoc.sections.map((section) => section.text) : [answerBody];
   const citationMap = buildCitationMap(docTexts, new Set(sources.map((source) => source.n)));
   const citedRows = citedSourceRows(citationMap, sources);
@@ -916,7 +924,7 @@ export function InspectorView({
     title: source.title || source.url,
     url: source.url,
   }));
-  const answerText = body ?? "";
+  const answerText = bodyText ?? "";
   const exportLabels = { sources: t("knowledge_inspector_sources") };
   // one document shape for BOTH markdown paths (the download + copy-as-
   // Markdown clipboard -- the ZJBlog copy-as-markdown contract); a DECK
@@ -1139,7 +1147,7 @@ export function InspectorView({
                       </ol>
                     </nav>
                   ) : null}
-                  <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={body} />
+                  <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={bodyText ?? ""} />
                 </>
               )
             ) : isCrawledSource ? (
@@ -1191,7 +1199,7 @@ export function InspectorView({
             ) : body === "" ? (
               <p className="text-[13px] text-ink-3">{t("knowledge_inspector_not_read")}</p>
             ) : (
-              <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={body} />
+              <InspectorMarkdown map={citationMap} meta={citationMeta} onCite={onCite} text={bodyText ?? ""} />
             )}
           </div>
           {/* the SAME meta line the thread page's answer card ends with --
