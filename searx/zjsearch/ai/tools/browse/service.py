@@ -503,7 +503,13 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
         )
         if background:
             strip = state.get("tabs") or []
-            idx = next((t["index"] for t in strip if t.get("url") == state["url"]), "?")
+            # the NEW tab is the strip's last entry -- search from the
+            # end so an older tab on the same url never shadows it (the
+            # model reads BY this index)
+            idx = next(
+                (t["index"] for t in reversed(strip) if t.get("url") == state["url"]),
+                "?",
+            )
             return ActionResult(
                 feed=(
                     f"opened in BACKGROUND as tab [{idx}]: {state['url']} -- {state['title']}"

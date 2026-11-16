@@ -1192,7 +1192,14 @@ async def adopt_page(page: "Page") -> None:
     """The context-level popup net (engine._adopt_popup): a page spawned
     OUTSIDE a click (window.open during a load, a redirect script) joins
     its opener's session tab set -- activated, viewport wired, download
-    capture riding; no opener session falls back to the lead's.
+    capture riding; a real popup whose opener session is gone falls back
+    to the lead's.
+
+    An OPENER-LESS page never adopts: the context-level ``page`` event
+    fires for the session lanes' own ``context.new_page()`` too, and
+    adopting those duplicated the tab in the strip (the lane appends it
+    again), took the active slot from ``activate=false`` background
+    opens, and dropped subagent pages into the lead's session.
 
     Deliberately WITHOUT the session lock: this runs ON the shared loop,
     and a worker thread holding the lock while it bridges its own next
@@ -1202,16 +1209,17 @@ async def adopt_page(page: "Page") -> None:
     idempotent)."""
     if page.is_closed():
         return
-    sess: _Session | None = None
     try:
         opener = await page.opener()
-        if opener is not None:
-            for candidate in _SESSIONS.values():
-                if any(pg is opener for pg in candidate.pages):
-                    sess = candidate
-                    break
     except Exception:  # pylint: disable=broad-except
-        sess = None
+        return
+    if opener is None:
+        return
+    sess: _Session | None = None
+    for candidate in _SESSIONS.values():
+        if any(pg is opener for pg in candidate.pages):
+            sess = candidate
+            break
     if sess is None:
         sess = _SESSIONS.get(LEAD)
     if sess is None:
@@ -1264,8 +1272,13 @@ def tab_new(
                 )
                 # background tabs render like any other page (Browser-use:
                 # no resource policy) -- and the stop button lands here
-                # too: a background tab must not load forever
-                sess.pages = [pg for pg in sess.pages if not pg.is_closed()]
+                # too: a background tab must not load forever.  The page
+                # filter is IDEMPOTENCE by construction (the same
+                # guarantee _register_tab carries): the append must stay
+                # a single-entry op however the adoption net races it.
+                sess.pages = [
+                    pg for pg in sess.pages if not pg.is_closed() and pg is not page
+                ]
                 sess.pages.append(page)
                 await page.wait_for_timeout(browser_config.settle_ms())
                 try:
