@@ -53,7 +53,11 @@ export function AiThreadPage({ data }: { data: AiThreadPageData }) {
             below: a fixed-measure container, so layouts tuned on the debug
             stage hold on the live page (a shrink-to-fit main drifts with
             the content -- research vs report read as a width change) */}
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
+        {/* the debug stage is a fixed-height shell at lg (hero-shell
+            pattern): the transport bar and the steer lab stay put, the run
+            section scrolls INSIDE, so the rail's sticky constraint reaches
+            the scroller's end and the lab input never scrolls away */}
+        <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem] lg:mb-[-3.5rem] lg:flex lg:flex-none lg:h-[calc(100vh-3.5rem)] lg:flex-col lg:overflow-hidden">
           <Suspense
             fallback={
               <div aria-busy="true" className="mt-4 space-y-5">
@@ -229,7 +233,12 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
 
   return (
     <Shell globals={globals}>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-44 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem]">
+      {/* the lg tail: main's old pb-44 moved into the last run's column
+          (the rail's sticky runway -- see AiSearchRunSection) and the
+          footer pulled up over that empty zone (lg:mb-[-3.5rem] ≥ the
+          footer's height), so the sticky rail's constraint reaches the
+          document's end and the rail never rides up near the bottom */}
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-44 pt-6 sm:px-6 lg:max-w-[68rem] xl:max-w-[72rem] lg:pb-0 lg:mb-[-3.5rem]">
         {resuming ? (
           <ThreadGhost />
         ) : hasThread ? (

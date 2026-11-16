@@ -1859,6 +1859,45 @@ function AiSearchRunSectionImpl({
           ? "mode_overview"
           : "mode_deep",
   );
+  // this run's follow-up suggestions, rendered TWICE by breakpoint: inside
+  // the column at lg -- its height extends the rail's sticky constraint
+  // (a block hanging after the row would push the pinned rail up through
+  // the page's last viewport, see the last-run column runway) -- and after
+  // the row below lg, keeping the stacked order answer → actions → sources
+  // → related unchanged
+  const relatedBlock =
+    run.related.length > 0 ? (
+      <section aria-label={t("related")}>
+        <div className="flex items-center gap-2">
+          <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
+          <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
+        </div>
+        <div className="mt-1">
+          {run.related.map((question, i) => (
+            <div key={i}>
+              <div className="h-px bg-line" />
+              <button
+                className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
+                onClick={() => {
+                  onRelated?.(question);
+                }}
+                type="button"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <CornerDownRight
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
+                  />
+                  <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
+                    {question}
+                  </span>
+                </span>
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    ) : null;
   return (
     <section
       aria-busy={streaming}
@@ -1970,9 +2009,23 @@ function AiSearchRunSectionImpl({
               source cards become a sticky rail on the right; below lg
               everything stacks: answer, related, actions, sources.  The
               answer carries no header row -- the prose is the anchor; one
-              compact line covers the writer's silent start. */}
+              compact line covers the writer's silent start.  On lg the
+              related block renders as the COLUMN's tail (inside this row,
+              see relatedBlock): its height extends the rail's sticky
+              constraint instead of hanging after the row. */}
       <div className="relative lg:flex lg:items-start lg:justify-between lg:gap-8">
-        <div className="min-w-0 flex-1 space-y-5 lg:max-w-3xl">
+        {/* the LAST run's column carries the page's bottom clearance as
+            its own padding: a sticky element can never leave its
+            containing block (this row's content box -- PADDING on the row
+            itself does not count), so at the page's end the rail rides up
+            through the last viewport unless the row's content box reaches
+            the document's tail.  The padding is the follow-up composer's
+            clearance AND the landing zone the footer overlap (the pages'
+            lg:mb-[-3.5rem] on main) tucks into -- together they hold the
+            pinned rail to the very bottom instead of dragging it up by
+            main's old pb-44 + footer height.  Earlier runs stay tight:
+            their rails hand off at the conversation boundary. */}
+        <div className={`min-w-0 flex-1 space-y-5 lg:max-w-3xl ${isLast ? "lg:pb-44" : ""}`}>
           {/* research: think stream + intent + parallel tool calls */}
           <section aria-busy={streaming} aria-label={t("ai_search_process")}>
             <div className="flex flex-wrap items-center gap-2">
@@ -2336,6 +2389,7 @@ function AiSearchRunSectionImpl({
               </div>
             </div>
           ) : null}
+          {relatedBlock ? <div className="hidden lg:block">{relatedBlock}</div> : null}
         </div>
 
         {/* this run's own source cards -- the evidence behind the
@@ -2482,44 +2536,12 @@ function AiSearchRunSectionImpl({
             )}
           </aside>
         ) : null}
-      </div>
 
-      {/* this run's follow-up suggestions: AFTER the two-column wrapper
-              so the stacked (mobile) order reads answer → actions → sources
-              → related; on desktop the block keeps the answer's reading
-              measure, exactly where it sat inside the left column */}
-      {run.related.length > 0 ? (
-        <section aria-label={t("related")} className="lg:max-w-3xl">
-          <div className="flex items-center gap-2">
-            <Repeat2 aria-hidden="true" className="size-4.5 text-ink-3" />
-            <h3 className="text-base font-semibold text-ink">{t("related")}</h3>
-          </div>
-          <div className="mt-1">
-            {run.related.map((question, i) => (
-              <div key={i}>
-                <div className="h-px bg-line" />
-                <button
-                  className="group flex w-full items-center justify-between gap-3 py-2.5 text-left"
-                  onClick={() => {
-                    onRelated?.(question);
-                  }}
-                  type="button"
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <CornerDownRight
-                      aria-hidden="true"
-                      className="size-4 shrink-0 text-ink-3 transition-colors group-hover:text-accent"
-                    />
-                    <span className="text-sm leading-relaxed text-ink-2 transition-colors group-hover:text-accent">
-                      {question}
-                    </span>
-                  </span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+        {/* the MOBILE face of the related block (the lg copy rides the
+            column above): the stacked order still reads answer → actions
+            → sources → related */}
+        {relatedBlock ? <div className="lg:hidden">{relatedBlock}</div> : null}
+      </div>
     </section>
   );
 }

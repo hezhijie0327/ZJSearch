@@ -139,8 +139,13 @@ export function AiDebugStage() {
     return null;
   }
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-      <div className="sticky top-14 z-10 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 py-2.5 backdrop-blur-md sm:-mx-6 sm:px-6">
+    // fixed-height shell at lg (the page main bounds this root): transport
+    // bar on top, the steer lab pinned at the bottom as the permanent input,
+    // the run section scrolling between them -- the rail's sticky constraint
+    // ends at the scroller's bottom, so it never rides up.  The aside
+    // override re-fits the rail to the scroller's own viewport.
+    <div className="mx-auto flex w-full max-w-6xl flex-col px-4 sm:px-6 lg:h-full lg:min-h-0 lg:[&_aside]:lg:top-0 lg:[&_aside]:lg:h-[calc(100vh-24rem)]">
+      <div className="sticky top-14 z-10 -mx-4 mb-5 border-b border-line bg-bg/90 px-4 py-2.5 backdrop-blur-md sm:-mx-6 sm:px-6 lg:sticky lg:top-0 lg:shrink-0">
         {/* ONE compact row: the brand, the scenario picker (a dropdown -- the
             old 14-pill wall wrapped six lines), and the event transport */}
         <div className="flex flex-wrap items-center gap-2">
@@ -231,38 +236,44 @@ export function AiDebugStage() {
           </div>
         </div>
       </div>
-      <AiSearchRunSection
-        isFirst
-        isLast
-        live={core.phase === "streaming"}
-        onClearTemplate={() => Promise.resolve(true)}
-        onContinue={() => {
-          pick(scenario.id);
-        }}
-        onRegenerate={() => {
-          pick(scenario.id);
-        }}
-        onSetShape={(shape) => {
-          // the same stub for the shape segment: the flip's local mirror
-          // (pending note + re-filtered list) and the direct-answer pick's
-          // face flip are QA-able without a host (null = the direct pick;
-          // its withdrawal is accepted on EVERY run now, so resolving ok
-          // mirrors the real host on every shape too)
-          void shape;
-          return Promise.resolve(true);
-        }}
-        onSetTemplate={() => {
-          // the simulator has no run host behind the pick: resolving ok
-          // lets the output-structure card's picked state (preview rows + the
-          // settle note) be QA'd here, where every report run's most
-          // consequential control lives
-          return Promise.resolve(true);
-        }}
-        onSubmitClarify={(text) => answerClarify(text ?? "")}
-        run={run}
-        sourceMeta={meta}
-      />
-      <SteerQueueLab />
+      {/* the internal scroller: the run section (and the rail with it) --
+          nothing below it inside here, so the constraint never binds */}
+      <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain">
+        <AiSearchRunSection
+          isFirst
+          isLast
+          live={core.phase === "streaming"}
+          onClearTemplate={() => Promise.resolve(true)}
+          onContinue={() => {
+            pick(scenario.id);
+          }}
+          onRegenerate={() => {
+            pick(scenario.id);
+          }}
+          onSetShape={(shape) => {
+            // the same stub for the shape segment: the flip's local mirror
+            // (pending note + re-filtered list) and the direct-answer pick's
+            // face flip are QA-able without a host (null = the direct pick;
+            // its withdrawal is accepted on EVERY run now, so resolving ok
+            // mirrors the real host on every shape too)
+            void shape;
+            return Promise.resolve(true);
+          }}
+          onSetTemplate={() => {
+            // the simulator has no run host behind the pick: resolving ok
+            // lets the output-structure card's picked state (preview rows + the
+            // settle note) be QA'd here, where every report run's most
+            // consequential control lives
+            return Promise.resolve(true);
+          }}
+          onSubmitClarify={(text) => answerClarify(text ?? "")}
+          run={run}
+          sourceMeta={meta}
+        />
+      </div>
+      <div className="lg:shrink-0 lg:pb-14 lg:pt-2">
+        <SteerQueueLab />
+      </div>
     </div>
   );
 }

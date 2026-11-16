@@ -916,7 +916,12 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               implementations lock it too). */}
           <div
             className={`@container min-w-0 flex-1 pt-4 ${columnCap} ${
-              aiMode ? "mx-auto w-full max-w-3xl lg:max-w-[68rem] xl:max-w-[72rem]" : ""
+              aiMode
+                ? // the footer overlap (the last run's column pb is the landing
+                  // zone -- see AiSearchRunSection): the sticky rail's
+                  // constraint reaches the document's end and never rides up
+                  "mx-auto w-full max-w-3xl lg:max-w-[68rem] xl:max-w-[72rem] lg:mb-[-3.5rem]"
+                : ""
             }`}
             ref={listRef}
           >
