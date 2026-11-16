@@ -213,6 +213,10 @@ export interface AiSearchState extends Core {
       Resolves false when the run host rejects it (unknown run, steer
       queue full) -- the composer flips its pending chip to not-sent. */
   steer(text: string, preempt?: boolean): Promise<boolean>;
+  /** the steer chips' drag order: permute the host's guide lane so the
+      head lands at the next boundary first.  Resolves false on a stale
+      queue view (a steer drained mid-drag) -- the caller reverts. */
+  reorderSteer(texts: string[]): Promise<boolean>;
   /** ONE settled section's rewrite (the failed section's chip): the
       rewrite lane re-streams the section and the tail folds in place.
       Resolves the outcome -- "busy" while another rewrite runs or the
@@ -1347,6 +1351,16 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     return control(preempt ? "preempt" : "steer", { text: value });
   };
 
+  /** The steer chips' drag order: permute the host's guide lane so the
+      head lands at the next boundary first.  False on a stale queue view
+      (a steer drained mid-drag) -- the caller reverts its local order. */
+  const reorderSteer = (texts: string[]): Promise<boolean> => {
+    if (!texts.length) {
+      return Promise.resolve(false);
+    }
+    return control("reorder", { texts });
+  };
+
   const setTemplate = (template: ReportTemplate): Promise<boolean> => control("template", { template });
 
   /** ONE settled section's rewrite: POST the rewrite lane and fold the
@@ -1704,6 +1718,7 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     continue: continueRun,
     stop,
     steer,
+    reorderSteer,
     setTemplate,
     setShape,
     clearTemplate,

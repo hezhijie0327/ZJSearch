@@ -358,7 +358,7 @@ function AiThreadPageImpl({ data }: { data: AiThreadPageData }) {
                     placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                     value={followupQuery}
                   />
-                  <SteerChips chips={steer.chips} onRetract={steer.retract} />
+                  <SteerChips chips={steer.chips} onReorder={steer.reorder} onRetract={steer.retract} />
                   <div className={`mt-3 flex items-center gap-2 ${steering ? "justify-end" : "justify-between"}`}>
                     {steering ? null : (
                       <DepthControls

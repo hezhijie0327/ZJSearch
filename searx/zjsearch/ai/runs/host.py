@@ -149,6 +149,23 @@ class ControlBox:
                 return self._steers.popleft()
         return ("", None)
 
+    def reorder(self, texts: list[str]) -> bool:
+        """Permute the guide lane to match ``texts`` (the client's drag
+        order -- the head lands at the next boundary first).  ``False``
+        on any disagreement with the live queue (a stale client view:
+        a steer drained or a chip retracted mid-drag) -- the caller keeps
+        its own order rather than guessing."""
+        with self._lock:
+            current = [text for text, _meta in self._steers]
+            if sorted(texts) != sorted(current):
+                return False
+            pool: "dict[str, list[tuple[str, dict | None]]]" = {}
+            for pair in self._steers:
+                pool.setdefault(pair[0], []).append(pair)
+            self._steers.clear()
+            self._steers.extend(pool[text].pop(0) for text in texts)
+            return True
+
     def drain_steers(self) -> list[tuple[str, dict | None]]:
         """Everything the guide lane never delivered (the write phase
         closed the lane -- the leftovers surface as visible discards)."""

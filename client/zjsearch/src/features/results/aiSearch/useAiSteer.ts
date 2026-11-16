@@ -30,6 +30,13 @@ export function useAiSteer(aiSearch: AiSearchState) {
     );
     setChips((prev) => {
       const alive = prev.filter((chip) => !delivered.has(chip.text));
+      // identity-stable while streaming when nothing retired (this effect
+      // re-runs on every wire fold -- a fresh array each time would
+      // re-render the composer area on every streamed delta for no
+      // visible change); the settle/stop clear below must still run
+      if (aiSearch.phase === "streaming" && alive.length === prev.length) {
+        return prev;
+      }
       if (aiSearch.phase !== "streaming") {
         return alive.length && alive.every((chip) => chip.state === "failed") ? alive : [];
       }
@@ -56,5 +63,27 @@ export function useAiSteer(aiSearch: AiSearchState) {
     setChips((prev) => prev.filter((chip) => chip.text !== text));
   };
 
-  return { chips, send, retract };
+  /** The drag order: the queue's visual permutation commits here, and
+      ONLY the pending chips' new relative order posts -- failed chips
+      never entered the host's guide lane, so their texts must not ride
+      the reorder (the endpoint validates against the live queue and a
+      stale view answers false: the pre-drag order stands). */
+  const reorder = (next: AiSteerChip[]): void => {
+    const pendingOf = (list: AiSteerChip[]) =>
+      list
+        .filter((chip) => chip.state === "pending")
+        .map((chip) => chip.text)
+        .join("\n");
+    if (pendingOf(next) === pendingOf(chips)) {
+      return;
+    }
+    setChips(next);
+    void aiSearch.reorderSteer(next.filter((chip) => chip.state === "pending").map((chip) => chip.text)).then((ok) => {
+      if (!ok) {
+        setChips(chips);
+      }
+    });
+  };
+
+  return { chips, send, retract, reorder };
 }

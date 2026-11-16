@@ -152,8 +152,17 @@ def _control_view() -> t.Any:
             # best-effort: a full guide queue must not block the flip --
             # the write boundary honors the pending shape either way
             handle.control.steer(_SHAPE_STEER[shape], preempt=False)
+    elif action == "reorder":
+        # the steer chips' drag order: permute the guide lane so the head
+        # lands at the next boundary first.  The endpoint validates the
+        # client's view against the LIVE queue (a steer drained or a chip
+        # retracted mid-drag answers 409 -- the caller keeps its own
+        # order; the next wire steer step resyncs the chips anyway).
+        texts = [str(text) for text in (payload.get("texts") or []) if str(text).strip()]
+        if not handle.control.reorder(texts):
+            return flask.jsonify({"ok": False, "error": "stale queue view"}), 409
     else:
-        error = "action must be stop / steer / preempt / wrap / template / shape"
+        error = "action must be stop / steer / preempt / wrap / template / shape / reorder"
     if error:
         return flask.jsonify({"ok": False, "error": error}), 422
     return flask.jsonify({"ok": True})

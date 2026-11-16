@@ -12,6 +12,7 @@ import {
   DEBUG_SCENARIOS,
   type DebugScenario,
 } from "@/features/results/aiSearch/debugFixtures.ts";
+import { SteerQueueLab } from "@/features/results/aiSearch/SteerQueueLab.tsx";
 import { applyEvent, type Core, emptyRun } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
 
@@ -261,6 +262,7 @@ export function AiDebugStage() {
         run={run}
         sourceMeta={meta}
       />
+      <SteerQueueLab />
     </div>
   );
 }

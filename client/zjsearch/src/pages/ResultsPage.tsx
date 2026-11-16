@@ -1028,7 +1028,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
                           placeholder={steering ? t("ai_steer_placeholder") : t("ai_search_followup")}
                           value={followupQuery}
                         />
-                        <SteerChips chips={steer.chips} onRetract={steer.retract} />
+                        <SteerChips chips={steer.chips} onReorder={steer.reorder} onRetract={steer.retract} />
                         <div
                           className={`mt-3 flex flex-wrap items-center gap-2 ${steering ? "justify-end" : "justify-between"}`}
                         >
