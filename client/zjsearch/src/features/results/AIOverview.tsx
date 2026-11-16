@@ -193,6 +193,17 @@ export function useOverview(capability: AiCapability | undefined, lang: string):
           usage: event.usage ?? null,
         };
         accumulated += `\n<<<zjs-meta:${JSON.stringify(meta)}>>>`;
+        // THE SETTLE IS THE CARD'S TERMINAL STATE (the AI search fold's
+        // rule): the answer is complete here -- the stream's late tail
+        // (title pass / related fallback / memory extraction) is
+        // recording work that holds the connection open for seconds
+        // more, and riding it left the finished card stuck in the
+        // streaming shape.  The tail keeps draining below (tags land
+        // in runTags for the recording); only the UI state moves early.
+        if (!controller.signal.aborted) {
+          setText(accumulated);
+          setPhase("done");
+        }
       } else if (kind === "tags") {
         runTags = ((event.items as unknown[]) ?? []).map((tag) => String(tag)).filter(Boolean);
       } else if (kind === "calls") {
