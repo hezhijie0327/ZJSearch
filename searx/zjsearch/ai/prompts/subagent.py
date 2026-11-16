@@ -32,8 +32,9 @@ def subagent_messages(
     tool_notes: list[tuple[str, str]] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The SUBAGENT's conversation opener: a compact researcher -- the
-    delegation contract verbatim, the shared discipline (wide then
-    narrow, the digest is the deliverable) and the report-back contract.
+    delegation contract verbatim, the shared conduct charter and the
+    shared discipline (wide then narrow, the digest is the deliverable)
+    plus the report-back contract.
     The child's registered tools carry their doctrine in ``tool_notes``
     (the same <tool_notes> channel the lead researcher speaks); the
     discipline here keeps only what spans the tools.  No task list, no
@@ -44,6 +45,7 @@ def subagent_messages(
             'You are a research SUBAGENT. A lead researcher delegated one subtask to you; you have your own context window and report a compressed digest back.  Research ONLY your subtask.',
         ),
         shared.today_line(tz),
+        shared.behavioral_guidelines(),
         shared.block(
             "delegation",
             f"""\

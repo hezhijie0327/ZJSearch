@@ -402,10 +402,11 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
 ) -> list[dict[str, t.Any]]:
     """The RESEARCHER's conversation opener, in the XML block organisation
     (Vane's): ``<role>`` (research only -- a separate writer writes the
-    answer), ``<today>``, ``<step_notes>`` language, ``<how_to_search>``,
-    ``<examples>`` (few-shot), ``<tool_notes>`` (the registered tools'
-    own doctrine) and ``<depth>`` (the round policy half -- output shape
-    belongs to the writer).  ``<research_policy>`` rides the USER
+    answer), ``<today>``, ``<behavior>`` (the four conduct rules),
+    ``<step_notes>`` language, ``<how_to_search>``, ``<examples>``
+    (few-shot), ``<tool_notes>`` (the registered tools' own doctrine)
+    and ``<depth>`` (the round policy half -- output shape belongs to
+    the writer).  ``<research_policy>`` rides the USER
     message's ``<run_context>`` -- its max_rounds/depth-rung values are
     graded PER RUN, and a per-run block in the system prompt would break
     the cross-run prefix cache there (the module's own caching doctrine
@@ -417,6 +418,7 @@ def initial_messages(  # pylint: disable=too-many-arguments, too-many-locals, to
     lines: list[str] = [
         _role(),
         shared.today_line(user_tz),
+        shared.behavioral_guidelines(),
         shared.block(
             "step_notes",
             f"Write your step notes (the narration before tool calls) in {lang}.  A note is ONE short sentence -- after it, make the tool calls through your tools; never continue the note with a written-out call.",
