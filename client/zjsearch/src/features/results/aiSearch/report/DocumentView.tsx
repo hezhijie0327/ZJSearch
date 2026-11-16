@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
+import { Brain, ChevronDown, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Collapse } from "@/components/Collapse.tsx";
 import { Tape } from "@/components/Tape.tsx";
-import { MarkdownAnswer } from "@/features/results/AIOverview.tsx";
+import { MarkdownAnswer, ThinkScroll } from "@/features/results/AIOverview.tsx";
 import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
 import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";
 import { holdBackTail } from "@/lib/markdownParts.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
-import { CHIP_BTN } from "@/lib/styles.ts";
+import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
 
 /**
  * The REPORT document renderer: the run's outline becomes the document
@@ -32,6 +33,47 @@ import { CHIP_BTN } from "@/lib/styles.ts";
     instead -- the English machine line is not report prose. */
 const GAP_PLACEHOLDER = "*Section generation failed upstream*";
 
+/** One section's retained REASONING (the writer's relayed working turn):
+    expanded and tail-following while the section writes -- the pane is
+    never silent through the model's long first-byte wait -- and folded to
+    the research entries' think disclosure once the section settles.  The
+    buffer stays on the run, so a replay, the knowledge inspector or a
+    print re-opens the very same reasoning. */
+function SectionThink({ active, text }: { active: boolean; text: string }) {
+  const t = useT();
+  // null = follow the auto behaviour (open while writing, folded after);
+  // an explicit toggle always wins, a fresh writing turn re-arms it
+  const [forced, setForced] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (active) {
+      setForced(null);
+    }
+  }, [active]);
+  if (!text.trim()) {
+    return null;
+  }
+  const open = forced ?? active;
+  return (
+    <div className="mt-1.5">
+      <button
+        aria-expanded={open}
+        className={`${META_TOGGLE} text-xs`}
+        onClick={() => {
+          setForced(!open);
+        }}
+        type="button"
+      >
+        <Brain aria-hidden="true" className="size-3 shrink-0" />
+        {t("ai_thinking")}
+        <ChevronDown className={`size-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      <Collapse className={open ? "mt-1" : ""} open={open}>
+        <ThinkScroll active={active} text={text} />
+      </Collapse>
+    </div>
+  );
+}
+
 export function DocumentView({
   run,
   meta,
@@ -49,6 +91,8 @@ export function DocumentView({
       sections: Array<{ id: string; title: string; status: "pending" | "writing" | "done" | "failed" }>;
     }>;
     sections?: Record<string, string>;
+    /** per-section reasoning buffers (think-marked ``section`` deltas) */
+    sectionThink?: Record<string, string>;
     galleries: AiSearchGallery[][];
   };
   meta: AiSourceMeta[];
@@ -214,6 +258,8 @@ export function DocumentView({
           return null;
         }
         const busy = rewritingId === section.id;
+        const writing = section.status === "writing" || busy;
+        const think = run.sectionThink?.[section.id] ?? "";
         return (
           <section className="scroll-mt-20" id={anchorId(section.id)} key={section.id}>
             <h2
@@ -242,6 +288,9 @@ export function DocumentView({
                 </button>
               ) : null}
             </h2>
+            {/* the section's retained reasoning: live while it writes,
+                folded after -- the body below is the report prose */}
+            <SectionThink active={writing} text={think} />
             {text ? (
               <MarkdownAnswer
                 figureLightbox
@@ -251,12 +300,16 @@ export function DocumentView({
                 onCite={onCiteLocal}
                 settled={settled}
               />
-            ) : section.status === "writing" || busy ? (
-              <div aria-hidden="true" className="mt-2 space-y-2">
-                <div className="h-3 w-full animate-pulse rounded bg-surface-2/70" />
-                <div className="h-3 w-4/5 animate-pulse rounded bg-surface-2/70" />
-                <div className="h-3 w-3/5 animate-pulse rounded bg-surface-2/70" />
-              </div>
+            ) : writing ? (
+              // the bars fill the wait only while there is NO reasoning to
+              // show -- once the think line streams, it IS the liveness
+              think.trim() ? null : (
+                <div aria-hidden="true" className="mt-2 space-y-2">
+                  <div className="h-3 w-full animate-pulse rounded bg-surface-2/70" />
+                  <div className="h-3 w-4/5 animate-pulse rounded bg-surface-2/70" />
+                  <div className="h-3 w-3/5 animate-pulse rounded bg-surface-2/70" />
+                </div>
+              )
             ) : section.status === "failed" ? (
               <p className="mt-2 text-[13px] text-warning" dir="auto">
                 {t("ai_section_rewrite_note")}

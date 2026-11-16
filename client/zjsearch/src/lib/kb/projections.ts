@@ -61,6 +61,10 @@ export interface RunSnapshot {
       these + the outline in meta.report; the deck shape's bodies are
       slide-markdown chapters */
   sections?: Record<string, string>;
+  /** the report shape's per-section REASONING buffers ({id: text}) --
+      stored beside the texts so the inspector's DocumentView keeps the
+      section's thinking disclosure after the fact */
+  sectionThink?: Record<string, string>;
   /** the SLIDE shape (the outline event's shape: "deck") -- meta.report
       carries it so the inspector renders the deck view */
   deck?: boolean;
@@ -317,7 +321,12 @@ export function settleRun(threadId: string, run: RunSnapshot): void {
           // inspector re-renders the same DocumentView the research page
           // used (outline headings + per-section bodies) -- the glued
           // answer string alone cannot reconstruct that structure
-          run.sections && Object.keys(run.sections).length ? JSON.stringify(run.sections) : null,
+          // {texts, think}: the per-section bodies plus their retained
+          // reasoning (the inspector's DocumentView reads both; pre-think
+          // rows hold the bare texts map and read back as texts-only)
+          run.sections && Object.keys(run.sections).length
+            ? JSON.stringify({ texts: run.sections, think: run.sectionThink ?? null })
+            : null,
         ],
         tx,
       );

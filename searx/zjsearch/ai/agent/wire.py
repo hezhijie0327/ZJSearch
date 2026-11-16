@@ -115,7 +115,16 @@ bug and :py:func:`encode` refuses it):
                         REPLACES the buffer (the citation gate's
                         rewrite, a CONTINUE's re-synthesis, the
                         post-settle rewrite lane).  A dead section's
-                        gap placeholder rides ``failed: true``.
+                        gap placeholder rides ``failed: true``.  A delta
+                        carrying ``think: true`` is the section's
+                        REASONING stream instead of its body (the writer
+                        relays it so the pane never sits silent through
+                        the model's thinking turn); the client keeps it
+                        as the section's retained thinking disclosure,
+                        and it NEVER enters the answer/body buffers --
+                        reset is tracked per channel (the first think
+                        delta resets the think buffer, the first content
+                        delta resets the body).
 ``settle``              the terminal state: ``{status: done|awaiting|
                         error, finish, usage, model, halt,
                         halt_reason}``.  ``halt`` is human-facing prose

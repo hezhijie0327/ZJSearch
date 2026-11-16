@@ -2127,7 +2127,13 @@ function AiSearchRunSectionImpl({
                       : undefined
                   }
                   rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
-                  run={{ galleries: run.galleries, outline: run.outline, sections: run.sections, runNo: run.runNo }}
+                  run={{
+                    galleries: run.galleries,
+                    outline: run.outline,
+                    runNo: run.runNo,
+                    sections: run.sections,
+                    sectionThink: run.sectionThink,
+                  }}
                   settled={!streaming}
                   stamp={run.endedAt}
                 />

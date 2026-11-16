@@ -230,6 +230,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     usage: ThreadAnswer["usage"];
     report?: ThreadAnswer["report"];
     sections?: ThreadAnswer["sections"];
+    sectionThink?: ThreadAnswer["sectionThink"];
   } | null>(null);
   useEffect(() => {
     // every open starts from the loading face -- a second item must not
@@ -265,6 +266,7 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             usage: result.usage,
             report: result.report ?? null,
             sections: result.sections ?? null,
+            sectionThink: result.sectionThink ?? null,
           });
         })
         .catch(() => {

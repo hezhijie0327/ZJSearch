@@ -819,6 +819,9 @@ export function InspectorView({
       sections: Array<{ id: string; title: string }>;
     } | null;
     sections?: Record<string, string> | null;
+    /** the per-section reasoning buffers (the section's retained
+        thinking disclosure) -- absent on rows settled before the relay */
+    sectionThink?: Record<string, string> | null;
   } | null;
   item: KnowledgeItem;
   onBack: () => void;
@@ -1107,6 +1110,9 @@ export function InspectorView({
                     // time; the run row's own tail number keeps prefixes unique
                     runNo: Number(item.id.split(":").pop()) || 1,
                     sections: Object.fromEntries(reportDoc.sections.map((section) => [section.id, section.text])),
+                    // the retained per-section reasoning (the archived
+                    // evt log's think-marked section deltas re-fold here)
+                    sectionThink: extras?.sectionThink ?? undefined,
                   }}
                   settled
                   stamp={item.updated}

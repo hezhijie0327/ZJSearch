@@ -69,28 +69,49 @@ def _pump_section(
     """One stream ATTEMPT: answer deltas as ``section`` events; the usage
     lands in the tally; a transport error or idle timeout ends the attempt
     (the caller owns the retry and the gap note).  ``produced`` is a
-    one-element flag flipped on the first delta -- the caller's retry
-    verdict.  ``reset`` marks the attempt's FIRST delta ``reset: true`` --
-    the wire contract that this stream REPLACES whatever the client
-    already buffers for the section id (the citation gate's rewrite, and
-    every re-synthesis a CONTINUE replays into a run whose earlier
-    attempt had already written the section)."""
-    stream = LlmStream(cfg, messages, relay_reasoning=False)
+    one-element flag flipped on the attempt's first reasoning OR content
+    byte -- the caller's retry verdict (the upstream proving alive is
+    enough: a later death is a mid-stream failure, not a queue timeout).
+    ``reset`` marks the attempt's FIRST delta ``reset: true`` -- the wire
+    contract that this stream REPLACES whatever the client already buffers
+    for the section id (the citation gate's rewrite, and every
+    re-synthesis a CONTINUE replays into a run whose earlier attempt had
+    already written the section).  Reasoning rides the same event with
+    ``think: true``: the writer relays it so the section's pane never sits
+    silent through the model's long thinking turn, and the client keeps it
+    as the section's retained thinking disclosure.  The reset mark is
+    tracked PER CHANNEL: the attempt's first think delta resets the think
+    buffer, its first content delta resets the body."""
+    stream = LlmStream(cfg, messages, relay_reasoning=True)
+    first_think = True
+    first_content = True
     try:
         while True:
             wait = _FIRST_TIMEOUT if not produced[0] else _IDLE_TIMEOUT
             kind, payload = stream.next_event(wait)
-            if kind == "delta":
+            if kind == "think":
                 text = str(payload or "")
                 if text:
-                    first = not produced[0]
                     produced[0] = True
                     yield {
                         "e": "section",
                         "id": section_id,
                         "t": text,
-                        **({"reset": True} if reset and first else {}),
+                        "think": True,
+                        **({"reset": True} if reset and first_think else {}),
                     }
+                    first_think = False
+            elif kind == "delta":
+                text = str(payload or "")
+                if text:
+                    produced[0] = True
+                    yield {
+                        "e": "section",
+                        "id": section_id,
+                        "t": text,
+                        **({"reset": True} if reset and first_content else {}),
+                    }
+                    first_content = False
             elif kind == "finish":
                 tally.absorb(payload)
             elif kind == "error":

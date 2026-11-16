@@ -25,6 +25,10 @@ export interface ThreadAnswer {
   /** the per-section markdown texts ({id: body}) off the run_summary
       rollup -- absent for single-write runs and pre-v5.2 rows */
   sections?: Record<string, string> | null;
+  /** the per-section REASONING buffers ({id: text}) stored beside the
+      texts -- the section's retained thinking disclosure; absent on
+      rows settled before the writer relayed reasoning */
+  sectionThink?: Record<string, string> | null;
 }
 
 /** A thread's latest run answer off the rollup row, with the run's cited
@@ -78,6 +82,20 @@ export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> 
     [threadId],
   );
   const row = rows?.[0];
+  // the stored per-section payload is `{texts, think}`; pre-think rows
+  // stored the bare texts map -- both read back as the same pair
+  const bag = (row?.sections ?? null) as unknown;
+  let sectionTexts: Record<string, string> | null = null;
+  let sectionThink: Record<string, string> | null = null;
+  if (bag && typeof bag === "object") {
+    const record = bag as Record<string, unknown>;
+    if (record.texts && typeof record.texts === "object") {
+      sectionTexts = record.texts as Record<string, string>;
+      sectionThink = (record.think ?? null) as Record<string, string> | null;
+    } else {
+      sectionTexts = bag as Record<string, string>;
+    }
+  }
   const usage = row?.usage
     ? {
         model: row.model ?? null,
@@ -91,7 +109,8 @@ export async function loadThreadAnswer(threadId: string): Promise<ThreadAnswer> 
   return {
     answer: String(row?.answer ?? "").replace(/\{\{zjs-gallery:\d+\}\}/g, ""),
     report,
-    sections: (row?.sections ?? null) as Record<string, string> | null,
+    sections: sectionTexts,
+    sectionThink,
     sources: (sources ?? []).map((source) => ({
       n: Number(source.n) || 0,
       url: String(source.url ?? ""),

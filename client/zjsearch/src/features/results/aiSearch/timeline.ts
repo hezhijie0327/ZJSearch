@@ -511,6 +511,11 @@ export interface AiSearchRun {
   /** the report's per-section markdown buffers (the ``section`` deltas,
       keyed by section id -- the document renders them in outline order) */
   sections?: Record<string, string>;
+  /** the per-section REASONING buffers (the think-marked ``section``
+      deltas): the writer relays each section's working so its pane never
+      sits silent, and the document keeps it as the section's retained
+      thinking disclosure (folded once the section settles) */
+  sectionThink?: Record<string, string>;
   /** the recorded data tables (the ``artifact`` events, keyed by id) */
   artifacts?: Record<number, AiSearchArtifact>;
   /** the interactive session's live mirror (the browse call's
@@ -1482,6 +1487,17 @@ export function applyEvent(
       const delta = String(event.t ?? "");
       if (!id || !delta) {
         return core;
+      }
+      // the think-marked delta is the section's REASONING (the writer
+      // relays its working turn): its own buffer, never the body --
+      // reset-tracked per channel, so a rewritten section's fresh
+      // reasoning replaces the buffer while the body reset stays the
+      // body's own contract
+      if (event.think === true) {
+        const thinkPrev = run.sectionThink?.[id] ?? "";
+        const think = event.reset === true ? delta : thinkPrev + delta;
+        runs[lastIdx] = { ...run, sectionThink: { ...(run.sectionThink ?? {}), [id]: think } };
+        return { ...core, runs };
       }
       // the wire's RESET contract (synth.py): a stream whose first delta
       // carries `reset: true` REPLACES whatever the section already

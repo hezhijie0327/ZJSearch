@@ -1435,7 +1435,10 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 return
             if kind == "answer":
                 answer_parts.append(str(event.get("t") or ""))
-            elif kind == "section":
+            elif kind == "section" and not event.get("think"):
+                # a think-marked section delta is the writer's reasoning,
+                # never body text -- the post-settle related/memory
+                # extraction must not digest it
                 answer_parts.append(str(event.get("t") or ""))
             elif kind == "related":
                 related_seen = True
@@ -1462,7 +1465,7 @@ class _Ndjson:  # pylint: disable=too-few-public-methods
                 break
             if kind == "answer":
                 answer_parts.append(str(event.get("t") or ""))
-            if kind == "section":
+            if kind == "section" and not event.get("think"):
                 answer_parts.append(str(event.get("t") or ""))
             if kind == "ask":
                 awaiting = True
@@ -1513,7 +1516,7 @@ def _drive(  # pylint: disable=too-many-branches
             handle.publish(event)
         for event in events:
             kind = event.get("e")
-            if kind in ("answer", "section"):
+            if kind == "answer" or (kind == "section" and not event.get("think")):
                 answer_parts.append(str(event.get("t") or ""))
             elif kind == "ask":
                 awaiting = True

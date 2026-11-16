@@ -1104,9 +1104,25 @@ const FULL_STAGE: DebugScenario = {
       ],
     },
     {
+      // the writer's RELAYED REASONING (think-marked section deltas): the
+      // section pane streams this live before its first body byte
+      e: "section",
+      id: "summary",
+      t: "双线并行:格局线先定份额与扩产节点,价格线给片区均价锚点;摘要只收两条结论,不展开。",
+      think: true,
+      reset: true,
+    },
+    {
       e: "section",
       id: "summary",
       t: "**基线判断.** 全球多肽原料药处于产能军备竞赛早段:需求端 GLP-1 药物放量驱动,2025 年市场规模 41.2 亿美元,CAGR 8.6%[1];供给端中国 CDMO 已占全球产能 28%[4],扩产节奏最激进。\n\n**核心逻辑.** 产能与合规资质是双重壁垒,头部企业以长约锁定订单[2];深圳住宅市场则呈「新房定价锚、二手房以量换价」格局,2025 年新房成交均价 5.8 万/㎡[3]。",
+    },
+    {
+      e: "section",
+      id: "s1",
+      t: "先把全球玩家按份额排序,再落到中国三家头部;引用只挂可核实数字,传闻不写。",
+      think: true,
+      reset: true,
     },
     {
       e: "section",
