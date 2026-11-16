@@ -13,6 +13,7 @@
 import type { Blockquote, Paragraph } from "mdast";
 import { pandocMarkFromMarkdown } from "mdast-util-mark";
 import { pandocMark } from "micromark-extension-mark";
+import remarkCjkFriendly from "remark-cjk-friendly";
 import remarkDeflist from "remark-deflist";
 import remarkEmoji from "remark-emoji";
 import remarkGfm from "remark-gfm";
@@ -165,7 +166,21 @@ export const remarkHtmlFallback = function remarkHtmlFallback() {
     ZJBlog's content.ts); the math pipeline stays lazy beside it --
     `sharedRemarkWithMath` slots it right after remark-gfm, the blog's
     own position (one tail, two heads -- the chain cannot drift). */
-const SHARED_TAIL: PluggableList = [remarkMark, remarkEmoji, remarkCallouts, remarkDeflist, remarkHtmlFallback];
+const SHARED_TAIL: PluggableList = [
+  // CJK-adjacent emphasis (the taught bold-lead opening's natural Chinese
+  // realization: `**lead-in:**glued-to-the-following-text`): the closer
+  // sits between punctuation and a CJK letter, which CommonMark's
+  // right-flanking rule rejects, so the whole span renders literally.
+  // The plugin re-resolves attention runs with CJK-aware flanking -- the
+  // same taught grammar, parsed correctly (normalizeEmphasis's sibling
+  // fix, at the parser level so every emphasis character benefits).
+  remarkCjkFriendly,
+  remarkMark,
+  remarkEmoji,
+  remarkCallouts,
+  remarkDeflist,
+  remarkHtmlFallback,
+];
 
 export const SHARED_REMARK: PluggableList = [remarkGfm, ...SHARED_TAIL];
 
