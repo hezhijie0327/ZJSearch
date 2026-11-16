@@ -104,8 +104,12 @@ function AiBootGhost({ q, t }: { q: string; t: Translate }) {
 /** The floating back-to-top chip -- PAGE-PRIVATE (this page is the only
     consumer; DESIGN.md §12 folds single-consumer components into their
     page).  The scroll watcher, the exit-presence fade and the animated
-    scroll all ride the shared lib pieces. */
-function BackToTop() {
+    scroll all ride the shared lib pieces.  `overChrome`: the AI page's
+    floating bottom chrome (the follow-up composer, the browser wait
+    bar) occupies this corner below lg -- the chip stands down there and
+    stays lg+ only while such chrome lives (on lg+ the composer confines
+    left of the sources rail, the wait bar never renders). */
+function BackToTop({ overChrome = false }: { overChrome?: boolean }) {
   const t = useT();
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -125,7 +129,7 @@ function BackToTop() {
   return (
     <button
       aria-label={t("back_to_top")}
-      className={`zjs-print-hide fixed bottom-6 right-6 z-40 grid size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-pop transition-colors hover:text-accent ${
+      className={`zjs-print-hide fixed bottom-6 right-6 z-40 ${overChrome ? "hidden lg:grid" : "grid"} size-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-pop transition-colors hover:text-accent ${
         closing ? "animate-fade-out" : "animate-fade-in"
       }`}
       onClick={() => {
@@ -637,6 +641,16 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
   // "jump to latest" on long threads (morphic's scroll-to-bottom): the
   // scrolled-up reader gets a one-hop way back to the live run + composer
   const [jumpLatest, setJumpLatest] = useState(false);
+  // the AI page's floating BOTTOM chrome that shares the back-to-top
+  // chip's corner below lg: the follow-up composer (mounted from the
+  // run's start through the settled page) and the browser takeover's
+  // wait bar (a live wait_user window; its view derivation mirrors
+  // AiSearchRunSection's).  Either one stands the chip down on mobile.
+  const composerLive = aiSearch.phase !== "idle" && aiSearch.phase !== "error";
+  const lastRun = aiSearch.runs[aiSearch.runs.length - 1];
+  const waitBarLive =
+    (lastRun?.browser ?? Object.values(lastRun?.browserSessions ?? {}).find((item) => item.img))?.waitLeft !==
+    undefined;
   useEffect(() => {
     if (!aiMode) {
       return;
@@ -1184,7 +1198,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
         </div>
       </main>
 
-      <BackToTop />
+      <BackToTop overChrome={composerLive || waitBarLive} />
       {renderHelp ? (
         <HelpModal ai={aiMode} closing={helpClosing} layout={settings.hotkeys} onClose={() => setHelpOpen(false)} />
       ) : null}
