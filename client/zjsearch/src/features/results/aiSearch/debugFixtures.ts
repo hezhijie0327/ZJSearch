@@ -338,7 +338,10 @@ const FULL_STAGE: DebugScenario = {
           page: { url: "https://example.com/peptide-report", title: "多肽原料药行业深度报告" },
           args: {
             action: "multi",
-            steps: [{ action: "open", url: "https://example.com/peptide-report" }, { action: "read" }],
+            steps: [
+              { action: "open", url: "https://example.com/peptide-report" },
+              { action: "read", indexes: [1, 2] },
+            ],
           },
           feed: "1. open: opened https://example.com/peptide-report -- 多肽原料药行业深度报告\n\n# 多肽原料药行业深度报告\n全球多肽原料药市场…",
         },
@@ -599,12 +602,46 @@ const FULL_STAGE: DebugScenario = {
       id: 2,
       call: 1,
       status: "ok",
-      chars: 12480,
       ms: 8420,
-      // the READING PANE payload: what the model actually read -- the row's
-      // chevron expands to it (scroll-capped), the debug pane shows the raw
-      // args + receipt; without this field the fixture cannot demo the fold
-      text: "# 多肽原料药(CDMO)行业深度报告\n\n## 市场规模\n\n全球多肽原料药市场 2025 年规模 **41.2 亿美元**,2019-2025 年 CAGR 8.6%;其中 GLP-1 相关肽类占比从 31% 升至 58%。\n\n## 产能格局\n\n| 企业 | 产能(吨/年) | 扩产投资 |\n|---|---|---|\n| Polypeptide | ≈12 | €1.4亿 |\n| Bachem | ≈9 | CHF 1.1亿 |\n| 诺泰生物 | ≈5 | ¥8.2亿 |\n\n欧洲双雄占据高端合成订单,中国企业以 40-60% 的成本优势切入仿制肽与轻改造肽。\n\n## 采购要点\n\n- 长约锁价周期从 2 年缩短至 1 年,买方倾向分批定价;\n- 固相合成 overcrowding:2026 年新产能投产后价格战风险上升;\n- 质量审计成本占交付价 8-12%,FDA 483 记录是硬门槛。",
+      page: { url: "https://example.com/capacity-table", title: "产能格局对比表" },
+      // the MULTI-INDEX read's wire shape: one step row per BATCH step
+      // (position-aligned with args.steps); the read step carries
+      // `sections` -- one {url,title,chars,text} document PER TAB -- so the
+      // step card renders one link + reading pane per tab (the joined feed
+      // stays the model's; the single-joined-pane shape shipped before
+      // 2026-11 filed every tab's body under the last tab's identity)
+      steps: [
+        {
+          action: "open",
+          status: "ok",
+          label: "opened https://example.com/peptide-report -- 多肽原料药行业深度报告",
+          url: "https://example.com/peptide-report",
+          title: "多肽原料药行业深度报告",
+        },
+        {
+          action: "read",
+          status: "ok",
+          label: "[tab 1] 多肽原料药行业深度报告 (https://example.com/peptide-report)",
+          url: "https://example.com/capacity-table",
+          title: "产能格局对比表",
+          chars: 1100,
+          sections: [
+            {
+              url: "https://example.com/peptide-report",
+              title: "多肽原料药行业深度报告",
+              chars: 620,
+              text: "# 多肽原料药行业深度报告\n\n全球多肽原料药市场 2025 年规模 **41.2 亿美元**,2019-2025 年 CAGR 8.6%;其中 GLP-1 相关肽类占比从 31% 升至 58%。\n\n## 采购要点\n\n- 长约锁价周期从 2 年缩短至 1 年,买方倾向分批定价;\n- 固相合成 overcrowding:2026 年新产能投产后价格战风险上升。",
+            },
+            {
+              url: "https://example.com/capacity-table",
+              title: "产能格局对比表",
+              chars: 480,
+              text: "## 产能格局\n\n| 企业 | 产能(吨/年) | 扩产投资 |\n|---|---|---|\n| Polypeptide | ≈12 | €1.4亿 |\n| Bachem | ≈9 | CHF 1.1亿 |\n| 诺泰生物 | ≈5 | ¥8.2亿 |\n\n欧洲双雄占据高端合成订单,中国企业以 40-60% 的成本优势切入仿制肽与轻改造肽。",
+            },
+          ],
+        },
+      ],
+      feed: "1. open: opened https://example.com/peptide-report -- 多肽原料药行业深度报告\n\n# 多肽原料药行业深度报告\n全球多肽原料药市场…",
     },
     {
       e: "call",

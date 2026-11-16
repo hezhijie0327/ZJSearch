@@ -228,7 +228,11 @@ export interface AiSearchCall {
       label / url / chars) -- the expansion renders each step's DETAIL,
       not the feed's bare first lines.  A read step carries `text` (the
       clean title+body document): its step row opens the same reading
-      pane a standalone read does. */
+      pane a standalone read does.  A MULTI-INDEX read instead carries
+      `sections` -- one {url,title,chars,text} document PER TAB (the
+      joined feed stays the model's; the timeline renders one pane per
+      tab instead of filing every tab's body under the last tab's
+      identity). */
   steps?: Array<{
     action: string;
     status: string;
@@ -237,6 +241,7 @@ export interface AiSearchCall {
     title?: string;
     chars?: number;
     text?: string;
+    sections?: Array<{ url: string; title: string; chars?: number; text: string }>;
   }>;
   /** calendar: the composite time/date payload -- the row's expansion
       renders the instant (time / weekday / zone / UTC / unix) or the
@@ -1202,6 +1207,16 @@ export function applyEvent(
                       title: s.title ? String(s.title) : undefined,
                       chars: typeof s.chars === "number" ? s.chars : undefined,
                       text: typeof s.text === "string" && s.text ? s.text : undefined,
+                      sections: Array.isArray(s.sections)
+                        ? (s.sections as Array<Record<string, unknown>>)
+                            .map((sec) => ({
+                              url: String(sec.url ?? ""),
+                              title: String(sec.title ?? ""),
+                              chars: typeof sec.chars === "number" ? sec.chars : undefined,
+                              text: String(sec.text ?? ""),
+                            }))
+                            .filter((sec) => sec.text)
+                        : undefined,
                     })),
                   }
                 : {}),
@@ -1221,8 +1236,25 @@ export function applyEvent(
         // a multi batch's read steps carry their OWN document (the
         // wire-only per-step text): the same url-identity archive a
         // standalone read joins -- the recall pages from the batch's
-        // reads exactly like it pages from a single read
+        // reads exactly like it pages from a single read.  A multi-INDEX
+        // read's sections archive PER TAB (the step's own text/url would
+        // file every tab's body under the last tab's identity)
         for (const step of Array.isArray(event.steps) ? (event.steps as Array<Record<string, unknown>>) : []) {
+          const sections = Array.isArray(step.sections) ? (step.sections as Array<Record<string, unknown>>) : [];
+          if (sections.length) {
+            for (const section of sections) {
+              const secUrl = String(section.url ?? "");
+              const secText = String(section.text ?? "");
+              if (secText && secUrl.startsWith("http")) {
+                fx.archive(
+                  secUrl,
+                  run.sources.find((source) => source.url === secUrl)?.title ?? String(section.title ?? ""),
+                  secText,
+                );
+              }
+            }
+            continue;
+          }
           const stepText = typeof step.text === "string" ? step.text : "";
           const stepUrl = String(step.url ?? "");
           if (stepText && stepUrl.startsWith("http")) {

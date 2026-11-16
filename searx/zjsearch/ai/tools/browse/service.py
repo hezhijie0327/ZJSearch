@@ -614,7 +614,40 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
         if result.page and result.page.get("url"):
             summary["url"] = str(result.page["url"])[:200]
             summary["title"] = str(result.page.get("title") or "")[:120]
-        if summary["action"] == "read":
+        # the MULTI-INDEX read's per-tab documents (reads carries every
+        # section but the last, last_read the last): reassembled into one
+        # list so the timeline can keep the tabs apart
+        sections = (
+            [*result.reads, *([result.last_read] if result.last_read else [])]
+            if summary["action"] == "read" and not first.startswith("error:")
+            else []
+        )
+        if sections:
+            # the step row stays ONE row (the client's step summaries are
+            # position-aligned with the batch's steps) but carries the
+            # tabs SEPARATELY: one link + reading pane per tab instead of
+            # the joined feed filed under the last tab's identity.  The
+            # batch's reads register each tab under its own url for the
+            # same reason.  The joined text stays the model's feed only.
+            summary["chars"] = len(str(result.feed))
+            summary["sections"] = [
+                {
+                    "url": str(section.get("url") or "")[:200],
+                    "title": str(section.get("title") or "")[:120],
+                    "chars": len(str(section.get("text") or "")),
+                    "text": str(section.get("text") or ""),
+                }
+                for section in sections
+            ]
+            for section in sections:
+                reads.append(
+                    {
+                        "url": str(section.get("url") or ""),
+                        "title": str(section.get("title") or ""),
+                        "text": str(section.get("text") or ""),
+                    }
+                )
+        elif summary["action"] == "read":
             # the WIRE-ONLY document text (title + body, the standalone
             # read settlement's archive shape) -- the timeline's step row
             # opens the same reading pane a standalone read does; the
@@ -625,14 +658,15 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
         step_rows.append(summary)
         if str(step.get("action") or "") in ("read", "fetch") and not first.startswith("error:"):
             feeds.append(f"{i}. {step.get('action')}: {str(result.feed)}")
-            page = result.page or {}
-            reads.append(
-                {
-                    "url": str(page.get("url") or ""),
-                    "title": str(page.get("title") or ""),
-                    "text": str(result.feed),
-                }
-            )
+            if not sections:
+                page = result.page or {}
+                reads.append(
+                    {
+                        "url": str(page.get("url") or ""),
+                        "title": str(page.get("title") or ""),
+                        "text": str(result.feed),
+                    }
+                )
         else:
             feeds.append(f"{i}. {step.get('action')}: {first}")
         if first.startswith("error:"):

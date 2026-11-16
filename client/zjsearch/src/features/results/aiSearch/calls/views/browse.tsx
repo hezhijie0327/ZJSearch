@@ -199,9 +199,12 @@ function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tab
     the equal-treatment rule: a real outbound link for the page the step
     landed on (the location line's vocabulary at step scale), and a read
     step's document as a click-open reading pane (the standalone read's
-    fold doctrine: the pane never sits open in the timeline).  Legacy
-    replays without a structured summary render nothing here -- the
-    feed-tail lines above stay their body. */
+    fold doctrine: the pane never sits open in the timeline).  A
+    multi-INDEX read step's `sections` render one link + pane group PER
+    TAB -- the tabs stay apart instead of one joined pane filed under
+    the last tab's identity.  Legacy replays without a structured
+    summary render nothing here -- the feed-tail lines above stay their
+    body. */
 function StepDetail({
   d,
   t,
@@ -215,91 +218,116 @@ function StepDetail({
       choosing WHICH pane to open is real interaction) */
   autoOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(autoOpen);
-  const copyToast = useCopyToast();
-  if (!d.url && !d.text) {
+  // the document groups: a multi-index read's per-tab sections, or the
+  // single-document shape (url + text) every other step speaks
+  const groups: Array<{ url: string; title: string; chars?: number; text: string }> = d.sections?.length
+    ? d.sections
+    : d.text
+      ? [{ url: d.url ?? "", title: d.title ?? "", chars: d.chars, text: d.text }]
+      : [];
+  if (!groups.length) {
     return null;
   }
   return (
     // ONE grounded card per step (the batch's own anatomy: verb line ->
-    // card) -- the link row, the chars toggle and the reading pane live
-    // INSIDE it; a bare "N chars" toggle floating between verb and card
-    // read as three disconnected pieces
+    // card) -- the link rows, the chars toggles and the reading panes
+    // live INSIDE it; a bare "N chars" toggle floating between verb and
+    // card read as three disconnected pieces
     <BodyRow className="mt-0.5 ms-[18px] space-y-1">
+      {groups.map((g, gi) => (
+        <StepReadingGroup autoOpen={autoOpen} g={g} key={gi} t={t} />
+      ))}
+    </BodyRow>
+  );
+}
+
+/** One document group inside a step card: the outbound link row, the
+    chars fold and the reading pane (the standalone read's anatomy at
+    step scale).  Its own open state -- a multi-tab read's panes open
+    independently. */
+function StepReadingGroup({
+  g,
+  t,
+  autoOpen = false,
+}: {
+  g: { url: string; title: string; chars?: number; text: string };
+  t: ToolRowProps["t"];
+  autoOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(autoOpen);
+  const copyToast = useCopyToast();
+  return (
+    <>
       {/* the link row renders only on TITLED pages -- a titleless read
           would print its host twice (the verb line already names the
           page, the pane's chip carries the outbound link) */}
-      {d.url && d.title ? (
+      {g.url && g.title ? (
         <a
           className="flex min-w-0 items-center gap-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
           dir="auto"
-          href={d.url}
+          href={g.url}
           rel="noreferrer"
           target="_blank"
-          title={d.url}
+          title={g.url}
         >
           <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
-          <span className="min-w-0 flex-1 truncate font-medium">{d.title}</span>
-          <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(d.url)}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">{g.title}</span>
+          <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(g.url)}</span>
           <ArrowUpRight aria-hidden="true" className="size-3 shrink-0" />
         </a>
       ) : null}
-      {d.text ? (
-        <>
-          {/* the chars fold hugs the RIGHT edge (the card's meta
-              convention: title row left, meta right) */}
-          <div className="flex justify-end">
+      {/* the chars fold hugs the RIGHT edge (the card's meta
+          convention: title row left, meta right) */}
+      <div className="flex justify-end">
+        <button
+          aria-expanded={open}
+          className="flex items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
+          onClick={() => {
+            setOpen(!open);
+          }}
+          type="button"
+        >
+          <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
+          <span>{t("ai_page_chars", { n: String(g.chars ?? g.text.length) })}</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+      </div>
+      <Collapse className={open ? "mt-1" : ""} open={open}>
+        <div className="group relative">
+          <div className={`relative ${READ_PANE} max-h-96 overflow-y-auto overscroll-contain`} dir="auto">
+            {g.text}
+          </div>
+          <div className="absolute end-2 top-2 flex gap-0.5">
             <button
-              aria-expanded={open}
-              className="flex items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
+              aria-label={t("copy")}
+              className={HOVER_CHIP}
               onClick={() => {
-                setOpen(!open);
+                copyToast(g.text);
               }}
+              title={t("copy")}
               type="button"
             >
-              <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
-              <span>{t("ai_page_chars", { n: String(d.chars ?? 0) })}</span>
-              <ChevronDown
-                aria-hidden="true"
-                className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
-              />
+              <Copy aria-hidden="true" className="size-3.5" />
             </button>
+            {g.url ? (
+              <a
+                aria-label={t("open_source")}
+                className={HOVER_CHIP}
+                href={g.url}
+                rel="noreferrer"
+                target="_blank"
+                title={t("open_source")}
+              >
+                <ArrowUpRight aria-hidden="true" className="size-3.5" />
+              </a>
+            ) : null}
           </div>
-          <Collapse className={open ? "mt-1" : ""} open={open}>
-            <div className="group relative">
-              <div className={`relative ${READ_PANE} max-h-96 overflow-y-auto overscroll-contain`} dir="auto">
-                {d.text}
-              </div>
-              <div className="absolute end-2 top-2 flex gap-0.5">
-                <button
-                  aria-label={t("copy")}
-                  className={HOVER_CHIP}
-                  onClick={() => {
-                    copyToast(d.text ?? "");
-                  }}
-                  title={t("copy")}
-                  type="button"
-                >
-                  <Copy aria-hidden="true" className="size-3.5" />
-                </button>
-                {d.url ? (
-                  <a
-                    aria-label={t("open_source")}
-                    className={HOVER_CHIP}
-                    href={d.url}
-                    rel="noreferrer"
-                    target="_blank"
-                    title={t("open_source")}
-                  >
-                    <ArrowUpRight aria-hidden="true" className="size-3.5" />
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          </Collapse>
-        </>
-      ) : null}
-    </BodyRow>
+        </div>
+      </Collapse>
+    </>
   );
 }
 
@@ -383,12 +411,17 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
   // pane) -- the feed is only the legacy/pending vocabulary's source
   const structuredRenderable = steps.some((_, i) => {
     const d = call.steps?.[i];
-    return d !== undefined && d.status !== "error" && (Boolean(d.url) || Boolean(d.text));
+    return (
+      d !== undefined && d.status !== "error" && (Boolean(d.url) || Boolean(d.text) || Boolean(d.sections?.length))
+    );
   });
   // the batch's ONLY readable document opens its pane directly (the row
-  // chevron already is the disclosure -- the standalone read's depth)
-  const textSteps = (call.steps ?? []).filter((s) => s.status !== "error" && s.text).length;
-  const autoOpenPane = textSteps === 1;
+  // chevron already is the disclosure -- the standalone read's depth;
+  // a multi-INDEX read's sections each count as one document)
+  const documentCount = (call.steps ?? [])
+    .filter((s) => s.status !== "error")
+    .reduce((sum, s) => sum + (s.sections?.length ?? (s.text ? 1 : 0)), 0);
+  const autoOpenPane = documentCount === 1;
   if (!steps.length || (!lines.length && !structuredRenderable && call.status === "ok")) {
     return null;
   }
