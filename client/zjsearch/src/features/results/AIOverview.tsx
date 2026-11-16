@@ -1422,57 +1422,61 @@ export function OverviewCard({
                     <AiRunFooter finish={meta.finish ?? null} model={meta.model ?? null} usage={meta.usage ?? null} />
                   </div>
                 ) : null}
+                {/* the follow-up lives INSIDE the reveal (the reader's
+                    "read, then ask" flow): the collapsed preview stays a
+                    pure preview + toggle -- expanding to the full answer
+                    is what surfaces the composer.  The question rides the
+                    AI search with THIS answer as the conversation's
+                    opening history -- a sessionStorage hand-off survives
+                    the navigation (the staged attachments' exact channel)
+                    and the takeover's first POST carries it, so the next
+                    run builds on what's established */}
+                {state.phase === "done" && q ? (
+                  <form
+                    className="zjs-print-hide mt-3 flex items-center gap-2 border-t border-line pt-3"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const question = followup.trim();
+                      if (!question) {
+                        return;
+                      }
+                      window.sessionStorage.setItem(
+                        "zjs-overview-thread",
+                        JSON.stringify({ q: question, thread: state.threadId }),
+                      );
+                      setFollowup("");
+                      navigate(threadUrl(state.threadId));
+                    }}
+                  >
+                    <input
+                      aria-label={t("ai_followup_placeholder")}
+                      className="h-9 min-w-0 flex-1 rounded-full border border-line bg-surface px-3.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
+                      onChange={(event) => {
+                        setFollowup(event.target.value);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.nativeEvent.isComposing) {
+                          event.preventDefault();
+                        }
+                      }}
+                      placeholder={t("ai_followup_placeholder")}
+                      value={followup}
+                    />
+                    <button
+                      aria-label={t("ai_followup_action")}
+                      className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover"
+                      title={t("ai_followup_action")}
+                      type="submit"
+                    >
+                      <ArrowUp aria-hidden="true" className="size-4" />
+                    </button>
+                  </form>
+                ) : null}
               </ClampReveal>
             )}
           </div>
         ) : streaming && !hasThink ? (
           <p className="mt-2 text-xs text-ink-3">{t("ai_overview_running")}</p>
-        ) : null}
-        {/* the follow-up: the question rides the AI search with THIS
-            answer as the conversation's opening history -- a sessionStorage
-            hand-off survives the navigation (the staged attachments' exact
-            channel) and the takeover's first POST carries it, so the next
-            run builds on what's established */}
-        {state.phase === "done" && hasAnswer && q ? (
-          <form
-            className="zjs-print-hide mt-3 flex items-center gap-2 border-t border-line pt-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const question = followup.trim();
-              if (!question) {
-                return;
-              }
-              window.sessionStorage.setItem(
-                "zjs-overview-thread",
-                JSON.stringify({ q: question, thread: state.threadId }),
-              );
-              setFollowup("");
-              navigate(threadUrl(state.threadId));
-            }}
-          >
-            <input
-              aria-label={t("ai_followup_placeholder")}
-              className="h-9 min-w-0 flex-1 rounded-full border border-line bg-surface px-3.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-accent"
-              onChange={(event) => {
-                setFollowup(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing) {
-                  event.preventDefault();
-                }
-              }}
-              placeholder={t("ai_followup_placeholder")}
-              value={followup}
-            />
-            <button
-              aria-label={t("ai_followup_action")}
-              className="grid size-9 shrink-0 place-items-center rounded-full bg-accent-strong text-accent-contrast transition-colors hover:bg-accent-strong-hover"
-              title={t("ai_followup_action")}
-              type="submit"
-            >
-              <ArrowUp aria-hidden="true" className="size-4" />
-            </button>
-          </form>
         ) : null}
         {failed ? (
           <div className="mt-2 text-xs text-danger">
