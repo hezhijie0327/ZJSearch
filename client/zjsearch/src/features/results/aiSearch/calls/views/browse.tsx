@@ -195,57 +195,68 @@ function TabStripView({ tabs, t }: { tabs: NonNullable<ToolRowProps["call"]["tab
   );
 }
 
-/** One multi step's DETAIL, rendered like its standalone row's body --
-    the equal-treatment rule: a real outbound link for the page the step
-    landed on (the location line's vocabulary at step scale), and a read
-    step's document as a click-open reading pane (the standalone read's
-    fold doctrine: the pane never sits open in the timeline).  A
-    multi-INDEX read step's `sections` render one link + pane group PER
-    TAB -- the tabs stay apart instead of one joined pane filed under
-    the last tab's identity.  Legacy replays without a structured
-    summary render nothing here -- the feed-tail lines above stay their
-    body. */
-function StepDetail({
-  d,
-  t,
-  autoOpen = false,
-}: {
-  d: NonNullable<ToolRowProps["call"]["steps"]>[number];
-  t: ToolRowProps["t"];
-  /** the batch's ONLY readable document opens its pane directly -- the
-      row chevron already IS the disclosure, the second toggle would be
-      a redundant depth (a multi-read batch keeps the per-step toggle:
-      choosing WHICH pane to open is real interaction) */
-  autoOpen?: boolean;
-}) {
-  // the document groups: a multi-index read's per-tab sections, or the
-  // single-document shape (url + text) every other step speaks
-  const groups: Array<{ url: string; title: string; chars?: number; text: string }> = d.sections?.length
+/** One step summary's DOCUMENT groups: a multi-index read's per-tab
+    sections, or the single-document shape (url + text) every other step
+    speaks.  Empty unless the step carries readable documents. */
+function stepDocs(d: NonNullable<ToolRowProps["call"]["steps"]>[number]): Array<{
+  url: string;
+  title: string;
+  chars?: number;
+  text: string;
+}> {
+  return d.sections?.length
     ? d.sections
     : d.text
       ? [{ url: d.url ?? "", title: d.title ?? "", chars: d.chars, text: d.text }]
       : [];
-  if (!groups.length) {
+}
+
+/** A landing-only step's grounded card (tab new / open / a
+    click-through): the location line's vocabulary at step scale -- the
+    landing page is the step's product.  A url-less step (a plain
+    type/press) renders nothing. */
+function StepLanding({ d }: { d: NonNullable<ToolRowProps["call"]["steps"]>[number] }) {
+  if (!d.url) {
     return null;
   }
   return (
-    // ONE grounded card per step (the batch's own anatomy: verb line ->
-    // card) -- the link rows, the chars toggles and the reading panes
-    // live INSIDE it; a bare "N chars" toggle floating between verb and
-    // card read as three disconnected pieces
-    <BodyRow className="mt-0.5 ms-[18px] space-y-1">
-      {groups.map((g, gi) => (
-        <StepReadingGroup autoOpen={autoOpen} g={g} key={gi} t={t} />
-      ))}
+    <BodyRow className="mt-0.5 ms-[18px]">
+      <StepLinkRow g={{ title: d.title, url: d.url }} />
     </BodyRow>
   );
 }
 
-/** One document group inside a step card: the outbound link row, the
-    chars fold and the reading pane (the standalone read's anatomy at
-    step scale).  Its own open state -- a multi-tab read's panes open
-    independently. */
-function StepReadingGroup({
+/** The landing-page link row (the LocationLine's vocabulary at step
+    scale): the title when the page carries one, host+path always. */
+function StepLinkRow({ g }: { g: { title?: string; url: string } }) {
+  return (
+    <a
+      className="flex min-w-0 items-center gap-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
+      dir="auto"
+      href={g.url}
+      rel="noreferrer"
+      target="_blank"
+      title={g.url}
+    >
+      <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
+      <span className="min-w-0 flex-1 truncate font-medium">{g.title || pageLabel(g.url)}</span>
+      {g.title ? (
+        <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(g.url)}</span>
+      ) : null}
+      <ArrowUpRight aria-hidden="true" className="size-3 shrink-0" />
+    </a>
+  );
+}
+
+/** One read step's document row: THE STANDALONE READ ROW ITSELF (the
+    row-header anatomy -- status check, book icon, host+path label, the
+    chars metric on the right edge, the fold chevron -- and the reading
+    pane hanging DIRECTLY off the line, no verb tier, no card).  The
+    title rides the tooltip and the document's own first line, exactly
+    like the standalone row; the pane's corner chips carry the outbound
+    open and the copy.  Its own open state -- a multi-tab read's panes
+    open independently. */
+function StepReadRow({
   g,
   t,
   autoOpen = false,
@@ -257,38 +268,24 @@ function StepReadingGroup({
   const [open, setOpen] = useState(autoOpen);
   const copyToast = useCopyToast();
   return (
-    <>
-      {/* the link row renders only on TITLED pages -- a titleless read
-          would print its host twice (the verb line already names the
-          page, the pane's chip carries the outbound link) */}
-      {g.url && g.title ? (
-        <a
-          className="flex min-w-0 items-center gap-1.5 text-xs text-ink-2 transition-colors hover:text-ink"
-          dir="auto"
-          href={g.url}
-          rel="noreferrer"
-          target="_blank"
-          title={g.url}
-        >
-          <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
-          <span className="min-w-0 flex-1 truncate font-medium">{g.title}</span>
-          <span className="hidden max-w-[45%] truncate font-mono text-xs text-ink-3 sm:block">{pageLabel(g.url)}</span>
-          <ArrowUpRight aria-hidden="true" className="size-3 shrink-0" />
-        </a>
-      ) : null}
-      {/* the chars fold hugs the RIGHT edge (the card's meta
-          convention: title row left, meta right) */}
-      <div className="flex justify-end">
+    <div>
+      <div className="flex min-h-6 w-full items-center gap-1.5 px-1 text-xs text-ink-3">
+        <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
+        <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
         <button
           aria-expanded={open}
-          className="flex items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
+          className="flex min-w-0 flex-1 items-center gap-1.5 transition-colors hover:text-ink"
           onClick={() => {
             setOpen(!open);
           }}
           type="button"
         >
-          <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
-          <span>{t("ai_page_chars", { n: String(g.chars ?? g.text.length) })}</span>
+          <span className="truncate" dir="auto" title={g.url || g.title}>
+            {g.url ? pageLabel(g.url) : g.title || "?"}
+          </span>
+          <span className="ms-auto flex shrink-0 items-center gap-1 ps-2 font-mono text-xs tabular-nums">
+            {t("ai_page_chars", { n: String(g.chars ?? g.text.length) })}
+          </span>
           <ChevronDown
             aria-hidden="true"
             className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
@@ -327,21 +324,14 @@ function StepReadingGroup({
           </div>
         </div>
       </Collapse>
-    </>
+    </div>
   );
 }
 
-/** The multi action's rendered result: one row per STEP, speaking the
-    SAME anatomy its standalone row speaks -- the localized verb (the
-    label() vocabulary over the step's own args, merged with the
-    structured summary's url so a settled read labels as its page, never
-    as the running fallback), then StepDetail's link + reading pane.
-    The feed tails render ONLY for steps without a structured summary
-    (legacy replays, the pending plan) -- a structured step's feed line
-    is receipt material, its raw urls never join the verb line. */
 /** One multi step's localized VERB (the standalone label's vocabulary
-    minus the detail: the numbered step's target renders in its own card,
-    so the verb line carries the verb alone). */
+    minus the detail: a landing-bearing step's target renders in its own
+    card below the verb line, a read step's documents ARE the step's own
+    rows -- the verb line never speaks for either). */
 function stepVerb(action: string, step: Record<string, unknown>, t: ToolRowProps["t"]): string {
   switch (action) {
     case "open":
@@ -458,6 +448,10 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         const nowAt = tail.indexOf(". now: ");
         const dest = nowAt > 0 ? tail.slice(nowAt + 7).replace(/\s*\([^)]*\)\s*$/, "") : "";
         const rest = nowAt > 0 ? tail.slice(0, nowAt) : tail;
+        // a read step IS its documents: each renders as the standalone
+        // read row itself (no verb tier, no card) -- the equal-treatment
+        // rule taken to the row level
+        const docs = structured ? stepDocs(d) : [];
         return (
           <li className="flex min-w-0 items-start gap-1.5 text-xs" key={i}>
             <span
@@ -468,29 +462,39 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
               {i + 1}
             </span>
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
-                <span className={`min-w-0 flex-1 truncate font-medium ${failed ? "text-danger" : "text-ink-2"}`}>
-                  {verb}
-                </span>
-              </div>
-              {failed ? (
-                <div className="mt-0.5 truncate ps-[18px] text-danger" dir="auto">
-                  {tail}
-                </div>
-              ) : structured ? (
-                <StepDetail autoOpen={autoOpenPane} d={d} t={t} />
-              ) : dest ? (
-                <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
-                  <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate" dir="auto">
-                    {dest}
-                  </span>
+              {docs.length ? (
+                <div className="space-y-0.5">
+                  {docs.map((g, gi) => (
+                    <StepReadRow autoOpen={autoOpenPane} g={g} key={gi} t={t} />
+                  ))}
                 </div>
               ) : (
-                <div className="mt-0.5 truncate ps-[18px] text-ink-3" dir="auto">
-                  {rest}
-                </div>
+                <>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
+                    <span className={`min-w-0 flex-1 truncate font-medium ${failed ? "text-danger" : "text-ink-2"}`}>
+                      {verb}
+                    </span>
+                  </div>
+                  {failed ? (
+                    <div className="mt-0.5 truncate ps-[18px] text-danger" dir="auto">
+                      {tail}
+                    </div>
+                  ) : structured ? (
+                    <StepLanding d={d} />
+                  ) : dest ? (
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1 ps-[18px] text-ink-3">
+                      <CornerDownRight aria-hidden="true" className="size-3 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate" dir="auto">
+                        {dest}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-0.5 truncate ps-[18px] text-ink-3" dir="auto">
+                      {rest}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </li>

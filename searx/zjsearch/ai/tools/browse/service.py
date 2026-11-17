@@ -516,6 +516,11 @@ def _act_tab(args: dict[str, t.Any], session_id: str) -> ActionResult:
                     " (not active; read it with read + index)"
                 ),
                 frames=[{**session.frame(session_id), "agent": session_id}],
+                # the landing page rides like any open: the multi summary
+                # reads url/title off it (a background tab's step row used
+                # to render the verb alone), the standalone tab row's
+                # location line renders it
+                page=_page(state),
                 tabs=state.get("tabs"),
             )
         result = _outline_result(
