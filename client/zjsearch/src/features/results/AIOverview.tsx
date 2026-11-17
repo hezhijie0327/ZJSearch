@@ -1197,6 +1197,8 @@ function AnswerStreamPane({ active, children }: { active: boolean; children: Rea
 }
 
 export function ThinkScroll({ active, text }: { active: boolean; text: string }) {
+  const t = useT();
+  const copyToast = useCopyToast();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // tail-follow must not fight the reader: while streaming the tail is
   // followed ONLY until the user scrolls away from it; scrolling back to
@@ -1210,22 +1212,37 @@ export function ThinkScroll({ active, text }: { active: boolean; text: string })
     }
   }, [active, text]);
   return (
-    <div
-      // the machine-voice chrome: the reasoning stream sits on the same
-      // boxed ground as the reading pane and the args debug pane -- THINK
-      // (12px ink-3 on surface-2) vs CONTENT (14px ink on the plain
-      // ground) distinguishes at a glance
-      className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 px-3 py-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-ink-3"
-      dir="auto"
-      onScroll={() => {
-        const el = scrollRef.current;
-        if (el) {
-          pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-        }
-      }}
-      ref={scrollRef}
-    >
-      {text.trim()}
+    <div className="group relative">
+      <div
+        // the machine-voice chrome: the reasoning stream sits on the same
+        // boxed ground as the reading pane and the args debug pane -- THINK
+        // (12px ink-3 on surface-2) vs CONTENT (14px ink on the plain
+        // ground) distinguishes at a glance
+        className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 px-3 py-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-ink-3"
+        dir="auto"
+        onScroll={() => {
+          const el = scrollRef.current;
+          if (el) {
+            pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+          }
+        }}
+        ref={scrollRef}
+      >
+        {text.trim()}
+      </div>
+      {/* the corner copy chip (the CodeBlock pattern): the reasoning is
+          feed material the user carries elsewhere */}
+      <button
+        aria-label={t("copy")}
+        className={`absolute end-2 top-2 ${HOVER_CHIP}`}
+        onClick={() => {
+          copyToast(text.trim());
+        }}
+        title={t("copy")}
+        type="button"
+      >
+        <Copy aria-hidden="true" className="size-3.5" />
+      </button>
     </div>
   );
 }

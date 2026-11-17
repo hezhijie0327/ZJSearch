@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   ChevronsUpDown,
+  CircleAlert,
   Copy,
   CornerDownRight,
   FileDown,
@@ -134,39 +135,57 @@ function LocationLine({ page }: { page: { url: string; title: string } }) {
 /** The session's interactive-element outline (the model's primary read):
     one row per element -- ref chip, role, name -- so the user sees
     exactly what the model sees.  Outline text is untrusted page content:
-    rendered as plain text runs, never HTML. */
+    rendered as plain text runs, never HTML.  The corner copy chip (the
+    reading panes' vocabulary) -- an outline is feed material the user
+    may carry elsewhere. */
 function BrowserOutline({ snapshot, t }: { snapshot: string; t: ToolRowProps["t"] }) {
+  const copyToast = useCopyToast();
   const lines = snapshot.split("\n");
   const rows = lines.filter((line) => /^(?:f\d+)?e\d+\t/.test(line));
   if (!rows.length) {
     return <p className="mt-1 px-1 text-xs text-ink-3">{t("ai_browser_outline_empty")}</p>;
   }
   return (
-    <div className={`${READ_PANE} mt-1 max-h-56 space-y-0.5 overflow-y-auto overscroll-contain p-1.5`}>
-      {lines.map((line, i) => {
-        if (line.startsWith("-- frame ")) {
+    <div className="group relative">
+      <div className={`${READ_PANE} mt-1 max-h-56 space-y-0.5 overflow-y-auto overscroll-contain p-1.5`}>
+        {lines.map((line, i) => {
+          if (line.startsWith("-- frame ")) {
+            return (
+              <p className="px-1 pt-1 font-mono text-xs text-ink-3" dir="auto" key={`f${i}`}>
+                {line.trim()}
+              </p>
+            );
+          }
+          const parts = line.split("\t");
+          if (parts.length < 3 || !/^(?:f\d+)?e\d+$/.test(parts[0] ?? "")) {
+            return null;
+          }
+          const ref = parts[0] ?? "";
+          const role = parts[1] ?? "";
           return (
-            <p className="px-1 pt-1 font-mono text-xs text-ink-3" dir="auto" key={`f${i}`}>
-              {line.trim()}
-            </p>
+            <div className="flex min-w-0 items-center gap-1.5 text-xs" key={`${ref}-${i}`}>
+              <span className="shrink-0 rounded bg-accent-soft px-1 font-mono text-xs leading-4 text-accent">
+                {ref}
+              </span>
+              <span className="w-16 shrink-0 truncate font-mono text-xs text-ink-3">{role}</span>
+              <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
+                {parts.slice(2).join(" ")}
+              </span>
+            </div>
           );
-        }
-        const parts = line.split("\t");
-        if (parts.length < 3 || !/^(?:f\d+)?e\d+$/.test(parts[0] ?? "")) {
-          return null;
-        }
-        const ref = parts[0] ?? "";
-        const role = parts[1] ?? "";
-        return (
-          <div className="flex min-w-0 items-center gap-1.5 text-xs" key={`${ref}-${i}`}>
-            <span className="shrink-0 rounded bg-accent-soft px-1 font-mono text-xs leading-4 text-accent">{ref}</span>
-            <span className="w-16 shrink-0 truncate font-mono text-xs text-ink-3">{role}</span>
-            <span className="min-w-0 flex-1 truncate text-ink-2" dir="auto">
-              {parts.slice(2).join(" ")}
-            </span>
-          </div>
-        );
-      })}
+        })}
+      </div>
+      <button
+        aria-label={t("copy")}
+        className={`absolute end-2 top-2 ${HOVER_CHIP}`}
+        onClick={() => {
+          copyToast(snapshot);
+        }}
+        title={t("copy")}
+        type="button"
+      >
+        <Copy aria-hidden="true" className="size-3.5" />
+      </button>
     </div>
   );
 }
@@ -470,7 +489,17 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                 </div>
               ) : (
                 <>
+                  {/* the step's own verdict rides the verb line like the
+                      read rows' check: settled ok vs failed; a pending
+                      step stays unmarked (the row-level spinner owns
+                      "running", and the steps run in order -- five
+                      spinners would read as parallel) */}
                   <div className="flex min-w-0 items-center gap-1.5">
+                    {failed ? (
+                      <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
+                    ) : structured ? (
+                      <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
+                    ) : null}
                     <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
                     <span className={`min-w-0 flex-1 truncate font-medium ${failed ? "text-danger" : "text-ink-2"}`}>
                       {verb}
