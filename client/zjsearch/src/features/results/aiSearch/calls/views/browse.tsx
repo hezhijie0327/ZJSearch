@@ -232,14 +232,16 @@ function stepDocs(d: NonNullable<ToolRowProps["call"]["steps"]>[number]): Array<
 
 /** A landing-only step's grounded card (tab new / open / a
     click-through): the location line's vocabulary at step scale -- the
-    landing page is the step's product.  A url-less step (a plain
-    type/press) renders nothing. */
+    landing page is the step's product.  The card spans the content
+    column (the timeline's one content line -- the badge occupies the
+    icon slot ahead of it).  A url-less step (a plain type/press)
+    renders nothing. */
 function StepLanding({ d }: { d: NonNullable<ToolRowProps["call"]["steps"]>[number] }) {
   if (!d.url) {
     return null;
   }
   return (
-    <BodyRow className="mt-0.5 ms-[18px]">
+    <BodyRow className="mt-0.5">
       <StepLinkRow g={{ title: d.title, url: d.url }} />
     </BodyRow>
   );
@@ -290,7 +292,7 @@ function StepReadRow({
   const copyToast = useCopyToast();
   return (
     <div>
-      <div className="flex min-h-6 w-full items-center gap-1.5 px-1 text-xs text-ink-3">
+      <div className="flex min-h-6 w-full items-center gap-1.5 text-xs text-ink-3">
         <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
         <button
           aria-expanded={open}
@@ -474,11 +476,12 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         const docs = structured ? stepDocs(d) : [];
         return (
           // the verdict mark lives in a LEADING slot so every status mark
-          // in the timeline sits on one x (the sibling rows' checks are
-          // flush -- the steps' used to indent behind their number
-          // badges); pending steps leave the slot empty (the row-level
-          // spinner owns "running", and the steps run in order -- five
-          // spinners would read as parallel)
+          // in the timeline sits on one x, and the badge takes the tool
+          // icon's slot: the content column lands exactly where the
+          // sibling rows' labels start -- status, icon, content: three
+          // lines through the whole timeline.  Pending steps leave the
+          // slot empty (the row-level spinner owns "running", and the
+          // steps run in order -- five spinners would read as parallel)
           <li className="flex min-w-0 items-start gap-1.5 ps-1 text-xs" key={i}>
             <span className="mt-px flex w-3 shrink-0 justify-center leading-4">
               {failed ? (
@@ -488,7 +491,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
               ) : null}
             </span>
             <span
-              className={`mt-px shrink-0 rounded px-1 font-mono leading-4 ${
+              className={`mt-px w-3 shrink-0 rounded text-center font-mono leading-4 ${
                 failed ? "bg-danger/10 text-danger" : "bg-accent-soft text-accent"
               }`}
             >
