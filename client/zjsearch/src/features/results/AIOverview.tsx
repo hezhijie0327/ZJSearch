@@ -32,14 +32,7 @@ import { appendRunEvents } from "@/lib/kb/events.ts";
 import { settleRun, startRun } from "@/lib/kb/projections.ts";
 import { newThreadId, threadUrl } from "@/lib/kb/shared.ts";
 import { hostnameOf } from "@/lib/link.ts";
-import {
-  holdBackTail,
-  inlineMdHtml,
-  MD,
-  normalizeEmphasis,
-  SHARED_REMARK,
-  sharedRemarkWithMath,
-} from "@/lib/markdownParts.ts";
+import { holdBackTail, MD, normalizeEmphasis, SHARED_REMARK, sharedRemarkWithMath } from "@/lib/markdownParts.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { CHIP_ACCENT, HOVER_CHIP, META_TOGGLE } from "@/lib/styles.ts";
 import type { AiCapability } from "@/lib/types.ts";
@@ -1223,7 +1216,6 @@ export function ThinkScroll({ active, text }: { active: boolean; text: string })
       // (12px ink-3 on surface-2) vs CONTENT (14px ink on the plain
       // ground) distinguishes at a glance
       className="max-h-40 overflow-y-auto overscroll-contain rounded-lg bg-surface-2/50 px-3 py-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-ink-3"
-      dangerouslySetInnerHTML={{ __html: inlineMdHtml(text.trim()) }}
       dir="auto"
       onScroll={() => {
         const el = scrollRef.current;
@@ -1232,7 +1224,9 @@ export function ThinkScroll({ active, text }: { active: boolean; text: string })
         }
       }}
       ref={scrollRef}
-    ></div>
+    >
+      {text.trim()}
+    </div>
   );
 }
 
