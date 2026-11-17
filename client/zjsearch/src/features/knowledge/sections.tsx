@@ -59,6 +59,7 @@ import type { ThreadSummary } from "@/lib/kb/recall.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import type { KnowledgeStats } from "@/lib/kb/stats.ts";
 import { newTabLinkProps } from "@/lib/link.ts";
+import { inlineMdHtml } from "@/lib/markdownParts.ts";
 import { printDocument } from "@/lib/print.ts";
 
 /** The ONE glyph identity per knowledge surface: the segment tab, the kind
@@ -291,9 +292,14 @@ export function ThreadRows({
             )}
           </div>
           {thread.preview ? (
-            <p className="relative line-clamp-2 text-[13px] leading-relaxed text-ink-3" dir="auto">
-              {thread.preview}
-            </p>
+            // the answer's head carries the model's inline markdown -- the
+            // one-line chrome pass (bold, code) renders it; block syntax in
+            // a two-line clamp stays literal
+            <p
+              className="relative line-clamp-2 text-[13px] leading-relaxed text-ink-3"
+              dangerouslySetInnerHTML={{ __html: inlineMdHtml(thread.preview) }}
+              dir="auto"
+            />
           ) : null}
           <div className="relative flex flex-wrap items-center gap-2 text-xs text-ink-3">
             <span className="shrink-0 font-mono">{formatDate(new Date(thread.updated).toISOString())}</span>
