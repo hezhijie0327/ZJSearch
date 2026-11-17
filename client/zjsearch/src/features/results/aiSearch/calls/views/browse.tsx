@@ -268,13 +268,15 @@ function StepLinkRow({ g }: { g: { title?: string; url: string } }) {
 }
 
 /** One read step's document row: THE STANDALONE READ ROW ITSELF (the
-    row-header anatomy -- status check, book icon, host+path label, the
-    chars metric on the right edge, the fold chevron -- and the reading
-    pane hanging DIRECTLY off the line, no verb tier, no card).  The
-    title rides the tooltip and the document's own first line, exactly
-    like the standalone row; the pane's corner chips carry the outbound
-    open and the copy.  Its own open state -- a multi-tab read's panes
-    open independently. */
+    row-header anatomy -- book icon, host+path label, the chars metric
+    on the right edge, the fold chevron -- and the reading pane hanging
+    DIRECTLY off the line, no verb tier, no card).  The step's verdict
+    check lives in the batch list's leading status slot, so every
+    status mark in the timeline lines up on one x.  The title rides the
+    tooltip and the document's own first line, exactly like the
+    standalone row; the pane's corner chips carry the outbound open and
+    the copy.  Its own open state -- a multi-tab read's panes open
+    independently. */
 function StepReadRow({
   g,
   t,
@@ -289,7 +291,6 @@ function StepReadRow({
   return (
     <div>
       <div className="flex min-h-6 w-full items-center gap-1.5 px-1 text-xs text-ink-3">
-        <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
         <BookOpenText aria-hidden="true" className="size-3 shrink-0" />
         <button
           aria-expanded={open}
@@ -472,7 +473,20 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         // rule taken to the row level
         const docs = structured ? stepDocs(d) : [];
         return (
-          <li className="flex min-w-0 items-start gap-1.5 text-xs" key={i}>
+          // the verdict mark lives in a LEADING slot so every status mark
+          // in the timeline sits on one x (the sibling rows' checks are
+          // flush -- the steps' used to indent behind their number
+          // badges); pending steps leave the slot empty (the row-level
+          // spinner owns "running", and the steps run in order -- five
+          // spinners would read as parallel)
+          <li className="flex min-w-0 items-start gap-1.5 ps-1 text-xs" key={i}>
+            <span className="mt-px flex w-3 shrink-0 justify-center leading-4">
+              {failed ? (
+                <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
+              ) : structured ? (
+                <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
+              ) : null}
+            </span>
             <span
               className={`mt-px shrink-0 rounded px-1 font-mono leading-4 ${
                 failed ? "bg-danger/10 text-danger" : "bg-accent-soft text-accent"
@@ -489,17 +503,7 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                 </div>
               ) : (
                 <>
-                  {/* the step's own verdict rides the verb line like the
-                      read rows' check: settled ok vs failed; a pending
-                      step stays unmarked (the row-level spinner owns
-                      "running", and the steps run in order -- five
-                      spinners would read as parallel) */}
                   <div className="flex min-w-0 items-center gap-1.5">
-                    {failed ? (
-                      <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
-                    ) : structured ? (
-                      <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
-                    ) : null}
                     <Icon aria-hidden="true" className="size-3 shrink-0 text-ink-3" />
                     <span className={`min-w-0 flex-1 truncate font-medium ${failed ? "text-danger" : "text-ink-2"}`}>
                       {verb}
