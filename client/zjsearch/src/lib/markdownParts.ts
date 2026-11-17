@@ -21,6 +21,7 @@ import remarkGfm from "remark-gfm";
 import type { PluggableList, Processor } from "unified";
 import type { Node } from "unist";
 import { visit } from "unist-util-visit";
+import { escapeHtml } from "@/lib/print.ts";
 
 // ==highlight== (Pandoc/Typora style): the micromark micro-extension joins
 // the parser at the standard injection points (data lists are REPLACED by
@@ -289,4 +290,21 @@ export function holdBackTail(markdown: string, settled: boolean): string {
     return markdown.slice(0, lastBreak + 1);
   }
   return markdown;
+}
+
+/** The inline-code chip for the HTML-STRING renderers (the MD.code recipe
+    at string scale -- react-markdown is not available to one-line chrome
+    like the intent narration or the run title). */
+const INLINE_CODE_CLS = "rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[0.875em] text-accent-hover";
+
+/** One-shot INLINE markdown -> safe html for the small chrome lines (the
+    run title, intent narrations, the think stream, ledger facts): escape
+    first, then pair up `code` and **bold** spans -- an unpaired marker
+    stays literal.  Block syntax is not a one-liner's vocabulary and
+    passes through untouched.  Pure string in, safe html out (the caller
+    owns the dangerouslySetInnerHTML). */
+export function inlineMdHtml(text: string): string {
+  return escapeHtml(text)
+    .replace(/`([^`\n]+)`/g, `<code class="${INLINE_CODE_CLS}">$1</code>`)
+    .replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>");
 }

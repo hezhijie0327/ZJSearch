@@ -97,13 +97,13 @@ const FULL_STAGE: DebugScenario = {
   id: "full",
   name: "全工具行",
   label: "all tool rows × states (report in progress)",
-  q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研",
+  q: "`多肽原料药`全球竞争格局与深圳住宅市场价格矩阵深度调研",
   mode: "report",
   events: [
     {
       e: "client.start",
       runNo: 1,
-      q: "多肽原料药全球竞争格局与深圳住宅市场价格矩阵深度调研",
+      q: "`多肽原料药`全球竞争格局与深圳住宅市场价格矩阵深度调研",
       mode: "report",
       // attachment METADATA only -- the bytes live in the browser's
       // attachment table; the simulator inlines a tiny SVG so the thumb
@@ -286,7 +286,7 @@ const FULL_STAGE: DebugScenario = {
       items: [
         {
           id: 1,
-          text: "全球多肽原料药市场 2025 年规模 41.2 亿美元,CAGR 8.6%[1]。",
+          text: "全球多肽原料药市场 2025 年规模 **41.2 亿美元**,CAGR 8.6%[1]。",
           refs: [1],
           tags: ["多肽原料药", "市场规模"],
           status: "active",
@@ -326,7 +326,11 @@ const FULL_STAGE: DebugScenario = {
       round: 2,
     },
     { e: "phase", name: "research" },
-    { e: "say", id: 2, t: "行业面已立住;这轮读承载关键数字的两页,并补深圳片区明细。" },
+    {
+      e: "say",
+      id: 2,
+      t: "行业面已立住;这轮读承载关键数字的两页(`peptide-report` 与 `capacity-table`),**只补**深圳片区明细。",
+    },
     calls(
       [
         {
@@ -385,7 +389,7 @@ const FULL_STAGE: DebugScenario = {
           ms: 5,
           args: {
             facts: [
-              { text: "深圳 2025 新房成交均价 5.8 万/㎡[3]。", refs: [3] },
+              { text: "深圳 2025 新房成交均价 **5.8 万/㎡**(限购松绑后)[3]。", refs: [3] },
               { text: "翰宇药业多肽原料药收入 4.7 亿元,同比 +32%[5]。", refs: [5] },
             ],
           },

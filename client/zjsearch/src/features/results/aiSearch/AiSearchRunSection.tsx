@@ -85,7 +85,7 @@ import { buildAnswerMarkdown, buildReportMarkdown } from "@/lib/exporters.ts";
 import { formatDuration } from "@/lib/format.ts";
 import { themeLocaleTag, useLocale, useT } from "@/lib/i18n.ts";
 import { listTemplates } from "@/lib/kb/templates.ts";
-import { holdBackTail } from "@/lib/markdownParts.ts";
+import { holdBackTail, inlineMdHtml } from "@/lib/markdownParts.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { escapeHtml, printDocument } from "@/lib/print.ts";
 import {
@@ -218,7 +218,7 @@ function TaskCard({
     colored dot (an owed question, not an achievement), a closed one
     settles as a check + its answer. */
 function factHtml(text: string): string {
-  return escapeHtml(text).replace(/\[(\d{1,3})\]/g, (_mark, n: string) => {
+  return inlineMdHtml(text).replace(/\[(\d{1,3})\]/g, (_mark, n: string) => {
     const num = Number(n);
     if (!(num > 0)) {
       return `[${n}]`;
@@ -808,9 +808,11 @@ function StepSegment({
     return (
       <div className={`flex items-start gap-1.5 px-1 ${index > 0 ? "mt-1.5" : ""}`}>
         <Lightbulb aria-hidden="true" className="mt-1 size-3 shrink-0 text-ink-3" />
-        <p className="py-0.5 text-[13px] leading-relaxed text-ink-2" dir="auto">
-          {step.text}
-        </p>
+        <p
+          className="py-0.5 text-[13px] leading-relaxed text-ink-2"
+          dangerouslySetInnerHTML={{ __html: inlineMdHtml(step.text) }}
+          dir="auto"
+        />
       </div>
     );
   }
@@ -1920,9 +1922,11 @@ function AiSearchRunSectionImpl({
               previewPx={RUN_TITLE_PREVIEW_PX}
               scrimClassName="from-bg"
             >
-              <h2 className="break-words font-medium leading-tight text-ink text-3xl" dir="auto">
-                {run.q}
-              </h2>
+              <h2
+                className="break-words font-medium leading-tight text-ink text-3xl"
+                dangerouslySetInnerHTML={{ __html: inlineMdHtml(run.q) }}
+                dir="auto"
+              />
             </ClampReveal>
           </div>
           {run.mode ? (

@@ -4,7 +4,7 @@ import { NotebookPen } from "lucide-react";
 import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { Snippet } from "@/features/results/cardParts.tsx";
-import { escapeHtml } from "@/lib/print.ts";
+import { inlineMdHtml } from "@/lib/markdownParts.ts";
 import { CHIP } from "@/lib/styles.ts";
 
 interface LedgerArgFact {
@@ -45,7 +45,7 @@ export const recordFindingsView: ToolView = {
               <span aria-hidden="true" className="mt-2 size-1.5 shrink-0 rounded-full bg-accent/70" />
               <div className="min-w-0 flex-1">
                 <Snippet
-                  contentHtml={escapeHtml(String(fact.text ?? ""))}
+                  contentHtml={inlineMdHtml(String(fact.text ?? ""))}
                   textClass="text-[13px] leading-relaxed text-ink-2"
                 />
                 {tags.length ? (
