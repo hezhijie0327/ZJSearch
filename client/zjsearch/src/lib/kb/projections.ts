@@ -811,13 +811,6 @@ async function normalizeTags(): Promise<void> {
 
 // --------------------------------------------------------------- mutations
 
-export function toggleThreadPin(threadId: string, on: boolean): void {
-  void enqueue(async () => {
-    await pgQuery("UPDATE knowledge SET pinned = $1 WHERE thread_id = $2 AND kind = 'run'", [on ? 1 : 0, threadId]);
-    await pgQuery("UPDATE thread_head SET pinned = $1 WHERE thread_id = $2", [on ? 1 : 0, threadId]);
-  });
-}
-
 /** The user's manual rename: the title lands with the title_manual lock,
     so every later settle's auto title (writer fence, outline title,
     mechanical derive) leaves it alone. */
@@ -827,14 +820,6 @@ export async function renameThread(threadId: string, title: string): Promise<voi
     return;
   }
   await pgQuery("UPDATE thread_head SET title = $1, title_manual = 1 WHERE thread_id = $2", [clean, threadId]);
-}
-
-/** Pin/unpin ANY projection row (the row's own id -- threads pin as a
-    group through toggleThreadPin, every other kind pins itself). */
-export function toggleItemPin(id: string, on: boolean): void {
-  void enqueue(async () => {
-    await pgQuery("UPDATE knowledge SET pinned = $1 WHERE id = $2", [on ? 1 : 0, id]);
-  });
 }
 
 /** Delete one projection row by id.  A run takes its WHOLE trail with it

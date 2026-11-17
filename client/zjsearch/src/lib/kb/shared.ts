@@ -76,7 +76,6 @@ export interface KnowledgeItem {
   tags: string[];
   status: string;
   n: number | null;
-  pinned: boolean;
   refs: number;
   cited: number;
   updated: number;
@@ -108,7 +107,6 @@ export function rowToItem(row: Record<string, unknown>): KnowledgeItem {
     tags,
     status: String(row.status ?? "done"),
     n: row.n === null || row.n === undefined ? null : Number(row.n),
-    pinned: Number(row.pinned) === 1,
     refs: Number(row.refs) || 0,
     cited: Number(row.cited) || 0,
     updated: Number(row.updated) || 0,
@@ -121,13 +119,13 @@ export function rowToItem(row: Record<string, unknown>): KnowledgeItem {
     to render 90-char previews).  Full text is the inspector's business:
     loadItemBody / the corpus columns below. */
 export const ITEM_COLUMNS =
-  "id, kind, thread_id, run_id, url, url_hash, host, title, head AS body, tags, meta, status, n, pinned, refs, cited, updated";
+  "id, kind, thread_id, run_id, url, url_hash, host, title, head AS body, tags, meta, status, n, refs, cited, updated";
 
 /** The corpus columns: the REAL body -- the AI-context paths (the writer
     corpus, the recall_history index) feed ~1500-char heads to the model
     and need the whole text, bounded by their own LIMIT. */
 export const CORPUS_COLUMNS =
-  "id, kind, thread_id, run_id, url, url_hash, host, title, body, tags, meta, status, n, pinned, refs, cited, updated";
+  "id, kind, thread_id, run_id, url, url_hash, host, title, body, tags, meta, status, n, refs, cited, updated";
 
 // ---------------------------------------------------------- ordered queue
 

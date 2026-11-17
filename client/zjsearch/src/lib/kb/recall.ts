@@ -327,10 +327,10 @@ export async function listThreads(limit = 30, offset = 0): Promise<ThreadSummary
   await pg();
   sweepStaleRuns();
   const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT h.thread_id AS id, h.title, h.preview, h.runs, h.sources, h.reports, h.updated, h.pinned,
+    `SELECT h.thread_id AS id, h.title, h.preview, h.runs, h.sources, h.reports, h.updated,
        (SELECT json_agg(DISTINCT m.mode) FROM (SELECT kr.meta->>'mode' AS mode FROM knowledge kr
         WHERE kr.thread_id = h.thread_id AND kr.kind = 'run' AND kr.meta->>'mode' IS NOT NULL) m) AS modes
-     FROM thread_head h ORDER BY h.pinned DESC, h.updated DESC LIMIT $1 OFFSET $2`,
+     FROM thread_head h ORDER BY h.updated DESC LIMIT $1 OFFSET $2`,
     [limit, offset],
   );
   return (rows ?? []).map((row) => ({
@@ -368,7 +368,7 @@ export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[
   }
   await pg();
   const rows = await pgQuery<Record<string, unknown>>(
-    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY pinned DESC, updated DESC LIMIT $2`,
+    `SELECT ${ITEM_COLUMNS} FROM knowledge WHERE kind = $1 ORDER BY updated DESC LIMIT $2`,
     [kind, limit],
   );
   return (rows ?? []).map(rowToItem);
@@ -379,16 +379,13 @@ export async function listKind(kind: string, limit = 40): Promise<KnowledgeItem[
     the drawer's debounce budget stays model-free). */
 export async function searchKnowledge(
   query: string,
-  opts: { kinds?: string[]; pinned?: boolean; since?: number } = {},
+  opts: { kinds?: string[]; since?: number } = {},
   limit = 24,
 ): Promise<KnowledgeItem[]> {
   const hits = await fuseRecall(query, opts.kinds?.length ? opts.kinds : SEARCHABLE_KINDS, limit, {
     rerank: false,
   });
-  return hits
-    .map((hit) => hit.item)
-    .filter((item) => (opts.pinned ? item.pinned : true))
-    .filter((item) => (opts.since ? item.updated >= opts.since : true));
+  return hits.map((hit) => hit.item).filter((item) => (opts.since ? item.updated >= opts.since : true));
 }
 
 // THE SEGMENT RERANK: a long row (the full-text lanes' whole bodies)

@@ -32,7 +32,6 @@ import {
   Printer,
   Search,
   Sparkles,
-  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -183,7 +182,6 @@ function RenameForm({
 export function ThreadRows({
   onHome,
   onOpen,
-  onPin,
   onRemove,
   onRename,
   threads,
@@ -195,7 +193,6 @@ export function ThreadRows({
 }: {
   threads: ThreadSummary[];
   onOpen: (thread: ThreadSummary) => void;
-  onPin: (thread: ThreadSummary, on: boolean) => void;
   onRemove: (thread: ThreadSummary) => void;
   onRename?: (thread: ThreadSummary, title: string) => void;
   /** panel context: the empty state's home pill must leave the drawer, an
@@ -277,16 +274,11 @@ export function ThreadRows({
                   title={thread.title}
                   type="button"
                 >
-                  <span className="line-clamp-2">
-                    {thread.pinned ? <Star aria-hidden="true" className="me-1.5 inline size-3.5 text-accent" /> : null}
-                    {thread.title || t("ai_search")}
-                  </span>
+                  <span className="line-clamp-2">{thread.title || t("ai_search")}</span>
                 </button>
                 <RowActions
-                  onPin={(on) => onPin(thread, on)}
                   onRemove={() => onRemove(thread)}
                   onRename={onRename ? () => setRenaming({ id: thread.id }) : undefined}
-                  pinned={thread.pinned}
                 />
               </>
             )}
@@ -332,6 +324,19 @@ function listingExcerpt(text: string): string {
     .replace(/[#>*`|]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** The listing body line's html: the link/url strip of listingExcerpt
+    MINUS the marker stripping -- the inline pass renders bold and code
+    (the thread preview's contract at listing scale). */
+function listingBodyHtml(text: string): string {
+  const stripped = text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return inlineMdHtml(stripped);
 }
 
 /** The row's host: the stored column first -- older settle rows left
@@ -405,16 +410,12 @@ function AdminHeader({ icon: Icon, title }: { icon: LucideIcon; title: string })
 }
 
 function RowActions({
-  onPin,
   onRemove,
   onRename,
-  pinned,
   reveal = true,
 }: {
-  onPin?: (on: boolean) => void;
   onRemove: () => void;
   onRename?: () => void;
-  pinned?: boolean;
   reveal?: boolean;
 }) {
   const t = useT();
@@ -432,22 +433,6 @@ function RowActions({
           type="button"
         >
           <Pencil aria-hidden="true" className="size-3.5" />
-        </button>
-      ) : null}
-      {onPin ? (
-        <button
-          aria-label={t(pinned ? "knowledge_menu_unpin" : "knowledge_menu_pin")}
-          aria-pressed={pinned}
-          className={`grid size-7 place-items-center rounded-full transition-colors hover:bg-surface-2 ${
-            pinned ? "fill-current text-accent" : "text-ink-3 hover:text-ink"
-          }`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onPin(!pinned);
-          }}
-          type="button"
-        >
-          <Star aria-hidden="true" className="size-3.5" />
         </button>
       ) : null}
       <button
@@ -494,7 +479,6 @@ export function SearchResults({
   loading = false,
   onOpen,
   onOpenThread,
-  onPin,
   onRemove,
 }: {
   groups: Map<string, KnowledgeItem[]>;
@@ -502,7 +486,6 @@ export function SearchResults({
   loading?: boolean;
   onOpen: (item: KnowledgeItem) => void;
   onOpenThread: (item: KnowledgeItem) => void;
-  onPin: (item: KnowledgeItem, on: boolean) => void;
   onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
@@ -554,7 +537,7 @@ export function SearchResults({
                     ) : null}
                   </span>
                 </button>
-                <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
+                <RowActions onRemove={() => onRemove(item)} />
               </div>
             ))}
           </Card>
@@ -808,7 +791,6 @@ export function InspectorView({
   item,
   onBack,
   onOpenThread,
-  onPin,
   onRemove,
 }: {
   body: string | null;
@@ -832,7 +814,6 @@ export function InspectorView({
   item: KnowledgeItem;
   onBack: () => void;
   onOpenThread: (id: string) => void;
-  onPin: (item: KnowledgeItem, on: boolean) => void;
   onRemove: (item: KnowledgeItem) => void;
 }) {
   const t = useT();
@@ -1024,12 +1005,7 @@ export function InspectorView({
               </button>
             </>
           ) : null}
-          <RowActions
-            onPin={(on) => onPin(item, on)}
-            onRemove={() => onRemove(item)}
-            pinned={item.pinned}
-            reveal={false}
-          />
+          <RowActions onRemove={() => onRemove(item)} reveal={false} />
           {item.url ? (
             <a
               aria-label={t("open_in_new_tab")}
@@ -1294,7 +1270,6 @@ export function KindItemRows({
   emptyLine,
   onOpenInspector,
   onOpenThread,
-  onPin,
   onRemove,
 }: {
   /** the kind's own glyph -- the same one its segment tab wears */
@@ -1302,7 +1277,6 @@ export function KindItemRows({
   items: KnowledgeItem[];
   onOpenInspector: (item: KnowledgeItem) => void;
   onOpenThread: (item: KnowledgeItem) => void;
-  onPin: (item: KnowledgeItem, on: boolean) => void;
   onRemove: (item: KnowledgeItem) => void;
   /** optional section band above the rows */
   label?: string;
@@ -1364,9 +1338,13 @@ export function KindItemRows({
                   {item.title || item.url}
                 </span>
                 {item.body ? (
-                  <span className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">
-                    {listingExcerpt(item.body)}
-                  </span>
+                  // the body is markdown (crawled pages ride markitdown): the
+                  // link/url strip stays, the inline markers render -- the
+                  // thread directory's preview contract
+                  <span
+                    className="mt-0.5 line-clamp-2 block text-[13px] leading-relaxed text-ink-3"
+                    dangerouslySetInnerHTML={{ __html: listingBodyHtml(item.body) }}
+                  />
                 ) : null}
                 <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-3">
                   <span className="shrink-0 font-mono">{formatDate(new Date(item.updated).toISOString())}</span>
@@ -1380,7 +1358,7 @@ export function KindItemRows({
                 </span>
               </button>
             </div>
-            <RowActions onPin={(on) => onPin(item, on)} onRemove={() => onRemove(item)} pinned={item.pinned} />
+            <RowActions onRemove={() => onRemove(item)} />
           </div>
         );
       })}

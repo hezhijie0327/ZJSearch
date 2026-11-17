@@ -79,7 +79,6 @@ function memoryToItem(row: Record<string, unknown>): KnowledgeItem {
     tags: [],
     status: memory.state,
     n: null,
-    pinned: memory.pinned,
     refs: 0,
     cited: 0,
     updated: memory.updated,

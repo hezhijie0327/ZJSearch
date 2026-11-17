@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { LibraryBig, Star } from "lucide-react";
+import { LibraryBig } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
@@ -31,15 +31,7 @@ import {
   saveMemory,
   updateMemory,
 } from "@/lib/kb/memory.ts";
-import {
-  deleteItem,
-  deleteSource,
-  deleteThread,
-  renameThread,
-  resetAll,
-  toggleItemPin,
-  toggleThreadPin,
-} from "@/lib/kb/projections.ts";
+import { deleteItem, deleteSource, deleteThread, renameThread, resetAll } from "@/lib/kb/projections.ts";
 import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { exportSnapshot, importSnapshot, SNAPSHOT_VERSION, totalImported } from "@/lib/kb/snapshot.ts";
@@ -75,6 +67,17 @@ const READING_PAGE_SIZE = 10;
  */
 
 type KindFilter = "run" | "reading" | "memory";
+
+/** The reading tab's evidence filter chips -- the run rail's sources-card
+    labels verbatim (cited / read / all), the same judgment vocabulary. */
+const READ_FILTER_CHIPS: Array<{
+  id: "cited" | "crawled" | "all";
+  label: "ai_sources_filter_all" | "ai_sources_filter_cited" | "ai_sources_filter_crawled";
+}> = [
+  { id: "cited", label: "ai_sources_filter_cited" },
+  { id: "crawled", label: "ai_sources_filter_crawled" },
+  { id: "all", label: "ai_sources_filter_all" },
+];
 type TimeFilter = "any" | "week" | "month";
 
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -142,7 +145,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // re-fetches them after a pin or a delete lands
   const [listingBump, setListingBump] = useState(0);
   const [time, setTime] = useState<TimeFilter>("any");
-  const [pinnedOnly, setPinnedOnly] = useState(false);
   const since = time === "week" ? Date.now() - WEEK : time === "month" ? Date.now() - MONTH : 0;
 
   // ── memories (live, fetched for the memory view) ─────────────────────
@@ -194,11 +196,30 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
   // ── the kind directory (a filter chip's own listing, non-search) ────
   const [kindItems, setKindItems] = useState<KnowledgeItem[] | null>(null);
   const [readingPage, setReadingPage] = useState(0);
+  // the reading tab's evidence filter (the run rail's sources-card
+  // vocabulary: cited / read / all -- zero-yield filters fall back to all
+  // at the chips' own count, the list never reads as empty-by-default)
+  const [readFilter, setReadFilter] = useState<"cited" | "crawled" | "all">("all");
+  const filteredKindItems = useMemo(() => {
+    const rows = kindItems ?? [];
+    if (readFilter === "all") {
+      return rows;
+    }
+    return rows.filter((item) => (readFilter === "cited" ? item.cited > 0 : Boolean(item.meta?.crawled)));
+  }, [kindItems, readFilter]);
+  const readFilterCounts = useMemo(() => {
+    const rows = kindItems ?? [];
+    return {
+      all: rows.length,
+      cited: rows.filter((item) => item.cited > 0).length,
+      crawled: rows.filter((item) => Boolean(item.meta?.crawled)).length,
+    };
+  }, [kindItems]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the filters RESET the page -- the listed values are the triggers, not the effect's reads
   useEffect(() => {
     setReadingPage(0);
-  }, [debounced, pinnedOnly]);
-  const readingPages = Math.max(1, Math.ceil((kindItems?.length ?? 0) / READING_PAGE_SIZE));
+  }, [debounced]);
+  const readingPages = Math.max(1, Math.ceil(filteredKindItems.length / READING_PAGE_SIZE));
   const readingPageSafe = Math.min(readingPage, readingPages - 1);
   const kindListing = !searching && kind === "reading";
   // biome-ignore lint/correctness/useExhaustiveDependencies: listingBump only re-fetches the one-shot listing
@@ -316,10 +337,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     importReleaseRef.current = null;
     release?.();
   };
-  const pinItem = (item: KnowledgeItem, on: boolean) => {
-    toggleItemPin(item.id, on);
-    setListingBump((b) => b + 1);
-  };
   const removeItem = (item: KnowledgeItem, after?: () => void) => {
     setConfirming({
       label: item.title || item.url || t("knowledge_title"),
@@ -428,7 +445,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
       kind: "run",
       meta: {},
       n: null,
-      pinned: false,
       refs: 0,
       runId: null,
       status: "done",
@@ -449,14 +465,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
 
   const visibleThreads = useMemo(() => {
     let rows = threads ?? [];
-    if (pinnedOnly) rows = rows.filter((thread) => thread.pinned);
     if (since) rows = rows.filter((thread) => thread.updated >= since);
     if (debounced) {
       const needle = debounced.toLowerCase();
       rows = rows.filter((thread) => thread.title.toLowerCase().includes(needle));
     }
     return rows;
-  }, [threads, pinnedOnly, since, debounced]);
+  }, [threads, since, debounced]);
 
   const searchByKind = useMemo(() => {
     // the reading tab searches BOTH row kinds its listing merges (the
@@ -466,14 +481,13 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
     const groups = new Map<string, KnowledgeItem[]>();
     for (const item of results ?? []) {
       if (!wanted.includes(item.kind)) continue;
-      if (pinnedOnly && !item.pinned) continue;
       if (since && item.updated < since) continue;
       const list = groups.get(item.kind) ?? [];
       list.push(item);
       groups.set(item.kind, list);
     }
     return groups;
-  }, [results, kind, pinnedOnly, since]);
+  }, [results, kind, since]);
 
   const memoryList = useMemo(() => {
     const rows = memories ?? [];
@@ -525,7 +539,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
             item={inspected}
             onBack={() => setView("library")}
             onOpenThread={navigateThread}
-            onPin={pinItem}
             onRemove={(item) => removeItem(item, () => setView("library"))}
           />
         ) : (
@@ -597,15 +610,26 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   value={time}
                   variant="chip"
                 />
-                <button
-                  aria-pressed={pinnedOnly}
-                  className={`${CHIP_OUTLINE} ${pinnedOnly ? CHIP_OUTLINE_ACTIVE : CHIP_OUTLINE_IDLE}`}
-                  onClick={() => setPinnedOnly((prev) => !prev)}
-                  type="button"
-                >
-                  <Star aria-hidden="true" className="size-3.5" />
-                  {t("knowledge_pinned_only")}
-                </button>
+                {kind === "reading" ? (
+                  <>
+                    <span aria-hidden="true" className="mx-1 h-5 w-px bg-line" />
+                    {READ_FILTER_CHIPS.map((chip) => {
+                      const active = readFilter === chip.id;
+                      const count = readFilterCounts[chip.id];
+                      return (
+                        <button
+                          aria-pressed={active}
+                          className={`${CHIP_OUTLINE} ${active ? CHIP_OUTLINE_ACTIVE : CHIP_OUTLINE_IDLE}`}
+                          key={chip.id}
+                          onClick={() => setReadFilter(chip.id)}
+                          type="button"
+                        >
+                          {t(chip.label)} <span className="tabular-nums">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </>
+                ) : null}
               </div>
             ) : null}
 
@@ -664,7 +688,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   loading={results === null}
                   onOpen={setView}
                   onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
-                  onPin={pinItem}
                   onRemove={removeItem}
                 />
               ) : kindListing ? (
@@ -676,13 +699,12 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                       <KindItemRows
                         emptyIcon={KNOWLEDGE_KIND_ICONS.reading}
                         emptyLine={t("knowledge_reading_empty_line")}
-                        items={kindItems.slice(
+                        items={filteredKindItems.slice(
                           readingPageSafe * READING_PAGE_SIZE,
                           readingPageSafe * READING_PAGE_SIZE + READING_PAGE_SIZE,
                         )}
                         onOpenInspector={setView}
                         onOpenThread={(item) => openThreadInspector(item.threadId ?? "", item.title)}
-                        onPin={pinItem}
                         onRemove={removeItem}
                       />
                     </div>
@@ -696,7 +718,6 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
                   loading={threads === null}
                   onHome={embedded ? goHome : undefined}
                   onOpen={(thread) => openThreadInspector(thread.id, thread.title)}
-                  onPin={(thread, on) => toggleThreadPin(thread.id, on)}
                   onRemove={(thread) =>
                     setConfirming({
                       label: thread.title || t("ai_search"),
