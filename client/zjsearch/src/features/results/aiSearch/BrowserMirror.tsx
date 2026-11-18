@@ -843,9 +843,9 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
       </div>
       {waiting
         ? createPortal(
-            <div className="fixed inset-x-4 bottom-4 z-40 flex animate-fade-up justify-center lg:hidden">
+            <div className="fixed inset-x-4 bottom-4 z-40 flex animate-fade-up justify-center gap-2 lg:hidden">
               <button
-                className="flex w-full max-w-md items-center gap-2.5 rounded-2xl border border-accent-strong/40 bg-surface px-4 py-3 text-start shadow-card transition-colors hover:border-accent"
+                className="flex min-w-0 max-w-md flex-1 items-center gap-2.5 rounded-2xl border border-accent-strong/40 bg-surface px-4 py-3 text-start shadow-card transition-colors hover:border-accent"
                 onClick={() => setFull(true)}
                 type="button"
               >
@@ -857,6 +857,21 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
                 <span className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-[13px] font-medium text-accent-contrast">
                   {t("ai_browser_open")}
                 </span>
+              </button>
+              {/* the bar's own DONE chip: finishing the window must not
+                  require opening the takeover -- the same signal the rail
+                  header carries on desktop, one tap from anywhere */}
+              <button
+                aria-label={t("ai_browser_done_hint")}
+                className="flex shrink-0 items-center gap-1.5 self-center rounded-2xl bg-accent px-3.5 py-3 text-[13px] font-medium text-accent-contrast transition-colors hover:bg-accent-strong"
+                onClick={() => {
+                  void postBrowserInput({ type: "done" });
+                }}
+                title={t("ai_browser_done_hint")}
+                type="button"
+              >
+                <Check aria-hidden="true" className="size-4" />
+                {t("ai_browser_done")}
               </button>
             </div>,
             document.body,
