@@ -42,6 +42,13 @@ export const CHIP_HOVER = "hover:text-ink";
     tags) — the non-pill sibling of CHIP in the 12px meta tier. */
 export const CODE_CHIP = "rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-ink-2";
 
+/** Wrapping grid for the preferences category tabs (default-categories and
+    engine tabs): equal-width cells at ANY container width, so a tab set the
+    size of the deployment's full category vocabulary reads as a matrix
+    instead of flex-wrap's ragged rows.  auto-fill works off the grid's own
+    width — no container queries needed. */
+export const CATEGORY_GRID = "grid grid-cols-[repeat(auto-fill,minmax(8.25rem,1fr))] gap-x-2 gap-y-1";
+
 /** Segmented-control language (preference tabs, info tabs, stock range
     picker): one shape, two states — selected fills accent-strong. */
 export const SEGMENT =

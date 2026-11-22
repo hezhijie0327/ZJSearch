@@ -3,7 +3,7 @@
 import { Check, Key, LayoutGrid, X } from "lucide-react";
 import { categoryLabel } from "@/lib/categories.ts";
 import { useT } from "@/lib/i18n.ts";
-import { OUTLINE_PILL } from "@/lib/styles.ts";
+import { CATEGORY_GRID, OUTLINE_PILL } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
 import { Card, CategoryTab, SectionLabel, SettingRow } from "@/pages/preferences/parts.tsx";
 import { EngineTable } from "@/pages/preferences/tabs/EngineTable.tsx";
@@ -79,7 +79,7 @@ export function EnginesPane({
         ) : null}
       </SettingRow>
       <div className="px-5 py-3 sm:px-6">
-        <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+        <div className={CATEGORY_GRID}>
           {data.engine_tabs.map((tabInfo, index) => (
             <CategoryTab
               category={tabInfo.category}

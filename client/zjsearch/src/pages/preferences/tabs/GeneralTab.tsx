@@ -15,7 +15,7 @@ import {
 import { Fragment } from "react";
 import { categoryLabel } from "@/lib/categories.ts";
 import { languageOptions, useT } from "@/lib/i18n.ts";
-import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
+import { CATEGORY_GRID, SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
 import { Card, CategoryTab, SectionLabel, Select, SettingRow, Switch } from "@/pages/preferences/parts.tsx";
 import type { PreferencesForm } from "@/pages/preferences/usePreferencesForm.ts";
@@ -51,7 +51,7 @@ export function GeneralTab({
           <SectionLabel label={t("general_group_search")} />
           {!locked.has("categories") ? (
             <SettingRow icon={<LayoutGrid className="size-4.5" />} stacked title={t("default_categories")}>
-              <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
+              <div className={CATEGORY_GRID}>
                 {/* globals.categories = tabs filtered to categories with enabled
                     engines — mirrors upstream simple preferences behaviour */}
                 {globals.categories.map((category) => (
