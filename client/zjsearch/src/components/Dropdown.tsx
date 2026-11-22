@@ -125,10 +125,10 @@ export function Dropdown({
       };
       if (openUp) {
         style.bottom = window.innerHeight - rect.top + 6;
-        style.maxHeight = Math.max(120, rect.top - margin - 6);
+        style.maxHeight = Math.max(120, Math.min(320, rect.top - margin - 6));
       } else {
         style.top = rect.bottom + 6;
-        style.maxHeight = Math.max(120, roomBelow - 6);
+        style.maxHeight = Math.max(120, Math.min(320, roomBelow - 6));
       }
       if (align === "end") {
         style.right = Math.max(margin, window.innerWidth - rect.right);
@@ -139,6 +139,18 @@ export function Dropdown({
     }
     setOpen(true);
   };
+
+  // the highlighted row must stay inside a capped (scrolling) menu: arrow-key
+  // navigation past the visible window would otherwise highlight rows the
+  // user cannot see.  Instant nearest-block scroll — motion doctrine bans
+  // smooth scrolling in theme code.
+  useEffect(() => {
+    const menu = menuRef.current;
+    if (!open || !menu || active < 0) {
+      return;
+    }
+    (menu.children[active] as HTMLElement | undefined)?.scrollIntoView({ block: "nearest" });
+  }, [active, open]);
 
   const pick = (index: number) => {
     const option = options[index];
