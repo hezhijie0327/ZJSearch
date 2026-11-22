@@ -305,7 +305,11 @@ export function SearchBox({
   const exitSuggestions = lastSuggestions.current;
 
   return (
-    <div className="relative w-full" ref={boxRef}>
+    // the bare (ask-card) root deliberately stays static: its suggestion
+    // panel then anchors to the wrapping card (the nearest positioned
+    // ancestor) and hangs off the card's bottom edge at the card's full
+    // width, instead of floating inset over the card's action row
+    <div className={variant === "bare" ? "w-full" : "relative w-full"} ref={boxRef}>
       <form
         className={
           variant === "bare"
