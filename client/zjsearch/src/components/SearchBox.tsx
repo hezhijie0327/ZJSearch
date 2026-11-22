@@ -424,18 +424,9 @@ export function SearchBox({
       {renderSuggest && exitSuggestions.length > 0 ? (
         <ul
           aria-label={t("search_suggestions")}
-          className={
-            variant === "bare"
-              ? // in-flow inside the wrapping card (morphic): the card grows
-                // to fit the list, no overlay chrome of its own -- capped at
-                // four rows, the rest scroll
-                `max-h-36 w-full overflow-auto py-1 ${
-                  suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
-                }`
-              : `absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
-                  suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
-                }`
-          }
+          className={`absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-auto rounded-2xl border border-line bg-surface py-1.5 shadow-pop ${
+            suggestClosing ? "pointer-events-none animate-fade-out" : "animate-fade-in"
+          }`}
           id={listboxId}
           inert={suggestClosing || undefined}
           role="listbox"
