@@ -78,10 +78,8 @@ def _disabled_engines() -> list[tuple[str, str, list[str], bool]]:
     for name in sorted(engine_map):
         engine = engine_map[name]
         if engine.disabled and is_engine_active(engine):
-            paid = getattr(engine, "paid", None)
-            if paid is None:  # unset: fall back to the api-key heuristic
-                paid = bool(str(getattr(engine, "api_key", "") or "").strip())
-            out.append((name, str(engine.shortcut or name), sorted(set(engine.categories)), bool(paid)))
+            paid = getattr(engine, "paid", False) is True
+            out.append((name, str(engine.shortcut or name), sorted(set(engine.categories)), paid))
     return out
 
 

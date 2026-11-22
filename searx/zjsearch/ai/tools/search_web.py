@@ -186,29 +186,16 @@ _PAID_ENGINES: frozenset[str] | None = None
 
 
 def paid_engines() -> frozenset[str]:
-    """The API-BILLED engines of this deployment: settings entries with
-    ``paid: true`` (explicit) or, when ``paid`` is unset, carrying a
-    non-empty ``api_key`` (the commercial engines' universal marker --
-    bocha/tavily/brave.api/...).  Free-tier-but-keyed engines opt out
-    with ``paid: false`` (pubmed/openalex/flickr/...).  They cost money
-    per call, so the executor holds a !bang on one of them until the
-    user approves the spend (:py:data:`paid_ok`)."""
+    """The API-BILLED engines of this deployment: exactly the settings
+    entries marked ``paid: true`` (bocha/tavily/brave.api/...).  They
+    cost money per call, so the executor holds a !bang on one of them
+    until the user approves the spend (:py:data:`paid_ok`)."""
     global _PAID_ENGINES  # pylint: disable=global-statement
     if _PAID_ENGINES is None:
         from searx import settings  # pylint: disable=import-outside-toplevel
 
-        def _is_paid(entry: dict) -> bool:
-            # An explicit ``paid`` flag wins: free-tier-but-keyed engines opt
-            # out with ``paid: false``, billed ones without a settings-level
-            # key can opt in with ``paid: true``. Unset falls back to the
-            # historical api_key-presence heuristic.
-            flag = entry.get("paid")
-            if flag is not None:
-                return bool(flag)
-            return bool(str(entry.get("api_key") or "").strip())
-
         _PAID_ENGINES = frozenset(
-            str(entry.get("name") or "") for entry in settings["engines"] if _is_paid(entry)
+            str(entry.get("name") or "") for entry in settings["engines"] if entry.get("paid") is True
         ) - {""}
     return _PAID_ENGINES
 
