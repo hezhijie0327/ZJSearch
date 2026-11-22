@@ -872,7 +872,7 @@ export function ResultsPage({ data }: { data: SearchPageData }) {
               <div className="hidden min-[480px]:block">
                 <Brand className="text-2xl" globals={globals} />
               </div>
-              <div className="min-w-0 flex-1 max-w-2xl xl:max-w-3xl 2xl:max-w-4xl">
+              <div className="min-w-0 flex-1 max-w-2xl">
                 <SearchBox initialQuery={data.q} onSubmitQuery={submitQuery} />
               </div>
               <div className="ms-auto">

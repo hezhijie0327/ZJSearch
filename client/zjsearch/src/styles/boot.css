@@ -130,7 +130,7 @@
     height: 1.75rem;
   }
   /* stand-in for the real compact SearchBox: h-12 ps-5 pe-2 with the
-     max-w-2xl xl:max-w-3xl 2xl:max-w-4xl column of ResultsPage's header */
+     flat max-w-2xl column of ResultsPage's header */
   .zjs-boot-q {
     flex: 1 1 auto;
     display: flex;
@@ -145,16 +145,6 @@
     box-shadow: var(--shadow-card);
     color: var(--ink-2);
     font-size: 1rem;
-  }
-  @media (min-width: 80rem) {
-    .zjs-boot-q {
-      max-width: 48rem;
-    }
-  }
-  @media (min-width: 96rem) {
-    .zjs-boot-q {
-      max-width: 56rem;
-    }
   }
   .zjs-boot-q-text {
     flex: 1 1 auto;
