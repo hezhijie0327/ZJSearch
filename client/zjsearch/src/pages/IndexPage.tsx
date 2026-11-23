@@ -189,14 +189,17 @@ export function IndexPage({ data }: { data: IndexData }) {
             for classic) and the circular submit.  Raised stacking level:
             fade-up leaves a residual transform (a stacking context) on
             animated siblings, which would let the dropdown paint under
-            them. */}
+            them.  The level is z-20 — one above the z-10 option rows
+            unfolded below the card, which would otherwise paint over the
+            suggestion panel hanging off this card (DOM-later siblings
+            win at the same level). */}
         {/* The ask-card keeps the family pinned-note DRESS (top-edge tape,
             the blog hero's hand-drawn arrow) but sits perfectly straight:
             the micro-tilt + focus-within straighten read as a glitch on
             click (the card visibly rocked on every focus), so the card
             itself never moves — focus only warms the border. */}
         <div
-          className="relative z-10 mt-12 w-full animate-fade-up [animation-delay:60ms]"
+          className="relative z-20 mt-12 w-full animate-fade-up [animation-delay:60ms]"
           onFocusCapture={preloadResultsPage}
         >
           {/* the blog hero's hand-drawn arrow (DESIGN.md §7 decoration):
