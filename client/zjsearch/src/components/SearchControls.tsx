@@ -20,7 +20,8 @@ interface CategoryTabsProps {
       query submits (Enter / search box) use the up-to-date selection */
   onSelectionChange?: (categories: string[]) => void;
   onSearch: (categories: string[]) => void;
-  /** wrap onto multiple lines (index hero) instead of scrolling one row */
+  /** hero padding variant: ps-2 inset instead of the -ms-4 trigger
+      alignment (both variants wrap on phones, scroll one row on sm+) */
   wrap?: boolean;
 }
 
@@ -35,21 +36,37 @@ export function CategoryTabs({ globals, selected, onSelectionChange, onSearch, w
   const settings = useSettings();
   const scrollerRef = useRef<HTMLDivElement>(null);
 
+  const tabs = globals.categories_as_tabs.length > 0 ? globals.categories_as_tabs : globals.categories;
+  // config order decides visibility: up to seven tabs lay out flat (a
+  // "more" trigger would only waste a slot); beyond that the first six stay
+  // visible and the rest folds into the "more" menu.  When a folded
+  // category is the active selection the trigger itself shows its name,
+  // Google-style.
+  const FLAT_TAB_LIMIT = 7;
+  const visibleTabs = tabs.length <= FLAT_TAB_LIMIT ? tabs : tabs.slice(0, FLAT_TAB_LIMIT - 1);
+  const overflowTabs = tabs.length <= FLAT_TAB_LIMIT ? [] : tabs.slice(FLAT_TAB_LIMIT - 1);
+  const foldedSelected = overflowTabs.filter((category) => selected.includes(category));
+
   // Keep the active tab in view on narrow screens: landing on a category
   // whose tab sits beyond the first viewport-width otherwise reads as
-  // "nothing selected".  Centering is a no-op while the row fits.
+  // "nothing selected".  Centering is a no-op while the row fits.  The
+  // folded-selection mirror ("More" -> "Science") lives on the dropdown
+  // trigger, which carries no aria-pressed — center it too while it
+  // holds the selection.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-center when the selection changes
   useLayoutEffect(() => {
     const strip = scrollerRef.current;
-    if (wrap || !strip) {
+    if (!strip) {
       return;
     }
-    const tab = strip.querySelector<HTMLElement>('button[aria-pressed="true"]');
+    const tab =
+      strip.querySelector<HTMLElement>('button[aria-pressed="true"]') ??
+      (foldedSelected.length > 0 ? strip.lastElementChild?.querySelector<HTMLElement>("button") : null);
     if (!tab) {
       return;
     }
     animateScroll(strip, { left: tab.offsetLeft + tab.offsetWidth / 2 - strip.clientWidth / 2 });
-  }, [wrap, selected]);
+  }, [selected]);
 
   const toggle = (category: string) => {
     const next = selected.includes(category) ? selected.filter((item) => item !== category) : [...selected, category];
@@ -64,16 +81,6 @@ export function CategoryTabs({ globals, selected, onSelectionChange, onSearch, w
     onSearch([category]);
   };
 
-  const tabs = globals.categories_as_tabs.length > 0 ? globals.categories_as_tabs : globals.categories;
-  // config order decides visibility: up to seven tabs lay out flat (a
-  // "more" trigger would only waste a slot); beyond that the first six stay
-  // visible and the rest folds into the "more" menu.  When a folded
-  // category is the active selection the trigger itself shows its name,
-  // Google-style.
-  const FLAT_TAB_LIMIT = 7;
-  const visibleTabs = tabs.length <= FLAT_TAB_LIMIT ? tabs : tabs.slice(0, FLAT_TAB_LIMIT - 1);
-  const overflowTabs = tabs.length <= FLAT_TAB_LIMIT ? [] : tabs.slice(FLAT_TAB_LIMIT - 1);
-  const foldedSelected = overflowTabs.filter((category) => selected.includes(category));
   const label = (category: string) => categoryLabel(category, t);
   // trigger mirrors the folded selection: "More" -> "Science" -> "Science +1" (the
   // same +N language as the engine pills), accent while anything is selected
@@ -96,11 +103,7 @@ export function CategoryTabs({ globals, selected, onSelectionChange, onSearch, w
   return (
     <div className="flex items-center py-1">
       <div
-        className={`min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5 ${
-          wrap
-            ? "ps-2"
-            : `-ms-4 sm:flex-nowrap sm:gap-y-0 sm:overflow-x-auto sm:pb-0.5 ${SCROLLBAR_NONE_SM} sm:[&>*]:shrink-0`
-        }`}
+        className={`min-w-0 flex flex-wrap items-center gap-x-1 gap-y-0.5 ${wrap ? "ps-2" : "-ms-4"} sm:flex-nowrap sm:gap-y-0 sm:overflow-x-auto sm:pb-0.5 ${SCROLLBAR_NONE_SM} sm:[&>*]:shrink-0`}
         ref={scrollerRef}
       >
         {visibleTabs.map((category) => (
