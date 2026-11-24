@@ -3225,7 +3225,9 @@ redundant, both fused into ONE post-run extractor:
 TWO addresses, no query flags: `/zjsearch/debug/thread` (the literal
 `debug` thread id -- the route special-cases it before the UUID regex
 and the client diverts on `data.thread === "debug"`) replays wire-event
-SCRIPTS (`debugFixtures.ts`) through the REAL fold and the REAL run
+SCRIPTS (`src/features/results/aiSearch/debug/` -- ONE module per
+scenario; the catalog and its COVERAGE MAP live in `debug/scenarios.ts`)
+through the REAL fold and the REAL run
 section, and `/zjsearch/debug/overview` (a SYNTHETIC host -- the real
 AI Overview card lives on the results page and has no route of its own)
 replays the card's RAW stream chunks through the REAL `AiAnswerCard`
@@ -3237,18 +3239,60 @@ family.  THE RULE: a new tool row, wire event or state ships with a
 fixture in the same change -- if the simulator can't show it, the UI
 can't render it.
 
-Scenario inventory (10): browser login collaboration (mirror frames ×
-wait_user × screenshot), the report kitchen-sink (every tool row ×
-status, decisions, clarify pre-screen, attachments, outline streaming,
-settle), the DECK shape (mode deck: 智能PPT picker + deck presets
+THE FIXTURES ARE DEMO MATERIAL, NEVER A REAL CASE (2026-11-24): every
+scenario is set in one fictional place -- a school paper-plane club --
+with invented numbers and `example.com`-style pages, so the stage shows
+every surface without telling a reader what anyone actually researches.
+Keep new fixtures inside that universe (or an equally fictional one).
+`[n]` is the order a page JOINS the registry, so a scenario never
+hard-codes a number: it draws its pages from `PAGES` through a
+`sourceBook()` (`S.join` builds the `sources` event, `S.cite` the
+prose's [n] marks, `S.reserve` numbers the pages a call's own arguments
+cite before their round gathers them); a `clarifyTail` builds its own
+book inside the function.  The calendar payloads (`debug/calendar.ts`)
+are FUNCTIONAL data computed by the real tools against the demo clock --
+regenerate them, never hand-edit.
+
+Scenario inventory (20, ONE surface each -- there is no kitchen-sink;
+the table in `debug/scenarios.ts` is the source of truth):
+`report` (the DEFAULT: attachments · depth probe · outline/section
+streaming with reasoning · unwritten sections at the settle), `search`
+(search_web ok/error/duplicate · list_engines inventory · search_tools
+· recall_history · update_plan · findings superseded/conflict · a gap ·
+plan sources · a task left pending at the settle), `tools` (calculate ·
+clock · calendar ×4 · evaluate · build_table ok + error + artifact ·
+inspect_image · ask_user recorded · memory ×4 · mcp · the decision
+card), `batch-read` (background tabs × multi-index read with a FAILED
+tab × viewport × an open that dies), `browser-ops` (annotated frame ×
+tab strip × scroll-to-text × fetch × multi click-through ×
+browser-minted sources), `browser` (the login collaboration: mirror
+frames × wait_user × aimed screenshots, then hover / select / drag /
+type / press / history / scroll / snapshot), the DECK shape (`deck`:
+mode deck: Smart PPT picker + deck presets
 pre-outline, `shape: "deck"` flip to DeckView, slide-markdown chapters,
-the settled chapter structure card), panorama (gallery + related/title/
-memory/tags + gates usage), steer, subagents, balanced single-write,
-stopped (title lock), awaiting/clarify (`clarifyTail` replays the
-continuation), failed (receipt + continue).  Writer-think coverage: the
+the settled chapter structure card), `shape-flip` (the reader's deck
+pick steering a report-born run), `model-flip` (set_deliverable:
+balanced → report), `rewrite` (a section cut mid-sentence → the
+post-settle rewrite), panorama (`panorama`: gallery + related/title/
+memory/tags + gates usage), steer, subagents (`sub`, and `sub-pending`
+for the interrupted sweep), the paid-engine hold → ask_user → approved
+re-run (`paid`), awaiting/clarify (`awaiting`; `clarifyTail` replays the
+continuation), the pasted brief (`longtext`), balanced single-write
+(`done`), stopped (title lock), failed (receipt + continue).
+Writer-think coverage: the
 write turns of the report/balanced/deck scenarios carry `think` deltas,
 QA-ing the 思考过程 toggle (expanded live pre-outline, folded at the
 answer, settled at the document top).
+
+BEFORE COMMITTING a fixture change, replay through the REAL fold without
+a browser: bundle a tiny entry (imports `DEBUG_SCENARIOS` +
+`applyEvent`) with rolldown and the `@` alias, then fold every scenario
+at EVERY prefix the way the stage scrubs -- it must not throw, every
+run must settle, a DONE run must leave no `interrupted` row (a `calls`
+batch whose id is not its entry's id never settles), and every `[n]`
+in the prose must resolve to a gathered source with the numbering
+running 1..N.  The fold cannot see a component's expectations, so a
+browser pass over every scenario is still the last gate.
 
 Coverage notes from the 2026-10-11 audit: every wire kind except the
 storage-only `ctx` has a fixture (ctx never renders -- it upserts the

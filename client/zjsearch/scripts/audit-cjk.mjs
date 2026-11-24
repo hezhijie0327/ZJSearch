@@ -18,8 +18,9 @@
 // Allowlist (deliberate, keep in sync with the rule):
 //   - src/lib/i18n/**  — the catalogs and the per-locale template preset
 //     table are the one sanctioned home of Chinese.
-//   - debugFixtures.ts — the AI debug stage's scenarios simulate zh runs;
-//     their query/answer/title content is test data, not UI strings.
+//   - src/features/results/aiSearch/debug/** -- the AI debug stage's
+//     scenarios simulate zh runs; their query/answer/title content is
+//     fictional demo data, not UI strings.
 //   - stock_quote.py `in market_label` lines — functional detection of the
 //     upstream data source's own Chinese field values.
 //   - tools/calendar.py `in _LUNAR_FESTIVALS table data` — the traditional
@@ -56,7 +57,7 @@ function isAllowlisted(relPath, line) {
   if (relPath.startsWith(`src${sep}lib${sep}i18n${sep}`) || relPath.startsWith("src/lib/i18n/")) {
     return true;
   }
-  if (relPath.replaceAll(sep, "/").endsWith("debugFixtures.ts")) {
+  if (relPath.replaceAll(sep, "/").includes("/features/results/aiSearch/debug/")) {
     return true;
   }
   if (relPath.replaceAll(sep, "/").endsWith("stock_quote.py") && line.includes("in market_label")) {
