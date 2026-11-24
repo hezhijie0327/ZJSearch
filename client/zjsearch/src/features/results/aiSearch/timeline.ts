@@ -232,7 +232,9 @@ export interface AiSearchCall {
       `sections` -- one {url,title,chars,text} document PER TAB (the
       joined feed stays the model's; the timeline renders one pane per
       tab instead of filing every tab's body under the last tab's
-      identity). */
+      identity).  The tabs that FAILED beside the read ones ride `errors`
+      -- one {index, url, error} PER FAILED TAB: the step shows them as
+      alert rows, a failed tab never silently vanishes from the batch. */
   steps?: Array<{
     action: string;
     status: string;
@@ -242,6 +244,7 @@ export interface AiSearchCall {
     chars?: number;
     text?: string;
     sections?: Array<{ url: string; title: string; chars?: number; text: string }>;
+    errors?: Array<{ index: string; url: string; error: string }>;
   }>;
   /** calendar: the composite time/date payload -- the row's expansion
       renders the instant (time / weekday / zone / UTC / unix) or the
@@ -1216,6 +1219,15 @@ export function applyEvent(
                               text: String(sec.text ?? ""),
                             }))
                             .filter((sec) => sec.text)
+                        : undefined,
+                      errors: Array.isArray(s.errors)
+                        ? (s.errors as Array<Record<string, unknown>>)
+                            .map((failure) => ({
+                              index: String(failure.index ?? ""),
+                              url: String(failure.url ?? ""),
+                              error: String(failure.error ?? ""),
+                            }))
+                            .filter((failure) => failure.error)
                         : undefined,
                     })),
                   }

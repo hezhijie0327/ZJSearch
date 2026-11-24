@@ -474,6 +474,10 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
         // read row itself (no verb tier, no card) -- the equal-treatment
         // rule taken to the row level
         const docs = structured ? stepDocs(d) : [];
+        // a multi-index read's FAILED tabs: alert rows BESIDE the read
+        // documents -- the step used to show the tabs that succeeded and
+        // no trace of the others
+        const failures = structured ? (d?.errors ?? []) : [];
         return (
           // the verdict mark lives in a LEADING slot so every status mark
           // in the timeline sits on one x, and the badge takes the tool
@@ -486,6 +490,10 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
             <span className="mt-px flex w-3 shrink-0 justify-center leading-4">
               {failed ? (
                 <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-danger" />
+              ) : failures.length ? (
+                // the step succeeded only in part: the warning mark, never
+                // the check, above a row that carries a failed tab
+                <CircleAlert aria-hidden="true" className="size-3 shrink-0 text-warning" />
               ) : structured ? (
                 <Check aria-hidden="true" className="size-3 shrink-0 text-ok" />
               ) : null}
@@ -502,6 +510,17 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                 <div className="space-y-0.5">
                   {docs.map((g, gi) => (
                     <StepReadRow autoOpen={autoOpenPane} g={g} key={gi} t={t} />
+                  ))}
+                  {failures.map((failure) => (
+                    <div
+                      className="flex min-h-6 min-w-0 items-center gap-1.5 text-xs text-danger"
+                      key={`failed-${failure.index}`}
+                    >
+                      <CircleAlert aria-hidden="true" className="size-3 shrink-0" />
+                      <span className="truncate" dir="auto" title={failure.error}>
+                        {failure.url ? pageLabel(failure.url) : `[${failure.index}]`} · {failure.error}
+                      </span>
+                    </div>
                   ))}
                 </div>
               ) : (

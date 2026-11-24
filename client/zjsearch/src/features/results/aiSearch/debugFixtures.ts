@@ -643,6 +643,9 @@ const FULL_STAGE: DebugScenario = {
               text: "## 产能格局\n\n| 企业 | 产能(吨/年) | 扩产投资 |\n|---|---|---|\n| Polypeptide | ≈12 | €1.4亿 |\n| Bachem | ≈9 | CHF 1.1亿 |\n| 诺泰生物 | ≈5 | ¥8.2亿 |\n\n欧洲双雄占据高端合成订单,中国企业以 40-60% 的成本优势切入仿制肽与轻改造肽。",
             },
           ],
+          // the tab that FAILED beside the read ones: an alert row under
+          // the documents -- it used to vanish from the step entirely
+          errors: [{ index: "2", url: "https://example.com/gated-report", error: "no readable content found" }],
         },
       ],
       feed: "1. open: opened https://example.com/peptide-report -- 多肽原料药行业深度报告\n\n# 多肽原料药行业深度报告\n全球多肽原料药市场…",

@@ -45,6 +45,11 @@ class ActionResult(t.NamedTuple):
     # joins every tab's body with --- separators, so the finish branch's
     # old feed-split archived tab 1's body under the last tab's identity
     last_read: dict[str, str] | None = None
+    failed: t.Sequence[dict[str, str]] = ()
+    # the multi-index read's FAILED tabs ({index, url?, error}): the feed
+    # speaks them to the model, the batch's step summary shows them to the
+    # reader -- a tab that failed beside read ones used to vanish from the
+    # step entirely (one green check, one pane, no trace of the other tab)
 
 
 def _obs(state: dict[str, str]) -> str:
@@ -429,10 +434,18 @@ def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
         cap = reader_max_chars()
         docs = session.extract_many(session_id, cap, indexes[:6])
         sections: list[dict[str, str]] = []
+        failed: list[dict[str, str]] = []
         lines: list[str] = []
         for doc in docs:
             if "error" in doc:
                 lines.append(f"[tab {doc.get('index')}] error: {doc['error']}")
+                failed.append(
+                    {
+                        "index": str(doc.get("index") or ""),
+                        "url": str(doc.get("url") or ""),
+                        "error": str(doc["error"]),
+                    }
+                )
                 continue
             header = f"[tab {doc.get('index')}] {doc.get('title')} ({doc.get('url')})"
             lines.append(f"{header}\n\n{doc.get('text')}")
@@ -443,16 +456,21 @@ def _act_read(args: dict[str, t.Any], session_id: str) -> ActionResult:
                     "text": str(doc.get("text") or ""),
                 }
             )
+        if not sections:
+            # EVERY requested tab failed: an honest error action (the row
+            # and the batch step read as failed) -- not an ok read whose
+            # pane holds the error lines
+            raise SessionError(
+                "none of the tabs could be read -- "
+                + "; ".join(f"tab {entry['index']}: {entry['error']}" for entry in failed)
+            )
         return ActionResult(
             feed="\n\n---\n\n".join(lines),
             frames=[{**session.frame(session_id), "agent": session_id}],
-            page=(
-                {"url": sections[-1]["url"], "title": sections[-1]["title"]}
-                if sections
-                else None
-            ),
-            reads=tuple(sections[:-1]) if len(sections) > 1 else (),
-            last_read=sections[-1] if sections else None,
+            page={"url": sections[-1]["url"], "title": sections[-1]["title"]},
+            reads=tuple(sections[:-1]),
+            last_read=sections[-1],
+            failed=tuple(failed),
         )
     state = session.extract(session_id, reader_max_chars(), args.get("index"))
     return ActionResult(
@@ -652,6 +670,11 @@ def _act_multi(args: dict[str, t.Any], session_id: str) -> ActionResult:
                         "text": str(section.get("text") or ""),
                     }
                 )
+            if result.failed:
+                # the tabs that FAILED beside the read ones ride the step
+                # too ({index, url, error}): the model already reads them
+                # in the feed, the timeline row must show them as well
+                summary["errors"] = [dict(entry) for entry in result.failed]
         elif summary["action"] == "read":
             # the WIRE-ONLY document text (title + body, the standalone
             # read settlement's archive shape) -- the timeline's step row
