@@ -129,7 +129,16 @@ def _merge_params(launch_kwargs: dict[str, t.Any]) -> None:
             " coherent); reconcile the settings block",
             dropped,
         )
-    launch_kwargs.update({k: v for k, v in params.items() if k not in _CODE_OWNED_KEYS})
+    params_config = params.get("config")
+    launch_kwargs.update({k: v for k, v in params.items() if k not in _CODE_OWNED_KEYS and k != "config"})
+    # a params ``config`` dict (CAMOU_CONFIG properties) MERGES over the
+    # code-built one instead of replacing it -- the shallow update above
+    # would silently drop the trust bundle's ``certificatePaths``; the
+    # deployment's own keys win on collisions
+    if isinstance(params_config, dict):
+        merged = dict(launch_kwargs.get("config") or {})
+        merged.update(params_config)
+        launch_kwargs["config"] = merged
 
 
 def _kill_stale_holders(profile: str) -> None:
@@ -203,7 +212,12 @@ async def _launch() -> "BrowserContext":
         # cert failures (expired/self-signed, TLS-intercepting corporate
         # proxies) are dead reads on the long-tail pages the reader exists
         # for -- accepted by default; zjsearch.browser.params restores
-        # strict validation (params merge last over these launch kwargs)
+        # strict validation (params merge last over these launch kwargs).
+        # STRICT VALIDATION IS THE DEPLOYMENT'S CALL, NOT OURS: every
+        # programmatic external-trust lane measured dead on camoufox
+        # 159.0-beta.43 (2026-11-24, see the AGENTS.md debugging note) --
+        # there is no verified trust source to enforce against, so the
+        # default stays accept-all until one lands.
         "ignore_https_errors": True,
     }
     if browser_config.proxy() is not None:

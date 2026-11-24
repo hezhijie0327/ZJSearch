@@ -439,6 +439,9 @@ zjsearch:
     # -- key for one warns once and is dropped.  Everything else camoufox
     # -- natively accepts flows through verbatim (defaults per the docs):
     #   args: ["-wait-for-browser"]  # extra Firefox launch args
+    #   ignore_https_errors: false   # enforce TLS against the built-in
+    #                                # roots (the engine default accepts
+    #                                # every cert failure)
     #   block_images: false          # kill image requests browser-wide
     #   block_webgl: false           # disable WebGL entirely (a signal in
     #                                # itself -- prefer leaving off)

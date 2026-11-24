@@ -331,7 +331,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     un-routable leak; uBlock Origin rides along as a default addon =
     the adblock, `adblock: false` excludes it; cert errors are accepted
     at launch — `ignore_https_errors: True` is the engine default,
-    params restores strict validation); the identity OS is PINNED
+    params restores strict validation — external trust sources are a
+    measured dead end for now, see the debugging note); the identity OS is PINNED
     `windows` in the launch kwargs (camoufox would otherwise randomize
     all three OSes per launch; windows is the mainstream desktop claim
     and a Linux fingerprint is itself a rarity flag) and the Docker
@@ -3331,7 +3332,40 @@ pages the reader exists for, not pages to refuse;
 `zjsearch.browser.params: {ignore_https_errors: false}` restores strict
 validation (the params passthrough reaches playwright's
 launch_persistent_context verbatim via launch_options' catch-all
-spread).  SAME DAY, THE TOOL MERGED: web_reader folded into browse
+spread).  THE EXTERNAL-TRUST-SOURCE DEAD END (2026-11-24, wired up in
+WSL against Linux camoufox 159.0-beta.43 — the same family as the
+Docker image — with a local self-signed HTTPS service as the verdict
+probe): every programmatic lane to give camoufox an external trust
+bundle measured DEAD.  (1) The CAMOU_CONFIG `certificatePaths` /
+`certificates` properties are DECLARED in the build's properties.json
+and survive the whole launch chain into the `CAMOU_CONFIG_1..n` env
+payload, but the browser never applies them — a self-signed root rides
+both keys and the strict-validation probe still dies with
+SSL_ERROR_UNKNOWN.  (2) The Firefox enterprise-policies lane
+(`<bundledir>/distribution/policies.json` → `Certificates.Install`) is
+WORSE: with the file present the browser's navigation wedges outright
+(even `about:policies` times out) — camoufox's patches break the
+policies engine.  (3) NSS `certutil -A -t "CT,,"` imports into the
+persistent profile's cert9.db (Ubuntu libnss3-tools extracted without
+root, LD_LIBRARY_PATH against the bundle's own NSS libs) list the roots
+correctly but Firefox still rejects the probe — AND a CONTROL test on
+clean playwright Firefox 145 with a fresh profile fails the same way,
+so it is not a camoufox quirk: the certutil-on-a-prepared-profile
+recipe itself does not earn trust on current Firefox.  (4) The
+OS-system-store lane — `security.enterprise_roots.enabled: true` plus
+the root installed via `update-ca-certificates`, then the full
+p11-kit machinery (p11-kit-trust.so registered into the profile's
+secmod.db via `modutil -add -libfile`, the root as a
+`/etc/pki/p11-kit/*.p11-kit` anchor visible in `trust list` as the
+"System Trust" token) — ALSO fails the probe: Firefox on Linux does
+not honor the OS store this way (the policies `SecurityDevices`
+documented channel is the only official one, and policies wedge
+camoufox per (2)).  Until a lane
+verifies LIVE, the engine default stays accept-all; strict validation
+remains the deployment's explicit `params` call.  One real fix DID
+land from this session: `_merge_params` MERGES a params `config` dict
+over the code-built one instead of letting the shallow update silently
+drop its keys (any future trust-source retry needs that merge).  SAME DAY, THE TOOL MERGED: web_reader folded into browse
 (ONE tool, polymorphic `read` — see THE BROWSER-USE MERGE below), and
 the cross-references name the merged tool only (search_web's spec:
 "the browse tool's read reads that page in full … the same tool is
