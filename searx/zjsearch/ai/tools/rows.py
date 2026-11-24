@@ -20,6 +20,7 @@ from searx.zjsearch.ai.tools.calculate import CALCULATE_TOOL
 from searx.zjsearch.ai.tools.calendar import CALENDAR_TOOL
 from searx.zjsearch.ai.tools.clock import CLOCK_TOOL
 from searx.zjsearch.ai.tools.evaluate import EVALUATE_TOOL, decision_row
+from searx.zjsearch.ai.tools.inspect_image import INSPECT_IMAGE_TOOL
 from searx.zjsearch.ai.tools.message_subtask import MESSAGE_SUBTASK_TOOL
 from searx.zjsearch.ai.tools.memory import MEMORY_TOOL
 from searx.zjsearch.ai.tools.recall_history import RECALL_HISTORY_TOOL
@@ -227,6 +228,12 @@ def display_item(  # pylint: disable=too-many-return-statements, too-many-branch
             "q": str(extract_args.get("title") or "")[:120],
             "args": extract_args,
         }
+    if call_name == INSPECT_IMAGE_TOOL:
+        # the researcher's eyes on ONE result image: the image url (in the
+        # raw args) is the row's identity -- the client's inspect view
+        # renders the picture.  Left to the search fallthrough, the row
+        # read as an EMPTY-QUERY search wearing "no results"
+        return {"id": idx, "tool": INSPECT_IMAGE_TOOL, "q": "", "args": raw_args(call)}
     query, category, time_range, include, exclude, _paid_ok = parse_call(call)
     operators = " ".join([f"site:{host}" for host in include] + [f"-site:{host}" for host in exclude])
     if operators:
