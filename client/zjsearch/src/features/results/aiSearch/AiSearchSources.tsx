@@ -204,6 +204,8 @@ export function AiSearchSources({
   cited,
   sources,
   expanded,
+  locateN = null,
+  onFilter,
   onToggleExpanded,
 }: {
   sources: AiSearchSource[];
@@ -213,6 +215,13 @@ export function AiSearchSources({
   /** CONTROLLED cap state (the parent expands it on a citation click and
       may clear it when the user folds the list again) */
   expanded: boolean;
+  /** the pending citation-locate target: a card the active filter would
+      HIDE forces the full list -- the filter must never eat a citation
+      (the cap's rule), so the scroll always finds its card */
+  locateN?: number | null;
+  /** a filter chip was picked: the reader's own choice drops the forced
+      list (the host clears the locate target) */
+  onFilter?: () => void;
   onToggleExpanded: (next: boolean) => void;
 }) {
   const t = useT();
@@ -227,7 +236,8 @@ export function AiSearchSources({
   const filtered = sources.filter((s) =>
     filter === "cited" ? cited.has(s.n) : filter === "crawled" ? s.crawled : true,
   );
-  const effective: SourceFilter = filter !== "all" && filtered.length === 0 ? "all" : filter;
+  const hidesTarget = locateN !== null && !filtered.some((s) => s.n === locateN);
+  const effective: SourceFilter = filter !== "all" && (filtered.length === 0 || hidesTarget) ? "all" : filter;
   const list = effective === "all" ? sources : filtered;
   // numbering order: the evidence list reads [1] -> [N] (the [n] chips in
   // the answer index into this exact order); the older tail folds in a
@@ -257,6 +267,7 @@ export function AiSearchSources({
             }`}
             key={chip.id}
             onClick={() => {
+              onFilter?.();
               setFilter(chip.id);
             }}
             type="button"

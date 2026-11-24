@@ -273,6 +273,26 @@ const FULL_STAGE: DebugScenario = {
       feed: 'This deployment searches 361 enabled engines across 28 categories:\n  apps (4) · blogs (8) · books (4) · …\nDisabled engines (12) -- a bang prefix still reaches them, e.g. "!shortcut keywords":\n  bocha (bang: bocha) -- general, web\n  …',
     },
     {
+      // the source behind the findings' [6] (the other institution's market
+      // size) -- UNCITED by the answer and past the rail's four-card cap: a
+      // chip pointing at it locates a card the default 已引用 filter and
+      // the cap both hide (the citation locate must force it past both --
+      // a hidden card used to make the jump a silent no-op)
+      e: "sources",
+      items: [
+        {
+          n: 6,
+          title: "全球多肽原料药市场规模预测(另一家机构口径)",
+          url: "https://greenpeak.example.com/peptide-api-market-2025",
+          netloc: "greenpeak.example.com",
+          round: 1,
+          id: 1,
+          idx: 0,
+          content: "2025 年全球多肽原料药市场约 52 亿美元,2021-2025 年 CAGR 12%。",
+        },
+      ],
+    },
+    {
       e: "plan",
       items: [
         { title: "全球竞争格局与头部玩家", status: "active", sources: [1, 2] },

@@ -1676,9 +1676,10 @@ function AiSearchRunSectionImpl({
   // re-run drops it so the new think follows the auto pattern again
   const [writeThinkForced, setWriteThinkForced] = useState<boolean | null>(null);
   // the citation-locate flow: an [n] click (answer chip, gallery tile,
-  // findings-fact chip) EXPANDS the rail's capped lists, then scrolls the
-  // target source card into view inside the rail's own scroll and flashes
-  // it -- the cap must never eat a citation
+  // findings-fact chip) EXPANDS the sources cap and forces the card past
+  // the list's filter, then scrolls the target source card into view
+  // inside the rail's own scroll and flashes it -- the cap and the filter
+  // must never eat a citation
   const [locate, setLocate] = useState<{ n: number; seq: number } | null>(null);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const [findingsExpanded, setFindingsExpanded] = useState(false);
@@ -1719,9 +1720,12 @@ function AiSearchRunSectionImpl({
     }
     locateSeq.current += 1;
     setLocate({ n, seq: locateSeq.current });
+    // ONLY the sources list opens -- its [n] cards are the locate target.
+    // The findings and gaps caps used to open with it: both sit ABOVE the
+    // sources in the rail, so their reveal shifted the very card the scroll
+    // was measured against (and a plan chip unfolding twenty facts reads as
+    // a glitch); their own chips stay the only way to open them
     setSourcesExpanded(true);
-    setFindingsExpanded(true);
-    setGapsExpanded(true);
   };
   // the failed section's rewrite chip: the lane streams the section back
   // and the fold updates the document in place; the OUTCOME toasts (the
@@ -2529,6 +2533,10 @@ function AiSearchRunSectionImpl({
               <AiSearchSources
                 cited={citedSet}
                 expanded={sourcesExpanded}
+                locateN={locate?.n ?? null}
+                onFilter={() => {
+                  setLocate(null);
+                }}
                 onToggleExpanded={setSourcesExpanded}
                 sources={run.sources}
               />
