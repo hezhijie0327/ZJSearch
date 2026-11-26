@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ANNOTATED_FRAME, base, call, calls, settled, usage } from "@/features/results/aiSearch/debug/shared.ts";
+import { ANNOTATED_FRAME, base, call, calls, FRAME, settled, usage } from "@/features/results/aiSearch/debug/shared.ts";
 import type { DebugScenario } from "@/features/results/aiSearch/debug/types.ts";
 
 const QUESTION = "在浏览器里查纸飞机滑翔形的折法,开个新标签对比比赛规则,再滚到百科条目";
@@ -43,13 +43,15 @@ const browserSource = (
 
 /** The browser's mechanical surface: an open with its annotated mirror
     frame and outline, the tab strip (a background tab switches in), the
-    targeted scroll-to-text, a fetched document, and a multi batch whose
-    click-through lands a fresh outline -- the explored pages join the
-    source registry with the browser mark. */
+    targeted scroll-to-text, a fetched document, a multi batch whose
+    click-through lands a fresh outline, and a multi that ENDS on a
+    screenshot (the attachment-line settlement carries img+shot beside the
+    step summaries) -- the explored pages join the source registry with
+    the browser mark. */
 export const BROWSER_OPS_STAGE: DebugScenario = {
   id: "browser-ops",
   name: "浏览器操作",
-  label: "browser ops (annotated frame × tab strip × scroll-to-text × multi)",
+  label: "browser ops (annotated frame × tab strip × scroll-to-text × multi × multi-shot)",
   q: QUESTION,
   mode: "balanced",
   events: [
@@ -180,18 +182,59 @@ export const BROWSER_OPS_STAGE: DebugScenario = {
         browserSource(2, 2, { url: RULES_URL, title: RULES_TITLE }, false),
       ],
     },
-    { e: "open", id: 4, kind: "write", round: 0 },
+    { ...base, id: 4, round: 4 },
+    { e: "say", id: 4, t: "滚到规则表格并整批截一张最终版面的图,作为交付前的视觉核对。" },
+    calls(
+      [
+        call(1, "browse", "", {
+          action: "multi",
+          steps: [{ action: "scroll", text: "比赛规则" }, { action: "screenshot" }],
+        }),
+      ],
+      4,
+    ),
+    {
+      e: "call",
+      id: 4,
+      call: 1,
+      status: "ok",
+      ms: 3860,
+      // a multi that ENDS on a screenshot: the early-exit settlement's
+      // feed is the attachment line alone -- the step summaries must ride
+      // `steps` beside img+shot or the row's step list collapses
+      img: FRAME,
+      shot: true,
+      steps: [
+        {
+          action: "scroll",
+          status: "ok",
+          label: `scrolled to '比赛规则'. now: ${WIKI_TITLE}`,
+          url: WIKI_URL,
+          title: WIKI_TITLE,
+        },
+        {
+          action: "screenshot",
+          status: "ok",
+          label: "viewport captured",
+          url: WIKI_URL,
+          title: WIKI_TITLE,
+        },
+      ],
+      feed: "screenshot attached -- it is visible to you in the next turn.",
+      page: { url: WIKI_URL, title: WIKI_TITLE },
+    },
+    { e: "open", id: 5, kind: "write", round: 0 },
     { e: "phase", name: "write" },
     {
       e: "think",
-      id: 4,
-      t: "两个搜索页 + 百科条目互相印证:滑翔形最均衡、馆内风速要低于 0.5 米/秒[1][2]。浏览器探索的页面已在来源里,直接给结论。",
+      id: 5,
+      t: "两个搜索页 + 百科条目互相印证:滑翔形最均衡、馆内风速要低于 0.5 米/秒[1][2]。最终截图确认了百科页的版面,浏览器探索的页面已在来源里,直接给结论。",
     },
     {
       e: "answer",
-      t: "比赛用**滑翔形**最稳妥,翼面宽、滞空久[1];示例体育馆要求馆内风速低于 **0.5 米/秒**,回旋动作不吃分[2]。百科条目与比赛规则已核对。",
+      t: "比赛用**滑翔形**最稳妥,翼面宽、滞空久[1];示例体育馆要求馆内风速低于 **0.5 米/秒**,回旋动作不吃分[2]。百科条目与比赛规则已核对,最终截图确认页面版面无误。",
     },
-    { e: "close", id: 4 },
-    settled(usage(24800, 1640, 980, 11200)),
+    { e: "close", id: 5 },
+    settled(usage(26100, 1740, 1050, 11800)),
   ],
 };
