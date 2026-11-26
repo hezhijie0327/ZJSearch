@@ -30,6 +30,7 @@ from searx.zjsearch.ai.tools import clock as clock_tool
 from searx.zjsearch.ai.tools import recall_history as recall_history_cap
 from searx.zjsearch.ai.tools import memory as memory_cap
 from searx.zjsearch.ai.tools import list_engines as list_engines_tool
+from searx.zjsearch.ai.tools import decode_code as decode_code_tool
 from searx.zjsearch.ai.browser import session as browser_session
 from searx.zjsearch.ai.tools import delegate_research as delegate_tool
 from searx.zjsearch.ai.tools import message_subtask
@@ -57,6 +58,7 @@ from searx.zjsearch.ai.tools import (
     paid_bangs,
     INSPECT_IMAGE_TOOL,
     BROWSE_TOOL,
+    DECODE_CODE_TOOL,
     EVALUATE_TOOL,
     RECORD_FINDINGS_TOOL,
     CALCULATE_TOOL,
@@ -69,6 +71,7 @@ from searx.zjsearch.ai.tools import (
     parse_build_table_call,
     parse_plan_call,
     parse_inspect_image_call,
+    parse_decode_code_call,
     parse_set_deliverable_call,
     BUILD_TABLE_TOOL,
     RECALL_HISTORY_TOOL,
@@ -665,6 +668,23 @@ action from what is visible."""
                         "ms": int((time.monotonic() - started) * 1000),
                         "feed": feed[:800],
                         "raw": feed[:50_000],
+                    },
+                )
+                continue
+            if tool_name == DECODE_CODE_TOOL:
+                # the barcode payload from a public image URL -- text-only
+                # read beside inspect_image (no injection, no vision spend)
+                url = parse_decode_code_call(call)
+                feed_text = decode_code_tool.run_call(url)
+                feeds[wire_id - 1] = feed_text
+                yield (
+                    "call",
+                    {
+                        "call": wire_id,
+                        "status": "error" if feed_text.startswith("error") else "ok",
+                        "ms": int((time.monotonic() - started) * 1000),
+                        "feed": feed_text[:800],
+                        "raw": feed_text[:50_000],
                     },
                 )
                 continue

@@ -32,6 +32,7 @@ from searx.zjsearch.ai.tools import (
     calculate_spec,
     calendar_spec,
     clock_spec,
+    decode_code_spec,
     delegate_research_spec,
     evaluate_spec,
     inspect_image_spec,
@@ -130,8 +131,11 @@ def build_tool_surface(
     if research_tier or has_images:
         # the eyes on images: research runs may always meet a chart in a
         # source line; Search only carries the tool when the REQUEST
-        # itself brought pictures
+        # itself brought pictures.  decode_code sits beside it: the
+        # payload-only read (no injection, no vision spend) for the
+        # codes vision cannot parse
         specs.append(inspect_image_spec())
+        specs.append(decode_code_spec())
     if browser_on:
         specs.append(browse_tool.browse_spec())
     specs.append(ask_user_spec())

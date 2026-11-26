@@ -22,6 +22,7 @@ from searx.extended_types import sxng_request
 from searx.network.client import get_loop
 from searx.network.network import Network
 from searx.utils import gen_useragent
+from searx.zjsearch.ai.core import barcodes
 from searx.zjsearch.ai.core import convert as convert_service
 from searx.zjsearch.ai.core import guard as core_guard
 from searx.zjsearch.ai.llm import config as llm_config
@@ -252,6 +253,7 @@ def parse_uploads(raw):
     markdown files as ``{name, text}`` for the prompt blocks."""
     images: list = []
     files: list = []
+    decode_notes: list[str] = []
     if not isinstance(raw, list):
         return images, files
     for item in raw[:MAX_UPLOADS]:
@@ -263,14 +265,28 @@ def parse_uploads(raw):
         if item.get("kind") == "image" and mime in _UPLOAD_MIMES and data.startswith("data:" + mime + ";base64,"):
             if len(data) - len("data:" + mime + ";base64,") <= _MAX_UPLOAD_B64:
                 images.append({"type": "image_url", "image_url": {"url": data}})
+                # THE EAGER BARCODE DECODE: vision cannot read code
+                # pixels, and a pasted QR's payload only reaches the run
+                # as text -- decoded here, server-side, with zero model
+                # action, riding the first turn beside the image itself
+                for fmt, text in barcodes.read_data_url(data):
+                    decode_notes.append(f"[{name or f'image {len(images)}'}] {fmt}: {text}")
         elif item.get("kind") == "file" and data:
             extension = _doc_extension(mime, name)
             if extension == "text":
                 files.append({"name": name or "attachment.txt", "text": data[:_MAX_FILE_CHARS]})
-            elif extension and len(data) <= _UPLOAD_DOC_B64_MAX:
+            elif extension and len(data) <= _MAX_UPLOAD_DOC_B64_MAX:
                 text = _convert_b64(data, extension)
                 if text:
                     files.append({"name": name or f"attachment.{extension}", "text": text[:_MAX_FILE_CHARS]})
+    if decode_notes:
+        images.insert(
+            0,
+            {
+                "type": "text",
+                "text": "<decoded_barcodes>\n" + "\n".join(decode_notes) + "\n</decoded_barcodes>",
+            },
+        )
     return images, files
 
 

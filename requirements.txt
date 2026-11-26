@@ -72,11 +72,14 @@ camoufox[geoip]==0.5.9
 cnlunar==0.2.5
 chinesecalendar==1.12.1
 
-# zjsearch theme: the browse session's action=decode -- 1D/2D barcode
-# (QR / EAN / DataMatrix...) reading over the page captures
-# (searx/zjsearch/ai/tools/browse/service.py -- vision cannot read code
-# pixels, so a QR's url reaches the model only as decoded text).
-# zxing-cpp ships prebuilt wheels (Windows + manylinux); the decode
-# action is OPTIONAL: an absent install degrades to an honest feed
-# error, the session keeps working
+# zjsearch theme: the barcode reader over zxing-cpp (QR / EAN /
+# DataMatrix / PDF417 / Aztec -- vision cannot read code pixels, so a
+# code's payload reaches the model only as decoded text) with THREE
+# consumers: the browse session's action=decode (page captures),
+# decode_code (the payload-only tool over any public image url) and
+# the uploads parser's eager decode of pasted images
+# (searx/zjsearch/ai/core/barcodes.py is the single home).  zxing-cpp
+# ships prebuilt wheels (Windows + manylinux); every consumer is
+# OPTIONAL: an absent install degrades to honest feed errors, nothing
+# else changes
 zxing-cpp==3.2.0

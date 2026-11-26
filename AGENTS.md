@@ -439,12 +439,20 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     ride); every injected screenshot spends a per-run budget
     (`_MAX_MODEL_SHOTS` 8, viewport + close-ups together) — past it the
     settlement errors honestly instead of turning the context into an
-    image carousel.  The `decode` action reads 1D/2D barcodes the same
-    three ways (ref close-up / x-y-w-h region / viewport) and returns
-    the payload as FEED TEXT — vision cannot read code pixels, so a
-    QR's url reaches the model only through it (zxing-cpp, an optional
-    install: absent → an honest feed error); no image injection, no
-    shot budget.
+    image carousel.  THE BARCODE READER (`core/barcodes.py`, the ONE
+    zxing-cpp home — vision cannot read code pixels, so a QR's url
+    reaches the model only as decoded text) serves THREE channels: the
+    `decode` action reads codes on the session page the same three ways
+    as screenshot (ref close-up / x-y-w-h region / viewport — no image
+    injection, no shot budget); `decode_code` is the payload-only TOOL
+    over any public image url (fetches through inspect_image's gated
+    fetch, text-only result — registered beside inspect_image on
+    research_tier/has_images; named decode_CODE because 1D barcodes
+    EAN/DataMatrix/PDF417 ride the same call); the uploads parser
+    decodes PASTED images eagerly at parse time — the payload rides the
+    first turn as a `<decoded_barcodes>` text part with zero model
+    action.  zxing-cpp is an optional install: absent → honest feed
+    errors, nothing else changes.
     The takeover's input forwarding mirrors the model's
     surface (click / wheel / type / key / back / forward / reload plus
     `drag` — the user's pointer gesture on the mirror maps to the same

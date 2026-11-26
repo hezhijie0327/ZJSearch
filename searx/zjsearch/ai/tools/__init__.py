@@ -133,6 +133,11 @@ from searx.zjsearch.ai.tools.inspect_image import (
     inspect_image_spec,
     parse_inspect_image_call,
 )
+from searx.zjsearch.ai.tools.decode_code import (
+    DECODE_CODE_TOOL,
+    decode_code_spec,
+    parse_decode_code_call,
+)
 from searx.zjsearch.ai.tools.browse import (
     BROWSE_TOOL,
     INSTRUCTIONS as BROWSE_INSTRUCTIONS,
@@ -179,6 +184,7 @@ __all__ = [
     "CLOCK_TOOL",
     "CLOCK_INSTRUCTIONS",
     "clock_spec",
+    "DECODE_CODE_TOOL",
     "DELEGATE_RESEARCH_TOOL",
     "EVALUATE_TOOL",
     "INSPECT_IMAGE_TOOL",
@@ -203,6 +209,7 @@ __all__ = [
     "delegate_research_spec",
     "display_item",
     "evaluate_spec",
+    "decode_code_spec",
     "inspect_image_spec",
     "list_engines_run",
     "list_engines_spec",
@@ -212,6 +219,7 @@ __all__ = [
     "parse_build_table_call",
     "parse_calculate_call",
     "parse_call",
+    "parse_decode_code_call",
     "parse_delegate_research_call",
     "parse_evaluate_call",
     "parse_inspect_image_call",

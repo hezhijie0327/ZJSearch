@@ -5,8 +5,6 @@ the wire: the mirror frames (the rail's live card), the settlement's
 page state / outline / screenshot (the timeline row's rendered result)
 and the screenshot's image injection (the model sees it next turn)."""
 
-import base64
-import io
 import time
 import typing as t
 from urllib.parse import urlsplit
@@ -17,11 +15,7 @@ from searx.zjsearch.ai.browser.session import (
     drain_downloads,
 )  # pylint: disable=unused-import; re-export
 from searx.zjsearch.ai.browser.session import SessionError
-
-try:  # the barcode decoder behind action=decode -- absent install degrades honestly
-    import zxingcpp
-except ImportError:  # pragma: no cover
-    zxingcpp = None
+from searx.zjsearch.ai.core import barcodes
 
 _WAIT_POLL_S = 2.0
 """The wait_user frame cadence -- frames ARE the heartbeats that keep
@@ -358,7 +352,7 @@ def _act_decode(args: dict[str, t.Any], session_id: str) -> ActionResult:
         raise SessionError("decode takes a ref (element close-up) OR a region (x y w h), not both")
     if any(v is not None for v in region) and not all(v is not None for v in region):
         raise SessionError("the decode region needs x, y, w and h together (viewport coordinates)")
-    if zxingcpp is None:
+    if not barcodes.available():
         return ActionResult(
             feed="error: barcode decoding is not installed on this deployment (pip install zxing-cpp)"
         )
@@ -372,22 +366,16 @@ def _act_decode(args: dict[str, t.Any], session_id: str) -> ActionResult:
         shot = session.region_b64(session_id, x, y, w, h, quality=90)
     else:
         shot = session.screenshot_b64(session_id, quality=90)
-    from PIL import Image as PILImage  # pylint: disable=import-outside-toplevel
-
-    found = zxingcpp.read_barcodes(
-        PILImage.open(io.BytesIO(base64.b64decode(shot["img"]))),
-        try_invert=True,
-        try_downscale=True,
-    )
+    found = barcodes.read_data_url("data:image/jpeg;base64," + shot["img"])
     if not found:
         return ActionResult(
             feed="error: no barcode found in the capture -- aim closer"
             " (decode with the code element's ref) or crop tighter (x y w h)"
         )
     if len(found) == 1:
-        feed = f"decoded {found[0].format.name}: {found[0].text}"
+        feed = f"decoded {found[0][0]}: {found[0][1]}"
     else:
-        feed = "decoded:\n" + "\n".join(f"- {b.format.name}: {b.text}" for b in found)
+        feed = "decoded:\n" + "\n".join(f"- {fmt}: {text}" for fmt, text in found)
     return ActionResult(
         feed=feed,
         page={"url": str(shot["url"]), "title": str(shot["title"])},
