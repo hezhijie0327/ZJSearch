@@ -183,12 +183,16 @@ export const BROWSER_OPS_STAGE: DebugScenario = {
       ],
     },
     { ...base, id: 4, round: 4 },
-    { e: "say", id: 4, t: "滚到规则表格并整批截一张最终版面的图,作为交付前的视觉核对。" },
+    {
+      e: "say",
+      id: 4,
+      t: "滚到规则表格,把页脚的入会二维码解码出来,再整批截一张最终版面的图,作为交付前的视觉核对。",
+    },
     calls(
       [
         call(1, "browse", "", {
           action: "multi",
-          steps: [{ action: "scroll", text: "比赛规则" }, { action: "screenshot" }],
+          steps: [{ action: "scroll", text: "比赛规则" }, { action: "decode", ref: "e186" }, { action: "screenshot" }],
         }),
       ],
       4,
@@ -201,7 +205,9 @@ export const BROWSER_OPS_STAGE: DebugScenario = {
       ms: 3860,
       // a multi that ENDS on a screenshot: the early-exit settlement's
       // feed is the attachment line alone -- the step summaries must ride
-      // `steps` beside img+shot or the row's step list collapses
+      // `steps` beside img+shot or the row's step list collapses; the
+      // decode step's label IS its payload (the decoded text the model
+      // read in the feed)
       img: FRAME,
       shot: true,
       steps: [
@@ -209,6 +215,13 @@ export const BROWSER_OPS_STAGE: DebugScenario = {
           action: "scroll",
           status: "ok",
           label: `scrolled to '比赛规则'. now: ${WIKI_TITLE}`,
+          url: WIKI_URL,
+          title: WIKI_TITLE,
+        },
+        {
+          action: "decode",
+          status: "ok",
+          label: "decoded QRCode: https://app.example.org/invite?code=ppc",
           url: WIKI_URL,
           title: WIKI_TITLE,
         },

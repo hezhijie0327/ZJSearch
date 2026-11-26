@@ -16,7 +16,7 @@
  * | search_web ok / error / duplicate · list_engines inventory · search_tools · recall_history · update_plan · findings (superseded / conflict) · gap · plan sources · a task left pending at the settle | `search` |
  * | calculate · clock · calendar ×4 · evaluate · build_table ok + error + artifact · inspect_image · ask_user recorded · memory ×4 · mcp · decision card (5 purposes) | `tools` |
  * | background tabs · multi-index read (sections + a failed tab) · viewport · open error | `batch-read` |
- * | annotated frame · tab strip · scroll-to-text · fetch · multi click-through · multi ending on a screenshot (steps + img + shot) · browser-minted sources | `browser-ops` |
+ * | annotated frame · tab strip · scroll-to-text · fetch · multi click-through · multi ending on a screenshot (steps + img + shot) with a barcode-decode step · browser-minted sources | `browser-ops` |
  * | wait_user window · aimed screenshots · hover / select / drag / type · press · history · wheel scroll · re-snapshot | `browser` |
  * | deck born as deck (slide markdown) | `deck` |
  * | the reader's deck pick (steer notice + deck outline on a report-born run) | `shape-flip` |

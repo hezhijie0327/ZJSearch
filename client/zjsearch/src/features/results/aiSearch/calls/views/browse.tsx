@@ -26,6 +26,7 @@ import {
   MoveHorizontal,
   Paperclip,
   Pointer,
+  QrCode,
   Smartphone,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -77,6 +78,7 @@ const ACTION_ICONS: Record<string, LucideIcon> = {
   press: Keyboard,
   scroll: ArrowUpDown,
   screenshot: Camera,
+  decode: QrCode,
   hover: Pointer,
   select: ChevronsUpDown,
   drag: MoveHorizontal,
@@ -370,6 +372,8 @@ function stepVerb(action: string, step: Record<string, unknown>, t: ToolRowProps
       return t("ai_browser_act_scroll");
     case "screenshot":
       return t("ai_browser_act_screenshot");
+    case "decode":
+      return t("ai_browser_act_decode");
     case "hover":
       return t("ai_browser_act_hover");
     case "select":
@@ -531,6 +535,14 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
                       {verb}
                     </span>
                   </div>
+                  {!failed && structured && action === "decode" && d?.label ? (
+                    // a decode step's label IS its payload (the decoded
+                    // text the model read in the feed) -- the one step
+                    // whose product is text, so it renders right here
+                    <div className="mt-0.5 truncate ps-[18px] font-mono text-xs text-ink-3" dir="auto" title={d.label}>
+                      {d.label}
+                    </div>
+                  ) : null}
                   {failed ? (
                     <div className="mt-0.5 truncate ps-[18px] text-danger" dir="auto">
                       {tail}
@@ -680,6 +692,10 @@ export const browseView: ToolView = {
         const ref = String(args?.ref ?? "").trim();
         return ref ? `${t("ai_browser_act_screenshot")} ${ref}` : t("ai_browser_act_screenshot");
       }
+      case "decode": {
+        const ref = String(args?.ref ?? "").trim();
+        return ref ? `${t("ai_browser_act_decode")} ${ref}` : t("ai_browser_act_decode");
+      }
       case "hover": {
         const ref = String(args?.ref ?? "").trim();
         return ref ? `${t("ai_browser_act_hover")} ${ref}` : t("ai_browser_act_hover");
@@ -754,6 +770,8 @@ export const browseView: ToolView = {
         return null;
       case "screenshot":
         return t("ai_browser_shot_done");
+      case "decode":
+        return t("ai_browser_decode_done");
       case "wait_user":
         return t("ai_browser_row_waited");
       default:
