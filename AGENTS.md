@@ -643,7 +643,7 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     round policy, few-shot recipes).  The tool implementations are
     self-contained packages under `ai/tools/` (one package per tool:
     spec + sanitizer + service; `core/`, `prompts/`, `runs/`, `api/`
-    complete the layout — see NEXTGEN-DESIGN.md).  THE CLOCK AND THE
+    complete the layout).  THE CLOCK AND THE
     CALENDAR (tools/clock.py + tools/calendar.py, EVERY tier + the
     overview surface): the CLOCK is the instant only (no args — date,
     HH:MM:SS, weekday, UTC offset, UTC, unix — split from the composite
@@ -1305,7 +1305,7 @@ BCP-47 tag. Export only what other modules need. Full rationale and the
   已调研 (researched) clock freezes), the keepalive WORKER keeps holding the server
   run, and the visibility-attach replays the missed tail on return.
   Trust the DOM truth and the run host, not the frozen paint.  THE
-  CLIENT-SIDE RECOVERY LADDER (2026-10-13, `useAiSearch.consumeRunStream`
+  CLIENT-SIDE RECOVERY LADDER (2026-10-13, `runStream.ts`'s consumer —
   -- all lanes share one fold against the hook-level seq watermark): the
   stream WATCHDOG aborts a silent stream and reattaches — the ceiling
   (170s) sits ABOVE every server-side quiet bound (loop 135s/125s,
@@ -3056,7 +3056,7 @@ redundant, both fused into ONE post-run extractor:
   markdown images, PlantUML, Shiki.
 - **SETTLE HALTS ARE MACHINE KEYS**: the server emits
   `stopped_by_user` / `wrap_grace_ended` (loop `_STOP_HALT`/`_WRAP_HALT`)
-  and the client's `aiSearch/halts.ts` renders them through i18n
+  and the client's `aiAnswer/halts.ts` renders them through i18n
   (unknown halt strings stay verbatim -- legacy stored threads keep
   reading).  The GUARD-caused early ends ride `halt_reason` instead
   (closed set `stalled | time_budget | round_budget | loop_detected` --

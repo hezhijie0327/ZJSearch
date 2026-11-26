@@ -93,10 +93,12 @@ flowchart TB
 
 - `lib/` never imports from `components/` / `features/` / `pages/`.
 - `features/<domain>/` owns a cohesive domain: `results/` (layout
-  detection, cards/grids, answers, **aiSearch/** — the AI run surfaces,
-  aiOverview), `knowledge/` (the browser-local research memory UI),
-  `overlay/` (slide-in panels, injected by `app.tsx`), `hotkeys`,
-  `calculate`.
+  detection, cards/grids, answers, **aiSearch/** — the AI run surfaces),
+  `aiAnswer/` (the ONE shared AI answer/document surface — the sanctioned
+  cross-cutting domain beside the overlay context), `knowledge/` (the
+  browser-local research memory UI), `overlay/` (slide-in panels,
+  injected by `app.tsx`), `hotkeys`.  Pure logic belongs in `lib/`
+  (`calculator.ts`).
 - `pages/` composes: state + event handlers + layout wiring.
   Page-private pieces sit next to the page.
 - **i18n is theme-owned**: `src/lib/i18n/` holds one catalog per locale;
@@ -144,9 +146,7 @@ run.
 
 > **Deep documentation:** [`AGENTS.md`](../../AGENTS.md) is the
 > operational manual (architecture, contracts, conventions, debugging
-> lore — the single source of truth for working on this repo), and
-> [`NEXTGEN-DESIGN.md`](../../NEXTGEN-DESIGN.md) is the dated design log
-> behind the AI stack.
+> lore — the single source of truth for working on this repo).
 
 ### Configuration quickstart
 
@@ -205,12 +205,13 @@ client/zjsearch/
     │                      # PaperEmpty, SettingParts, …
     ├── features/          # one dir per cohesive domain:
     │   ├── results/       #   layout detection, cards/grids, answers,
-    │   │                  #   aiSearch/ (the AI run surfaces), aiOverview
+    │   │                  #   aiSearch/ (the AI run surfaces)
+    │   ├── aiAnswer/      #   the shared AI answer/document surface
+    │   │                  #   (MarkdownAnswer, deck/report views, chips)
     │   ├── knowledge/     #   the research memory (directory, inspector,
     │   │                  #   tag graph, admin, templates)
     │   ├── overlay/       #   slide-in panels (injected by app.tsx)
-    │   ├── hotkeys.ts
-    │   └── calculate.ts
+    │   └── hotkeys.ts
     └── pages/             # route composition roots (thin); page-private
                            # pieces sit next to the page (preferences/tabs/)
 ```
@@ -284,7 +285,7 @@ keeps its own npm lockfile.
 
 ```sh
 make themes.zjsearch          # pnpm install + vite build → searx/static/themes/zjsearch
-make themes.zjsearch.lint     # biome check + tsc --noEmit
+make themes.zjsearch.lint     # biome + tsc --noEmit + audit-cjk + audit-deps
 make themes.zjsearch.dev      # vite dev server (HMR), proxies API calls to :8888
 
 # the local instance (first: ./manage pyenv.install)
@@ -294,7 +295,7 @@ SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/dev-settings.yml ./manage webapp.run
 | Command | What it does |
 |---|---|
 | `make themes.zjsearch` | production build into `searx/static/themes/zjsearch` (git-ignored) |
-| `make themes.zjsearch.lint` | the quality gate: Biome + `tsc --noEmit` |
+| `make themes.zjsearch.lint` | the quality gate: Biome + `tsc --noEmit` + audit-cjk + audit-deps |
 | `make themes.zjsearch.dev` | HMR dev server; proxies `/search`, `/autocompleter`, … to `127.0.0.1:8888` (override with `ZJSEARCH_BACKEND`) |
 | `pnpm run audit` | the **fully offline** Lighthouse gate (see below) |
 

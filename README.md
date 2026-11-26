@@ -49,7 +49,6 @@ SEARXNG_SETTINGS_PATH=$PWD/client/zjsearch/dev-settings.yml ./manage webapp.run
 
 - [AGENTS.md](AGENTS.md) — 开发规范、架构约定与 Gotchas（英文）
 - [AUDIT.md](AUDIT.md) — 审计手册（Lighthouse 门禁、AI 故障 UX 等）
-- [NEXTGEN-DESIGN.md](NEXTGEN-DESIGN.md) — 设计文档
 - [SearXNG 官方文档](https://docs.searxng.org/) — 上游安装与配置指南
 
 ## License
