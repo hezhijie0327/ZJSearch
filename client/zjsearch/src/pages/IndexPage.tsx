@@ -11,7 +11,7 @@ import { Tape } from "@/components/Tape.tsx";
 import { focusSearchInput, type HotkeyTarget, useHotkeys } from "@/features/hotkeys.ts";
 import { AttachmentPicker } from "@/features/results/aiSearch/AttachmentPicker.tsx";
 import { DepthControls, parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
-import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchAttachment } from "@/features/results/aiSearch/runModel.ts";
 import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
 import { type StringKey, useT } from "@/lib/i18n.ts";
 import { useRouter } from "@/lib/router.tsx";

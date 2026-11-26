@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Check, CircleAlert, CircleStop } from "lucide-react";
-import type { AiSearchStage } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchStage } from "@/features/results/aiSearch/runModel.ts";
 import { useT } from "@/lib/i18n.ts";
 
 const ORDER: readonly AiSearchStage[] = ["plan", "research", "write"];

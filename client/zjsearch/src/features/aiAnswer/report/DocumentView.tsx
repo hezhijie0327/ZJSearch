@@ -4,8 +4,9 @@ import { Brain, ChevronDown, CircleAlert, LoaderCircle, RefreshCw } from "lucide
 import { useEffect, useMemo, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Tape } from "@/components/Tape.tsx";
-import { MarkdownAnswer, ThinkScroll } from "@/features/results/AIOverview.tsx";
-import type { AiSearchGallery, AiSourceMeta } from "@/features/results/aiOverview.ts";
+import type { AiSearchGallery, AiSourceMeta } from "@/features/aiAnswer/aiOverview.ts";
+import { MarkdownAnswer } from "@/features/aiAnswer/MarkdownAnswer.tsx";
+import { ThinkScroll } from "@/features/aiAnswer/ThinkScroll.tsx";
 import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";
 import { holdBackTail } from "@/lib/markdownParts.ts";

@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { PanelSearch } from "@/features/knowledge/PanelSearch.tsx";
-import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/sections.tsx";
+import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/rowParts.tsx";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { graphSnapshot, itemsByTag, type TagGraph } from "@/lib/kb/recall.ts";

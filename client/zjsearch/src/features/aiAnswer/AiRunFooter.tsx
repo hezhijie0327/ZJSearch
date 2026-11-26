@@ -17,7 +17,7 @@ import {
   ShieldAlert,
   Wrench,
 } from "lucide-react";
-import { haltLabelText, haltReasonText } from "@/features/results/aiSearch/halts.ts";
+import { haltLabelText, haltReasonText } from "@/features/aiAnswer/halts.ts";
 import { formatTokens } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SCROLLBAR_NONE } from "@/lib/styles.ts";

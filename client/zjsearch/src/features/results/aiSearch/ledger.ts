@@ -1,6 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
+/** One task-card row (the ledger owns the shape -- the timeline's
+    AiSearchRun.plan is THIS array). */
+export interface LedgerPlanRow {
+  title: string;
+  /** "missed" (client-side at settle): the run concluded and this
+      subtask never gathered a source -- the card shows a warning, not
+      a dishonest check */
+  status: "pending" | "active" | "done" | "missed";
+  /** the global [n] numbers this subtask's research produced -- the
+      provenance count on the task card */
+  sources?: number[];
+  /** LEGACY threads only (the dropped subagent era); carried for stored
+      threads, read by nobody */
+  steps: unknown[];
+  findings?: string;
+}
 
 /**
  * The findings-ledger / task-list state helpers of the AI Search fold:
@@ -41,10 +56,7 @@ export function parseClarifyPairs(text: string): Array<{ q: string; a: string }>
     replaces the list wholesale, but a task's research provenance (its
     steps and findings, LEGACY-era fields) survives the replace when the
     title matches. */
-export function mergeTaskSnapshot(
-  existing: AiSearchRun["plan"],
-  items: Array<Record<string, unknown>>,
-): AiSearchRun["plan"] {
+export function mergeTaskSnapshot(existing: LedgerPlanRow[], items: Array<Record<string, unknown>>): LedgerPlanRow[] {
   return items.map((item) => {
     const prior = existing.find((task) => task.title === String(item.title ?? ""));
     return {
@@ -155,7 +167,7 @@ export function learningGaps(gaps: unknown): LedgerGap[] {
 
 /** The task card's settle completion, HONESTLY: a subtask with sources
     is done; one that never gathered a source stays visibly unresearched. */
-export function completeTasks(plan: AiSearchRun["plan"]): AiSearchRun["plan"] {
+export function completeTasks(plan: LedgerPlanRow[]): LedgerPlanRow[] {
   return plan.map((task) =>
     task.status === "done" || (task.sources?.length ?? 0) > 0
       ? { ...task, status: "done" as const }

@@ -2,10 +2,11 @@
 
 import { ChartColumn, ChevronLeft } from "lucide-react";
 import { useMemo } from "react";
+import { Link } from "@/components/Link.tsx";
 import { Meter } from "@/components/Meter.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Card, SectionLabel } from "@/components/SettingParts.tsx";
-import { Link, Shell } from "@/components/Shell.tsx";
+import { Shell } from "@/components/Shell.tsx";
 import { SortHeader } from "@/components/SortHeader.tsx";
 import { round1 } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";

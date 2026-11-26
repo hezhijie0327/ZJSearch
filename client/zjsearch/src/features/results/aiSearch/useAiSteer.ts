@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { useEffect, useState } from "react";
-import type { AiSearchStep } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchStep } from "@/features/results/aiSearch/runModel.ts";
 import type { AiSearchState } from "@/features/results/aiSearch/useAiSearch.ts";
 
 /** One sent-but-maybe-not-yet-delivered steering message (the composer's

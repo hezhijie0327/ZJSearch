@@ -36,9 +36,9 @@
 import { ChevronLeft, ChevronRight, Maximize, Minimize, Printer, StickyNote } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MarkdownAnswer, MermaidBlock } from "@/features/results/AIOverview.tsx";
-import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
-import { fitVisibleSlides, observeLateContent } from "@/features/results/aiSearch/deck/deckFit.ts";
+import type { AiSourceMeta } from "@/features/aiAnswer/aiOverview.ts";
+import { fitVisibleSlides, observeLateContent } from "@/features/aiAnswer/deck/deckFit.ts";
+import { MarkdownAnswer, MermaidBlock } from "@/features/aiAnswer/MarkdownAnswer.tsx";
 import { applyLocalCiteNumbers, buildCitationMap, citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { cn } from "@/lib/cn.ts";
 import { useT } from "@/lib/i18n.ts";

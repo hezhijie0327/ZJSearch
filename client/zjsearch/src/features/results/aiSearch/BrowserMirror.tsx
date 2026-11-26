@@ -26,7 +26,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
-import type { AiSearchRun } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchRun } from "@/features/results/aiSearch/runModel.ts";
 import { postBrowserInput, sessionViewport } from "@/lib/browserInput.ts";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";

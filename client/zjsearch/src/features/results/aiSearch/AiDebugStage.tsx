@@ -3,14 +3,15 @@
 import { ChevronLeft, ChevronRight, FlaskConical, Pause, Play, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dropdown } from "@/components/Dropdown.tsx";
-import { OverviewCard } from "@/features/results/AIOverview.tsx";
-import type { AiSourceMeta } from "@/features/results/aiOverview.ts";
+import { OverviewCard } from "@/features/aiAnswer/AIOverview.tsx";
+import type { AiSourceMeta } from "@/features/aiAnswer/aiOverview.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AI_OVERVIEW_SCENARIOS } from "@/features/results/aiSearch/debug/overview.ts";
 import { DEBUG_SCENARIOS } from "@/features/results/aiSearch/debug/scenarios.ts";
 import type { AiOverviewDebugScenario, DebugScenario } from "@/features/results/aiSearch/debug/types.ts";
+import type { Core } from "@/features/results/aiSearch/runModel.ts";
 import { SteerQueueLab } from "@/features/results/aiSearch/SteerQueueLab.tsx";
-import { applyEvent, type Core, emptyRun } from "@/features/results/aiSearch/timeline.ts";
+import { applyEvent, emptyRun } from "@/features/results/aiSearch/timeline.ts";
 import { useT } from "@/lib/i18n.ts";
 
 /**

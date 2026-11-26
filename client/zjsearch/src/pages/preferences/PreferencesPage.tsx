@@ -2,7 +2,8 @@
 
 import { AlertTriangle, Cookie, LayoutGrid, Palette, Puzzle, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, Shell } from "@/components/Shell.tsx";
+import { Link } from "@/components/Link.tsx";
+import { Shell } from "@/components/Shell.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { SEGMENT, SEGMENT_ACTIVE, SEGMENT_IDLE } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";

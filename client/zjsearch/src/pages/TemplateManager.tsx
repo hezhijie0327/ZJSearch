@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
 import { Card, SectionLabel } from "@/components/SettingParts.tsx";
-import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/sections.tsx";
+import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/rowParts.tsx";
 import {
   type ReportTemplate,
   TEMPLATE_SHAPE_ICONS,

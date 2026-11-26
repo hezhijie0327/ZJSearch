@@ -4,12 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { parseDepthMode } from "@/features/results/aiSearch/depth.tsx";
 import { continueBrief } from "@/features/results/aiSearch/ledger.ts";
 import type { ReportTemplate, TemplateShape } from "@/features/results/aiSearch/reportTemplates.ts";
+import type { AiSearchAttachment, AiSearchMode, Core, EntryIndex } from "@/features/results/aiSearch/runModel.ts";
 import {
-  type AiSearchAttachment,
-  type AiSearchMode,
   applyEvent,
-  type Core,
-  type EntryIndex,
   emptyRun,
   type FoldFx,
   interruptPending,
@@ -100,8 +97,8 @@ export type {
   AiSearchRun,
   AiSearchSource,
   AiSearchStep,
-} from "@/features/results/aiSearch/timeline.ts";
-export { applyEvent, type FoldFx } from "@/features/results/aiSearch/timeline.ts";
+} from "@/features/results/aiSearch/runModel.ts";
+export type { applyEvent, FoldFx } from "@/features/results/aiSearch/timeline.ts";
 
 const IDLE: Core = {
   phase: "idle",

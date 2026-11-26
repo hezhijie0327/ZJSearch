@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import type { AiSearchMode } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchMode } from "@/features/results/aiSearch/runModel.ts";
 
 /** One debug-stage scenario: a wire-event SCRIPT replayed through the real
     fold (`applyEvent`) and rendered by the real run section.  The scenarios

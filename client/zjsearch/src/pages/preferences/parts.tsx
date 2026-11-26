@@ -4,11 +4,11 @@ import { AlertTriangle, ExternalLink, Sparkle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { DropdownOption } from "@/components/Dropdown.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
+import { Link } from "@/components/Link.tsx";
 // the panel furniture (Card / SectionLabel / SettingRow / IconTile) is
 // shared with the knowledge panel -- re-exported so the tabs keep one
 // import source
 import { SettingRow } from "@/components/SettingParts.tsx";
-import { Link } from "@/components/Shell.tsx";
 import { loadEngineDescriptions } from "@/lib/engineDescriptions.ts";
 import { type StringKey, type Translate, useT } from "@/lib/i18n.ts";
 import { CODE_CHIP } from "@/lib/styles.ts";

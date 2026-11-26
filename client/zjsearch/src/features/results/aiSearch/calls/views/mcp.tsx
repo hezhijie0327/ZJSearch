@@ -3,7 +3,7 @@
 import { Plug } from "lucide-react";
 import { CapList } from "@/components/CapList.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
-import type { AiToolMatch } from "@/features/results/aiSearch/timeline.ts";
+import type { AiToolMatch } from "@/features/results/aiSearch/runModel.ts";
 import { useT } from "@/lib/i18n.ts";
 
 /** The MCP view: the server-scoped tool name (the discovery call shows

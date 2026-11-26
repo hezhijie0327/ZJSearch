@@ -32,7 +32,7 @@ import {
 import { type ReactNode, useState } from "react";
 
 import { Collapse } from "@/components/Collapse.tsx";
-import { Lightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
+import { Lightbox } from "@/features/aiAnswer/AttachmentLightbox.tsx";
 import { BodyRow } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";

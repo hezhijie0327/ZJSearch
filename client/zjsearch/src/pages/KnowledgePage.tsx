@@ -7,19 +7,15 @@ import { BootRowsCard } from "@/components/BootGhosts.tsx";
 import { Dropdown } from "@/components/Dropdown.tsx";
 import { CompactPager } from "@/components/SettingParts.tsx";
 import { Shell } from "@/components/Shell.tsx";
+import { AdminView } from "@/features/knowledge/AdminView.tsx";
+import { InspectorView } from "@/features/knowledge/InspectorView.tsx";
+import { MemorySection } from "@/features/knowledge/MemorySection.tsx";
 import { PanelSearch } from "@/features/knowledge/PanelSearch.tsx";
-import {
-  AdminView,
-  ConfirmDialog,
-  InspectorView,
-  KindItemRows,
-  KNOWLEDGE_KIND_ICONS,
-  MemorySection,
-  SearchResults,
-  ThreadRows,
-} from "@/features/knowledge/sections.tsx";
+import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/rowParts.tsx";
+import { KindItemRows, SearchResults, ThreadRows } from "@/features/knowledge/sections.tsx";
 import { TagGraphView } from "@/features/knowledge/TagGraphView.tsx";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
+import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
 import { loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
@@ -38,6 +34,8 @@ import { exportSnapshot, importSnapshot, SNAPSHOT_VERSION, totalImported } from 
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
 import { useRouter } from "@/lib/router.tsx";
 import {
+  CHIP_DANGER,
+  CHIP_GHOST,
   CHIP_OUTLINE,
   CHIP_OUTLINE_ACTIVE,
   CHIP_OUTLINE_IDLE,
@@ -47,6 +45,7 @@ import {
 } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { KnowledgePageData } from "@/lib/types.ts";
+import { useExitPresence } from "@/lib/useExitPresence.ts";
 import { TemplateManagerPanel } from "@/pages/TemplateManager.tsx";
 
 /** The library listings paginate -- 40 rows in one card read as an
@@ -778,5 +777,67 @@ export function KnowledgePage({ data, embedded = false }: { data: KnowledgePageD
         }
       />
     </Shell>
+  );
+}
+
+function ConfirmDialog({
+  cancel,
+  message,
+  onConfirm,
+  open,
+  title,
+}: {
+  cancel: () => void;
+  message: string;
+  onConfirm: () => void;
+  open: boolean;
+  title: string;
+}) {
+  const t = useT();
+  const { render, closing } = useExitPresence(open, 140);
+  const ref = useDialogFocus<HTMLDivElement>(open && !closing);
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") cancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cancel, open]);
+  if (!render) {
+    return null;
+  }
+  return (
+    <div
+      className={`fixed inset-0 z-[60] flex items-center justify-center p-4 ${closing ? "pointer-events-none" : ""}`}
+    >
+      <div
+        aria-hidden="true"
+        className={`absolute inset-0 bg-black/60 ${closing ? "animate-fade-out" : "animate-fade-in"}`}
+      />
+      <div
+        aria-label={title}
+        aria-modal="true"
+        className={`relative z-10 w-full max-w-md rounded-2xl border border-line bg-surface p-5 ${
+          closing ? "animate-fade-out" : "animate-fade-up"
+        }`}
+        inert={closing || undefined}
+        ref={ref}
+        role="dialog"
+      >
+        <h3 className="text-base font-semibold text-ink">{title}</h3>
+        <p className="mt-2 break-words text-sm leading-relaxed text-ink-2">{message}</p>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button className={CHIP_GHOST} data-dialog-close="" onClick={cancel} type="button">
+            {t("ai_delete_cancel")}
+          </button>
+          <button className={CHIP_DANGER} onClick={onConfirm} type="button">
+            {t("ai_delete_ok")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

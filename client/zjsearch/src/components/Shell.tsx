@@ -1,57 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { ChartColumn, Info, LibraryBig, MonitorDown, SlidersHorizontal } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { BrandDot } from "@/components/Brand.tsx";
+import { Link } from "@/components/Link.tsx";
 import { siteConfig } from "@/config/site.ts";
 import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useT } from "@/lib/i18n.ts";
-import { isModifiedClick, newTabLinkProps } from "@/lib/link.ts";
 import { canPromptInstall, onPwaInstallChange, promptInstall } from "@/lib/pwa.ts";
 import { useRouter } from "@/lib/router.tsx";
 import { ICON_BTN, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import { flashToast } from "@/lib/toast.ts";
 import type { GlobalData } from "@/lib/types.ts";
-
-/** Anchor that performs SPA navigation for internal URLs. */
-export function Link({
-  href,
-  children,
-  className,
-  ariaLabel,
-  title,
-}: {
-  href: string;
-  children: ReactNode;
-  className?: string;
-  ariaLabel?: string;
-  title?: string;
-}) {
-  const { navigate } = useRouter();
-  const internal = href.startsWith("/");
-
-  const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!internal || isModifiedClick(event)) {
-      return;
-    }
-    event.preventDefault();
-    navigate(href);
-  };
-
-  return (
-    <a
-      className={className}
-      href={href}
-      onClick={onClick}
-      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
-      {...(title ? { title } : {})}
-      {...newTabLinkProps(undefined)}
-    >
-      {children}
-    </a>
-  );
-}
 
 function ProgressBar({ active }: { active: boolean }) {
   if (!active) {

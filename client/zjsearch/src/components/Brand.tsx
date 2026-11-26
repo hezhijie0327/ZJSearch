@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Link } from "@/components/Shell.tsx";
+import { Link } from "@/components/Link.tsx";
 import type { GlobalData } from "@/lib/types.ts";
 
 /** The geometric gold period that closes the wordmark (DESIGN.md §2.2) —

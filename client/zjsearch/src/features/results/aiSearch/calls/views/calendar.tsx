@@ -3,7 +3,7 @@
 import { BookOpenText, CalendarDays, Clock, Copy, SearchCheck } from "lucide-react";
 import { DirectoryGrid } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolRowProps, ToolView } from "@/features/results/aiSearch/calls/types.ts";
-import type { AiCalendarLunar, AiCalendarPayload } from "@/features/results/aiSearch/timeline.ts";
+import type { AiCalendarLunar, AiCalendarPayload } from "@/features/results/aiSearch/runModel.ts";
 import { useCopyToast } from "@/lib/clipboard.ts";
 import type { Translate } from "@/lib/i18n.ts";
 import { CHIP_HOVER, MONO_CHIP } from "@/lib/styles.ts";

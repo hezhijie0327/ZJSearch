@@ -2,7 +2,7 @@
 
 import { Eye } from "lucide-react";
 import { useState } from "react";
-import { Lightbox } from "@/features/results/aiSearch/AttachmentLightbox.tsx";
+import { Lightbox } from "@/features/aiAnswer/AttachmentLightbox.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { useT } from "@/lib/i18n.ts";
 

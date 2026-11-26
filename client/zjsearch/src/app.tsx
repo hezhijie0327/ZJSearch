@@ -14,7 +14,8 @@ import {
   BootStatsTable,
   BootTabCard,
 } from "@/components/BootGhosts.tsx";
-import { Link, Shell } from "@/components/Shell.tsx";
+import { Link } from "@/components/Link.tsx";
+import { Shell } from "@/components/Shell.tsx";
 import { Tape } from "@/components/Tape.tsx";
 import { OverlayProvider } from "@/features/overlay/OverlayProvider.tsx";
 import { setDateFormatLocale } from "@/lib/format.ts";

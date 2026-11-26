@@ -2,7 +2,7 @@
 
 import { FileText, Paperclip, X } from "lucide-react";
 import { useCallback, useState } from "react";
-import type { AiSearchAttachment } from "@/features/results/aiSearch/timeline.ts";
+import type { AiSearchAttachment } from "@/features/results/aiSearch/runModel.ts";
 import { useT } from "@/lib/i18n.ts";
 
 /**

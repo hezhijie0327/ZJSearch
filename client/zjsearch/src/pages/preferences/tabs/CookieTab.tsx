@@ -2,8 +2,8 @@
 
 import { Cookie, ExternalLink, Key, Link as LinkIcon, RefreshCw, Trash2 } from "lucide-react";
 import { ClickToCopy } from "@/components/CopyButton.tsx";
+import { Link } from "@/components/Link.tsx";
 import { PaperEmpty } from "@/components/PaperEmpty.tsx";
-import { Link } from "@/components/Shell.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { OUTLINE_PILL } from "@/lib/styles.ts";
 import type { PreferencesPageData } from "@/lib/types.ts";
