@@ -6,7 +6,7 @@
  * constants only pin down the names the client special-cases.
  */
 
-import { cap } from "@/lib/format.ts";
+import { capitalize } from "@/lib/format.ts";
 import type { StringKey, Translate } from "@/lib/i18n.ts";
 
 /** Pseudo category of engine-bang searches (`!imdb bat`): the results carry
@@ -25,7 +25,7 @@ const NO_SUBGROUPING = "without further subgrouping";
 export function categoryLabel(category: string, t: Translate): string {
   const key = `cat_${category.replaceAll(" ", "_")}` as StringKey;
   const label = t(key);
-  return label === key ? cap(category) : label;
+  return label === key ? capitalize(category) : label;
 }
 
 /** Localized label for an engine subgroup id inside a preferences engine tab. */

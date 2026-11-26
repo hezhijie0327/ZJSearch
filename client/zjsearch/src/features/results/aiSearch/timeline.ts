@@ -8,7 +8,6 @@ import {
   mergeTaskSnapshot,
   parseClarifyPairs,
 } from "@/features/results/aiSearch/ledger.ts";
-import { normalizeCalendar, normalizeCall } from "@/features/results/aiSearch/normalize.ts";
 import type {
   AiDecision,
   AiEngineInventory,
@@ -23,6 +22,7 @@ import type {
   AiToolMatch,
   Core,
 } from "@/features/results/aiSearch/runModel.ts";
+import { normalizeCalendar, normalizeCall } from "@/features/results/aiSearch/wireNormalizers.ts";
 import { sessionViewport } from "@/lib/browserInput.ts";
 
 /**

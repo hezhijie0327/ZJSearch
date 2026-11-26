@@ -2,7 +2,7 @@
 
 import { AlignCenterVertical, Globe, Languages, Link as LinkIcon, Monitor, Moon, Sun, Tag } from "lucide-react";
 import { Fragment } from "react";
-import { cap } from "@/lib/format.ts";
+import { capitalize } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { SEGMENT_ACTIVE, SEGMENT_IDLE, SEGMENT_SM } from "@/lib/styles.ts";
 import type { ThemeStyle } from "@/lib/theme.ts";
@@ -53,7 +53,7 @@ export function UiTab({
                 onChange={form.setTheme}
                 options={data.themes.map((name) => ({
                   value: name,
-                  label: name === "zjsearch" ? "ZJSearch" : cap(name),
+                  label: name === "zjsearch" ? "ZJSearch" : capitalize(name),
                 }))}
                 value={form.theme}
               />
@@ -64,10 +64,10 @@ export function UiTab({
               <div className="inline-flex rounded-xl border border-line bg-surface p-0.5">
                 {(
                   [
-                    ["auto", cap(t("auto")), <Sun className="size-3.5" key="a" />],
-                    ["light", cap(t("light")), <Sun className="size-3.5" key="l" />],
-                    ["dark", cap(t("dark")), <Moon className="size-3.5" key="d" />],
-                    ["black", cap(t("black")), <Moon className="size-3.5" key="b" />],
+                    ["auto", capitalize(t("auto")), <Sun className="size-3.5" key="a" />],
+                    ["light", capitalize(t("light")), <Sun className="size-3.5" key="l" />],
+                    ["dark", capitalize(t("dark")), <Moon className="size-3.5" key="d" />],
+                    ["black", capitalize(t("black")), <Moon className="size-3.5" key="b" />],
                   ] as const
                 ).map(([value, label, icon]) => (
                   <button

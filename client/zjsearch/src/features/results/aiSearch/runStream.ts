@@ -12,7 +12,6 @@ import { type RunKeepalive, startRunKeepalive } from "@/lib/keepalive.ts";
 import { pg } from "@/lib/pg.ts";
 import type { AiCapability } from "@/lib/types.ts";
 
-
 export interface RunStreamContext {
   capability: AiCapability | undefined;
   seqWatermarkRef: RefObject<Map<string, number>>;
@@ -24,9 +23,12 @@ export interface RunStreamContext {
   heartbeatRef: RefObject<RunKeepalive | null>;
   beatOkAtRef: RefObject<number>;
   waitWindowRef: RefObject<boolean>;
-  makeApply: (threadId: string, runNo: number, refCounts: Map<string, number>) => (event: Record<string, unknown>) => void;
+  makeApply: (
+    threadId: string,
+    runNo: number,
+    refCounts: Map<string, number>,
+  ) => (event: Record<string, unknown>) => void;
 }
-
 
 export const STREAM_IDLE_MS = 170_000;
 /** The stream watchdog's silence ceiling -- ABOVE every server-side
@@ -62,7 +64,6 @@ export const WAIT_WINDOW_CAP_MS = 600_000;
     window ends at the frame budget), so ten minutes covers any legal
     window with margin; past it the reattach ladder proves the run. */
 
-
 /** The CONTINUE replay payload: the dead attempt's ctx checkpoints (its
     exact conversation), its [n] sources (the server's registry reseeds so
     repeat urls reuse their numbers), the entry/round bases (the resumed
@@ -85,17 +86,15 @@ export interface ResumePayload {
   };
 }
 
-
-  export interface StreamOutcome {
-    settled: boolean;
-    /** the FIRST stream's failure (HTTP errors, watchdog aborts) -- an
+export interface StreamOutcome {
+  settled: boolean;
+  /** the FIRST stream's failure (HTTP errors, watchdog aborts) -- an
         HttpError's message is the failed box's text */
-    error?: unknown;
-    /** the LADDER's last attach failure -- the 404 verdict (handle gone)
+  error?: unknown;
+  /** the LADDER's last attach failure -- the 404 verdict (handle gone)
         lives here, the continue path's probe reads it */
-    attachError?: unknown;
-  }
-
+  attachError?: unknown;
+}
 
 export function createRunStreamConsumer(ctx: RunStreamContext) {
   return async function consumeRunStream(
@@ -153,7 +152,12 @@ export function createRunStreamConsumer(ctx: RunStreamContext) {
     // primary lane
     let kickTimer: ReturnType<typeof setTimeout> | null = null;
     const kick = () => {
-      if (ctx.settledRef.current || outer?.signal.aborted || !ctx.runKeyRef.current || document.visibilityState !== "visible") {
+      if (
+        ctx.settledRef.current ||
+        outer?.signal.aborted ||
+        !ctx.runKeyRef.current ||
+        document.visibilityState !== "visible"
+      ) {
         return;
       }
       if (kickTimer) clearTimeout(kickTimer);

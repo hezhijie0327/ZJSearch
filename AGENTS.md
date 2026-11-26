@@ -986,8 +986,8 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
   Intl), `link.ts`, `motion.ts`.
   Never imports from `components/` / `features/` / `pages/`.
 - `src/components/` — UI shared across pages (Shell, Link, SearchBox,
-  SearchControls, Dropdown, CopyButton, HelpModal, BackToTop, Brand,
-  CategoryIcon).
+  SearchControls, Dropdown, CopyButton, HelpModal, Brand, CategoryIcon,
+  ClampReveal, Collapse, CapList, SettingParts, Tape, …).
 - `src/features/<domain>/` — cohesive feature modules with colocated views,
   pure logic and hooks: `overlay/` (drawer, panels injected by app.tsx),
   `aiAnswer/` (the ONE shared AI answer/document surface — the sanctioned
@@ -1003,6 +1003,17 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
   zero `export default`; no barrel files.  Legacy-compat shapes are
   deleted with their era, not carried — no old-name mapping survives a
   rename (old stored threads degrade to the fallback row view).
+  SPLIT BY MODIFIABLE UNIT, never by line count: one file = one
+  responsibility a change can touch alone — a 400-line file carrying
+  three responsibilities splits; a 900-line single-purpose renderer
+  stays.  A multi-component family file (the `*Parts.tsx` pattern) is
+  legitimate ONLY while its members always change together.  Page-private
+  pieces sit in sibling files next to the page (`pages/results/`,
+  `pages/preferences/`), not inside the page root.  Names are precise:
+  a file/function/variable names its responsibility (`wireNormalizers`,
+  `runStream`, `mirrorParts`), never an abbreviation or a word the
+  codebase already uses for something else (`cap` meant clamp — the
+  capitalise helper is `capitalize`).
 - `src/pages/` — thin route composition roots (state + event handlers +
   layout wiring); page-private pieces sit next to the page
   (`preferences/` → PreferencesPage + `usePreferencesForm` + `tabs/`).

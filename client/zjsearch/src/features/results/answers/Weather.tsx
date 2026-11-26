@@ -2,7 +2,7 @@
 
 import { MapPin } from "lucide-react";
 import { CapChip } from "@/components/CapChip.tsx";
-import { cap } from "@/lib/format.ts";
+import { capitalize } from "@/lib/format.ts";
 import { type StringKey, type Translate, translateFor, useLocale, useT } from "@/lib/i18n.ts";
 import { CHIP, CHIP_HOVER, SCROLLBAR_NONE } from "@/lib/styles.ts";
 import type { AnswerData, WeatherItem } from "@/lib/types.ts";
@@ -23,7 +23,7 @@ function conditionLabel(condition: string, locale: string): string {
       return label;
     }
   }
-  return cap(condition);
+  return capitalize(condition);
 }
 
 /** The server datetime is location wall-clock (no offset): HH:mm is a plain

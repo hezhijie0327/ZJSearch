@@ -119,7 +119,7 @@ export function formatMs(ms: number): string {
 }
 
 /** Capitalise the first letter (option labels, condition names). */
-export function cap(value: string): string {
+export function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
