@@ -10,7 +10,7 @@ import { CategoryTabs, type FilterValues, SearchFilters } from "@/components/Sea
 import { HeaderActions, Shell } from "@/components/Shell.tsx";
 import { OverviewCard, OverviewTrigger, useOverview } from "@/features/aiAnswer/AIOverview.tsx";
 import { type AiSourceMeta, aiSourceMeta, buildAiContext, collectAiImages } from "@/features/aiAnswer/aiOverview.ts";
-import { tryEvaluateExpression } from "@/features/calculator.ts";
+import { tryEvaluateExpression } from "@/lib/calculator.ts";
 import { focusSearchInput, useHotkeys } from "@/features/hotkeys.ts";
 import { AiSearchRunSection } from "@/features/results/aiSearch/AiSearchRunSection.tsx";
 import { AiSearchSourcesSkeleton } from "@/features/results/aiSearch/AiSearchSources.tsx";

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { useState } from "react";
-import { type CalculationAnswer, tryEvaluateExpression } from "@/features/calculator.ts";
+import { type CalculationAnswer, tryEvaluateExpression } from "@/lib/calculator.ts";
 
 /** Interactive calculator for the "calculator" plugin: the query-detected
     expression seeds the display and the keypad keeps evaluating live, like

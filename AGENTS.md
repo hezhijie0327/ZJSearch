@@ -960,11 +960,16 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   payload opens as which page is injected by `app.tsx` (`renderPage`) — the
   overlay module never imports pages (keeps lib→page cycles impossible).
   Internal links inside a panel are browsed within the panel (click-capture in
-  OverlayProvider.tsx). `features/overlay` is the one sanctioned cross-cutting
-  capability: its `useOverlay()` context may be consumed from `components/`
-  (Shell header actions, footer) and other features (DebugPanels) — a context
-  provider consumed via hooks is the accepted decoupling; do not thread
-  `openOverlay` callbacks through props instead.
+  OverlayProvider.tsx). The sanctioned cross-cutting surfaces are TWO: the
+  overlay context — `features/overlay`'s `useOverlay()` may be consumed from
+  `components/` (Shell header actions, footer) and other features
+  (DebugPanels) — a context provider consumed via hooks is the accepted
+  decoupling (do not thread `openOverlay` callbacks through props) — and the
+  `features/aiAnswer/` presentation domain (the ONE AI answer/document
+  surface: overview card, `MarkdownAnswer`, `ThinkScroll`, run footer,
+  galleries, attachment lightbox, halt labels, the deck/report document
+  views), consumed downward by `features/results` and `features/knowledge`
+  alike; a renderer with a second implementation is the bug it prevents.
 
 ## Client code organization (keep it this way)
 
@@ -983,10 +988,12 @@ alias (`tsconfig.paths` + vite `resolve.alias`), never deep relative paths:
   CategoryIcon).
 - `src/features/<domain>/` — cohesive feature modules with colocated views,
   pure logic and hooks: `overlay/` (drawer, panels injected by app.tsx),
-  `results/` (layout.ts detection, ResultsView, CategoryBlocks, CardList,
-  ResultRow, cards/, answers/, image/, grids, infobox/debug/suggestions,
-  aiOverview.ts — the AI Overview contract: context assembly, stream
-  splitting, citation meta), `hotkeys.ts`, `calculate.ts`.
+  `aiAnswer/` (the ONE shared AI answer/document surface — the sanctioned
+  cross-cutting domain noted above), `results/` (layout.ts detection,
+  ResultsView, CategoryBlocks, CardList, ResultRow, cards/, answers/, image/,
+  grids, infobox/debug/suggestions; the AI Overview contract lives in
+  `aiAnswer/aiOverview.ts`), `hotkeys.ts`.  Pure logic modules belong in
+  `lib/` (`calculator.ts`), not under features/.
   PLACEMENT DOCTRINE (ZJBlog DESIGN.md §12): `components/` is cross-page
   ONLY — a component with a single page consumer folds into that page's
   file (AiModeSwitch lives in IndexPage.tsx); `features/<domain>/` owns
