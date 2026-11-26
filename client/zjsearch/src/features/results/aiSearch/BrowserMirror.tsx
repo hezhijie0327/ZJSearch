@@ -17,12 +17,10 @@ import { BrowserLightbox } from "@/features/results/aiSearch/BrowserLightbox.tsx
 import {
   ActionMark,
   addressOf,
-  FramePlaceholder,
+  FrameImage,
   LivePulse,
   type MirrorView,
   SessionTabs,
-  VIEWPORT_H,
-  VIEWPORT_W,
 } from "@/features/results/aiSearch/mirrorParts.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import { postBrowserInput } from "@/lib/browserInput.ts";
@@ -219,36 +217,18 @@ export function BrowserMirrorSection({ view, sessions }: { view: MirrorView; ses
           </div>
         ) : null}
         {leadActive ? (
-          shown.img ? (
-            <button
-              aria-label={t("ai_browser_full")}
-              className="relative block w-full cursor-zoom-in"
-              onClick={() => setFull(true)}
-              type="button"
-            >
-              <img
-                alt={shown.title || shown.url}
-                className="w-full object-contain object-top"
-                src={`data:image/jpeg;base64,${shown.img}`}
-                style={{ aspectRatio: `${shown.w || VIEWPORT_W()} / ${shown.h || VIEWPORT_H()}` }}
-              />
-              <ActionMark view={shown} />
-            </button>
-          ) : (
-            <FramePlaceholder className="w-full" view={shown} />
-          )
+          <button
+            aria-label={t("ai_browser_full")}
+            className="relative block w-full cursor-zoom-in"
+            onClick={() => setFull(true)}
+            type="button"
+          >
+            <FrameImage imgClassName="w-full object-contain object-top" view={shown} />
+            <ActionMark view={shown} />
+          </button>
         ) : (
           <div className="relative">
-            {activeView.img ? (
-              <img
-                alt={activeView.title || activeView.url}
-                className="w-full object-contain object-top opacity-90"
-                src={`data:image/jpeg;base64,${activeView.img}`}
-                style={{ aspectRatio: `${activeView.w || VIEWPORT_W()} / ${activeView.h || VIEWPORT_H()}` }}
-              />
-            ) : (
-              <FramePlaceholder className="w-full opacity-90" view={activeView} />
-            )}
+            <FrameImage imgClassName="w-full object-contain object-top opacity-90" view={activeView} />
             <ActionMark view={activeView} />
           </div>
         )}

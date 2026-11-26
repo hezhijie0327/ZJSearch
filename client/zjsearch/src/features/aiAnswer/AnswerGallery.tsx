@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+import { ImageOff } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { type AiSearchGallery, splitGallerySegments } from "@/features/aiAnswer/aiOverview.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 
 /**
  * One inline image group of the AI answer (the server-validated
@@ -17,6 +19,7 @@ import { type AiSearchGallery, splitGallerySegments } from "@/features/aiAnswer/
 
 function GalleryTile({ item, onCite }: { item: AiSearchGallery; onCite?: (index: number) => void }) {
   const [loaded, setLoaded] = useState(false);
+  const [failed, markFailed] = useImgFallback(item.url);
   return (
     <button
       aria-label={item.title || `[${item.n}]`}
@@ -27,17 +30,24 @@ function GalleryTile({ item, onCite }: { item: AiSearchGallery; onCite?: (index:
       title={item.title || undefined}
       type="button"
     >
-      <img
-        alt={item.title || ""}
-        className={`size-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
-        decoding="async"
-        loading="lazy"
-        onLoad={() => {
-          setLoaded(true);
-        }}
-        referrerPolicy="no-referrer"
-        src={item.url}
-      />
+      {failed ? (
+        <span className="grid size-full place-items-center bg-surface-2/60">
+          <ImageOff aria-hidden="true" className="size-5 text-ink-3" />
+        </span>
+      ) : (
+        <img
+          alt={item.title || ""}
+          className={`size-full object-cover transition-opacity duration-300 ${loaded ? "opacity-100" : "opacity-0"}`}
+          decoding="async"
+          loading="lazy"
+          onError={markFailed}
+          onLoad={() => {
+            setLoaded(true);
+          }}
+          referrerPolicy="no-referrer"
+          src={item.url}
+        />
+      )}
       <span className="absolute bottom-1.5 end-1.5 rounded-full bg-black/55 px-1.5 py-0.5 text-xs font-medium leading-none text-white">
         [{item.n}]
       </span>

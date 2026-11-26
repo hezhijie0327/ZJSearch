@@ -6,6 +6,7 @@
     tab strip.  One home so the card and the takeover cannot drift. */
 
 import { Bot, MousePointer2, VideoOff } from "lucide-react";
+import { useState } from "react";
 import type { AiSearchRun } from "@/features/results/aiSearch/runModel.ts";
 import { sessionViewport } from "@/lib/browserInput.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -174,6 +175,35 @@ export function FramePlaceholder({ view, className = "" }: { view: MirrorView; c
       <VideoOff aria-hidden="true" className="size-8 text-ink-3" />
       <span className="px-4 text-center text-xs leading-snug text-ink-3">{t("ai_browser_frame_live")}</span>
     </div>
+  );
+}
+
+/** The frame renderer, the result-thumbnail way (cardParts.Favicon):
+    a failed state -- seeded from byte-emptiness, flipped by the img's
+    own onError (corrupt frames die the same door) -- swaps the image
+    for the live-only placeholder icon. */
+export function FrameImage({
+  view,
+  className = "",
+  imgClassName = "",
+}: {
+  view: MirrorView;
+  className?: string;
+  imgClassName?: string;
+}) {
+  const [failed, setFailed] = useState(!view.img);
+  if (failed || !view.img) {
+    return <FramePlaceholder className={className} view={view} />;
+  }
+  return (
+    <img
+      alt={view.title || view.url}
+      className={imgClassName}
+      decoding="async"
+      onError={() => setFailed(true)}
+      src={`data:image/jpeg;base64,${view.img}`}
+      style={{ aspectRatio: `${view.w || VIEWPORT_W()} / ${view.h || VIEWPORT_H()}` }}
+    />
   );
 }
 

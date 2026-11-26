@@ -17,6 +17,7 @@ import type { AiSearchCall, AiSearchSource } from "@/features/results/aiSearch/u
 import { useCopyToast } from "@/lib/clipboard.ts";
 import { formatMs } from "@/lib/format.ts";
 import { type Translate, useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import { HOVER_CHIP, READ_PANE, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /**
@@ -28,6 +29,17 @@ import { HOVER_CHIP, READ_PANE, SCROLLBAR_NONE } from "@/lib/styles.ts";
 
 /** The model's raw tool-call arguments as the debug pane's text (null
     when the call carries no arguments). */
+/** The source card's favicon cell (per-item state: the failed flag is
+    the img's own onError, the result-thumbnail way). */
+function SourceFavicon({ src }: { src: string }) {
+  const [failed, markFailed] = useImgFallback(src);
+  return failed ? (
+    <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
+  ) : (
+    <img alt="" aria-hidden="true" className="size-3.5 rounded object-contain" onError={markFailed} src={src} />
+  );
+}
+
 export function rawArgsOf(call: AiSearchCall): string | null {
   return call.args && Object.keys(call.args).length > 0 ? JSON.stringify(call.args, null, 2) : null;
 }
@@ -326,7 +338,7 @@ export function CallResults({ results }: { results: AiSearchSource[] }) {
           </p>
           <span className="mt-1.5 flex min-w-0 items-center gap-1">
             {source.favicon ? (
-              <img alt="" aria-hidden="true" className="size-3.5 rounded object-contain" src={source.favicon} />
+              <SourceFavicon src={source.favicon} />
             ) : (
               <Globe aria-hidden="true" className="size-3.5 shrink-0 text-ink-3" />
             )}

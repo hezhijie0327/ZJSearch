@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Eye } from "lucide-react";
+import { Eye, ImageOff } from "lucide-react";
 import { useState } from "react";
 import { Lightbox } from "@/features/aiAnswer/AttachmentLightbox.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 
 /** The inspect_image body: the fetched image on the machine-voice ground
     (padded, centered, never edge-to-edge); clicking opens the FAMILY
@@ -12,6 +13,7 @@ import { useT } from "@/lib/i18n.ts";
 function ViewImageBody({ url }: { url: string }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [failed, markFailed] = useImgFallback(url);
   return (
     <div className="mt-1 rounded-lg bg-surface-2/50 p-2">
       <button
@@ -22,7 +24,14 @@ function ViewImageBody({ url }: { url: string }) {
         }}
         type="button"
       >
-        <img alt="" className="mx-auto max-h-72 object-contain" src={url} />
+        {failed ? (
+          <span className="mx-auto flex h-40 w-full items-center justify-center gap-2 rounded-xl border border-line bg-surface-2/50 text-xs text-ink-3">
+            <ImageOff aria-hidden="true" className="size-4" />
+            <span>{t("ai_attach_preview")}</span>
+          </span>
+        ) : (
+          <img alt="" className="mx-auto max-h-72 object-contain" onError={markFailed} src={url} />
+        )}
       </button>
       <p className="mt-1.5 text-center text-xs text-ink-3">{t("ai_attach_preview")}</p>
       {open ? (

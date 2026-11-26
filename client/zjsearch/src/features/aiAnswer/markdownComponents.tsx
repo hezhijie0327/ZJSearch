@@ -2,7 +2,9 @@
 
 // KaTeX typography for the math pipeline (lazy-loaded plugins, css is small
 // enough to ride the results stylesheet; the woff2 fonts load on demand)
+import { ImageOff } from "lucide-react";
 import { CitationChip, CitationGroupChip } from "@/features/aiAnswer/citationChips.tsx";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import "katex/dist/katex.min.css";
 
 import { Copy } from "lucide-react";
@@ -236,6 +238,20 @@ function MdHeading({ children, className, level }: MdProps & { level: "h1" | "h2
   );
 }
 
+/** Markdown figure images (remote answer sources): a dead URL swaps to
+    the failed glyph -- same door as every other image site. */
+function MdImage({ alt, src }: { alt?: string; src?: string }) {
+  const [failed, markFailed] = useImgFallback(src);
+  return failed ? (
+    <span className="my-2 flex items-center gap-2 rounded-lg border border-line bg-surface-2/60 px-3 py-2 text-xs text-ink-3">
+      <ImageOff aria-hidden="true" className="size-4 shrink-0" />
+      <span className="min-w-0 truncate">{alt || "image unavailable"}</span>
+    </span>
+  ) : (
+    <img alt={alt ?? ""} className={MD.img} loading="lazy" onError={markFailed} src={src} />
+  );
+}
+
 export function markdownComponents(
   meta: AiSourceMeta[],
   onCite: ((index: number) => void) | undefined,
@@ -323,7 +339,7 @@ export function markdownComponents(
         {children}
       </MdHeading>
     ),
-    img: ({ alt, src }) => <img alt={alt ?? ""} className={MD.img} loading="lazy" src={src} />,
+    img: ({ alt, src }) => <MdImage alt={alt} src={src} />,
     hr: () => <hr className={MD.hr} />,
     li: ({ children }) => (
       <li className={MD.li} dir="auto">

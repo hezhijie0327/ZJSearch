@@ -18,6 +18,7 @@ import { KNOWLEDGE_KIND_ICONS, META_CHIP, RowActions } from "@/features/knowledg
 import { useHostFavicon } from "@/lib/favicons.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import type { ThreadSummary } from "@/lib/kb/listings.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import { newTabLinkProps } from "@/lib/link.ts";
@@ -284,10 +285,11 @@ function RowFavicon({ item }: { item: KnowledgeItem }) {
   const stored = item.meta?.favicon as string | undefined;
   const fetched = useHostFavicon(rowHost(item) || null);
   const src = stored || fetched || "";
-  return src ? (
-    <img alt="" className="size-4 shrink-0 rounded-sm object-contain" src={src} />
-  ) : (
+  const [failed, markFailed] = useImgFallback(src);
+  return failed ? (
     <Globe aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
+  ) : (
+    <img alt="" className="size-4 shrink-0 rounded-sm object-contain" onError={markFailed} src={src} />
   );
 }
 

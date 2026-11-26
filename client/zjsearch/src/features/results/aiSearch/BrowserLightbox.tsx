@@ -11,7 +11,7 @@
     the run's ``browser`` wire events; the bytes never persist. */
 
 import { ArrowLeft, ArrowRight, Check, ExternalLink, Keyboard, Minimize2, RotateCcw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ActionMark,
@@ -62,6 +62,89 @@ function frameCoords(
   };
 }
 
+/** The takeover's interaction frame (LEAD ONLY): the click/drag surface
+    mapping viewport coordinates onto the session's page.  Rendered only
+    for frames that carry bytes -- a byte-less frame is the placeholder
+    (read-only), never a blind input surface. */
+function InteractiveFrame({
+  shown,
+  isLead,
+  send,
+  dialogRef,
+  suppressClickRef,
+  dragStartRef,
+  setDragTrail,
+}: {
+  shown: MirrorView;
+  isLead: boolean;
+  send: (payload: Parameters<typeof postBrowserInput>[0]) => void;
+  dialogRef: RefObject<HTMLDivElement | null>;
+  suppressClickRef: RefObject<boolean>;
+  dragStartRef: RefObject<{ x1: number; y1: number } | null>;
+  setDragTrail: (trail: { x1: number; y1: number; x: number; y: number } | null) => void;
+}) {
+  return (
+    <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the frame IS the
+          interaction surface -- the click forwards as a viewport coordinate;
+          keyboard users use the bar below */}
+      <img
+        alt={shown.title || shown.url}
+        className="h-full w-full touch-none object-contain cursor-crosshair"
+        onClick={(event) => {
+          if (!isLead) {
+            return;
+          }
+          if (suppressClickRef.current) {
+            // a drag just landed -- the pointerup's synthetic click
+            // must not also fire a tap at the endpoint
+            suppressClickRef.current = false;
+            return;
+          }
+          event.stopPropagation();
+          const { x, y } = frameCoords(event, shown.w, shown.h);
+          send({ type: "click", x, y });
+          // clicking a non-focusable element blurs the takeover -- pull
+          // focus back so direct typing keeps flowing
+          dialogRef.current?.focus();
+        }}
+        onPointerDown={(event) => {
+          if (!isLead || event.button !== 0) {
+            return;
+          }
+          const { x, y } = frameCoords(event, shown.w, shown.h);
+          dragStartRef.current = { x1: x, y1: y };
+          setDragTrail({ x1: x, y1: y, x, y });
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (!dragStartRef.current) {
+            return;
+          }
+          const { x, y } = frameCoords(event, shown.w, shown.h);
+          setDragTrail({ x1: dragStartRef.current.x1, y1: dragStartRef.current.y1, x, y });
+        }}
+        onPointerUp={(event) => {
+          const start = dragStartRef.current;
+          dragStartRef.current = null;
+          setDragTrail(null);
+          if (!start || !isLead) {
+            return;
+          }
+          const { x, y } = frameCoords(event, shown.w, shown.h);
+          if (Math.abs(x - start.x1) + Math.abs(y - start.y1) < 8) {
+            return; // a tap -- the click handler owns it
+          }
+          suppressClickRef.current = true;
+          send({ type: "drag", x1: start.x1, y1: start.y1, x2: x, y2: y });
+        }}
+        role="presentation"
+        src={`data:image/jpeg;base64,${shown.img}`}
+      />
+    </>
+  );
+}
+
 export function BrowserLightbox({
   onClose,
   sessions,
@@ -107,6 +190,15 @@ export function BrowserLightbox({
     setOverride(null);
   }, [tab, view]);
   const shown = override ?? activeView;
+
+  // the frame's byte state, the result-thumbnail way (cardParts.Favicon):
+  // seeded from byte-emptiness (a reconnect's replayed events carry no
+  // jpeg), flipped by the img's own onError (corrupt bytes die the same
+  // door), RESET per frame -- the model's next capture restores the view
+  const [frameFailed, setFrameFailed] = useState(!shown.img);
+  useEffect(() => {
+    setFrameFailed(!shown.img);
+  }, [shown.img]);
 
   // React's synthetic onWheel is passive -- the takeover must STOP the
   // page behind the fixed overlay from scrolling, so the wheel listener
@@ -291,68 +383,19 @@ export function BrowserLightbox({
             className="relative w-full overflow-hidden rounded-lg"
             style={{ aspectRatio: `${shown.w || VIEWPORT_W()} / ${shown.h || VIEWPORT_H()}` }}
           >
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: the frame
-                IS the interaction surface -- the click forwards as a viewport
-                coordinate; keyboard users use the bar below */}
-            <img
-              alt={shown.title || shown.url}
-              className={`h-full w-full touch-none object-contain ${isLead ? "cursor-crosshair" : ""}`}
-              onClick={(event) => {
-                if (!isLead) {
-                  return;
-                }
-                if (suppressClickRef.current) {
-                  // a drag just landed -- the pointerup's synthetic click
-                  // must not also fire a tap at the endpoint
-                  suppressClickRef.current = false;
-                  return;
-                }
-                event.stopPropagation();
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                send({ type: "click", x, y });
-                // clicking a non-focusable element blurs the takeover -- pull
-                // focus back so direct typing keeps flowing
-                dialogRef.current?.focus();
-              }}
-              onPointerDown={(event) => {
-                if (!isLead || event.button !== 0) {
-                  return;
-                }
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                dragStartRef.current = { x1: x, y1: y };
-                setDragTrail({ x1: x, y1: y, x, y });
-                event.currentTarget.setPointerCapture(event.pointerId);
-              }}
-              onPointerMove={(event) => {
-                if (!dragStartRef.current) {
-                  return;
-                }
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                setDragTrail({ x1: dragStartRef.current.x1, y1: dragStartRef.current.y1, x, y });
-              }}
-              onPointerUp={(event) => {
-                const start = dragStartRef.current;
-                dragStartRef.current = null;
-                setDragTrail(null);
-                if (!start || !isLead) {
-                  return;
-                }
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                if (Math.abs(x - start.x1) + Math.abs(y - start.y1) < 8) {
-                  return; // a tap -- the click handler owns it
-                }
-                suppressClickRef.current = true;
-                send({ type: "drag", x1: start.x1, y1: start.y1, x2: x, y2: y });
-              }}
-              role="presentation"
-              src={
-                shown.img
-                  ? `data:image/jpeg;base64,${shown.img}`
-                  : "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
-              }
-              {...(shown.img ? {} : { className: "invisible" })}
-            />
-            {!shown.img && <FramePlaceholder className="absolute inset-0 z-10" view={shown} />}
+            {frameFailed || !shown.img ? (
+              <FramePlaceholder className="h-full w-full" view={shown} />
+            ) : (
+              <InteractiveFrame
+                dialogRef={dialogRef}
+                dragStartRef={dragStartRef}
+                isLead={isLead}
+                send={send}
+                setDragTrail={setDragTrail}
+                shown={shown}
+                suppressClickRef={suppressClickRef}
+              />
+            )}
             {dragTrail ? (
               <svg
                 aria-hidden="true"

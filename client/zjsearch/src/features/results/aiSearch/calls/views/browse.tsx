@@ -13,13 +13,16 @@ import {
   TabStripView,
 } from "@/features/results/aiSearch/calls/views/browseParts.tsx";
 import { MultiSteps } from "@/features/results/aiSearch/calls/views/browseSteps.tsx";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 
 function BrowserShot({ call, t, hidePage }: ToolRowProps & { hidePage?: boolean }): ReactNode {
   const [zoom, setZoom] = useState(false);
+  // corrupt bytes route into the same volatile verdict as absent ones
+  const [failed, markFailed] = useImgFallback(call.img);
   const page = call.page;
   return (
     <div className="mt-1">
-      {call.img ? (
+      {call.img && !failed ? (
         <button
           aria-label={t("ai_browser_zoom")}
           className="mx-auto block w-fit cursor-zoom-in overflow-hidden rounded-xl border border-line bg-ink/5"
@@ -31,6 +34,7 @@ function BrowserShot({ call, t, hidePage }: ToolRowProps & { hidePage?: boolean 
           <img
             alt={page?.title || page?.url || t("ai_browser_act_screenshot")}
             className="h-40 w-auto object-contain"
+            onError={markFailed}
             src={call.img}
           />
         </button>

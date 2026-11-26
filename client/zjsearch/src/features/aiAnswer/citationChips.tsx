@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import type { AiSourceMeta } from "@/features/aiAnswer/aiOverview.ts";
 import { useHostFavicon } from "@/lib/favicons.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import { hostnameOf } from "@/lib/link.ts";
 
 /** The citation chips' shared hover-panel state: open on hover/focus with
@@ -75,7 +76,8 @@ function PanelFavicon({
 }) {
   const fetched = useHostFavicon(favicon ? null : hostnameOf(url));
   const src = favicon || fetched || "";
-  return src ? <img alt="" className={className} src={src} /> : fallback;
+  const [failed, markFailed] = useImgFallback(src);
+  return failed ? <>{fallback}</> : <img alt="" className={className} onError={markFailed} src={src} />;
 }
 
 /** Compact [n] citation chip: hovering opens a floating preview panel with

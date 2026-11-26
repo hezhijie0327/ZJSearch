@@ -4,6 +4,7 @@ import { FileText, Paperclip, X } from "lucide-react";
 import { useCallback, useState } from "react";
 import type { AiSearchAttachment } from "@/features/results/aiSearch/runModel.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 
 /**
  * The AI composer's paperclip: pick (or paste) images AND documents.
@@ -92,6 +93,24 @@ async function readBinaryDoc(file: File, mime: string): Promise<AiSearchAttachme
   return { kind: "file", mime, name: file.name, bytes: file.size, data: btoa(binary) };
 }
 
+import { ImageOff } from "lucide-react";
+
+function PickerThumb({ item, label }: { item: { data?: string; name?: string }; label: string }) {
+  const [failed, markFailed] = useImgFallback(item.data);
+  return failed ? (
+    <span className="grid size-9 place-items-center rounded-lg border border-line bg-surface-2/50 text-ink-3">
+      <ImageOff aria-hidden="true" className="size-4" />
+    </span>
+  ) : (
+    <img
+      alt={item.name ?? label}
+      className="size-9 rounded-lg border border-line object-cover"
+      onError={markFailed}
+      src={item.data}
+    />
+  );
+}
+
 export function AttachmentPicker({
   items,
   onChange,
@@ -143,11 +162,7 @@ export function AttachmentPicker({
       {items.map((item, index) => (
         <span className="relative shrink-0" key={index}>
           {item.kind === "image" ? (
-            <img
-              alt={item.name ?? t("attach_files")}
-              className="size-9 rounded-lg border border-line object-cover"
-              src={item.data}
-            />
+            <PickerThumb item={item} label={t("attach_files")} />
           ) : (
             <span
               className="grid size-9 place-items-center rounded-lg border border-line bg-surface-2/50 text-ink-2"

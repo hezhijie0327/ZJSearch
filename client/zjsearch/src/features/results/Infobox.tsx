@@ -1,14 +1,35 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { ExternalLink, Search } from "lucide-react";
+import { ExternalLink, ImageOff, Search } from "lucide-react";
 import { ClampReveal } from "@/components/ClampReveal.tsx";
 import { Tape } from "@/components/Tape.tsx";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import { newTabLinkProps } from "@/lib/link.ts";
 import { PILL } from "@/lib/styles.ts";
 import type { GlobalData, InfoboxData } from "@/lib/types.ts";
 
 /** Collapsed infobox preview height (the old max-h-72 clamp). */
 const INFOBOX_PREVIEW_PX = 288;
+
+/** The infobox image, the result-thumbnail way: a dead source URL swaps
+    to the failed glyph instead of a broken-image icon. */
+function InfoboxImage({ src, title }: { src: string; title: string }) {
+  const [failed, markFailed] = useImgFallback(src);
+  return failed ? (
+    <span className="grid aspect-square w-32 shrink-0 place-items-center rounded-xl border border-line bg-surface-2 sm:w-36 2xl:w-40">
+      <ImageOff aria-hidden="true" className="size-6 text-ink-3" />
+    </span>
+  ) : (
+    <img
+      alt={title}
+      className="aspect-square w-32 shrink-0 rounded-xl border border-line bg-surface-2 object-contain p-1 sm:w-36 2xl:w-40"
+      decoding="async"
+      loading="lazy"
+      onError={markFailed}
+      src={src}
+    />
+  );
+}
 
 export function Infobox({
   infobox,
@@ -28,15 +49,7 @@ export function Infobox({
       <Tape className="zjs-print-hide w-24 bg-accent-soft/80" seed={infobox.title} />
       <div className="rotate-[0.35deg] rounded-2xl border border-line bg-surface p-3">
         <div className={infobox.img_src ? "flex items-start gap-4" : ""}>
-          {infobox.img_src ? (
-            <img
-              alt={infobox.title}
-              className="aspect-square w-32 shrink-0 rounded-xl border border-line bg-surface-2 object-contain p-1 sm:w-36 2xl:w-40"
-              decoding="async"
-              loading="lazy"
-              src={infobox.img_src}
-            />
-          ) : null}
+          {infobox.img_src ? <InfoboxImage src={infobox.img_src} title={infobox.title} /> : null}
           <h2 className="min-w-0 font-serif text-xl font-semibold leading-tight tracking-tight text-ink" dir="auto">
             {infobox.title}
           </h2>

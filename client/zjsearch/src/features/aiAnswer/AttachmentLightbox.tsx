@@ -11,12 +11,33 @@
 // foreignObject -- the image would be bare boxes and arrows.  Inline SVG
 // zooms as vectors.
 
-import { ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageOff, Minus, Plus, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import { ICON_BTN } from "@/lib/styles.ts";
 import { useZoomPan, ZOOM_MAX, ZOOM_MIN } from "@/lib/zoomPan.ts";
+
+/** The lightbox image stage (per-item state): dead bytes swap to the
+    failed glyph -- an attachment record can be gone while its meta lives. */
+function AttachmentImg({ alt, src }: { alt?: string; src?: string }) {
+  const [failed, markFailed] = useImgFallback(src);
+  return failed ? (
+    <span className="grid max-h-[64dvh] max-w-[min(86vw,52rem)] place-items-center gap-2 self-stretch rounded-lg bg-surface-2/60 p-6 text-ink-3">
+      <ImageOff aria-hidden="true" className="size-8" />
+      <span className="text-xs">{alt}</span>
+    </span>
+  ) : (
+    <img
+      alt={alt}
+      className="max-h-[64dvh] max-w-[min(86vw,52rem)] select-none object-contain"
+      draggable={false}
+      onError={markFailed}
+      src={src}
+    />
+  );
+}
 
 export type LightboxItem =
   | { alt: string; kind: "img"; src: string }
@@ -176,12 +197,7 @@ export function Lightbox({
           {...contentProps}
         >
           {item.kind === "img" ? (
-            <img
-              alt={item.alt}
-              className="max-h-[64dvh] max-w-[min(86vw,52rem)] select-none object-contain"
-              draggable={false}
-              src={item.src}
-            />
+            <AttachmentImg alt={item.alt} src={item.src} />
           ) : (
             // Full width chain (fixed-width stage → wrapper w-full) gives the
             // svg's percentage width a definite base; mermaid's inline

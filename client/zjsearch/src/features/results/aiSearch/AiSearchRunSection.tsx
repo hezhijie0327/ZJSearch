@@ -68,6 +68,7 @@ import { useCopyToast } from "@/lib/clipboard.ts";
 import { buildAnswerMarkdown, buildReportMarkdown } from "@/lib/exporters.ts";
 import { formatDuration } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
+import { useImgFallback } from "@/lib/imgFallback.ts";
 import { holdBackTail, inlineMdHtml } from "@/lib/markdownParts.ts";
 import { animateScroll, scrollIntoViewAnimated } from "@/lib/motion.ts";
 import { printDocument } from "@/lib/print.ts";
@@ -1027,13 +1028,7 @@ function AiSearchRunSectionImpl({
                         }}
                         type="button"
                       >
-                        {attachment.data ? (
-                          <img alt={attachment.name ?? ""} className="h-16 w-16 object-cover" src={attachment.data} />
-                        ) : (
-                          <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-xs text-ink-3">
-                            {attachment.mime.replace("image/", "")}
-                          </span>
-                        )}
+                        <AttachmentThumb attachment={attachment} />
                       </button>
                     ),
                   )}
@@ -1099,6 +1094,19 @@ function AiSearchRunSectionImpl({
  * props are event handlers only, so they are deliberately excluded from
  * the comparison.
  */
+/** The attachment strip's image thumb (per-item state): dead bytes swap
+    to the mime glyph -- the strip's own empty shape, honest at 64px. */
+function AttachmentThumb({ attachment }: { attachment: { data?: string; mime: string; name?: string } }) {
+  const [failed, markFailed] = useImgFallback(attachment.data);
+  return failed ? (
+    <span className="grid h-16 w-16 place-items-center bg-surface-2/50 text-xs text-ink-3">
+      {attachment.mime.replace("image/", "")}
+    </span>
+  ) : (
+    <img alt={attachment.name ?? ""} className="h-16 w-16 object-cover" onError={markFailed} src={attachment.data} />
+  );
+}
+
 export const AiSearchRunSection = memo(
   AiSearchRunSectionImpl,
   (prev, next) =>
