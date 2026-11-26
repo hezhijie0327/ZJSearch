@@ -7,8 +7,8 @@
     these two ride the subscription because they are the always-open
     views. */
 
+import { sweepStaleRuns, type ThreadSummary } from "@/lib/kb/listings.ts";
 import { type MemoryRow, rowToMemory } from "@/lib/kb/memory.ts";
-import { sweepStaleRuns, type ThreadSummary } from "@/lib/kb/recall.ts";
 import { pg } from "@/lib/pg.ts";
 import type { Pg } from "@/lib/pgSchema.ts";
 

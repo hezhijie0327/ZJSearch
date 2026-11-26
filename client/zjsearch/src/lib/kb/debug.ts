@@ -10,9 +10,11 @@
     module body did). */
 
 import { loadRunEvents, loadThreadEvents } from "@/lib/kb/events.ts";
+import { listThreads } from "@/lib/kb/listings.ts";
 import { settleRun } from "@/lib/kb/projections.ts";
-import { graphSnapshot, listThreads, recallCorpus } from "@/lib/kb/recall.ts";
+import { recallCorpus } from "@/lib/kb/recall.ts";
 import { knowledgeStats } from "@/lib/kb/stats.ts";
+import { graphSnapshot } from "@/lib/kb/tags.ts";
 import { pgIsDegraded, pgQuery } from "@/lib/pg.ts";
 
 if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {

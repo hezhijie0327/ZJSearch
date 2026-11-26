@@ -7,8 +7,10 @@ import { PanelSearch } from "@/features/knowledge/PanelSearch.tsx";
 import { KNOWLEDGE_KIND_ICONS } from "@/features/knowledge/rowParts.tsx";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import { graphSnapshot, itemsByTag, type TagGraph } from "@/lib/kb/recall.ts";
+import { itemsByTag } from "@/lib/kb/listings.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
+import type { TagGraph } from "@/lib/kb/tags.ts";
+import { graphSnapshot } from "@/lib/kb/tags.ts";
 import { CHIP, CHIP_BTN, CHIP_HOVER } from "@/lib/styles.ts";
 
 /**

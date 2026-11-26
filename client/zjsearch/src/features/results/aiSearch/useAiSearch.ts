@@ -33,6 +33,7 @@ import {
   seedSeqCounter,
   seedSeqCounterFromStore,
 } from "@/lib/kb/events.ts";
+import { listEpisodes } from "@/lib/kb/listings.ts";
 import {
   forgetMemory,
   loadMemories,
@@ -43,7 +44,7 @@ import {
 } from "@/lib/kb/memory.ts";
 import { consolidatePrimer } from "@/lib/kb/primers.ts";
 import { archiveAttachments, archiveDocument, settleRun, startRun } from "@/lib/kb/projections.ts";
-import { listEpisodes, recallCorpus, recallPages } from "@/lib/kb/recall.ts";
+import { recallCorpus, recallPages } from "@/lib/kb/recall.ts";
 import { newThreadId } from "@/lib/kb/shared.ts";
 import type { RunKeepalive } from "@/lib/keepalive.ts";
 import type { AiCapability } from "@/lib/types.ts";

@@ -18,7 +18,7 @@ import { KNOWLEDGE_KIND_ICONS, META_CHIP, RowActions } from "@/features/knowledg
 import { useHostFavicon } from "@/lib/favicons.ts";
 import { formatDate } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
-import type { ThreadSummary } from "@/lib/kb/recall.ts";
+import type { ThreadSummary } from "@/lib/kb/listings.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import { newTabLinkProps } from "@/lib/link.ts";
 import { inlineMdHtml } from "@/lib/markdownParts.ts";

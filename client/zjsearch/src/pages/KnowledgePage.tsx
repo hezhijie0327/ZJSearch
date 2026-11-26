@@ -18,6 +18,7 @@ import { useOverlay } from "@/features/overlay/OverlayProvider.tsx";
 import { useDialogFocus } from "@/lib/dialogFocus.ts";
 import { useT } from "@/lib/i18n.ts";
 import { loadItemBody, loadThreadAnswer, type ThreadAnswer } from "@/lib/kb/inspector.ts";
+import { listReading, listThreadModes, type ThreadSummary } from "@/lib/kb/listings.ts";
 import { type StoreSubscription, subscribeMemories, subscribeThreads } from "@/lib/kb/live.ts";
 import {
   confirmProcedure,
@@ -28,7 +29,7 @@ import {
   updateMemory,
 } from "@/lib/kb/memory.ts";
 import { deleteItem, deleteSource, deleteThread, renameThread, resetAll } from "@/lib/kb/projections.ts";
-import { listReading, listThreadModes, searchKnowledge, type ThreadSummary } from "@/lib/kb/recall.ts";
+import { searchKnowledge } from "@/lib/kb/recall.ts";
 import { type KnowledgeItem, threadUrl } from "@/lib/kb/shared.ts";
 import { exportSnapshot, importSnapshot, SNAPSHOT_VERSION, totalImported } from "@/lib/kb/snapshot.ts";
 import { type KnowledgeStats, knowledgeStats } from "@/lib/kb/stats.ts";
