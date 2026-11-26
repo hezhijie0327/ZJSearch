@@ -439,7 +439,13 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     ride); every injected screenshot spends a per-run budget
     (`_MAX_MODEL_SHOTS` 8, viewport + close-ups together) — past it the
     settlement errors honestly instead of turning the context into an
-    image carousel.  The takeover's input forwarding mirrors the model's
+    image carousel.  The `decode` action reads 1D/2D barcodes the same
+    three ways (ref close-up / x-y-w-h region / viewport) and returns
+    the payload as FEED TEXT — vision cannot read code pixels, so a
+    QR's url reaches the model only through it (zxing-cpp, an optional
+    install: absent → an honest feed error); no image injection, no
+    shot budget.
+    The takeover's input forwarding mirrors the model's
     surface (click / wheel / type / key / back / forward / reload plus
     `drag` — the user's pointer gesture on the mirror maps to the same
     down→interpolated-move→up primitive, so slider challenges are

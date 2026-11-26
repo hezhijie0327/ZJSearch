@@ -89,20 +89,22 @@ canvas widget, a chart), and screenshot with x/y/w/h crops that
 VIEWPORT rectangle instead (the same coordinate space you click in) --
 for a corner, a caption strip, or a spread of widgets no single element
 wraps.  So aim before you shoot: ref for a thing, x/y/w/h for a place.
-QR-CODE LOGINS especially: when the wall shows a QR code, screenshot
-THE QR ELEMENT (its ref) BEFORE wait_user -- the close-up lands in the
-human's timeline row big enough to scan from the couch; a full-page
-shot leaves it thumbnail-sized.
+QR-CODE LOGINS especially: when the wall shows a QR code, DECODE it
+(decode with the code element's ref -- the payload lands in your feed
+as TEXT: a url you can open, an id you can quote; vision cannot read
+code pixels) and SCREENSHOT the same element BEFORE wait_user -- the
+close-up lands in the human's timeline row big enough to scan from the
+couch; a full-page shot leaves it thumbnail-sized.
 VISUAL-CAPTURE CHAINS: a click-then-look flow (open a dialog, switch a
-tab, then screenshot the panel) rides ONE multi -- [click <ref>, click
-<ref>, screenshot] -- never across rounds: browser-only rounds gather
+tab, then decode or screenshot the panel) rides ONE multi -- [click
+<ref>, click <ref>, decode <QR ref>] -- never across rounds: browser-only rounds gather
 no sources, and the round budget can end the run before a chain spread
-over several rounds ever reaches its screenshot.  A modal re-render
+over several rounds ever reaches its capture.  A modal re-render
 kills the refs the outline handed you: for in-modal buttons prefer
 viewport COORDINATE clicks (the geometry survives re-renders), and
 when a batch step dies to a stale ref, re-snapshot and resend the
-remaining chain with fresh refs -- a screenshot taken before the
-switch shows the previous state, not the panel you meant to capture.
+remaining chain with fresh refs -- a capture taken before the
+switch shows the previous state, not the panel you meant to read.
 SITE SKILLS: when you just cracked a site's way of doing things -- a
 sign-in flow, a captcha, the route to walled content, OR its on-site
 search pattern (the search URL shape, the filters and tags that
@@ -133,6 +135,7 @@ _ACTIONS = (
     "press",
     "scroll",
     "screenshot",
+    "decode",
     "hover",
     "select",
     "drag",
@@ -165,7 +168,10 @@ never opens it -- and fetch(download=<name>) converts a captured
 download instead.  snapshot re-lists the current page's refs; click / type /
 press / scroll (direction or text=) / hover (ref or x/y) / select /
 drag act by ref or viewport coordinates; screenshot shoots the
-viewport, an element close-up (ref), or a region (x/y/w/h); tab
+viewport, an element close-up (ref), or a region (x/y/w/h); decode
+reads 1D/2D barcodes (QR / EAN / DataMatrix...) the same three ways
+and returns the payload as feed text -- vision cannot read code
+pixels, so a QR's url only reaches you through decode; tab
 op=new/switch/close/list manages the page strip (refs are PER-PAGE;
 background tabs via activate=false are read later by index -- read
 accepts index and indexes for them); history op=back/forward/reload
@@ -196,7 +202,7 @@ patterns and the session craft live in the tool notes.""",
                 },
                 "ref": {
                     "type": "string",
-                    "description": 'click/type/hover/select/upload: the snapshot ref (e12; child-frame elements are f1e5).  hover also takes x/y INSTEAD of a ref (widget interiors); screenshot: capture that ONE element as a close-up instead of the whole viewport -- give ref OR x/y/w/h, not both.',
+                    "description": 'click/type/hover/select/upload: the snapshot ref (e12; child-frame elements are f1e5).  hover also takes x/y INSTEAD of a ref (widget interiors); screenshot: capture that ONE element as a close-up instead of the whole viewport -- give ref OR x/y/w/h, not both; decode: capture that ONE element and decode its barcode.',
                 },
                 "submit": {"type": "boolean", "description": "type: press Enter after filling."},
                 "key": {"type": "string", "description": "press: the key (Enter, Escape, Tab...)."},
@@ -255,17 +261,17 @@ patterns and the session craft live in the tool notes.""",
                 },
                 "x": {
                     "type": "integer",
-                    "description": "click: viewport X when clicking by COORDINATES instead of ref.  hover: viewport X when hovering by COORDINATES (widget interiors a ref cannot name).  screenshot: region left edge (with y/w/h).",
+                    "description": "click: viewport X when clicking by COORDINATES instead of ref.  hover: viewport X when hovering by COORDINATES (widget interiors a ref cannot name).  screenshot: region left edge (with y/w/h).  decode: region left edge (with y/w/h).",
                 },
                 "y": {
                     "type": "integer",
-                    "description": "click: viewport Y when clicking by COORDINATES instead of ref.  hover: viewport Y when hovering by COORDINATES.  screenshot: region top edge (with x/w/h).",
+                    "description": "click: viewport Y when clicking by COORDINATES instead of ref.  hover: viewport Y when hovering by COORDINATES.  screenshot: region top edge (with x/w/h).  decode: region top edge (with x/w/h).",
                 },
                 "w": {
                     "type": "integer",
-                    "description": "screenshot: region width (with x/y/h) -- crops that viewport rectangle instead of the full viewport.",
+                    "description": "screenshot: region width (with x/y/h) -- crops that viewport rectangle instead of the full viewport.  decode: region width (with x/y/h).",
                 },
-                "h": {"type": "integer", "description": "screenshot: region height (with x/y/w)."},
+                "h": {"type": "integer", "description": "screenshot: region height (with x/y/w).  decode: region height (with x/y/w)."},
                 "values": {
                     "type": "array",
                     "items": {"type": "string"},
@@ -300,7 +306,7 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
             out["timeout"] = max(5, min(int(args.get("timeout")), 40))
         except (TypeError, ValueError):
             pass
-    if action in ("click", "type", "screenshot", "hover", "select"):
+    if action in ("click", "type", "screenshot", "decode", "hover", "select"):
         out["ref"] = str(args.get("ref") or "").strip()[:16]
     if action == "hover":
         # the coordinate form: a widget interior a ref cannot name
@@ -309,7 +315,7 @@ def parse_browse_call(call: dict[str, t.Any]) -> dict[str, t.Any]:
                 out[key] = max(0, int(args.get(key)))
             except (TypeError, ValueError):
                 pass
-    if action == "screenshot":
+    if action in ("screenshot", "decode"):
         region = [args.get(k) for k in ("x", "y", "w", "h")]
         if any(v is not None for v in region):
             for key in ("x", "y", "w", "h"):

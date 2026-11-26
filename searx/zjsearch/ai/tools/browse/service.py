@@ -5,6 +5,8 @@ the wire: the mirror frames (the rail's live card), the settlement's
 page state / outline / screenshot (the timeline row's rendered result)
 and the screenshot's image injection (the model sees it next turn)."""
 
+import base64
+import io
 import time
 import typing as t
 from urllib.parse import urlsplit
@@ -15,6 +17,11 @@ from searx.zjsearch.ai.browser.session import (
     drain_downloads,
 )  # pylint: disable=unused-import; re-export
 from searx.zjsearch.ai.browser.session import SessionError
+
+try:  # the barcode decoder behind action=decode -- absent install degrades honestly
+    import zxingcpp
+except ImportError:  # pragma: no cover
+    zxingcpp = None
 
 _WAIT_POLL_S = 2.0
 """The wait_user frame cadence -- frames ARE the heartbeats that keep
@@ -333,6 +340,56 @@ def _act_screenshot(args: dict[str, t.Any], session_id: str) -> ActionResult:
             }
         ],
         image=f"data:image/jpeg;base64,{shot['img']}",
+        page={"url": str(shot["url"]), "title": str(shot["title"])},
+    )
+
+
+def _act_decode(args: dict[str, t.Any], session_id: str) -> ActionResult:
+    """Decode 1D/2D barcodes visible on the session page: a ref captures
+    that ONE element, x/y/w/h crops the region, otherwise the whole
+    viewport.  Vision cannot read code pixels -- this turns the code's
+    payload into feed TEXT the model can act on (a url to open, an id to
+    quote); no image injection, no shot budget.  QR-CODE LOGINS pair it
+    with screenshot: decode for the payload, screenshot for the human's
+    row."""
+    ref = str(args.get("ref") or "")
+    region = [args.get(k) for k in ("x", "y", "w", "h")]
+    if ref and any(v is not None for v in region):
+        raise SessionError("decode takes a ref (element close-up) OR a region (x y w h), not both")
+    if any(v is not None for v in region) and not all(v is not None for v in region):
+        raise SessionError("the decode region needs x, y, w and h together (viewport coordinates)")
+    if zxingcpp is None:
+        return ActionResult(
+            feed="error: barcode decoding is not installed on this deployment (pip install zxing-cpp)"
+        )
+    if ref:
+        shot = session.inspect_b64(session_id, ref, quality=90)
+    elif all(v is not None for v in region):
+        try:
+            x, y, w, h = (max(0, int(v)) for v in region)
+        except (TypeError, ValueError) as exc:
+            raise SessionError(f"the decode region needs integer x y w h: {exc}") from exc
+        shot = session.region_b64(session_id, x, y, w, h, quality=90)
+    else:
+        shot = session.screenshot_b64(session_id, quality=90)
+    from PIL import Image as PILImage  # pylint: disable=import-outside-toplevel
+
+    found = zxingcpp.read_barcodes(
+        PILImage.open(io.BytesIO(base64.b64decode(shot["img"]))),
+        try_invert=True,
+        try_downscale=True,
+    )
+    if not found:
+        return ActionResult(
+            feed="error: no barcode found in the capture -- aim closer"
+            " (decode with the code element's ref) or crop tighter (x y w h)"
+        )
+    if len(found) == 1:
+        feed = f"decoded {found[0].format.name}: {found[0].text}"
+    else:
+        feed = "decoded:\n" + "\n".join(f"- {b.format.name}: {b.text}" for b in found)
+    return ActionResult(
+        feed=feed,
         page={"url": str(shot["url"]), "title": str(shot["title"])},
     )
 
@@ -725,6 +782,7 @@ _ACTORS = {
     "press": _act_press,
     "scroll": _act_scroll,
     "screenshot": _act_screenshot,
+    "decode": _act_decode,
     "hover": _act_hover,
     "select": _act_select,
     "drag": _act_drag,

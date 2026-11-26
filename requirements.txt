@@ -71,3 +71,12 @@ camoufox[geoip]==0.5.9
 # announced coverage) omits the block, the clock itself keeps answering
 cnlunar==0.2.5
 chinesecalendar==1.12.1
+
+# zjsearch theme: the browse session's action=decode -- 1D/2D barcode
+# (QR / EAN / DataMatrix...) reading over the page captures
+# (searx/zjsearch/ai/tools/browse/service.py -- vision cannot read code
+# pixels, so a QR's url reaches the model only as decoded text).
+# zxing-cpp ships prebuilt wheels (Windows + manylinux); the decode
+# action is OPTIONAL: an absent install degrades to an honest feed
+# error, the session keeps working
+zxing-cpp==3.2.0
