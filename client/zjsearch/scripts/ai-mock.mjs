@@ -280,6 +280,29 @@ function gate(name, messages, res) {
     });
     return;
   }
+  if (name === "tag_normalize") {
+    // the knowledge base's tag normalization (POST /zjsearch/knowledge/tags
+    // upstream): the deterministic answer is the IDENTITY -- every row
+    // keeps its raw tags and the count matches the input exactly (the
+    // route 502s on any count mismatch)
+    const items = [];
+    for (const m of messages) {
+      const match = textOf(m).match(/<items>([\s\S]*?)<\/items>/);
+      if (!match) {
+        continue;
+      }
+      try {
+        for (const item of JSON.parse(match[1])) {
+          items.push({ tags: Array.isArray(item.tags) ? item.tags : [] });
+        }
+      } catch {
+        // unparsable batch: the empty items list 502s the route fail-open
+        // (raw tags stay), which is the honest verdict for corrupt input
+      }
+    }
+    jsonCompletion(res, { items });
+    return;
+  }
   // research_gate and anything unknown: research on (the fail-open verdict)
   jsonCompletion(res, { research: true });
 }
