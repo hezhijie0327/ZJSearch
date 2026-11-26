@@ -507,7 +507,8 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
     with a `factory()` + one line in `resolve()`.
   - **agent/** — the provider-agnostic agent ENGINE. `loop.py` is
     the phase machine (RESEARCH tool turns → WRITE turn; ask_user is a
-    first-class turn outcome) that YIELDS WIRE EVENTS; `wire.py` is the
+    first-class turn outcome) that YIELDS WIRE EVENTS; the settle's
+    usage tally lives in `tally.py`; `wire.py` is the
     CLOSED event set (open/think/say/calls/call/close/tasks/sources/
     answer/ask/gallery/related/memory/ctx/tags/usage/settle — a
     misspelled event raises; `ctx` is the storage-only resume
@@ -814,7 +815,9 @@ and boots `zjsearch.min.js`; React renders 100% of the interface.
   `related`/`memory`/`tags`/`usage` may follow (the late set — the
   follow-up box unlocks on settle, not on them).  A stream that dies
   before its first content event answers 502 (the route PRIMES the
-  stream before responding).
+  stream before responding).  The route's streaming machinery (the
+  Ndjson writer, the settle-tail replay gate, the clarify drain) lives
+  beside it in `search_stream.py`.
 
 - The client mirror is `features/results/aiSearch/useAiSearch.ts`: a
   dumb renderer over the timeline ops — steps mirror entries one-to-one
