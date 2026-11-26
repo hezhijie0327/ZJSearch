@@ -290,7 +290,7 @@ export function DocumentView({
               )
             ) : section.status === "failed" ? (
               <p className="mt-2 text-[13px] text-warning" dir="auto">
-                {t("ai_section_rewrite_note")}
+                {t("ai_section_failed_note")}
               </p>
             ) : null}
           </section>
