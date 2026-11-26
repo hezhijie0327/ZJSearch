@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Plug } from "lucide-react";
-import { CapList } from "@/components/CapList.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiToolMatch } from "@/features/results/aiSearch/runModel.ts";
+import { CapList } from "@/features/results/CapList.tsx";
 import { useT } from "@/lib/i18n.ts";
 
 /** The MCP view: the server-scoped tool name (the discovery call shows

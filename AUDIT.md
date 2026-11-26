@@ -373,7 +373,7 @@ rules and the shared-token inventory from AGENTS.md, covering:
    CROSS-PAGE only; features own real domains; lib modules are lowercase
    topics; zero default exports.  REUSE-FIRST: new list-shaped tool
    bodies compose the shared furniture (`calls/bodyParts.tsx`:
-   BodyRow/CopyValue/DirectoryGrid; `components/CapList.tsx`: the
+   BodyRow/CopyValue/DirectoryGrid; `features/results/CapList.tsx`: the
    cap-and-expand list) instead of re-typing grounds — run the
    orphan-export scan and the legacy-compat sweep each round
    (stored-legacy unions die with their era).

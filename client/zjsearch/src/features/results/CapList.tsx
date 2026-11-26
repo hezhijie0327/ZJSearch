@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { type ReactNode, useState } from "react";
-import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
+import { CAP_CHIP_CLASS, CapChip } from "@/features/results/CapChip.tsx";
 
 /**
  * The CAP-AND-EXPAND list, ONE component: the head items render, the

@@ -16,9 +16,9 @@ import {
   User,
 } from "lucide-react";
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from "react";
-import { CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { useCacheUrl } from "@/features/results/CacheUrlProvider.tsx";
+import { CapChip } from "@/features/results/CapChip.tsx";
 import { formatDate, formatLength, formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 import { newTabLinkProps } from "@/lib/link.ts";

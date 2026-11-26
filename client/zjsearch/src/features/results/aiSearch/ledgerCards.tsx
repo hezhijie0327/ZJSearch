@@ -2,10 +2,10 @@
 
 import { Check, CircleAlert, CircleHelp, NotebookPen, Swords } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import type { LedgerFact, LedgerGap } from "@/features/results/aiSearch/ledger.ts";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
+import { CAP_CHIP_CLASS, CapChip } from "@/features/results/CapChip.tsx";
 import { Snippet } from "@/features/results/cardParts.tsx";
 import { useT } from "@/lib/i18n.ts";
 import { inlineMdHtml } from "@/lib/markdownParts.ts";

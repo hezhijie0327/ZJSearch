@@ -2,11 +2,11 @@
 
 import { CircleDollarSign, DatabaseSearch } from "lucide-react";
 import { useState } from "react";
-import { CAP_CHIP_CLASS, CapChip } from "@/components/CapChip.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { DirectoryGrid } from "@/features/results/aiSearch/calls/bodyParts.tsx";
 import type { ToolView } from "@/features/results/aiSearch/calls/types.ts";
 import type { AiEngineInventory } from "@/features/results/aiSearch/runModel.ts";
+import { CAP_CHIP_CLASS, CapChip } from "@/features/results/CapChip.tsx";
 import { useT } from "@/lib/i18n.ts";
 
 const BANG_CELLS_CAP = 8;

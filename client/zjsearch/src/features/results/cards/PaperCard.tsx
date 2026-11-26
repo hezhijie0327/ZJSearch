@@ -2,7 +2,7 @@
 
 import { Activity, BookOpen, Calendar, ExternalLink, FileText, Fingerprint, Quote, User } from "lucide-react";
 import type { ReactNode } from "react";
-import { CapChip } from "@/components/CapChip.tsx";
+import { CapChip } from "@/features/results/CapChip.tsx";
 import {
   type CardProps,
   EnginesLine,

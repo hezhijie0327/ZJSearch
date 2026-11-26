@@ -2,10 +2,10 @@
 
 import { ChevronDown, CircleHelp, CornerDownRight, Scale } from "lucide-react";
 import { useState } from "react";
-import { CapList } from "@/components/CapList.tsx";
 import { Collapse } from "@/components/Collapse.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiDecision } from "@/features/results/aiSearch/runModel.ts";
+import { CapList } from "@/features/results/CapList.tsx";
 import { formatMs, formatScore } from "@/lib/format.ts";
 import { useT } from "@/lib/i18n.ts";
 

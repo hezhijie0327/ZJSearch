@@ -2,10 +2,10 @@
 
 import { Archive, Award, BookMarked, BookOpen, Bot as BotGlyph, Globe, Server } from "lucide-react";
 import { useState } from "react";
-import { CapChip } from "@/components/CapChip.tsx";
-import { CapList } from "@/components/CapList.tsx";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import type { AiSearchSource } from "@/features/results/aiSearch/useAiSearch.ts";
+import { CapChip } from "@/features/results/CapChip.tsx";
+import { CapList } from "@/features/results/CapList.tsx";
 import { Snippet, Thumb } from "@/features/results/cardParts.tsx";
 import { categoryLabel } from "@/lib/categories.ts";
 import { formatScore } from "@/lib/format.ts";

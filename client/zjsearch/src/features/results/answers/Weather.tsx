@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { MapPin } from "lucide-react";
-import { CapChip } from "@/components/CapChip.tsx";
+import { CapChip } from "@/features/results/CapChip.tsx";
 import { capitalize } from "@/lib/format.ts";
 import { type StringKey, type Translate, translateFor, useLocale, useT } from "@/lib/i18n.ts";
 import { CHIP, CHIP_HOVER, SCROLLBAR_NONE } from "@/lib/styles.ts";
