@@ -312,6 +312,14 @@ def _run(coro: t.Any, timeout: float = 45.0) -> t.Any:
             # next action relaunches (the engine's read path heals the
             # same way) -- without this every later action fails forever
             drop_context()
+        elif "ns_error_failure" in msg:
+            # firefox's generic goto failure, observed PERSISTENT for one
+            # origin on an otherwise-alive context (a wedged renderer the
+            # next goto keeps hitting -- every retry fails until the
+            # process restarts): reset the context so the retry lands on
+            # a fresh one -- one failed call against a site that would
+            # otherwise stay broken for the rest of the run
+            drop_context()
         raise SessionError(
             f"browser session failed: {type(exc).__name__}: {_brief(exc)}"
         ) from exc
