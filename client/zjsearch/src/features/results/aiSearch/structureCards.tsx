@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import type { LucideIcon } from "lucide-react";
-import { AlignLeft, Check, ChevronDown, CircleAlert, ListTree, LoaderCircle, RefreshCw, Trash2, X } from "lucide-react";
+import { AlignLeft, Check, ChevronDown, CircleAlert, ListTree, LoaderCircle, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { RailHeader } from "@/features/results/aiSearch/rail/RailSection.tsx";
 import {
@@ -451,17 +451,7 @@ function StructureFace({ deck, direct, templateName }: { deck: boolean; direct?:
     The one exception is a FAILED section's row: its rewrite chip is the
     repair affordance (the section re-streams through the run host's
     rewrite lane), not a structure change. */
-export function ActiveStructureCard({
-  deck,
-  outline,
-  onRewrite,
-  rewritingId,
-}: {
-  deck: boolean;
-  outline: AiSearchOutline;
-  onRewrite?: (sectionId: string) => void;
-  rewritingId?: string | null;
-}) {
+export function ActiveStructureCard({ deck, outline }: { deck: boolean; outline: AiSearchOutline }) {
   const t = useT();
   if (outline.sections.length === 0) {
     return null;
@@ -474,7 +464,6 @@ export function ActiveStructureCard({
       </div>
       <ol className="mt-2 space-y-1 px-1">
         {outline.sections.map((section, index) => {
-          const busy = rewritingId === section.id;
           return (
             <li className="flex items-start gap-2 text-[13px]" key={section.id || index}>
               <span className="w-3 shrink-0 pt-0.5 text-center font-mono text-xs tabular-nums text-ink-3">
@@ -486,7 +475,7 @@ export function ActiveStructureCard({
               <span className="grid w-3.5 shrink-0 place-items-center pt-0.5">
                 {section.status === "done" ? (
                   <Check aria-hidden="true" className="size-3 text-ok" />
-                ) : section.status === "writing" || busy ? (
+                ) : section.status === "writing" ? (
                   <LoaderCircle aria-hidden="true" className="size-3 animate-spin text-accent" />
                 ) : section.status === "failed" ? (
                   <CircleAlert aria-hidden="true" className="size-3 text-warning" />
@@ -494,21 +483,6 @@ export function ActiveStructureCard({
                   <span aria-hidden="true" className="size-1.5 rounded-full bg-line" />
                 )}
               </span>
-              {section.status === "failed" && onRewrite ? (
-                <button
-                  aria-label={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
-                  className="-mt-0.5 -me-1 grid size-6 shrink-0 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface-2 hover:text-accent"
-                  onClick={() => onRewrite(section.id)}
-                  title={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
-                  type="button"
-                >
-                  {busy ? (
-                    <LoaderCircle aria-hidden="true" className="size-3 animate-spin" />
-                  ) : (
-                    <RefreshCw aria-hidden="true" className="size-3" />
-                  )}
-                </button>
-              ) : null}
             </li>
           );
         })}

@@ -12,7 +12,7 @@
  *
  * | surface | scenario |
  * |---|---|
- * | attachments · depth probe · outline gate · outline/section with reasoning · unwritten sections at the settle | `report` |
+ * | attachments · depth probe · outline gate · the write boundary's outline announce · a single-write streamed answer | `report` |
  * | search_web ok / error / duplicate · list_engines inventory · search_tools · recall_history · update_plan · findings (superseded / conflict) · gap · plan sources · a task left pending at the settle | `search` |
  * | calculate · clock · calendar ×4 · evaluate · build_table ok + error + artifact · inspect_image · ask_user recorded · memory ×4 · mcp · decision card (5 purposes) | `tools` |
  * | background tabs · multi-index read (sections + a failed tab) · viewport · open error | `batch-read` |
@@ -20,8 +20,7 @@
  * | wait_user window · aimed screenshots · hover / select / drag / type · press · history · wheel scroll · re-snapshot | `browser` |
  * | deck born as deck (slide markdown) | `deck` |
  * | the reader's deck pick (steer notice + deck outline on a report-born run) | `shape-flip` |
- * | set_deliverable flip (balanced → report) | `model-flip` |
- * | a section cut mid-sentence → rewrite after the settle | `rewrite` |
+ * | set_deliverable flip (balanced → single-write report) | `model-flip` |
  * | gallery placeholder · stalled halt · title · memory row · tags · gates usage | `panorama` |
  * | steer: boundary guide · preempt · undelivered | `steer` |
  * | subagents: delegation row · folded child timeline · browser frame · compaction · follow-up | `sub` |
@@ -46,7 +45,6 @@ import { MODEL_FLIP_STAGE } from "@/features/results/aiSearch/debug/modelFlip.ts
 import { PAID_STAGE } from "@/features/results/aiSearch/debug/paid.ts";
 import { PANORAMA_STAGE } from "@/features/results/aiSearch/debug/panorama.ts";
 import { REPORT_STAGE } from "@/features/results/aiSearch/debug/report.ts";
-import { REWRITE_STAGE } from "@/features/results/aiSearch/debug/rewrite.ts";
 import { SEARCH_STAGE } from "@/features/results/aiSearch/debug/search.ts";
 import { SHAPE_FLIP_STAGE } from "@/features/results/aiSearch/debug/shapeFlip.ts";
 import { STEER_STAGE } from "@/features/results/aiSearch/debug/steer.ts";
@@ -66,7 +64,6 @@ export const DEBUG_SCENARIOS: DebugScenario[] = [
   DECK_STAGE,
   SHAPE_FLIP_STAGE,
   MODEL_FLIP_STAGE,
-  REWRITE_STAGE,
   PANORAMA_STAGE,
   STEER_STAGE,
   SUB_STAGE,

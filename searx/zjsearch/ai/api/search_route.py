@@ -56,7 +56,6 @@ from searx.zjsearch.ai.runs.search.state import (
     state_block,
 )
 from searx.zjsearch.ai.runs.report import outline as report_outline
-from searx.zjsearch.ai.runs.report import synth as report_synth
 from searx.zjsearch.ai.runs import attachments as uploads
 from searx.zjsearch.ai.runs import host as run_host
 from searx.zjsearch.ai.runs import journal as run_journal
@@ -796,34 +795,56 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         state.judgments.append(depth_probe_entry)
     past_ref: list[dict[str, t.Any]] = []
 
+    # the single write's document cells: the boundary's shape resolution
+    # lands here -- the loop calls the resolver BEFORE the writer builds,
+    # so ``write()`` reads a settled structure and ``write_intro`` yields
+    # the outline's announce at the position the old synthesizer's first
+    # snapshot occupied
+    write_structure: list[dict[str, t.Any] | None] = []
+    write_intro_events: list[dict[str, t.Any]] = []
+
+    def _outline_announce(o: dict[str, t.Any], deck: bool) -> dict[str, t.Any]:
+        snap: dict[str, t.Any] = {
+            "e": "outline",
+            "title": o["title"],
+            "subtitle": o["subtitle"],
+            "sections": [{**s, "status": "pending"} for s in o["sections"]],
+        }
+        name = str(o.get("template") or "").strip()
+        if name:
+            snap["template"] = name
+        if deck:
+            snap["shape"] = "deck"
+        return snap
+
     def synthesizer(tally: t.Any) -> t.Iterator[dict[str, t.Any]] | None:
         """The write boundary's SHAPE RESOLVER -- the flip signals
         consumed ONCE here (the temporal rule: the LAST explicit intent
         wins -- a pick the endpoint made after another simply replaced
         it in the ControlBox, so co-pending signals read in the order
-        template > direct > the rest):
+        template > direct > the rest).  The document is ONE write turn:
+        the resolution stashes the write STRUCTURE (dialect + skeleton)
+        for the writer prompt and the outline's announce event for
+        ``write_intro``, and ALWAYS defers to the single write.
 
         1. the reader's DIRECT pick with no later template pending --
            every deliverable signal dies with the intent: the route
            outline (the structure the request brought) exactly like the
-           model's minted skeleton -- the boundary defers to the single
-           write;
-        2. the reader's template pick -- re-minted right here over ANY
-           prior structure (the same adaptation gate the route-time
-           outline used), in the boundary-resolved dialect;
+           model's minted skeleton -- the run stays a plain answer;
+        2. the reader's template pick -- its OWN sections are the
+           binding skeleton (the boundary re-mint gate retired with the
+           per-section synthesis: one more LLM call saved -- the writer
+           adapts the wording itself);
         3. the route-time outline -- the rail's dialect pick rebinds it;
         4. the ``set_deliverable`` tool's already-minted skeleton (the
            model's flip; the reader's picks above outrank it);
-        5. the reader's shape pick on an outline-less run -- a free
-           outline minted in the picked dialect.
+        5. the reader's shape pick on an outline-less run -- the picked
+           dialect alone (no skeleton minted; the writer structures the
+           document itself).
 
-        ``None`` = no signal claimed the boundary -- the run defers to
-        the single write.  A template whose adaptation gate failed
-        defers too (the reader asked for THAT structure; a different
-        skeleton would be a lie).  Consumed control channels stay
-        consumed (one resolution per run) -- the delegating
-        ``make_synthesizer`` calls see empty lanes and rebind nothing.
-        """
+        Consumed control channels stay consumed (one resolution per
+        run)."""
+        _ = tally
         raw_pick = handle.control.take_shape() if handle is not None else None
         direct_pick = raw_pick == "direct"
         template_pick = handle.control.take_template() if handle is not None else None
@@ -831,56 +852,42 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         shape_pick = None if raw_pick in (None, "direct") else raw_pick == "deck"
         if direct_pick and template_pick is None:
             return None
-        route = outline is not None
+        doc: dict[str, t.Any] | None = None
         if template_pick is not None:
-            eff_deck = (
-                shape_pick if shape_pick is not None else (deck_requested if route else bool((flip or {}).get("deck")))
-            )
-            eff_outline: dict[str, t.Any] | None = report_outline.build_outline_from_template(
-                cfg,
-                research_q,
-                lang,
-                clarifications if clarify_state == "answered" else "",
-                template_pick,
-                account=state.account,
-                attachments=outline_attachments,
-                prior_topics=prior_topics,
-                deck=eff_deck,
-                tz=user_tz,
-            )
-        elif route:
-            eff_outline = outline
-            eff_deck = shape_pick if shape_pick is not None else deck_requested
+            deck = shape_pick if shape_pick is not None else deck_requested
+            skeleton = {
+                "title": research_q[:80],
+                "subtitle": "",
+                "template": str(template_pick.get("name") or "template"),
+                "sections": [
+                    {
+                        "id": f"s{i + 1}",
+                        "title": str(s.get("title") or "").strip()[:120],
+                        "brief": str(s.get("brief") or "").strip()[:300],
+                        "key_questions": [str(q).strip()[:200] for q in (s.get("key_questions") or [])][:3],
+                        "status": "pending",
+                    }
+                    for i, s in enumerate(template_pick.get("sections") or [])
+                    if str(s.get("title") or "").strip()
+                ],
+            }
+            doc = {"deck": deck, "outline": skeleton, "template": template_pick}
+            write_intro_events.append(_outline_announce(skeleton, deck))
+        elif outline is not None:
+            deck = shape_pick if shape_pick is not None else deck_requested
+            doc = {"deck": deck, "outline": outline, "template": None}
+            write_intro_events.append(_outline_announce(outline, deck))
         elif flip is not None:
-            eff_outline = flip.get("outline")
-            eff_deck = shape_pick if shape_pick is not None else bool((flip or {}).get("deck"))
+            flip_outline = (flip or {}).get("outline")
+            deck = shape_pick if shape_pick is not None else bool((flip or {}).get("deck"))
+            doc = {"deck": deck, "outline": flip_outline, "template": None}
+            if flip_outline:
+                write_intro_events.append(_outline_announce(flip_outline, deck))
         elif shape_pick is not None:
-            eff_deck = shape_pick
-            eff_outline = report_outline.build_outline(
-                cfg,
-                research_q,
-                lang,
-                clarifications if clarify_state == "answered" else "",
-                account=state.account,
-                attachments=outline_attachments,
-                prior_topics=prior_topics,
-                deck=shape_pick,
-                tz=user_tz,
-            )
-        else:
-            return None
-        if eff_outline is None:
-            return None
-        real = report_synth.make_synthesizer(
-            cfg,
-            state,
-            eff_outline,
-            research_q,
-            lang,
-            deck=eff_deck,
-            handle=handle,
-        )
-        return real(tally)
+            doc = {"deck": shape_pick, "outline": None, "template": None}
+        if doc is not None:
+            write_structure.append(doc)
+        return None
 
     def assign_past_sources() -> list[dict[str, t.Any]]:
         """Number the recalled past-research sources AFTER the live feed's
@@ -925,6 +932,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
                 if m.get("kind") == "procedure" and str(m.get("content") or "").strip()
             ],
             tz=user_tz,
+            structure=write_structure[0] if write_structure else None,
         )
         if state.image_archive:
             # the shots the researcher took ride into the write turn too:
@@ -1102,6 +1110,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         synthesizer=synthesizer,
         writer=write,
         writer_sources=assign_past_sources,
+        write_intro=lambda: list(write_intro_events),
         gallery_validator=gallery_validator,
         control=handle,
         entry_base=resume["entry_base"] if resume else 0,

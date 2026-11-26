@@ -176,8 +176,8 @@ class ControlBox:
 
     def set_template(self, template: dict) -> None:
         """The rail's output-structure control: one PENDING template for
-        the write boundary -- the synthesizer re-mints the outline from it
-        before the first section streams.  The latest write wins (a second
+        the write boundary -- the shape resolver hands its sections to
+        the single writer as the binding skeleton.  The latest write wins (a second
         set before the boundary simply replaces it)."""
         with self._lock:
             self._pending_template = template
@@ -261,15 +261,6 @@ class RunHandle:
         # the route skeleton for the remaining rounds.  Wired by the
         # search route; fail-open (directives() guards it).
         self.on_steer: t.Callable[[dict], None] | None = None
-        # the report synthesizer's SECTION REWRITE lane (synth.py registers
-        # the entry when the write phase opens): ``callable(section_id)``
-        # re-streams one settled section against the run's own write
-        # materials, serving ``POST /zjsearch/ask/run/section`` for the
-        # handle's terminal TTL.  ``None`` = not a synthesizer run (or the
-        # write phase never opened).  The lock serializes rewrites -- the
-        # written/status maps they mutate are single-writer state.
-        self.section_rewrite: t.Callable[[str], t.Iterator[dict[str, t.Any]]] | None = None
-        self.rewrite_lock = threading.Lock()
         self._lock = threading.Lock()
         self._lines: list[str] = []
         self._subs: dict[int, "queue.Queue[str]"] = {}

@@ -146,9 +146,9 @@ export interface FoldFx {
 /** The wire-event fold: one timeline operation in, the next state out.
     Exported for the knowledge page's replay (see the module doc).
     ``targetRunNo`` retargets the fold at THAT run instead of the thread's
-    last -- the section rewrite's tail (outline/section events for a run
-    that is no longer the last) folds into its own run; everything else
-    (the live stream, replays) omits it and keeps the last-run contract. */
+    last -- outline/section events for a run that is no longer the last
+    fold into their own run; everything else (the live stream, replays)
+    omits it and keeps the last-run contract. */
 export function applyEvent(
   core: Core,
   event: Record<string, unknown>,
@@ -929,12 +929,11 @@ export function applyEvent(
         runs[lastIdx] = { ...run, sectionThink: { ...(run.sectionThink ?? {}), [id]: think } };
         return { ...core, runs };
       }
-      // the wire's RESET contract (synth.py): a stream whose first delta
-      // carries `reset: true` REPLACES whatever the section already
-      // buffers -- the citation gate's rewrite, and the CONTINUE's
-      // re-synthesis replaying into a run whose earlier attempt had
-      // already written the section (the old append-only fold let the
-      // rewrite duplicate every rewritten section).
+      // the wire's RESET contract: a stream whose first delta carries
+      // `reset: true` REPLACES whatever the section already buffers.
+      // No producer remains (the per-section synthesis retired), but
+      // stored records' replays still carry the mark -- the fold keeps
+      // honoring it.
       const replace = event.reset === true;
       const prev = run.sections?.[id] ?? "";
       const sections = { ...(run.sections ?? {}), [id]: replace ? delta : prev + delta };
@@ -1072,15 +1071,17 @@ export function applyEvent(
       if (next.outline) {
         // THE SPINNING-FOREVER GUARD: outline statuses ride snapshots, and
         // a section whose stream died mid-write may never see its terminal
-        // snapshot (a crashed synthesizer, a dead process, a replay whose
-        // tail is simply absent).  A settle with a section still
+        // snapshot (a dead process, a replay whose tail is simply absent).
+        // A SECTION-STREAMED record's settle with a section still
         // pending/writing means that section is DEAD -- coalesce it to
-        // failed so the TOC tells the truth and the rewrite chip has its
-        // target (a later rewrite's own snapshots re-mint the real state).
+        // failed so the TOC tells the truth.  A single-write document (no
+        // section events at all -- the unified architecture) delivered its
+        // whole outline as ONE answer: pending coalesces to done.
+        const streamed = Object.keys(run.sections ?? {}).length > 0;
         const sections = next.outline.sections.map((section) =>
           section.status === "done" || section.status === "failed"
             ? section
-            : { ...section, status: "failed" as const },
+            : { ...section, status: streamed ? ("failed" as const) : ("done" as const) },
         );
         next = { ...next, outline: { ...next.outline, sections } };
       }

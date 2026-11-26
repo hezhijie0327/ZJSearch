@@ -49,8 +49,7 @@ def build_outline(  # pylint: disable=too-many-arguments, too-many-positional-ar
 ) -> dict[str, t.Any] | None:
     """The skeleton: ``{title, subtitle, sections: [{id, title, brief,
     key_questions, status}], entities: [{name, why}]}`` -- ids minted
-    here (``s1``...), the server-synthesized ``summary`` / ``method``
-    sections are NOT part of the gate's contract.  ``attachments`` ride
+    here (``s1``...).  ``attachments`` ride
     as heads (they may bind the deliverable's structure);
     ``prior_topics`` is the KNOWLEDGE BASE's metadata recall (titles
     only -- the red line: never content).  ``deck`` switches the gate's

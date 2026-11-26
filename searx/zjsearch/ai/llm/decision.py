@@ -173,10 +173,6 @@ FEATURE_DEFAULTS: dict[str, dict[str, t.Any]] = {
     # (contradicted?) -- small models read it reliably, the double
     # negative did not survive the live probe -- so a HIGH score flags.
     "claim_check": {"enabled": True, "max_facts": 6, "contradict_min": 0.55},
-    # the report SYNTHESIZE's per-section citation spot check (runs/search/
-    # report/synth.py): sampled claims judged against their sources, a
-    # failing claim earns one targeted rewrite BEFORE delivery
-    "citation_gate": {"enabled": True, "support_min": 0.5},
     "memory_dedup": {
         "enabled": True,
         # the cosine above which a new fact "reads as" a stored one -- the

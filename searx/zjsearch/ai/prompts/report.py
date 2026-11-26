@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
-"""The REPORT output shape's prompts: the outline gate, the per-section
-synthesis and the executive summary.  The report mode writes the answer
-DOCUMENT section by section -- each section one completion over ITS
-packed context -- so the writer's single-turn contract does not apply;
-these blocks are that contract instead.
+"""The REPORT output shape's prompts: the outline gate and the
+whole-document writer contract.  The document is ONE write turn on the
+shared loop -- the outline (template or gate) rides the writer prompt as
+the binding skeleton; there is no per-section synthesis anymore.
 
-The deck (:py:mod:`prompts.deck`) shares the report run's ENTIRE
-machinery and composes its own systems from the fragments defined HERE
-(the outline editor's role line, the deliverable-entities paragraph, the
-JSON response contract, the section system's spine stack) -- one edit
+The deck (:py:mod:`prompts.deck`) shares the report run's outline gate
+fragments defined HERE (the outline editor's role line, the
+deliverable-entities paragraph, the JSON response contract) -- one edit
 lands on both documents."""
 
 from searx.zjsearch.ai.prompts import spine
@@ -71,8 +69,7 @@ name the subject matter), a one-sentence brief of what the section must
 establish, and 1-3 key_questions the section's evidence must answer.
 Order the sections the way a decision-maker reads: the landscape first,
 mechanics/actors in the middle, implications and risks last.  Do NOT
-include an executive summary, a methodology note or an appendix -- the
-desk adds those itself."""
+include an executive summary, a methodology note or an appendix."""
 
 OUTLINE_SYSTEM = (
     f"{OUTLINE_EDITOR_LINE}  {_OUTLINE_FREE}"
@@ -103,83 +100,28 @@ TEMPLATE_ADAPT_SYSTEM = (
     + _OUTLINE_RESPONSE_CONTRACT
 )
 
-REPORT_SHAPE = spine.block(
+REPORT_DOCUMENT_SHAPE = spine.block(
     "shape",
     """\
-    You are writing ONE section of a research report -- not a chat answer.
-    - Open the section with 1-2 lead sentences that state what the section
-      establishes; then develop the substance in short paragraphs and
-      markdown tables.
+    You are writing a COMPLETE RESEARCH REPORT (a document deliverable)
+    in ONE completion -- not a chat answer.
+    - The <document_structure> block names the skeleton: open with the
+      report's title as a "# " H1 line, then write EVERY listed section
+      as a "## " heading in the given order, using the section titles as
+      given and covering what each brief (and its key questions) demands.
+      Never add a summary, methodology or appendix section.
+    - Open the document with 1-2 lead sentences stating what the report
+      establishes; each section then develops its substance in short
+      paragraphs, markdown tables and lists.  Use "###" sub-headings when
+      a section has 2+ distinct facets.
     - Match the form to the content: entity x metric matrices go into
       markdown tables; numeric series (quarterly figures, market share,
       capacity counts) read better as a ```mermaid xychart bar or line
-      chart than as prose; the section's key verdict or sharpest risk
+      chart than as prose; a section's key verdict or sharpest risk
       becomes a [!WARNING] / [!IMPORTANT] callout when it must not be
       missed.
-    - Use "###" sub-headings when the section has 2+ distinct facets.
-    - Numbers DENSELY: every load-bearing figure carries its [n] citation
-      right after the sentence or table row it supports.  A matrix of
-      entities x metrics belongs in a markdown table, one [n] per
-      load-bearing cell or row.
+    - Numbers DENSELY: every load-bearing figure or claim carries its [n]
+      citation right after the sentence or table row it supports.
     - If key material is missing from the provided sources, say so in one
-      clause and move on -- never pad, never invent a number.
-    - NO document-level title, NO "## " section heading of your own (the
-      section's heading is rendered by the document), NO preamble like
-      "In this section".""",
+      clause and move on -- never pad, never invent a number.""",
 )
-
-_SECTION_ROLE = 'You write one section of a research report, grounded in the numbered sources of THIS run.'
-
-
-def section_system(role: str, surface: str, shape: str, tz: str | None = None, with_surface: bool = True) -> str:
-    """The per-section synthesizer's system prompt, composed from the
-    SHARED spine fragments -- a hand-copied <citations> here once drifted
-    away from the citation grammar (the placement examples and the [*]
-    escape went missing); every document surface speaks the same
-    contract, stacked in one order.  The deck's chapter system rides the
-    identical stack with its own role, discipline surface and dialect --
-    and ``with_surface=False``, because the generic markdown surface
-    re-teaches exactly what the deck dialect's FORBIDDEN list retires
-    (footnotes, images); the dialect must have the last word."""
-    lines = [
-        role,
-        spine.today_line(tz),
-        spine.citation_rules(),
-        spine.citation_discipline(surface),
-        spine.figures_rule(),
-        shape,
-    ]
-    if with_surface:
-        lines.append(spine.markdown_surface())
-    return "\n".join(lines)
-
-
-def report_section_system(tz: str | None = None) -> str:
-    """The report section stack, dated at CALL time -- a module-level
-    constant once baked today_line(None) at import: the date went stale
-    at midnight AND duplicated the fresh block the synthesizer prepends."""
-    return section_system(_SECTION_ROLE, "report", REPORT_SHAPE, tz)
-
-
-SUMMARY_SYSTEM = """\
-You write the EXECUTIVE SUMMARY of a finished research report: 3-5
-bold-led findings ("**Bottom line.** ..." -- a BOLD short label, a
-period, then the finding), each 1-3 sentences, each carrying its [n]
-citations, followed by one short synthesis paragraph that names the core
-logic tying the findings together.  Synthesize -- do not retell section
-by section; the reader has not read them yet.  Ground every statement in
-the sections' own citations, and write every label in the report's
-language."""
-
-
-def summary_user(q: str, digest: str) -> str:
-    """The executive summary's user turn (the tags via :func:`spine.block`)."""
-    return (
-        spine.block("question", q)
-        + "\n"
-        + spine.block("written_sections", digest)
-        + "\nWrite the executive summary in the report's language."
-    )
-
-
-CITATION_GATE_INSTRUCTIONS = "For each numbered claim, judge whether the cited source's material actually supports it (a source that merely mentions the topic does NOT support a specific figure)."

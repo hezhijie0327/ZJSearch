@@ -13,7 +13,9 @@ Overview shares verbatim); the run-level honesty notes live in
 
 import typing as t
 
+from searx.zjsearch.ai.prompts import deck as deck_prompts
 from searx.zjsearch.ai.prompts import notes
+from searx.zjsearch.ai.prompts import report as report_prompts
 from searx.zjsearch.ai.prompts import spine as shared
 from searx.zjsearch.ai.runs.search.context import _fit_context, writer_context_max
 
@@ -69,6 +71,35 @@ the group renders empty).  At most two groups per answer.
 </answer_images>"""
 
 
+def _document_structure(structure: dict[str, t.Any]) -> str:
+    """The boundary-resolved skeleton as a binding block: the outline's
+    sections (title + brief + key questions) -- the one-write replacement
+    for the per-section synthesis' packed contexts.  The
+    <document_structure> block is pure data; the shape contract teaches
+    how to follow it."""
+    o = structure.get("outline") or {}
+    rows: list[str] = []
+    for s in o.get("sections") or []:
+        line = f"- {s.get('title')}"
+        brief = str(s.get("brief") or "").strip()
+        kq = [str(q).strip() for q in (s.get("key_questions") or []) if str(q).strip()]
+        if brief:
+            line += f" -- {brief}"
+        if kq:
+            line += " (" + "; ".join(kq) + ")"
+        rows.append(line)
+    if not rows:
+        return ""
+    head = f"Title: {o.get('title')}"
+    sub = str(o.get("subtitle") or "").strip()
+    if sub:
+        head += f"\nSubtitle: {sub}"
+    name = str(o.get("template") or "").strip()
+    prefix = f'The user\'s template "{name}" instantiates to THIS question; ' if name else ""
+    body = f"{prefix}write every listed section, in this order, under its given title:\n" + "\n".join(rows)
+    return shared.block("document_structure", head + "\n\n" + body)
+
+
 def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too-many-branches
     question: str,
     lang: str,
@@ -89,6 +120,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     image_parts: list[dict[str, t.Any]] | None = None,
     attached_files: list[dict[str, str]] | None = None,
     tz: str | None = None,
+    structure: dict[str, t.Any] | None = None,
 ) -> list[dict[str, t.Any]]:
     """The WRITER's fresh conversation (Vane's writer): a system prompt of
     XML blocks, ordered CACHE-FRIENDLY -- the byte-stable shared contract
@@ -97,7 +129,11 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
     so a provider's prefix cache survives across runs of the same
     mode+language.  ``direct`` marks a no-research run (the pre-flight
     gate judged the request a greeting / chat / writing task): the source
-    contract is dropped and the writer answers naturally.  ``halt``/
+    contract is dropped and the writer answers naturally.  ``structure``
+    claims a DOCUMENT shape (report/deck -- the boundary's resolved
+    skeleton): the tier budget swaps to the whole-document contract and
+    the skeleton rides as a binding <document_structure> block.
+    ``halt``/
     ``budget_truncated`` become an honesty note when the gathering ended
     early."""
     role = shared.block(
@@ -128,16 +164,29 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
             shared.reader_voice(),
         ]
     else:
+        # the DOCUMENT shape (report/deck): the tier budget swaps to the
+        # whole-document contract.  The deck dialect retires the generic
+        # markdown surface (``with_surface=False`` -- its footnotes/images
+        # teaching follows the dialect's FORBIDDEN list and undermines it;
+        # the dialect must have the last word).
+        deck = bool((structure or {}).get("deck"))
         lines = shared.answer_contract(
             lang,
             role,
-            shape=shared.shape_ladder(mode),
+            shape=(
+                (deck_prompts.DECK_DOCUMENT_DIALECT if deck else report_prompts.REPORT_DOCUMENT_SHAPE)
+                if structure
+                else shared.shape_ladder(mode)
+            ),
             user_tz=tz,
+            with_surface=not deck,
             sources_note=shared.block(
                 "sources_note",
                 f"The numbered sources gathered for this question follow the question below.  [n] labels are global and contiguous; sources [1]..[{sources_base}] predate this thread's question; cite only sources visible in the context.",
             ),
         )
+        if structure:
+            lines.append(_document_structure(structure))
         lines.append(shared.writing_guidelines())
     if attached_files:
         # the user's attached files may carry BINDING output conventions
@@ -261,8 +310,7 @@ def writer_messages(  # pylint: disable=too-many-arguments, too-many-locals, too
         )
     cap = writer_context_max(mode)
     # the attachment rides the SAME single turn -- its bulk comes off the
-    # feed's budget so the turn always fits the window (report mode never
-    # lands here: the synthesizer packs per-section instead)
+    # feed's budget so the turn always fits the window
     attach_chars = sum(min(len(str(f.get("text") or "")), 60_000) for f in attached_files or [])
     if attach_chars:
         cap = max(20_000, cap - attach_chars)

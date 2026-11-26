@@ -32,9 +32,8 @@ export interface RunStreamContext {
 
 export const STREAM_IDLE_MS = 170_000;
 /** The stream watchdog's silence ceiling -- ABOVE every server-side
-    quiet bound (the loop's 135s first-event / 125s idle timeouts, the
-    synthesizer's 150s section streams), so a healthy run can never trip
-    it.  Firing aborts a stream whose TCP path died silently (the
+    quiet bound (the loop's 135s first-event / 125s idle timeouts), so a
+    healthy run can never trip it.  Firing aborts a stream whose TCP path died silently (the
     half-open case: no error, no data, forever) and reattaches. */
 export const STREAM_IDLE_FALLBACK_MS = 300_000;
 /** The watchdog's threshold when the keepalive worker is unavailable (no

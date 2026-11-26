@@ -15,28 +15,27 @@ const QUESTION = "`纸飞机`三种折法对比与社团备赛方案";
 const TITLE = "纸飞机三种折法对比与社团备赛方案";
 const S = sourceBook();
 
-const outline = (status: string[]): Record<string, unknown> => ({
+const outline = {
   e: "outline",
   title: TITLE,
   subtitle: "折法、纸张与投掷:社团备赛的三条线",
   sections: [
-    { id: "summary", title: "执行摘要", status: status[0] },
-    { id: "s1", title: "折法对比:距离与滞空", status: status[1] },
-    { id: "s2", title: "纸张与投掷角度", status: status[2] },
-    { id: "s3", title: "场地与时间安排", status: status[3] },
-    { id: "s4", title: "比赛日风险与备选方案", status: status[4] },
+    { id: "s1", title: "折法对比:距离与滞空", status: "pending" },
+    { id: "s2", title: "纸张与投掷角度", status: "pending" },
+    { id: "s3", title: "场地与时间安排", status: "pending" },
+    { id: "s4", title: "比赛日风险与备选方案", status: "pending" },
   ],
-});
+};
 
-/** A REPORT mid-write, cut short on purpose: the run opens with two
-    attachments and the depth probe, researches one round, then the write
-    phase streams the outline and two sections (each with its reasoning
-    reset) before the settle leaves three sections unwritten -- the
-    failed-section state.  The stage's DEFAULT scenario. */
+/** A REPORT written by the SINGLE writer (the unified architecture -- the
+    document is one streamed answer under the outline's skeleton): the run
+    opens with two attachments and the depth probe, researches one round,
+    then the write boundary announces the outline and the writer streams
+    the whole document as answer deltas.  The stage's DEFAULT scenario. */
 export const REPORT_STAGE: DebugScenario = {
   id: "report",
-  name: "报告进行中",
-  label: "report in progress (attachments · depth probe · outline · sections)",
+  name: "报告写作",
+  label: "single-write report (attachments · depth probe · outline · answer)",
   q: QUESTION,
   mode: "report",
   events: [
@@ -76,7 +75,7 @@ export const REPORT_STAGE: DebugScenario = {
           purpose: "outline",
           question: "The report skeleton: sections and the deliverable entities they cover",
           target: TITLE,
-          sections: 5,
+          sections: 4,
           entities: 3,
           uncovered: 1,
           ms: 1480,
@@ -129,31 +128,14 @@ export const REPORT_STAGE: DebugScenario = {
     { e: "close", id: 1 },
     { e: "open", id: 2, kind: "write", round: 0 },
     { e: "phase", name: "write" },
-    { e: "think", id: 2, t: "摘要只收两条结论;折法一节先给对比表,再落到推荐;其余小节按计划逐个展开。" },
-    outline(["writing", "pending", "pending", "pending", "pending"]),
-    { e: "section", id: "summary", t: "先给结论,再说明依据;数字全部带引用。", think: true, reset: true },
+    outline,
+    { e: "think", id: 2, t: "折法一节先给对比表,再落到推荐;其余小节按大纲逐个展开,一次写完整篇。" },
     {
-      e: "section",
-      id: "summary",
-      t: `**基线判断.** 三种折法里滑翔形最均衡:平均飞行 **15.8 米**、滞空 6.4 秒${S.cite("folds", "weight")};镖形出手快但落地早,特技形胜在稳定。\n\n**核心建议.** 比赛用 80g A4 纸折滑翔形,出手角度取 10 度;场地订示例体育馆的周末场,300 元/小时${S.cite("venue")}。`,
+      e: "answer",
+      t: `滑翔形是三种折法里最均衡的选择。下面按折法、纸张与投掷、场地时间三条线给出备赛方案。\n\n## 折法对比:距离与滞空\n\n| 折法 | 平均距离 | 平均滞空 | 上手难度 |\n|---|---|---|---|\n| 镖形 | 12.4 米 | 3.1 秒 | 容易 |\n| 滑翔形 | 15.8 米 | 6.4 秒 | 中等 |\n| 特技形 | 8.2 米 | 4.8 秒 | 较难 |\n\n滑翔形两项都排第一,折叠步骤却只比特技形多两步${S.cite("folds")}。\n\n## 纸张与投掷角度\n\n80g A4 纸比 70g 平均多飞 1.8 米,出手角度取 10 度滞空最久${S.cite("weight")}。\n\n## 场地与时间安排\n\n示例体育馆周末场 300 元/小时,含 20 张折叠桌,需提前三天预约${S.cite("venue")};建议赛前两周每周五下午进场练习。\n\n## 比赛日风险与备选方案\n\n> [!WARNING] 口径不一致\n> 两份实测记录的滞空口径不同,正赛以现场测量为准${S.cite("folds")}。`,
     },
-    outline(["done", "writing", "pending", "pending", "pending"]),
-    {
-      e: "section",
-      id: "s1",
-      t: "先摆三种折法的实测表,再解释滑翔形为什么胜出;口径不一致的两份记录要如实说明。",
-      think: true,
-      reset: true,
-    },
-    {
-      e: "section",
-      id: "s1",
-      t: `三种折法的差距集中在滞空一项:\n\n| 折法 | 平均距离 | 平均滞空 | 上手难度 |\n|---|---|---|---|\n| 镖形 | 12.4 米 | 3.1 秒 | 容易 |\n| 滑翔形 | 15.8 米 | 6.4 秒 | 中等 |\n| 特技形 | 8.2 米 | 4.8 秒 | 较难 |\n\n滑翔形两项都排第一,折叠步骤却只比特技形多两步${S.cite("folds")}。`,
-    },
-    outline(["done", "done", "writing", "pending", "pending"]),
+    { e: "close", id: 2 },
     { e: "related", items: ["80g 纸会不会太重影响出手?", "示例体育馆的门口风大怎么办?", "特技形怎么折才能回旋?"] },
-    // the settle lands with three sections still unwritten: they read as
-    // failed sections (the rewrite chip's surface)
     settled(usage(21400, 1980, 1140, 9030)),
   ],
 };

@@ -550,10 +550,10 @@ export interface AiSearchRun {
 }
 
 /** The REPORT mode's outline snapshot (the wire's ``outline`` event): the
-    document's TOC -- the server synthesizes the summary/method sections,
-    their status rides the same snapshot.  ``failed`` is a section whose
-    stream died (the gap placeholder shipped) -- the rewrite lane's
-    target. */
+    document's TOC -- every section's status rides the same snapshot.
+    ``failed`` marks a section whose stream died (the gap placeholder
+    shipped).  New runs never carry one (the document is a single
+    write); the shape survives for stored records' replays. */
 interface AiSearchOutlineSection {
   id: string;
   title: string;

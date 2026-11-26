@@ -492,33 +492,25 @@ def shape_ladder(mode: str) -> str:
     )
 
 
-def citation_discipline(surface: str) -> str:
-    """The one-line discipline the DOCUMENT surfaces (report sections,
-    deck chapters) stack under the citation grammar -- a synthesis over
-    many completions stands or falls with per-claim citations."""
-    return block(
-        "citation_discipline",
-        f"""\
-        Every load-bearing number or claim carries its citation -- the
-        {surface}'s credibility IS the citation discipline.""",
-    )
-
-
 def answer_contract(
     lang: str,
     role: str,
     shape: str | None = None,
     sources_note: str | None = None,
     user_tz: str | None = None,
+    with_surface: bool = True,
 ) -> list[str]:
     """The reader-facing answer spine EVERY answer surface speaks, in the
     cache-friendly order: the byte-stable blocks (role, identity, date,
     language, shape, citations, figures, grounding, voice, opening)
     first, the caller's per-run blocks after.  ``shape`` (:func:`shape_ladder`)
     and ``sources_note`` slot in at their fixed positions; surfaces
-    without a tier omit the shape.  Callers append their feature-specific
-    blocks (follow-up fences, gallery contracts, research notes) and the
-    conversation around it -- the spine is what must not drift."""
+    without a tier omit the shape.  ``with_surface=False`` serves a
+    dialect whose own FORBIDDEN list retires part of the generic markdown
+    vocabulary -- the dialect must have the last word.  Callers append
+    their feature-specific blocks (follow-up fences, gallery contracts,
+    research notes) and the conversation around it -- the spine is what
+    must not drift."""
     lines: list[str] = [role, identity(), today_line(user_tz), language_directive(lang)]
     if shape:
         lines.append(shape)
@@ -528,7 +520,8 @@ def answer_contract(
     lines.append(tool_grounding())
     if sources_note:
         lines.append(sources_note)
-    lines.append(markdown_surface())
+    if with_surface:
+        lines.append(markdown_surface())
     lines.append(reader_voice())
     lines.append(opening_rule())
     return lines

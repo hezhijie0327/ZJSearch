@@ -181,8 +181,8 @@ export interface AiSearchState extends Core {
       its research on the SAME run */
   submitClarify(text: string | null, lang: string, mode?: AiSearchMode, searchLanguage?: string): void;
   /** the report rail's output-structure control: ONE pending template the
-      write boundary consumes (research phase only -- the synthesizer
-      re-mints the outline from it before the first section streams) */
+      write boundary consumes (research phase only -- the writer follows
+      its sections as the binding skeleton) */
   setTemplate(template: ReportTemplate): Promise<boolean>;
   /** the rail's shape flip (report|deck, research phase only): ONE
       pending shape the write boundary honors AND a canonical steer notice
@@ -219,14 +219,6 @@ export interface AiSearchState extends Core {
       head lands at the next boundary first.  Resolves false on a stale
       queue view (a steer drained mid-drag) -- the caller reverts. */
   reorderSteer(texts: string[]): Promise<boolean>;
-  /** ONE settled section's rewrite (the failed section's chip): the
-      rewrite lane re-streams the section and the tail folds in place.
-      Resolves the outcome -- "busy" while another rewrite runs or the
-      run is still streaming, "unknown" when the run's server handle is
-      gone (past the terminal TTL, restart), "error" otherwise. */
-  rewriteSection(runNo: number, sectionId: string): Promise<"ok" | "busy" | "unknown" | "error">;
-  /** the section a rewrite is currently streaming (the chips' spinner) */
-  rewriting: { runNo: number; sectionId: string } | null;
   /** wrap-up: end the research gracefully and let the writer answer from
       the material gathered */
   wrap(): void;
@@ -250,9 +242,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
   const langRef = useRef("");
   // the continue path's re-entry guard (the double-click race)
   const continuingRef = useRef(false);
-  // the section rewrite's re-entry guard + live chip state
-  const rewritingRef = useRef(false);
-  const [rewriting, setRewriting] = useState<{ runNo: number; sectionId: string } | null>(null);
   const entryIndexRef = useRef<Map<number, EntryIndex>>(new Map());
   // the current run's recalled-refs badge map (set at beginRun, read by
   // the sources fold)
@@ -1132,64 +1121,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
 
   const setTemplate = (template: ReportTemplate): Promise<boolean> => control("template", { template });
 
-  /** ONE settled section's rewrite: POST the rewrite lane and fold the
-      streamed outline/section tail through the shared apply -- the same
-      per-run seq watermark, evt log and reducer the live run used, so
-      the document updates in place, every store record refreshes, and a
-      replay folds the identical events.  The run key rides the per-run
-      host record (an older run's key is not the hook's current one). */
-  const rewriteSection = async (runNo: number, sectionId: string): Promise<"ok" | "busy" | "unknown" | "error"> => {
-    if (!capability || rewritingRef.current) {
-      return "busy";
-    }
-    const threadId = threadIdRef.current;
-    const runId = `${threadId}:${runNo}`;
-    const last = core.runs[core.runs.length - 1];
-    const runKey =
-      last?.runNo === runNo && runKeyRef.current ? runKeyRef.current : await loadRunHost(runId).catch(() => "");
-    if (!threadId || !runKey) {
-      return "unknown";
-    }
-    rewritingRef.current = true;
-    setRewriting({ runNo, sectionId });
-    const controller = new AbortController();
-    const onAbort = () => controller.abort();
-    abortRef.current?.signal.addEventListener("abort", onAbort);
-    try {
-      await fetchEventStream(
-        "/zjsearch/ask/run/section",
-        { tk: capability.tk, run_key: runKey, section_id: sectionId },
-        makeApply(threadId, runNo, refCountsRef.current),
-        controller.signal,
-      );
-      // the rewritten run's knowledge projection re-lands (the section
-      // buffers and the derived answer changed under the settled row --
-      // an idempotent upsert, so the double-fire is safe)
-      setCore((prev) => {
-        const run = prev.runs.find((item) => item.runNo === runNo);
-        if (run) {
-          void settleRun(threadId, run);
-        }
-        return prev;
-      });
-      return "ok";
-    } catch (error) {
-      if (error instanceof HttpError) {
-        if (error.status === 404) {
-          return "unknown";
-        }
-        if (error.status === 409) {
-          return "busy";
-        }
-      }
-      return "error";
-    } finally {
-      abortRef.current?.signal.removeEventListener("abort", onAbort);
-      rewritingRef.current = false;
-      setRewriting(null);
-    }
-  };
-
   const setShape = (shape: TemplateShape | null): Promise<boolean> =>
     control("shape", { shape: shape ?? "direct", lang: langRef.current });
 
@@ -1491,8 +1422,6 @@ export function useAiSearch(capability: AiCapability | undefined): AiSearchState
     setTemplate,
     setShape,
     clearTemplate,
-    rewriteSection,
-    rewriting,
     deleteRun,
     wrap,
     reset,

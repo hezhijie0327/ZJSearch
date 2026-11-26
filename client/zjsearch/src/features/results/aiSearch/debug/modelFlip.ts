@@ -7,27 +7,14 @@ const QUESTION = "帮我调研一下纸飞机比赛的备赛方案";
 const TITLE = "纸飞机比赛备赛方案调研报告";
 const S = sourceBook();
 
-const SECTIONS = [
-  { id: "summary", title: "执行摘要" },
-  { id: "s1", title: "折法与纸张的选择" },
-  { id: "s2", title: "投掷角度与练习安排" },
-  { id: "s3", title: "场地与时间安排" },
-];
-
-const outline = (status: string[]): Record<string, unknown> => ({
-  e: "outline",
-  title: TITLE,
-  subtitle: "",
-  sections: SECTIONS.map((section, index) => ({ ...section, status: status[index] })),
-});
-
 /** A balanced run the MODEL flips to a report mid-research through
     set_deliverable: the settled row folds the mode forward, and the write
-    phase streams a report outline section by section. */
+    boundary announces the outline before the single writer streams the
+    whole document as answer deltas. */
 export const MODEL_FLIP_STAGE: DebugScenario = {
   id: "model-flip",
   name: "交付翻转",
-  label: "set_deliverable flip (balanced → report)",
+  label: "set_deliverable flip (balanced → single-write report)",
   q: QUESTION,
   mode: "balanced",
   events: [
@@ -59,7 +46,7 @@ export const MODEL_FLIP_STAGE: DebugScenario = {
       status: "ok",
       q: "report",
       ms: 1730,
-      feed: `deliverable shape set to report: an outline of 4 sections ("${TITLE}") was minted. Keep researching exactly as planned -- every source you gather is what the sections will cite; the document itself is written at the write phase.`,
+      feed: `deliverable shape set to report: an outline of 3 sections ("${TITLE}") was minted. Keep researching exactly as planned -- every source you gather is what the sections will cite; the document itself is written at the write phase.`,
     },
     { e: "close", id: 1 },
     { ...base, id: 2, round: 2 },
@@ -77,30 +64,22 @@ export const MODEL_FLIP_STAGE: DebugScenario = {
     { e: "close", id: 2 },
     { e: "open", id: 3, kind: "write", round: 0 },
     { e: "phase", name: "write" },
-    { e: "think", id: 3, t: "摘要收两条结论;每节先给依据再给可执行的做法。" },
-    outline(["done", "writing", "pending", "pending"]),
     {
-      e: "section",
-      id: "summary",
-      t: `**基线判断.** 备赛的胜负手是折法与纸张:滑翔形配 80g A4 纸,平均能飞 **15.8 米**${S.cite("folds", "weight")}。出手角度和场地是第二位的影响因素${S.cite("angle", "venue")}。`,
+      e: "outline",
+      title: TITLE,
+      subtitle: "",
+      sections: [
+        { id: "s1", title: "折法与纸张的选择", status: "pending" },
+        { id: "s2", title: "投掷角度与练习安排", status: "pending" },
+        { id: "s3", title: "场地与时间安排", status: "pending" },
+      ],
     },
+    { e: "think", id: 3, t: "每节先给依据再给可执行的做法,一次写完整篇。" },
     {
-      e: "section",
-      id: "s1",
-      t: `三种折法里滑翔形两项都排第一:距离 15.8 米、滞空 6.4 秒${S.cite("folds")}。\n\n> [!IMPORTANT] 纸张的选择\n> 80g 纸比 70g 纸平均多飞 1.8 米${S.cite("weight")},但更难折出锐利的折痕,练习时要先用骨刀压线。`,
+      e: "answer",
+      t: `备赛的胜负手是折法与纸张:滑翔形配 80g A4 纸,平均能飞 **15.8 米**${S.cite("folds", "weight")}。\n\n## 折法与纸张的选择\n\n三种折法里滑翔形两项都排第一:距离 15.8 米、滞空 6.4 秒${S.cite("folds")}。\n\n> [!IMPORTANT] 纸张的选择\n> 80g 纸比 70g 纸平均多飞 1.8 米${S.cite("weight")},但更难折出锐利的折痕,练习时要先用骨刀压线。\n\n## 投掷角度与练习安排\n\n投掷角度取 **10 度**时滞空最久,取 45 度时距离最远${S.cite("angle")}。比赛比距离,练习以 40 至 45 度为主,每轮 20 次投掷并记录。\n\n## 场地与时间安排\n\n示例体育馆周末场 **300 元/小时**,含 20 张折叠桌,需提前三天预约${S.cite("venue")}。比赛日是 12 月 5 日(周六),建议赛前两周每周五下午进场练习。`,
     },
-    outline(["done", "done", "writing", "pending"]),
-    {
-      e: "section",
-      id: "s2",
-      t: `投掷角度取 **10 度**时滞空最久,取 45 度时距离最远${S.cite("angle")}。比赛比距离,练习以 40 至 45 度为主,每轮 20 次投掷并记录。`,
-    },
-    {
-      e: "section",
-      id: "s3",
-      t: `示例体育馆周末场 **300 元/小时**,含 20 张折叠桌,需提前三天预约${S.cite("venue")}。比赛日是 12 月 5 日(周六),建议赛前两周每周五下午进场练习。`,
-    },
-    outline(["done", "done", "done", "done"]),
+    { e: "close", id: 3 },
     { e: "related", items: ["滑翔形分步骤怎么折?", "比赛日下雨有备选场地吗?"] },
     settled(usage(11200, 890, 620, 3600)),
   ],

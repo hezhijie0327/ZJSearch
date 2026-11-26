@@ -80,7 +80,6 @@ import {
   CHIP_OUTLINE_IDLE,
   META_TOGGLE,
 } from "@/lib/styles.ts";
-import { flashToast } from "@/lib/toast.ts";
 import { useExitPresence } from "@/lib/useExitPresence.ts";
 
 const RUN_TITLE_PREVIEW_PX = 113;
@@ -151,8 +150,6 @@ function AiSearchRunSectionImpl({
   onClearTemplate,
   onSetShape,
   onDeleteRun,
-  onRewriteSection,
-  rewriting,
   onSubmitClarify,
 }: {
   run: AiSearchRun;
@@ -187,12 +184,6 @@ function AiSearchRunSectionImpl({
   onSetShape?: (shape: TemplateShape | null) => Promise<boolean>;
   /** delete THIS run (storage + timeline fold) -- settled runs only */
   onDeleteRun?: (runNo: number) => void;
-  /** ONE settled section's rewrite (the failed section's chip): the
-      rewrite lane re-streams the section on the server and the tail
-      folds in place.  Resolves the outcome -- the chips toast it. */
-  onRewriteSection?: (runNo: number, sectionId: string) => Promise<"ok" | "busy" | "unknown" | "error">;
-  /** the section a rewrite is currently streaming (the chips' spinner) */
-  rewriting?: { runNo: number; sectionId: string } | null;
   /** Wrap-up: the run finishes its round and the writer answers from the
       material gathered (the graceful end beside the hard stop) */
   onWrap?: () => void;
@@ -260,21 +251,6 @@ function AiSearchRunSectionImpl({
     // was measured against (and a plan chip unfolding twenty facts reads as
     // a glitch); their own chips stay the only way to open them
     setSourcesExpanded(true);
-  };
-  // the failed section's rewrite chip: the lane streams the section back
-  // and the fold updates the document in place; the OUTCOME toasts (the
-  // "ok" case needs no toast -- the replacement prose is its own
-  // feedback)
-  const handleRewrite = (sectionId: string) => {
-    onRewriteSection?.(run.runNo, sectionId).then((outcome) => {
-      if (outcome === "busy") {
-        flashToast(t("ai_section_rewrite_busy"), { tone: "accent" });
-      } else if (outcome === "unknown") {
-        flashToast(t("ai_section_rewrite_gone"), { tone: "danger" });
-      } else if (outcome === "error") {
-        flashToast(t("ai_section_rewrite_error"), { tone: "danger" });
-      }
-    });
   };
   useEffect(() => {
     if (!locate) {
@@ -704,7 +680,7 @@ function AiSearchRunSectionImpl({
             // -- serif at the long-form scale (§4, the fluid .prose root:
             // 16px @320 → 17px desktop cap), the blog prose rhythm
             <div className="zjs-answer-body zjs-prose text-ink" ref={answerBodyRef}>
-              {run.outline && run.deck ? (
+              {run.outline && run.deck && run.sections && Object.keys(run.sections).length > 0 ? (
                 <DeckView
                   meta={sourceMeta}
                   onCite={handleCite}
@@ -712,16 +688,10 @@ function AiSearchRunSectionImpl({
                   sections={run.sections ?? {}}
                   settled={!streaming}
                 />
-              ) : run.outline ? (
+              ) : run.outline && run.sections && Object.keys(run.sections).length > 0 ? (
                 <DocumentView
                   meta={sourceMeta}
                   onCite={handleCite}
-                  onRewrite={
-                    onRewriteSection && !streaming && (rewriting == null || rewriting.runNo === run.runNo)
-                      ? handleRewrite
-                      : undefined
-                  }
-                  rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
                   run={{
                     galleries: run.galleries,
                     outline: run.outline,
@@ -969,18 +939,7 @@ function AiSearchRunSectionImpl({
               const shapeSignal = run.mode === "report" || run.mode === "deck";
               const live = streaming || run.status === "awaiting";
               if (run.outline) {
-                return (
-                  <ActiveStructureCard
-                    deck={run.deck === true}
-                    onRewrite={
-                      onRewriteSection && !streaming && (rewriting == null || rewriting.runNo === run.runNo)
-                        ? handleRewrite
-                        : undefined
-                    }
-                    outline={run.outline}
-                    rewritingId={rewriting?.runNo === run.runNo ? rewriting.sectionId : null}
-                  />
-                );
+                return <ActiveStructureCard deck={run.deck === true} outline={run.outline} />;
               }
               if (live && run.stage !== "write" && onSetTemplate) {
                 return (
@@ -1114,8 +1073,5 @@ export const AiSearchRunSection = memo(
     prev.sourceMeta === next.sourceMeta &&
     prev.isFirst === next.isFirst &&
     prev.isLast === next.isLast &&
-    prev.live === next.live &&
-    // the rewrite chips' spinner rides this prop (the object identity
-    // flips null <-> {runNo, sectionId} on every rewrite start/end)
-    prev.rewriting === next.rewriting,
+    prev.live === next.live,
 );

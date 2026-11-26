@@ -294,6 +294,7 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     post_round_injections: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     synthesizer: t.Callable[[t.Any], t.Iterator[dict[str, t.Any]] | None] | None = None,
     writer_sources: t.Callable[[], list[dict[str, t.Any]]] | None = None,
+    write_intro: t.Callable[[], list[dict[str, t.Any]]] | None = None,
     gallery_validator: t.Callable[[str], list[dict[str, t.Any]]] | None = None,
     first_event_timeout: float = FIRST_EVENT_TIMEOUT,
     idle_timeout: float = IDLE_TIMEOUT,
@@ -329,12 +330,17 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
     - ``display(calls) -> rows``: the timeline rows of one turn's calls.
     - ``writer(halt) -> messages`` (an awaitable return is bridged onto
       the shared loop), ``writer_sources() -> entries``: the WRITE phase.
-    - ``synthesizer(tally) -> iterator | None``: the REPORT write phase
-      (per-section events + the settle).  Returning ``None`` DEFERS to
-      the writer above -- no outline was claimed at the boundary (the
-      deliverable flip never fired); a raised exception settles as an
-      error, never a silent fallback mid-document.  Pass ``writer``
-      alongside whenever the synthesizer can defer.
+    - ``write_intro() -> events``: the single write's intro events
+      (the boundary-claimed document's outline announce), yielded after
+      the sources event at the exact position the per-section
+      synthesizer's first snapshot used to occupy.
+    - ``synthesizer(tally) -> iterator | None``: the write boundary's
+      SHAPE RESOLVER -- consumes the flip/pick signals, stashes the
+      write structure for the single writer, and normally returns
+      ``None`` (defer to the writer above; the document is ONE write
+      turn).  A non-None return still means the callable owns the whole
+      write phase (streams to the settle itself); a raised exception
+      settles as an error, never a silent fallback mid-document.
     - ``gallery_validator(body) -> items``: the ``zjs-images`` fence
       whitelist (invented urls are dropped server-side).
     - ``control``: the RUN HOST handle (duck-typed: ``directives()``,
@@ -752,16 +758,12 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 if entries:
                     yield {"e": "sources", "items": entries}
             if synthesizer is not None:
-                # the REPORT synthesizer owns the write phase when it takes
-                # it: it streams per-section events and the settle itself
-                # (its usage lands in the same tally).  Returning None is
-                # the DEFER verdict -- no outline was claimed (the
-                # deliverable flip never fired, the reader never picked a
-                # shape) -- and the single-write branch below answers; the
-                # decision is the call's first act, so a defer can never
-                # follow a streamed section.  A RAISED exception still
-                # settles as an error: a half-written document must not
-                # silently become a thread answer.
+                # the write boundary's SHAPE RESOLVER: consumes the
+                # flip/pick signals and stashes the single write's
+                # structure (the resolution is the call's first act, so a
+                # defer can never follow a streamed section).  A non-None
+                # return still owns the write phase to the settle; a
+                # RAISED exception settles as an error.
                 try:
                     sections = synthesizer(run_state.tally)
                 except Exception as exc:  # pylint: disable=broad-except
@@ -773,6 +775,16 @@ def run(  # pylint: disable=too-many-branches, too-many-locals, too-many-stateme
                 if sections is not None:
                     yield from sections
                     return
+            if write_intro is not None:
+                # the boundary-claimed document's announce (the outline
+                # event): the single write's intro -- the position the
+                # per-section synthesizer's first snapshot used to occupy
+                try:
+                    intro_events = write_intro()
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.warning("zjsearch loop: write intro failed: %r", exc)
+                    intro_events = []
+                yield from intro_events
             try:
                 built = writer(halt_message)
             except Exception as exc:  # pylint: disable=broad-except

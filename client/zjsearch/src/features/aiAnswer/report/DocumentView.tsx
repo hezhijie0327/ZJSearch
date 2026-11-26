@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
-import { Brain, ChevronDown, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
+import { Brain, ChevronDown, CircleAlert, LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Collapse } from "@/components/Collapse.tsx";
 import { Tape } from "@/components/Tape.tsx";
@@ -11,7 +11,7 @@ import { citedSourceRows, citeToLinks } from "@/lib/citations.ts";
 import { useT } from "@/lib/i18n.ts";
 import { holdBackTail } from "@/lib/markdownParts.ts";
 import { scrollIntoViewAnimated } from "@/lib/motion.ts";
-import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
+import { META_TOGGLE } from "@/lib/styles.ts";
 
 /**
  * The REPORT document renderer: the run's outline becomes the document
@@ -22,8 +22,7 @@ import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
  * typographically elevated.  A section still writing carries the live
  * spinner in the TOC and at its heading; a FAILED section (its stream
  * died -- the server's gap placeholder shipped) carries the warning
- * mark and the rewrite chip beside its heading; the TOC row scrolls to
- * its section (the animated scroll -- rAF is not a safe primitive).  A
+ * mark beside its heading; the TOC row scrolls to its section (the animated scroll -- rAF is not a safe primitive).  A
  * settled document carries the family postmark at its tail (DESIGN.md
  * §7 `.paper-postmark`, the LockScreen stamp's real-meta cousin): the
  * filing date + label, mono, deterministic 12° tilt, in flow.
@@ -35,11 +34,12 @@ import { CHIP_BTN, META_TOGGLE } from "@/lib/styles.ts";
 const GAP_PLACEHOLDER = "*Section generation failed upstream*";
 
 /** One section's retained REASONING (the writer's relayed working turn):
-    expanded and tail-following while the section writes -- the pane is
-    never silent through the model's long first-byte wait -- and folded to
-    the research entries' think disclosure once the section settles.  The
-    buffer stays on the run, so a replay, the knowledge inspector or a
-    print re-opens the very same reasoning. */
+    expanded and tail-following until the section's PROSE arrives -- the
+    pane is never silent through the model's long first-byte wait, and
+    the body streams folded (the think is DONE once content flows; the
+    reader asked about the report, not the monologue).  The buffer stays
+    on the run, so a replay, the knowledge inspector or a print re-opens
+    the very same reasoning. */
 function SectionThink({ active, text }: { active: boolean; text: string }) {
   const t = useT();
   // null = follow the auto behaviour (open while writing, folded after);
@@ -79,8 +79,6 @@ export function DocumentView({
   run,
   meta,
   onCite,
-  onRewrite,
-  rewritingId,
   settled,
   stamp,
 }: {
@@ -98,11 +96,6 @@ export function DocumentView({
   };
   meta: AiSourceMeta[];
   onCite: (n: number) => void;
-  /** the failed section's rewrite action (absent while the run's host
-      is unreachable -- the chip is then warning-only) */
-  onRewrite?: (sectionId: string) => void;
-  /** the section a rewrite is currently streaming (its chip spins) */
-  rewritingId?: string | null;
   settled: boolean;
   /** the run's settle client-clock (ms) — the tail postmark's filing date;
       absent/0 renders no stamp */
@@ -258,8 +251,7 @@ export function DocumentView({
         if (section.status === "pending" && !text) {
           return null;
         }
-        const busy = rewritingId === section.id;
-        const writing = section.status === "writing" || busy;
+        const writing = section.status === "writing";
         const think = run.sectionThink?.[section.id] ?? "";
         return (
           <section className="scroll-mt-20" id={anchorId(section.id)} key={section.id}>
@@ -267,31 +259,16 @@ export function DocumentView({
               className="mt-6 flex items-center gap-2 text-[1.5em] font-semibold tracking-tight text-ink first:mt-0"
               dir="auto"
             >
-              {section.status === "writing" || busy ? (
+              {section.status === "writing" ? (
                 <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-accent" />
               ) : section.status === "failed" ? (
                 <CircleAlert aria-hidden="true" className="size-3.5 shrink-0 text-warning" />
               ) : null}
               {section.title}
-              {section.status === "failed" && onRewrite ? (
-                <button
-                  aria-label={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
-                  className={`${CHIP_BTN} ms-1`}
-                  onClick={() => onRewrite(section.id)}
-                  title={busy ? t("ai_section_rewriting") : t("ai_section_rewrite")}
-                  type="button"
-                >
-                  {busy ? (
-                    <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-3.5" />
-                  )}
-                </button>
-              ) : null}
             </h2>
             {/* the section's retained reasoning: live while it writes,
                 folded after -- the body below is the report prose */}
-            <SectionThink active={writing} text={think} />
+            <SectionThink active={writing && !text.trim()} text={think} />
             {text ? (
               <MarkdownAnswer
                 figureLightbox
