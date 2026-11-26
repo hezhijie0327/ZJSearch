@@ -521,6 +521,12 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
         # channel itself is text-only; routing images through a user turn
         # is the shape every provider accepts)
         self.image_injections: list[dict[str, t.Any]] = []
+        # the same injections, append-only: the WRITE turn rebuilds the
+        # conversation from the feed (writer_messages) -- without the
+        # archive a run that goes straight from the screenshot round to
+        # the write loses the image entirely (the writer honestly answers
+        # it cannot look at screenshots)
+        self.image_archive: list[dict[str, t.Any]] = []
         # the browser screenshots already injected this run (viewport +
         # element shots share the budget) -- a captcha retry loop must not
         # turn the conversation into an image carousel
@@ -609,6 +615,13 @@ class SearchesCore:  # pylint: disable=too-many-instance-attributes
                 break
             if thread.is_alive():
                 thread.join(timeout=remaining)
+
+    def record_image_injection(self, message: dict[str, t.Any]) -> None:
+        """Queue the image for the next research turn AND archive it for
+        the writer's context (drain_image_injections empties the queue at
+        the round boundary; the archive survives until the write)."""
+        self.image_injections.append(message)
+        self.image_archive.append(message)
 
     def drain_image_injections(self) -> list[dict[str, t.Any]]:
         """inspect_image's fetched pictures, drained into the next model turn

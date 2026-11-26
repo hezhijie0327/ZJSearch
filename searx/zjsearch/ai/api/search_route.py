@@ -915,7 +915,7 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
         return past_ref
 
     async def write(halt: str | None) -> list[dict[str, t.Any]]:
-        return writer_messages(
+        messages = writer_messages(
             research_q,
             lang,
             history,
@@ -942,6 +942,14 @@ def _search(  # pylint: disable=too-many-branches, too-many-statements, too-many
             ],
             tz=user_tz,
         )
+        if state.image_archive:
+            # the shots the researcher took ride into the write turn too:
+            # writer_messages rebuilds the conversation from the feed, and
+            # the feed's "screenshot attached" line alone taught the writer
+            # to answer it cannot look at screenshots (the research turns
+            # SAW the image -- only the rebuilt write context lost it)
+            messages = [*messages, *state.image_archive]
+        return messages
 
     def continuation() -> str | None:
         # the ledger-closure contract: a run may stop researching only

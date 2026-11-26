@@ -217,6 +217,11 @@ export interface AiSearchCall {
       mirror frames are stripped before the event log -- a replay keeps
       the shot, the trail shows the honest placeholder */
   img?: string;
+  /** wire mark: this settlement's img is a deliberate SCREENSHOT (the
+      bytes persist in the event log) -- mirror frames ride img too but
+      never carry the mark, so multi rows can render the shot without
+      flashing a volatile frame */
+  shot?: boolean;
   /** browse rows: the fresh element outline (open / snapshot / a
       click-through navigation) -- the expansion renders the session's
       interactive-element list */
@@ -1189,6 +1194,7 @@ export function applyEvent(
                   }
                 : {}),
               ...(event.img !== undefined ? { img: String(event.img ?? "") || undefined } : {}),
+              ...(event.shot !== undefined ? { shot: event.shot === true || undefined } : {}),
               ...(event.snapshot !== undefined ? { snapshot: String(event.snapshot ?? "") || undefined } : {}),
               ...(Array.isArray(event.tabs)
                 ? {

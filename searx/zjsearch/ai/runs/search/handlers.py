@@ -535,7 +535,7 @@ Attached: the region crop you requested of the page you opened
 action from what is visible."""
             else:
                 shot_note = 'Attached: the screenshot you requested of the page you opened.  Read it now and decide your next action from what is visible.'
-            self.image_injections.append(
+            self.record_image_injection(
                 {
                     "role": "user",
                     "content": [
@@ -544,11 +544,14 @@ action from what is visible."""
                     ],
                 }
             )
-            yield settle(
-                "ok",
-                "screenshot attached -- it is visible to you in the next turn.",
-                {"img": result.image, "page": result.page, "shot": True},
-            )
+            extra = {"img": result.image, "page": result.page, "shot": True}
+            if result.steps:
+                # a multi batch's step summaries must survive this early
+                # exit too -- the attachment receipt replaced the numbered
+                # feed lines, so without them the row's step list collapses
+                # at the settle
+                extra["steps"] = list(result.steps)
+            yield settle("ok", "screenshot attached -- it is visible to you in the next turn.", extra)
             return False
         try:
             feed, extra, gathered = yield from self._browser_finish(action, result, rnd, wire_id)
@@ -910,7 +913,7 @@ and the referee advises when a subtask's evidence runs thin."""
                     image_ref = fetched
                     how = "inline"
                 label = f"source [{source_n}]" if source_n else url[:120]
-                self.image_injections.append(
+                self.record_image_injection(
                     {
                         "role": "user",
                         "content": [

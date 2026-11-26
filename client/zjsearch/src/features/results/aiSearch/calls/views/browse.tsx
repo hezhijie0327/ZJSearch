@@ -562,11 +562,12 @@ function MultiSteps({ call, t }: { call: ToolRowProps["call"]; t: ToolRowProps["
 /** The screenshot action's rendered result: the shot as a FIXED-HEIGHT
     thumb (a viewport shot and an element close-up read at the same scale
     -- a full-width render let a tall close-up shove the whole timeline
-    around), the page line under it; the click opens the shared image
-    lightbox at full size.  The shot PERSISTS (the stream consumer keeps
-    shot-marked bytes); mirror-frame rows and pre-marking replays show
-    the honest placeholder instead. */
-function BrowserShot({ call, t }: ToolRowProps): ReactNode {
+    around), centered as the row's figure; the click opens the shared
+    image lightbox at full size.  The shot PERSISTS (the stream consumer
+    keeps shot-marked bytes); mirror-frame rows and pre-marking replays
+    show the honest placeholder instead.  `hidePage` drops the location
+    line (the multi branch: the step cards above already name the page). */
+function BrowserShot({ call, t, hidePage }: ToolRowProps & { hidePage?: boolean }): ReactNode {
   const [zoom, setZoom] = useState(false);
   const page = call.page;
   return (
@@ -574,7 +575,7 @@ function BrowserShot({ call, t }: ToolRowProps): ReactNode {
       {call.img ? (
         <button
           aria-label={t("ai_browser_zoom")}
-          className="block w-fit cursor-zoom-in overflow-hidden rounded-xl border border-line bg-ink/5"
+          className="mx-auto block w-fit cursor-zoom-in overflow-hidden rounded-xl border border-line bg-ink/5"
           onClick={() => {
             setZoom(true);
           }}
@@ -592,7 +593,7 @@ function BrowserShot({ call, t }: ToolRowProps): ReactNode {
           {t("ai_browser_shot_volatile")}
         </p>
       )}
-      {page ? <LocationLine page={page} /> : null}
+      {page && !hidePage ? <LocationLine page={page} /> : null}
       {zoom && call.img ? (
         <Lightbox
           initialIndex={0}
@@ -789,6 +790,11 @@ export const browseView: ToolView = {
       return (
         <>
           <MultiSteps call={call} t={t} />
+          {/* a batch can END on a screenshot (its settlement's img): the
+            same shot card the standalone row renders, minus the location
+            line (the step cards above already name the page) -- gated on
+            the wire shot mark so a volatile mirror frame never renders */}
+          {call.shot && call.img ? <BrowserShot call={call} hidePage results={[]} t={t} /> : null}
           {call.page && !covered ? <LocationLine page={call.page} /> : null}
           {call.snapshot ? <BrowserOutline snapshot={call.snapshot} t={t} /> : null}
         </>
