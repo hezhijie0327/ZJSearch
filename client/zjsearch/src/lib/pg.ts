@@ -39,8 +39,6 @@
 
 export type Pg = import("@electric-sql/pglite").PGlite;
 
-import { embeddingDimensions } from "@/lib/embed.ts";
-
 let pgPromise: Promise<Pg> | null = null;
 let pgDegradedMemory = false;
 
@@ -317,9 +315,9 @@ function scheduleVacuum(db: Pg): void {
       phases): the directory/inspector/stats reads that used to reassemble
       from the event log become one-row (or one-small-table) reads. */
 async function createSchema(db: Pg): Promise<void> {
-  // the width comes from the SAME capability the embed calls use --
-  // whatever the boot payload carried, the column matches the vectors
-  const dims = embeddingDimensions() ?? pgDimensions;
+  // the width main.tsx handed configurePgDimensions before boot -- the
+  // SAME capability the embed calls use, so the column matches the vectors
+  const dims = pgDimensions;
   const hadV5 = await db.query<{ present: boolean }>("SELECT to_regclass('run_summary') IS NOT NULL AS present");
   const carried = !(hadV5.rows ?? [])[0]?.present;
   if (carried) {

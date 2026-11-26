@@ -2,7 +2,7 @@
 
 import { Gauge, Telescope, Zap } from "lucide-react";
 import { Dropdown } from "@/components/Dropdown.tsx";
-import type { AiSearchMode } from "@/features/results/aiSearch/useAiSearch.ts";
+import type { AiSearchMode } from "@/features/results/aiSearch/runModel.ts";
 import type { Translate } from "@/lib/i18n.ts";
 import { useT } from "@/lib/i18n.ts";
 
