@@ -93,6 +93,16 @@ QR-CODE LOGINS especially: when the wall shows a QR code, screenshot
 THE QR ELEMENT (its ref) BEFORE wait_user -- the close-up lands in the
 human's timeline row big enough to scan from the couch; a full-page
 shot leaves it thumbnail-sized.
+VISUAL-CAPTURE CHAINS: a click-then-look flow (open a dialog, switch a
+tab, then screenshot the panel) rides ONE multi -- [click <ref>, click
+<ref>, screenshot] -- never across rounds: browser-only rounds gather
+no sources, and the round budget can end the run before a chain spread
+over several rounds ever reaches its screenshot.  A modal re-render
+kills the refs the outline handed you: for in-modal buttons prefer
+viewport COORDINATE clicks (the geometry survives re-renders), and
+when a batch step dies to a stale ref, re-snapshot and resend the
+remaining chain with fresh refs -- a screenshot taken before the
+switch shows the previous state, not the panel you meant to capture.
 SITE SKILLS: when you just cracked a site's way of doing things -- a
 sign-in flow, a captcha, the route to walled content, OR its on-site
 search pattern (the search URL shape, the filters and tags that
