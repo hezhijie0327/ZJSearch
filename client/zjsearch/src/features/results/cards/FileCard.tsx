@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
 import { Download, FileText, Film, Music } from "lucide-react";
+import { useState } from "react";
 import {
   type CardProps,
   EnginesLine,
   MediaCollapse,
+  MediaFailedChip,
   PrettyUrl,
   ResultArticle,
   Snippet,
@@ -18,6 +20,7 @@ import { CHIP_ACCENT_SOFT, META_ROW } from "@/lib/styles.ts";
 
 export function FileCard({ result, globals }: CardProps) {
   const t = useT();
+  const [mediaFailed, setMediaFailed] = useState(false);
   const isMedia = result.mtype === "audio" || result.mtype === "video";
   const tileClass = isMedia ? "bg-accent-soft text-accent" : "bg-surface-2 text-ink-3";
   const tileIcon =
@@ -64,22 +67,41 @@ export function FileCard({ result, globals }: CardProps) {
             isMedia ? (
               result.mtype === "video" ? (
                 <MediaCollapse hideLabel={t("hide_media")} showLabel={t("show_media")}>
-                  {() => (
-                    <video
-                      className="w-full max-w-lg rounded-xl"
-                      controls
-                      poster={result.thumbnail}
-                      preload="metadata"
-                      src={result.embedded}
-                    />
-                  )}
+                  {() =>
+                    mediaFailed ? (
+                      <MediaFailedChip />
+                    ) : (
+                      <video
+                        className="w-full max-w-lg rounded-xl"
+                        controls
+                        onError={() => {
+                          setMediaFailed(true);
+                        }}
+                        poster={result.thumbnail}
+                        preload="metadata"
+                        src={result.embedded}
+                      />
+                    )
+                  }
                 </MediaCollapse>
               ) : (
                 // audio: inline player, no collapse - music results should be
                 // playable in one click (preload="none" keeps it cheap)
                 <div className="mt-2 flex max-w-md items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
                   <Music className="size-4 shrink-0 text-accent" />
-                  <audio className="h-8 w-full" controls preload="none" src={result.embedded} />
+                  {mediaFailed ? (
+                    <MediaFailedChip />
+                  ) : (
+                    <audio
+                      className="h-8 w-full"
+                      controls
+                      onError={() => {
+                        setMediaFailed(true);
+                      }}
+                      preload="none"
+                      src={result.embedded}
+                    />
+                  )}
                 </div>
               )
             ) : (

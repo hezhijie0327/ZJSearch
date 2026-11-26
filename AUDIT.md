@@ -389,7 +389,10 @@ rules and the shared-token inventory from AGENTS.md, covering:
 3. **Plugin behaviour** — the §4 matrix plus edge cases (CJK terms,
    multi-keyword queries, unknown locations = silence).
 4. **Icons** — same concept = same icon everywhere; X = dismiss only;
-   failed rows wear the alert family; text-only controls next to
+   failed rows wear the alert family; every remote/volatile image and
+   media element dies through the one door (`useImgFallback` /
+   `MediaFailedChip` — the result-thumbnail failed state), each site
+   rendering its own fallback shape; text-only controls next to
    icon-paired siblings; sizes on the icon tiers.
 5. **Design tokens & skeletons** — light/dark/black sweeps,
    widescreen/centered, contrast tiers (the gate's boundary nodes are

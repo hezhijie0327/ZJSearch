@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 WITH Commons-Clause-1.0
 
+import { useState } from "react";
 import {
   type CardProps,
   EmbedFrame,
   EnginesLine,
   MediaCollapse,
+  MediaFailedChip,
   MetaLine,
   PrettyUrl,
   ResultArticle,
@@ -22,6 +24,7 @@ import { useT } from "@/lib/i18n.ts";
 
 export function DefaultCard({ eager, result, globals }: CardProps) {
   const t = useT();
+  const [mediaFailed, setMediaFailed] = useState(false);
   return (
     <ResultArticle priority={result.priority}>
       <div className="flex gap-4">
@@ -45,7 +48,19 @@ export function DefaultCard({ eager, result, globals }: CardProps) {
           ) : null}
           <Snippet className="mt-1.5" contentHtml={result.content_html || t("no_description")} />
           {result.audio_src ? (
-            <audio className="mt-2 w-full max-w-md" controls preload="none" src={result.audio_src} />
+            mediaFailed ? (
+              <MediaFailedChip />
+            ) : (
+              <audio
+                className="mt-2 w-full max-w-md"
+                controls
+                onError={() => {
+                  setMediaFailed(true);
+                }}
+                preload="none"
+                src={result.audio_src}
+              />
+            )
           ) : null}
         </div>
         {result.thumbnail ? (

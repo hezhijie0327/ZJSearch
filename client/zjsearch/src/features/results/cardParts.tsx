@@ -5,6 +5,7 @@ import {
   Award,
   Calendar,
   ChevronDown,
+  CircleAlert,
   Clock,
   Eye,
   Globe,
@@ -337,6 +338,18 @@ export function EmbedFrame({ src }: { src: string }) {
 
 /** Always-visible preview (music intent): prefer our own audio player for
     stream URLs; when the source is not raw audio fall back to the embed. */
+/** The media element's failed state (an audio/video whose source died):
+    one honest chip in the alert family instead of an empty player. */
+export function MediaFailedChip() {
+  const t = useT();
+  return (
+    <div className="mt-2 flex max-w-md items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3 text-xs text-ink-3">
+      <CircleAlert aria-hidden="true" className="size-4 shrink-0" />
+      <span>{t("media_source_unavailable")}</span>
+    </div>
+  );
+}
+
 export function MediaPreview({ src, video = false }: { src: string; video?: boolean }) {
   const [audioFailed, setAudioFailed] = useState(false);
   if (video || audioFailed) {
