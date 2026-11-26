@@ -588,6 +588,7 @@ export const EN = {
   ai_browser_wait: "{s}s",
   ai_browser_wait_hint: "time left in this operation window",
   ai_browser_full: "Open the takeover view",
+  ai_browser_frame_live: "Frames are live-only — a reconnect does not carry them back",
   ai_browser_close: "Back to the card",
   ai_browser_done: "Done",
   ai_browser_done_hint: "Hand the current page back to the model",

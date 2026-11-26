@@ -583,6 +583,7 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_browser_wait: "{s} 秒",
   ai_browser_wait_hint: "本操作窗口的剩余时间",
   ai_browser_full: "打开接管视图",
+  ai_browser_frame_live: "画面仅实时回传，重连后不补发",
   ai_browser_close: "回到卡片",
   ai_browser_done: "完成",
   ai_browser_done_hint: "把当前页面交回给模型",

@@ -16,6 +16,7 @@ import { createPortal } from "react-dom";
 import {
   ActionMark,
   addressOf,
+  FramePlaceholder,
   LivePulse,
   SessionTabs,
   VIEWPORT_H,
@@ -290,62 +291,63 @@ export function BrowserLightbox({
             className="relative w-full overflow-hidden rounded-lg"
             style={{ aspectRatio: `${shown.w || VIEWPORT_W()} / ${shown.h || VIEWPORT_H()}` }}
           >
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: the frame
-                IS the interaction surface -- the click forwards as a viewport
-                coordinate; keyboard users use the bar below */}
-            <img
-              alt={shown.title || shown.url}
-              className={`h-full w-full touch-none object-contain ${isLead ? "cursor-crosshair" : ""}`}
-              onClick={(event) => {
-                if (!isLead) {
-                  return;
-                }
-                if (suppressClickRef.current) {
-                  // a drag just landed -- the pointerup's synthetic click
-                  // must not also fire a tap at the endpoint
-                  suppressClickRef.current = false;
-                  return;
-                }
-                event.stopPropagation();
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                send({ type: "click", x, y });
-                // clicking a non-focusable element blurs the takeover -- pull
-                // focus back so direct typing keeps flowing
-                dialogRef.current?.focus();
-              }}
-              onPointerDown={(event) => {
-                if (!isLead || event.button !== 0) {
-                  return;
-                }
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                dragStartRef.current = { x1: x, y1: y };
-                setDragTrail({ x1: x, y1: y, x, y });
-                event.currentTarget.setPointerCapture(event.pointerId);
-              }}
-              onPointerMove={(event) => {
-                if (!dragStartRef.current) {
-                  return;
-                }
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                setDragTrail({ x1: dragStartRef.current.x1, y1: dragStartRef.current.y1, x, y });
-              }}
-              onPointerUp={(event) => {
-                const start = dragStartRef.current;
-                dragStartRef.current = null;
-                setDragTrail(null);
-                if (!start || !isLead) {
-                  return;
-                }
-                const { x, y } = frameCoords(event, shown.w, shown.h);
-                if (Math.abs(x - start.x1) + Math.abs(y - start.y1) < 8) {
-                  return; // a tap -- the click handler owns it
-                }
-                suppressClickRef.current = true;
-                send({ type: "drag", x1: start.x1, y1: start.y1, x2: x, y2: y });
-              }}
-              role="presentation"
-              src={`data:image/jpeg;base64,${shown.img}`}
-            />
+            {shown.img ? (
+              <img
+                alt={shown.title || shown.url}
+                className={`h-full w-full touch-none object-contain ${isLead ? "cursor-crosshair" : ""}`}
+                onClick={(event) => {
+                  if (!isLead) {
+                    return;
+                  }
+                  if (suppressClickRef.current) {
+                    // a drag just landed -- the pointerup's synthetic click
+                    // must not also fire a tap at the endpoint
+                    suppressClickRef.current = false;
+                    return;
+                  }
+                  event.stopPropagation();
+                  const { x, y } = frameCoords(event, shown.w, shown.h);
+                  send({ type: "click", x, y });
+                  // clicking a non-focusable element blurs the takeover -- pull
+                  // focus back so direct typing keeps flowing
+                  dialogRef.current?.focus();
+                }}
+                onPointerDown={(event) => {
+                  if (!isLead || event.button !== 0) {
+                    return;
+                  }
+                  const { x, y } = frameCoords(event, shown.w, shown.h);
+                  dragStartRef.current = { x1: x, y1: y };
+                  setDragTrail({ x1: x, y1: y, x, y });
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                }}
+                onPointerMove={(event) => {
+                  if (!dragStartRef.current) {
+                    return;
+                  }
+                  const { x, y } = frameCoords(event, shown.w, shown.h);
+                  setDragTrail({ x1: dragStartRef.current.x1, y1: dragStartRef.current.y1, x, y });
+                }}
+                onPointerUp={(event) => {
+                  const start = dragStartRef.current;
+                  dragStartRef.current = null;
+                  setDragTrail(null);
+                  if (!start || !isLead) {
+                    return;
+                  }
+                  const { x, y } = frameCoords(event, shown.w, shown.h);
+                  if (Math.abs(x - start.x1) + Math.abs(y - start.y1) < 8) {
+                    return; // a tap -- the click handler owns it
+                  }
+                  suppressClickRef.current = true;
+                  send({ type: "drag", x1: start.x1, y1: start.y1, x2: x, y2: y });
+                }}
+                role="presentation"
+                src={`data:image/jpeg;base64,${shown.img}`}
+              />
+            ) : (
+              <FramePlaceholder className="h-full w-full" view={shown} />
+            )}
             {dragTrail ? (
               <svg
                 aria-hidden="true"

@@ -5,7 +5,7 @@
     address form, the action mark overlay, the live pulse and the session
     tab strip.  One home so the card and the takeover cannot drift. */
 
-import { Bot, MousePointer2 } from "lucide-react";
+import { Bot, MousePointer2, VideoOff } from "lucide-react";
 import type { AiSearchRun } from "@/features/results/aiSearch/runModel.ts";
 import { sessionViewport } from "@/lib/browserInput.ts";
 import { useT } from "@/lib/i18n.ts";
@@ -153,6 +153,26 @@ export function ActionMark({ view }: { view: MirrorView }) {
           {markLabel}
         </span>
       ) : null}
+    </div>
+  );
+}
+
+/** The byte-less frame's honest placeholder: replayed browser events keep
+    their meta but never the volatile jpeg bytes (the run host strips them
+    on every replay line) -- the rail card and the takeover render this
+    instead of a broken image, and the takeover's pointer forwarding stands
+    down with the frame. */
+export function FramePlaceholder({ view, className = "" }: { view: MirrorView; className?: string }) {
+  const t = useT();
+  return (
+    <div
+      aria-label={t("ai_browser_frame_live")}
+      className={`grid place-items-center gap-2 bg-surface-2/40 ${className}`}
+      role="img"
+      style={{ aspectRatio: `${view.w || VIEWPORT_W()} / ${view.h || VIEWPORT_H()}` }}
+    >
+      <VideoOff aria-hidden="true" className="size-8 text-ink-3" />
+      <span className="px-4 text-center text-xs leading-snug text-ink-3">{t("ai_browser_frame_live")}</span>
     </div>
   );
 }
