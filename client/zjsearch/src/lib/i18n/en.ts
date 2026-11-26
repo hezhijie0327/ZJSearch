@@ -558,7 +558,6 @@ export const EN = {
   ai_report_toc: "Contents",
   ai_report_progress: "{done}/{total} sections written",
   ai_report_stamp_label: "Filed",
-  ai_section_failed_note: "This section failed to generate.",
   ai_debug: "Debug",
   ai_debug_overview: "AI Overview debug stage",
   ai_debug_stage: "AI debug stage",

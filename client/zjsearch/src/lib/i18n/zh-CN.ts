@@ -554,7 +554,6 @@ export const ZH_CN: Record<StringKey, string> = {
   ai_report_toc: "目录",
   ai_report_progress: "已完成 {done}/{total} 节",
   ai_report_stamp_label: "已归档",
-  ai_section_failed_note: "本节生成失败。",
   ai_debug: "调试",
   ai_debug_overview: "AI 概览调试台",
   ai_debug_stage: "AI 调试台",

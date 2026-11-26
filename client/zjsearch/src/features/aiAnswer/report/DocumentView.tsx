@@ -28,9 +28,10 @@ import { META_TOGGLE } from "@/lib/styles.ts";
  * filing date + label, mono, deterministic 12° tilt, in flow.
  */
 
-/** The server's gap placeholder (synth.py owns the string): a failed
-    section whose buffer holds exactly this renders the localized note
-    instead -- the English machine line is not report prose. */
+/** The server's gap placeholder (the retired per-section synthesis owned
+    the string): a legacy record's failed section whose buffer holds
+    exactly this renders as nothing -- the heading's warning mark carries
+    the failure, the English machine line is not report prose. */
 const GAP_PLACEHOLDER = "*Section generation failed upstream*";
 
 /** One section's retained REASONING (the writer's relayed working turn):
@@ -288,10 +289,6 @@ export function DocumentView({
                   <div className="h-3 w-3/5 animate-pulse rounded bg-surface-2/70" />
                 </div>
               )
-            ) : section.status === "failed" ? (
-              <p className="mt-2 text-[13px] text-warning" dir="auto">
-                {t("ai_section_failed_note")}
-              </p>
             ) : null}
           </section>
         );
