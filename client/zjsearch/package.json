@@ -13,11 +13,12 @@
     "ci": "pnpm run lint && pnpm run build",
     "clean": "rm -Rf node_modules",
     "fix": "biome check --write",
-    "lint": "pnpm run lint:biome && pnpm run lint:tsc && pnpm run lint:cjk",
+    "lint": "pnpm run lint:biome && pnpm run lint:tsc && pnpm run lint:cjk && pnpm run lint:deps",
     "lint:biome": "biome check",
     "lint:tsc": "tsc --noEmit",
     "lint:cjk": "node scripts/audit-cjk.mjs",
-    "audit:diff": "node scripts/audit-diff.mjs"
+    "audit:diff": "node scripts/audit-diff.mjs",
+    "lint:deps": "python scripts/audit-deps.py"
   },
   "browserslist": [
     "baseline 2022",

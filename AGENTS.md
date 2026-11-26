@@ -188,7 +188,8 @@ Key directories:
 
 ```sh
 make themes.zjsearch        # pnpm install + vite build -> searx/static/themes/zjsearch
-make themes.zjsearch.lint   # biome check + tsc --noEmit (run inside client/zjsearch)
+make themes.zjsearch.lint   # biome + tsc --noEmit + audit-cjk + audit-deps (run inside client/zjsearch;
+                            # audit-deps = scripts/audit-deps.py, the coupling gate — see AUDIT.md §7)
 make themes.zjsearch.dev    # vite dev server (HMR), proxies API calls to :8888
 make run                    # dev instance on http://127.0.0.1:8888 (granian, reloads ./searx)
 pnpm run audit              # Lighthouse gate (inside client/zjsearch): boots its own instance
@@ -212,7 +213,8 @@ lockfile, untouched).
   `./local/py3/bin/python -m searx.zjsearch.ai.browser.install`
 - No test infrastructure by design: `client/zjsearch` has no vitest/jest setup
   and must not gain `*.test.*` files or test dependencies (user decision).
-  Quality gates are `make themes.zjsearch.lint` (biome + tsc) and a successful
+  Quality gates are `make themes.zjsearch.lint` (biome + tsc + audit-cjk +
+  audit-deps — the import-graph coupling gate, AUDIT.md §7) and a successful
   `make themes.zjsearch` build.
 - Theme changes require `make themes.zjsearch`; the browser caches assets for 30 s
   (WhiteNoise), reload twice or wait after rebuilding. On Windows also RESTART the

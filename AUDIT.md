@@ -48,11 +48,22 @@ PLACEHOLDER keys — paste the real ones locally, never commit them.
 
 ```sh
 make themes.zjsearch                        # full build (also publishes static root)
-cd client/zjsearch && pnpm run lint         # biome + tsc --noEmit + audit-cjk
+cd client/zjsearch && pnpm run lint         # biome + tsc --noEmit + audit-cjk + audit-deps
 pnpm run audit                              # Lighthouse gate — home + every result
                                             # presentation + the AI surfaces (deterministic
                                             # mock LLM transport; Edge fallback built in)
 ```
+
+`lint:deps` (`scripts/audit-deps.py`, Python) is the MECHANICAL coupling
+gate behind §7 dimension 0: it builds both real import graphs and checks
+every edge against the declared layer order — server ranks
+`api → runs → tools → agent → {llm, browser, prompts} → core`, client
+layers `lib → components → features → pages` — plus cycle detection
+(SCC) and the `@/`-alias rule.  Exit 1 on any HARD finding; WARN-level
+findings (undeclared features→features lateral edges) print but do not
+fail — they are debt to review, never to accumulate.  The two sanctioned
+shared surfaces (overlay context, `features/aiAnswer`) are encoded in the
+script; adding a third requires an AGENTS.md contract change first.
 
 The ZJSearch client is a pnpm workspace (`pnpm-lock.yaml` + `packageManager`);
 `pnpm install --frozen-lockfile` is the only install path in scripts. The
@@ -353,7 +364,12 @@ rules and the shared-token inventory from AGENTS.md, covering:
 0. **Structure/naming/reuse** — duplicated JSX blocks, hand-typed tokens
    (CHIP/PILL/SEGMENT_*/BODY_ROW), reinvented hostname/date/number
    formatting, dead exports (grep-verify each claim), layer inversions.
-   The placement doctrine (DESIGN.md §12) governs: `components/` is
+   Layer inversions and import cycles are MECHANICAL now:
+   `pnpm run lint:deps` (`scripts/audit-deps.py`) checks both import
+   graphs against the declared contract on every lint round — the
+   Explore sweep only covers what the script cannot see (naming,
+   duplication, dead exports).  The placement doctrine (DESIGN.md §12)
+   governs: `components/` is
    CROSS-PAGE only; features own real domains; lib modules are lowercase
    topics; zero default exports.  REUSE-FIRST: new list-shaped tool
    bodies compose the shared furniture (`calls/bodyParts.tsx`:
