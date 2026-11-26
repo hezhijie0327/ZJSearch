@@ -182,8 +182,13 @@
    sheet itself only states rhythm and the furniture (wordmark / injected
    heading / sources tail) sizes itself inline or via its own class —
    nothing here re-states a body size or a palette value. ── */
+/* Paper size/orientation deliberately stay with the print dialog: declaring
+   `size` here would lock the dialog's controls instead of following them
+   (@page cannot be scoped by class — this rule is inherently document-wide).
+   The a4 clone is fluid and reflows to whatever paper the dialog names; the
+   deck sheets re-assert their own fixed 16:9 size inside the injected
+   document (lib/print.ts) — slides ARE fixed-size paper. */
 @page {
-  size: a4;
   margin: 16mm 14mm;
 }
 

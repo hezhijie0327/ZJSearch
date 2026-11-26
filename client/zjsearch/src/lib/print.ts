@@ -47,12 +47,13 @@ export interface PrintOptions {
       window.print() -- the paper face is the terminal state there, so tell
       the user to output the content from the browser's Print menu */
   hint?: string;
-  /** the paper the clone lays out on: "a4" (default -- portrait sheet,
-      the injected wordmark/heading chrome, print.css's @page) or "deck"
-      (16:9 landscape sheets, one slide per page via the clone's own
-      marpit @page re-asserted AFTER print.css, no injected chrome -- the
-      deck's cover slide IS the title page; the sources tail starts on
-      its own sheet).  Decks printed through the a4 path collapse into
+  /** the paper the clone lays out on: "a4" (default -- the injected
+      wordmark/heading chrome, print.css's @page margins, the paper
+      size/orientation following the print dialog) or "deck" (fixed 16:9
+      landscape sheets, one slide per page via the clone's own marpit
+      @page re-asserted AFTER print.css, no injected chrome -- the deck's
+      cover slide IS the title page; the sources tail starts on its own
+      sheet).  Decks printed through the a4 path collapse into
       portrait pages with half-empty sheets and a near-blank page 1. */
   paper?: "a4" | "deck";
 }
