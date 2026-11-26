@@ -9,7 +9,8 @@
 
 import { type MemoryRow, rowToMemory } from "@/lib/kb/memory.ts";
 import { sweepStaleRuns, type ThreadSummary } from "@/lib/kb/recall.ts";
-import { type Pg, pg } from "@/lib/pg.ts";
+import { pg } from "@/lib/pg.ts";
+import type { Pg } from "@/lib/pgSchema.ts";
 
 /** A live query's unsubscribe handle. */
 export interface StoreSubscription {

@@ -20,7 +20,8 @@ import { fetchJson } from "@/lib/http.ts";
 import { flushRunEventsBody } from "@/lib/kb/events.ts";
 import { aiTokenValue, bodySegments, embedModelName, enqueue, safeParse } from "@/lib/kb/shared.ts";
 import { invalidateStatsCache } from "@/lib/kb/stats.ts";
-import { pgQuery, pgTransaction, resetDatabase, segmentKeywords, toVectorLiteral, urlHash } from "@/lib/pg.ts";
+import { segmentKeywords, urlHash } from "@/lib/keywords.ts";
+import { pgQuery, pgTransaction, resetDatabase, toVectorLiteral } from "@/lib/pg.ts";
 
 /** The structural shape the store reads off a settled run.  The feature
     owns the typed shape (AiSearchRun satisfies it); the store never

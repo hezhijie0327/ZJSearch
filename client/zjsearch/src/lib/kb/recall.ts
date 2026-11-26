@@ -22,7 +22,8 @@ import {
   rowToItem,
   safeParse,
 } from "@/lib/kb/shared.ts";
-import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
+import { segmentKeywords } from "@/lib/keywords.ts";
+import { pg, pgQuery, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
 // memory lives in its OWN table (lib/kb/memory.ts) -- fuseRecall adds its

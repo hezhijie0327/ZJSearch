@@ -16,7 +16,8 @@
 import { embeddingsConfigured, embedQuery, embedTexts } from "@/lib/embed.ts";
 import type { KnowledgeItem } from "@/lib/kb/shared.ts";
 import { embedModelName, enqueue } from "@/lib/kb/shared.ts";
-import { pg, pgQuery, segmentKeywords, toVectorLiteral } from "@/lib/pg.ts";
+import { segmentKeywords } from "@/lib/keywords.ts";
+import { pg, pgQuery, toVectorLiteral } from "@/lib/pg.ts";
 import { rerankConfigured, rerankDocs } from "@/lib/rerank.ts";
 
 export type MemoryKind = "fact" | "procedure" | "lesson" | "gap";
