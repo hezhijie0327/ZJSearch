@@ -126,6 +126,47 @@ engines:
     engine: zjsearch_fixtures
     shortcut: zja
     disabled: false
+  # Tencent Yuanbao (so.qq.com) -- strong on Chinese content; the gzh lane
+  # serves WeChat official-account articles (site UI gates the tab behind a
+  # login, the API answers anonymously), the videos lane serves WeChat
+  # Channels clips
+  - name: yuanbao
+    engine: yuanbao
+    shortcut: yuanbao
+    disabled: false
+    # a CN site: the LAN proxy cannot reach it, this engine goes direct
+    network:
+      proxies: null
+  - name: yuanbao gzh
+    engine: yuanbao
+    shortcut: ybgzh
+    yuanbao_categ: weixin_article
+    # the API ignores its page parameter on this lane (page 2 repeats page
+    # 1's docIds, hasMore stays false) -- one page per query, no pagination
+    paging: false
+    disabled: false
+    network:
+      proxies: null
+  - name: yuanbao videos
+    engine: yuanbao
+    shortcut: ybvideo
+    yuanbao_categ: weixin_video
+    categories: [videos]
+    disabled: false
+    network:
+      proxies: null
+  # the images lane parses the SSR page (48 images per query): its own
+  # pagination API sits behind an antispider handshake, and the SSR
+  # payload ignores the site's timeFilter -- single page, no time range
+  - name: yuanbao images
+    engine: yuanbao
+    shortcut: ybimg
+    yuanbao_categ: images
+    categories: [images]
+    paging: false
+    disabled: false
+    network:
+      proxies: null
 
 # ── the LLM transport (zjsearch.llm) ─────────────────────────────────────
 # One transport serves BOTH AI features: the whole-page AI Overview
