@@ -30,13 +30,16 @@ export type Translate = (key: StringKey, params?: TranslateParams) => string;
 /** Language picker options shared by the results filter row and the
     preferences general tab: default [all], autodetect (optionally annotated
     with the detected language), then the instance locales sorted by name,
-    each carrying its tag + flag. */
+    each carrying its tag + flag. `whitelist` (globals.search_languages as a
+    Set) drops the rows the server would silently refuse on a preference
+    save -- search-time language params stay unrestricted either way. */
 export function languageOptions(
   locales: LocaleInfo[],
   t: Translate,
   autodetectSuffix?: string,
+  whitelist?: ReadonlySet<string> | null,
 ): Array<{ value: string; label: string }> {
-  return [
+  const rows = [
     { value: "all", label: `${t("default_language")} [all]` },
     { value: "auto", label: autodetectSuffix ? `${t("autodetect")} (${autodetectSuffix})` : t("autodetect") },
     ...[...locales]
@@ -46,6 +49,7 @@ export function languageOptions(
         label: `${item.name}${item.country ? `-${item.country}` : ""} [${item.tag}] ${item.flag}`,
       })),
   ];
+  return whitelist ? rows.filter((row) => whitelist.has(row.value)) : rows;
 }
 
 /** Catalogs keyed by their locale tag; the catalog file name IS the tag. */

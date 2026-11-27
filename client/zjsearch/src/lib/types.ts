@@ -62,6 +62,10 @@ export interface GlobalData {
   categories: string[];
   default_category: string;
   locales: LocaleInfo[];
+  /** the instance's search.languages whitelist -- exactly the language-preference
+      choices the server accepts (default when unconfigured: every tag incl
+      all/auto, so filtering is a no-op); the prefs dropdown filters against it */
+  search_languages: string[];
   language: string;
   safesearch: 0 | 1 | 2;
   method: "GET" | "POST";

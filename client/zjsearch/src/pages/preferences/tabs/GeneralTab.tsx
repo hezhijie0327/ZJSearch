@@ -31,6 +31,10 @@ export function GeneralTab({
 }) {
   const t = useT();
   const globals = data.globals;
+  // server truth: SearchLanguageSetting only accepts search.languages choices
+  // (a save outside the set is silently reverted), so the dropdown offers
+  // exactly those; search-time language params stay unrestricted
+  const languageWhitelist = new Set(globals.search_languages);
   // grouped like the plugins tab; a group only renders while at least one of
   // its rows survives the locked-preferences filter
   const showSearch =
@@ -92,7 +96,7 @@ export function GeneralTab({
               <Select
                 ariaLabel={t("search_language")}
                 onChange={form.setLanguage}
-                options={languageOptions(globals.locales, t)}
+                options={languageOptions(globals.locales, t, undefined, languageWhitelist)}
                 value={form.language}
               />
             </SettingRow>

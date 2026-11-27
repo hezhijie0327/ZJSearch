@@ -41,6 +41,7 @@ pipeline features without any Python changes. -#}
     {"tag": {{ tag|tojson }}, "name": {{ name|tojson }}, "country": {{ country|tojson }}, "english": {{ english|tojson }}, "flag": {{ flag|tojson }}}{{ ", " if not loop.last }}
     {%- endfor -%}
   ],
+  "search_languages": {{ get_setting('search.languages')|tojson }},
   "language": {{ current_language|tojson }},
   "safesearch": {{ safesearch|tojson }},
   "method": {{ method|tojson }},
