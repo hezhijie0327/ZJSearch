@@ -31,6 +31,8 @@ time_range_support = True
 time_range_dict = {'day': '4', 'week': '3', 'month': '2', 'year': '1'}
 
 CAPTCHA_PATTERN = r'\{[^{]*?"action"\s*:\s*"captcha"\s*,\s*"url"\s*:\s*"([^"]+)"[^{]*?\}'
+# the x5sec punish page: a redirect script to /s/_____tmd_____/punish?x5secdata=...
+PUNISH_PATTERN = r'_____tmd_____/punish\?x5secdata='
 
 
 def is_alibaba_captcha(html):
@@ -41,7 +43,7 @@ def is_alibaba_captcha(html):
 
     Typically, the ban duration is around 15 minutes.
     """
-    return bool(re.search(CAPTCHA_PATTERN, html))
+    return bool(re.search(CAPTCHA_PATTERN, html) or re.search(PUNISH_PATTERN, html))
 
 
 def setup(_: dict[str, t.Any]) -> bool | None:
@@ -310,6 +312,17 @@ def parse_news_uchq(data):
     return results
 
 
+def _to_text(value):
+    """html_to_text, tolerant of schema drift: a bare dict is unwrapped via
+    its text-ish fields instead of crashing (2026 ss_doc cards ship dict
+    titles/summaries)."""
+    if isinstance(value, dict):
+        value = value.get('content') or value.get('text') or value.get('title') or ''
+    if not isinstance(value, str):
+        return ''
+    return html_to_text(value)
+
+
 def parse_ss_doc(data):
     published_date = None
     try:
@@ -327,7 +340,7 @@ def parse_ss_doc(data):
         thumbnail = None
 
     return {
-        "title": html_to_text(
+        "title": _to_text(
             data.get('titleProps', {}).get('content')
             # ss_kv variant 1 & 2
             or data.get('title')
@@ -337,7 +350,7 @@ def parse_ss_doc(data):
         or data.get('normal_url')
         # ss_kv variant 2
         or data.get('url'),
-        "content": html_to_text(
+        "content": _to_text(
             data.get('summaryProps', {}).get('content')
             # ss_doc variant 1
             or data.get('message', {}).get('replyContent')

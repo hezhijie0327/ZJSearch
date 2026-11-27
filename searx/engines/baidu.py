@@ -18,7 +18,8 @@ import json
 from searx.exceptions import SearxEngineAPIException, SearxEngineCaptchaException, SearxEngineAccessDeniedException
 from searx.enginelib import EngineCache
 from searx.network import get as http_get
-from searx.utils import html_to_text
+from searx.utils import extract_text, html_to_text
+from lxml import html as lxml_html
 
 about = {
     "website": "https://www.baidu.com",
@@ -36,6 +37,12 @@ results_per_page = 10
 
 baidu_category = 'general'
 
+baidu_general_lane = 'json'
+"""Which response shape the ``general`` category parses: ``json`` (the
+structured ``tn=json`` feed; carries ``publishedDate`` but answers the
+security-check instead of JSON on some networks) or ``html`` (the SSR
+result page -- cookie-free and working where the feed is blocked)."""
+
 time_range_support = True
 time_range_dict = {"day": 86400, "week": 604800, "month": 2592000, "year": 31536000}
 
@@ -51,6 +58,8 @@ CACHE: EngineCache
 def setup(engine_settings: dict[str, t.Any]) -> bool:
     if baidu_category not in ('general', 'images', 'it'):
         raise SearxEngineAPIException(f"Unsupported category: {baidu_category}")
+    if baidu_category == 'general' and baidu_general_lane not in ('json', 'html'):
+        raise SearxEngineAPIException(f"Unsupported general lane: {baidu_general_lane}")
 
     global CACHE  # pylint: disable=global-statement
     CACHE = EngineCache(engine_settings["name"])
@@ -71,15 +80,18 @@ def get_image_cookies(headers: dict[str, str]) -> dict[str, str]:
 def request(query, params):
     page_num = params["pageno"]
 
+    general_params = {
+        "wd": query,
+        "rn": results_per_page,
+        "pn": (page_num - 1) * results_per_page,
+    }
+    if baidu_category == 'general' and baidu_general_lane == 'json':
+        general_params["tn"] = "json"
+
     category_config = {
         'general': {
             'endpoint': 'https://www.baidu.com/s',
-            'params': {
-                "wd": query,
-                "rn": results_per_page,
-                "pn": (page_num - 1) * results_per_page,
-                "tn": "json",
-            },
+            'params': general_params,
         },
         'images': {
             'endpoint': 'https://image.baidu.com/search/acjson',
@@ -128,14 +140,28 @@ def response(resp):
     if 'wappass.baidu.com/static/captcha' in resp.headers.get('Location', ''):
         raise SearxEngineCaptchaException()
 
+    if baidu_category == 'general':
+        if baidu_general_lane == 'html':
+            return parse_general_html(resp.text)
+        try:
+            data = json.loads(resp.text, strict=False)
+        except json.JSONDecodeError as exc:
+            raise SearxEngineCaptchaException(suspended_time=900) from exc
+        if data.get("antiFlag") == 1:
+            raise SearxEngineAccessDeniedException(data.get("message", "Forbid spider access"))
+        return parse_general(data)
+
     text = resp.text
     if baidu_category == 'images':
         # baidu's JSON encoder wrongly quotes / and ' characters by \\ and \'
         text = text.replace(r"\/", "/").replace(r"\'", "'")
-    data = json.loads(text, strict=False)
+    try:
+        data = json.loads(text, strict=False)
+    except json.JSONDecodeError as exc:
+        raise SearxEngineCaptchaException(suspended_time=900) from exc
     if data.get("antiFlag") == 1:
         raise SearxEngineAccessDeniedException(data.get("message", "Forbid spider access"))
-    parsers = {'general': parse_general, 'images': parse_images, 'it': parse_it}
+    parsers = {'images': parse_images, 'it': parse_it}
 
     return parsers[baidu_category](data)
 
@@ -166,6 +192,34 @@ def parse_general(data):
                 "url": entry["url"],
                 "content": content,
                 "publishedDate": published_date,
+            }
+        )
+    return results
+
+
+def parse_general_html(text):
+    """Parse the SSR result page (the `tn=json` feed answers the
+    security-check instead of JSON on some networks; the HTML page keeps
+    working there without any cookies).  Every result carries its real
+    landing URL in the ``mu`` attribute."""
+    dom = lxml_html.fromstring(text)
+    results = []
+    for item in dom.xpath('//div[@id="content_left"]/div[contains(@class, "result")]'):
+        url = item.get('mu')
+        title = extract_text(item.xpath('.//h3'))
+        if not url or not title:
+            continue
+        # no stable abstract class on the cos UI cards -- take the item text
+        # after the title and cap it
+        body = " ".join(" ".join(item.itertext()).split())
+        content = ""
+        if title in body:
+            content = body.split(title, 1)[1].strip()[:300]
+        results.append(
+            {
+                "title": title,
+                "url": url,
+                "content": content,
             }
         )
     return results

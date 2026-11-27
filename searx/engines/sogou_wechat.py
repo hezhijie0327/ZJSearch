@@ -1,9 +1,17 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Sogou-WeChat search engine for retrieving WeChat Article from Sogou"""
+"""Sogou-WeChat search engine for retrieving WeChat Article from Sogou
 
-from urllib.parse import urlencode
+The dedicated ``weixin.sogou.com/weixin`` endpoint was retired (it answers
+with an empty 200 body); WeChat article search now lives on the main domain
+at ``/iweixin?tab=weixin_vertical`` -- a single, unpaginated page whose
+results are semantic ``<article>`` elements with direct ``mp.weixin.qq.com``
+links.
+"""
+
 from datetime import datetime
-import re
+from urllib.parse import urlencode
+
+from lxml import html as lxml_html
 
 from searx.utils import extract_text
 
@@ -18,48 +26,41 @@ language = "zh"
 
 # Engine Configuration
 categories = ["news"]
-paging = True
+paging = False
 
 # Base URL
-base_url = "https://weixin.sogou.com"
+base_url = "https://www.sogou.com"
 
 
 def request(query, params):
     query_params = {
         "query": query,
-        "page": params["pageno"],
-        "type": 2,
+        "tab": "weixin_vertical",
     }
 
-    params["url"] = f"{base_url}/weixin?{urlencode(query_params)}"
+    params["url"] = f"{base_url}/iweixin?{urlencode(query_params)}"
     return params
 
 
 def response(resp):
-    dom = resp.html()
+    dom = lxml_html.fromstring(resp.text)
     results = []
 
-    for item in dom.xpath('//li[contains(@id, "sogou_vr_")]'):
-        title = extract_text(item.xpath('.//h3/a'))
-        url = extract_text(item.xpath('.//h3/a/@href'))
+    for item in dom.xpath('//article'):
+        title = extract_text(item.xpath('.//a[1]'))
+        url = extract_text(item.xpath('.//a[1]/@href'))
 
-        if url.startswith("/link?url="):
-            url = f"{base_url}{url}"
+        content = extract_text(item.xpath('.//p[1]'))
 
-        content = extract_text(item.xpath('.//p[@class="txt-info"]'))
-        if not content:
-            content = extract_text(item.xpath('.//p[contains(@class, "txt-info")]'))
-
-        thumbnail = extract_text(item.xpath('.//div[@class="img-box"]/a/img/@src'))
-        if thumbnail and thumbnail.startswith("//"):
-            thumbnail = f"https:{thumbnail}"
-
+        # meta captions: [account name, publish date "YYYY-MM-DD"]
+        captions = [c.strip() for c in item.xpath('.//span[contains(@class, "text-yb-caption")]//text()') if c.strip()]
+        author = captions[0] if captions else None
         published_date = None
-        timestamp = extract_text(item.xpath('.//script[contains(text(), "timeConvert")]'))
-        if timestamp:
-            match = re.search(r"timeConvert\('(\d+)'\)", timestamp)
-            if match:
-                published_date = datetime.fromtimestamp(int(match.group(1)))
+        if len(captions) > 1:
+            try:
+                published_date = datetime.strptime(captions[1], "%Y-%m-%d")
+            except ValueError:
+                published_date = None
 
         if title and url:
             results.append(
@@ -67,7 +68,7 @@ def response(resp):
                     "title": title,
                     "url": url,
                     "content": content,
-                    'thumbnail': thumbnail,
+                    "author": author,
                     "publishedDate": published_date,
                 }
             )

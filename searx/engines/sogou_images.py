@@ -3,6 +3,7 @@
 
 import json
 import re
+from datetime import datetime
 from urllib.parse import urlencode
 
 # about
@@ -33,22 +34,31 @@ def request(query, params):
 
 def response(resp):
     results = []
-    match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', resp.text, re.S)
+    # the trailing semicolon became optional (2026 markup: `}</script>`)
+    match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?})\s*;?\s*</script>', resp.text, re.S)
     if not match:
         return results
 
     data = json.loads(match.group(1))
     if "searchList" in data and "searchList" in data["searchList"]:
         for item in data["searchList"]["searchList"]:
+            img_src = item.get("oriPicUrl") or item.get("picUrl", "")
+            published_date = None
+            try:
+                published_date = datetime.fromtimestamp(int(item.get("publish_time")))
+            except (ValueError, TypeError):
+                published_date = None
             results.append(
                 {
                     "template": "images.html",
                     "url": item.get("url", ""),
-                    "thumbnail_src": item.get("picUrl", ""),
-                    "img_src": item.get("picUrl", ""),
+                    "thumbnail_src": item.get("thumbUrl") or img_src,
+                    "img_src": img_src,
                     "content": item.get("content_major", ""),
                     "title": item.get("title", ""),
                     "source": item.get("ch_site_name", ""),
+                    "resolution": f"{item.get('width', '')} x {item.get('height', '')}",
+                    "publishedDate": published_date,
                 }
             )
 
