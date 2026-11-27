@@ -132,12 +132,19 @@ engines:
   # Channels clips
   - name: yuanbao
     engine: yuanbao
-    shortcut: yuanbao
+    shortcut: yb
     disabled: false
-    # a CN site: the LAN proxy cannot reach it, this engine goes direct
+    categories:
+      - general
+    timeout: 7.5
+    weight: 1.0
+    # the CN site is unreachable via the default LAN proxy -- these lanes
+    # ride the alternate proxy instead
     network:
-      proxies: null
-  - name: yuanbao gzh
+      proxies:
+        all://:
+          - http://192.168.20.23:7890
+  - name: yuanbao gongzhonghao
     engine: yuanbao
     shortcut: ybgzh
     yuanbao_categ: weixin_article
@@ -145,28 +152,44 @@ engines:
     # 1's docIds, hasMore stays false) -- one page per query, no pagination
     paging: false
     disabled: false
+    categories:
+      - news
+    timeout: 7.5
+    weight: 1.0
     network:
-      proxies: null
+      proxies:
+        all://:
+          - http://192.168.20.23:7890
   - name: yuanbao videos
     engine: yuanbao
-    shortcut: ybvideo
+    shortcut: ybv
     yuanbao_categ: weixin_video
-    categories: [videos]
     disabled: false
+    categories:
+      - videos
+    timeout: 7.5
+    weight: 1.0
     network:
-      proxies: null
+      proxies:
+        all://:
+          - http://192.168.20.23:7890
   # the images lane parses the SSR page (48 images per query): its own
   # pagination API sits behind an antispider handshake, and the SSR
   # payload ignores the site's timeFilter -- single page, no time range
   - name: yuanbao images
     engine: yuanbao
-    shortcut: ybimg
+    shortcut: ybi
     yuanbao_categ: images
-    categories: [images]
     paging: false
     disabled: false
+    categories:
+      - images
+    timeout: 7.5
+    weight: 1.0
     network:
-      proxies: null
+      proxies:
+        all://:
+          - http://192.168.20.23:7890
 
 # ── the LLM transport (zjsearch.llm) ─────────────────────────────────────
 # One transport serves BOTH AI features: the whole-page AI Overview

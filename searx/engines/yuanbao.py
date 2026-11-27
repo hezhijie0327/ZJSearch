@@ -8,7 +8,7 @@ articles, WeChat Channels videos, Tencent ecosystem pages).
 
   - name: yuanbao
     engine: yuanbao
-    shortcut: yuanbao
+    shortcut: yb
     disabled: false
 
 The private ``next-page`` JSON API is reverse-engineered from the site:
@@ -24,7 +24,7 @@ qwant module's ``qwant_categ``:
 
 .. code:: yaml
 
-  - name: yuanbao gzh
+  - name: yuanbao gongzhonghao
     engine: yuanbao
     shortcut: ybgzh
     yuanbao_categ: weixin_article
@@ -32,8 +32,14 @@ qwant module's ``qwant_categ``:
 
   - name: yuanbao videos
     engine: yuanbao
-    shortcut: ybvideo
+    shortcut: ybv
     yuanbao_categ: weixin_video
+    disabled: false
+
+  - name: yuanbao images
+    engine: yuanbao
+    shortcut: ybi
+    yuanbao_categ: images
     disabled: false
 
 ``weixin_article`` serves WeChat official-account articles (the site UI
