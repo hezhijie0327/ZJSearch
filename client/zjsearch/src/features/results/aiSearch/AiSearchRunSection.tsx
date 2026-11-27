@@ -747,22 +747,29 @@ function AiSearchRunSectionImpl({
                   const exportSources = run.sources
                     .filter((source) => Number.isInteger(source.n))
                     .map((source) => ({ n: source.n as number, title: source.title || source.url, url: source.url }));
-                  const md = run.outline
-                    ? buildReportMarkdown(
-                        {
-                          title: run.outline.title,
-                          subtitle: run.outline.subtitle,
-                          sections: run.outline.sections.map((section) => ({
-                            title: section.title,
-                            text: run.sections?.[section.id] ?? "",
-                          })),
-                          sources: exportSources,
-                        },
-                        { sources: t("knowledge_inspector_sources") },
-                      )
-                    : buildAnswerMarkdown(run.q.slice(0, 120), run.answer, exportSources, {
-                        sources: t("knowledge_inspector_sources"),
-                      });
+                  // the unified write's fallback (the print texts' twin): a
+                  // report whose per-section buffers stayed empty is a
+                  // single-write document -- the answer carries the whole
+                  // markdown (H1 + sections), the plain answer builder fits
+                  const sectionTexts =
+                    run.outline?.sections.map((section) => run.sections?.[section.id] ?? "").filter(Boolean) ?? [];
+                  const md =
+                    run.outline && sectionTexts.length > 0
+                      ? buildReportMarkdown(
+                          {
+                            title: run.outline.title,
+                            subtitle: run.outline.subtitle,
+                            sections: run.outline.sections.map((section) => ({
+                              title: section.title,
+                              text: run.sections?.[section.id] ?? "",
+                            })),
+                            sources: exportSources,
+                          },
+                          { sources: t("knowledge_inspector_sources") },
+                        )
+                      : buildAnswerMarkdown(run.outline?.title || run.q.slice(0, 120), run.answer, exportSources, {
+                          sources: t("knowledge_inspector_sources"),
+                        });
                   copyToast(md);
                 }}
                 title={t("copy")}
@@ -784,9 +791,18 @@ function AiSearchRunSectionImpl({
                   // follows the SAME document-local map -- [1] up top is
                   // exactly the tail's first row.  The rewrite runs on the
                   // CLONE (the live screen keeps its global chips).
-                  const texts = run.outline
+                  // THE UNIFIED WRITE: a post-single-writer report/deck run
+                  // streams the WHOLE document as answer deltas -- the
+                  // outline is the TOC's structure record and the
+                  // per-section buffers stay empty (the render gate above
+                  // already falls back to MarkdownAnswer).  The texts take
+                  // the same ladder: per-section bodies while they exist
+                  // (stored records' replays), the answer document
+                  // otherwise.
+                  const sectionTexts = run.outline
                     ? run.outline.sections.map((section) => run.sections?.[section.id] ?? "").filter(Boolean)
-                    : [run.answer];
+                    : [];
+                  const texts = sectionTexts.length > 0 ? sectionTexts : [run.answer];
                   const knownNs = new Set(
                     sourceMeta.map((source) => source.n).filter((n): n is number => Number.isInteger(n)),
                   );
